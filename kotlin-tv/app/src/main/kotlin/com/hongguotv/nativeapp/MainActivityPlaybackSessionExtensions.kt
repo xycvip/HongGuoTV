@@ -60,8 +60,8 @@ internal fun MainActivity.cancelPrefetch(keepMediaSource: Boolean=false) {
     }
 
 internal fun MainActivity.maybePrefetch(force: Boolean=false) {
-        if(seamlessPlaybackEnabled && !force) return
         val p=player ?: return; val data=detail ?: return
+        if(seamlessPlaybackEnabled && !force && standbyFallbackEpisodeId!=data.episodes.getOrNull(episodeIndex)) return
         if(!foreground || !p.isPlaying || !library.autoNext || playError || sleepStopped || episodeIndex>=data.episodes.lastIndex) return
         if(!PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
         val id=data.episodes[episodeIndex+1]; val quality=library.maxQuality; val key="$id:$quality"
