@@ -166,7 +166,7 @@ internal fun MainActivity.playerFailure(problem: Throwable) {
         debugLogError("播放器故障",problem)
         val startupFailure=startupAutoPlaybackActive
         retryPosition=currentPosition().coerceAtLeast(0); retryAutoplay=requestedAutoplay && !sleepStopped
-        saveProgress(); hideBootSplash(); bootAutoPlaybackPending=false; cancelRecovery(); cancelPrefetch()
+        saveProgress(); hideBootSplash(); bootAutoPlaybackPending=false; cancelRecovery(); cancelPrefetch(); clearStandbyPlayer("当前集播放失败")
         if(startupFailure) {
             failStartupRecommendation()
             android.util.Log.i("HongguoTV","Startup recommendation playback failed; returned to home: ${problem.message}")
