@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicLong
         val selectedIndex=index.coerceIn(0,data.episodes.lastIndex)
         val standbyKey="${data.episodes[selectedIndex]}:${library.maxQuality}"
         val promoteStandby=position==0L && !recovering && !forceRebuild && seamlessPlaybackEnabled &&
-            standbyEpisodeId==standbyKey && standbyReady && standbyPlayer!=null && standbyRemote!=null
+            standbyEpisodeId==standbyKey && standbyReady && standbyFirstFrameAt>0L && standbyPlayer!=null && standbyRemote!=null
         val reuse=screen=="player" && player!=null && playerView!=null && !recovering && !playError && !forceRebuild
         library.setWatched(data.series.id,false)
         val isStartupPreview=bootAutoPlaybackPending && autoplay && !recovering
@@ -85,7 +85,7 @@ import java.util.concurrent.atomic.AtomicLong
             standbyJob=null
             debugLog("无缝接续：备用播放器接管第 ${selectedIndex+1} 集；READY等待=${if(standbyReadyAt>0L) standbyPromotionAt-standbyReadyAt else -1L}ms；预渲染首帧=${if(standbyFirstFrameAt>0L) standbyPromotionAt-standbyFirstFrameAt else -1L}ms；PlayerView交接=${standbyAttachedAt-standbyPromotionAt}ms")
         } else if(seamlessPlaybackEnabled && standbyEpisodeId.isNotEmpty()) {
-            clearStandbyPlayer("目标剧集未能由备用播放器接管")
+            clearStandbyPlayer(if(standbyReady && standbyFirstFrameAt==0L) "备用播放器虽已 READY 但未渲染首帧" else "目标剧集未能由备用播放器接管")
         }
         library.flush(); invalidatePage(); favoriteMonitor.stop(); releaseCatalogViews(); stopDanmaku()
         if(reuse) {
