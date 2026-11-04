@@ -190,7 +190,23 @@ jobs:
           PACKAGE_NAME: ${{ steps.verify.outputs.package }}
           APK_SIZE: ${{ steps.verify.outputs.size }}
           APK_SHA256: ${{ steps.verify.outputs.sha256 }}
+          TEST_NOTES: ${{ inputs.test_notes }}
         run: |
+          {
+            echo "## 红果TV测试版构建成功"
+            echo ""
+            echo "- 包名：$PACKAGE_NAME"
+            echo "- 版本名称：$VERSION_NAME"
+            echo "- versionCode：$VERSION_CODE"
+            echo "- APK大小：$APK_SIZE 字节"
+            echo "- SHA-256：$APK_SHA256"
+            echo ""
+            echo "### 本次测试说明"
+            printf "%s\\n" "$TEST_NOTES"
+            echo ""
+            echo "请在本次工作流运行页面的“构建产物”区域下载测试APK。"
+            echo "本测试版不会发布到 AppDownload，也不会改变正式版更新清单。"
+          } >> "$GITHUB_STEP_SUMMARY"
           echo "红果TV测试版构建成功"
           echo "包名：$PACKAGE_NAME"
           echo "版本名称：$VERSION_NAME"
