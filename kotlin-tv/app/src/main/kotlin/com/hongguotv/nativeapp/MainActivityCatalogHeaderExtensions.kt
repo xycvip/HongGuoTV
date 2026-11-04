@@ -15,6 +15,10 @@ import com.hongguotv.core.*
 
 /** 首页/剧场等主页面共用的顶部导航与四叶接口状态入口。 */
 internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHeader: Boolean) {
+        // 页面重建时清空上一轮导航引用，确保显示开关关闭后不残留隐藏入口或旧焦点。
+        nav.clear()
+        navByTab.clear()
+        searchNavShortcut=null
         // 四叶状态灯位于导航栏的随便播放快捷入口内；点击仍执行随机播放。
         stopApiStatusAnimations()
         apiStatusViews.clear()
@@ -123,6 +127,27 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             nav+=item
             navByTab[tabId]=item
             pageNavItems+=item
+        }
+        // 片源入口紧跟「红果账户」；headerContent/pageNav 均按实际子项宽度测量，整体自动居中。
+        val showThirdSource=getSharedPreferences("appearance-settings-v1",android.content.Context.MODE_PRIVATE)
+            .getBoolean("show_third_source",false)
+        if(showThirdSource) {
+            val sourceItem=addButton(pageNav,"片源",screen=="third_source") { openThirdSource() }
+            sourceItem.textSize=if(compactHeader) 13.5f else 14f
+            sourceItem.minHeight=dp(40)
+            sourceItem.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
+            fun paintSource(focused:Boolean) {
+                val active=screen=="third_source"
+                sourceItem.setTextColor(if(focused) bg else if(active) accent else muted)
+                sourceItem.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
+                sourceItem.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
+                sourceItem.elevation=if(focused) dp(5).toFloat() else 0f
+            }
+            paintSource(false)
+            sourceItem.setOnFocusChangeListener { _,focused -> paintSource(focused); if(focused) revealCatalogNavForFocus() }
+            nav+=sourceItem
+            navByTab[8]=sourceItem
+            pageNavItems+=sourceItem
         }
         val navFrame=FrameLayout(this)
         val headerContent=row().apply {
