@@ -7,6 +7,9 @@ import android.widget.FrameLayout
 internal class ApiStatusUiState {
     val views = mutableMapOf<String, ApiStatusFlowerView>()
     val results = mutableMapOf<String, Pair<Int, String>>()
+    val updatedAt = mutableMapOf<String, Long>()
+    val elapsedMs = mutableMapOf<String, Long?>()
+    var checkBatchId = 0L
     val animators = mutableMapOf<String, ValueAnimator>()
     var catalogNavFrame: FrameLayout? = null
     var catalogNavFlower: View? = null
