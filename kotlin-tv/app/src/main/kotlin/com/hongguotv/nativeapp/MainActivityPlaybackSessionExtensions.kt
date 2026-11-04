@@ -25,7 +25,7 @@ internal fun MainActivity.closeActiveVideo() {
         commentPanel?.let { if(it.parent===root) root.removeView(it) }
         commentPanel=null; commentAnchor=null; commentReplyCursors.clear()
         hideBootSplash()
-        cancelRecovery(); cancelPrefetch(); preloadManager?.release(); preloadManager=null
+        cancelRecovery(); cancelPrefetch(); clearStandbyPlayer("退出播放器"); preloadManager?.release(); preloadManager=null
         mediaSession.deactivate(); tvTools.close()
         ffActive=false; outroSkipSeconds=0; outroTriggered=false
         val wasForeground=foreground; foreground=false
@@ -59,7 +59,8 @@ internal fun MainActivity.cancelPrefetch(keepMediaSource: Boolean=false) {
         closeTransport(prefetchHttp); prefetchHttp=null; prefetchedFor=""
     }
 
-internal fun MainActivity.maybePrefetch() {
+internal fun MainActivity.maybePrefetch(force: Boolean=false) {
+        if(seamlessPlaybackEnabled && !force) return
         val p=player ?: return; val data=detail ?: return
         if(!foreground || !p.isPlaying || !library.autoNext || playError || sleepStopped || episodeIndex>=data.episodes.lastIndex) return
         if(!PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
