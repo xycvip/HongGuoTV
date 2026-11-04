@@ -58,5 +58,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "chore: migrate HHTV refactor source into HongGuoTV main"
-          git push origin HEAD:main
+          mapfile -d '' paths < <(git diff --cached --name-only -z)
+          git reset
+          total=${#paths[@]}
+          batch_size=20
+          batch=1
+          for ((start=0; start<total; start+=batch_size)); do
+            files=("${paths[@]:start:batch_size}")
+            git add -- "${files[@]}"
+            git commit -m "chore: migrate HHTV refactor source batch ${batch}"
+            git push origin HEAD:main
+            batch=$((batch + 1))
+          done
