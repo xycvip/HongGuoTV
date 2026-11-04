@@ -497,7 +497,7 @@ class MainActivity: Activity() {
         applyImmersiveFullscreen()
         library=Library(this)
         // 第三方片源独立存储，但源配置、观看历史和收藏必须进入整机备份。
-        // ThirdSourceScreen 使用同一 SharedPreferences，因此这里注入的快照/恢复回调可直接覆盖其数据。
+        // ThirdSourceScreen 使用同一 SharedPreferences，因此这里注入的快照/恢复回调可直接读取并合并其数据。
         val thirdStore = ThirdStore(applicationContext)
         library.thirdSourcesProvider = { thirdStore.backupSources() }
         library.thirdSourcesRestore = { thirdStore.mergeRestored(it) }
