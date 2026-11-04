@@ -78,8 +78,18 @@ internal fun MainActivity.createPlayerView(): PlayerView {
             isFocusable=false
             setKeepContentOnPlayerReset(true)
             setShutterBackgroundColor(Color.BLACK)
-            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+            setShowBuffering(if (seamlessPlaybackEnabled && standbyPlayer != null) PlayerView.SHOW_BUFFERING_NEVER else PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
         }
+    }
+
+    /** 双播放器已接管预加载职责时，隐藏主画面的缓冲转圈；退出双播放器后恢复原提示。 */
+    internal fun MainActivity.updatePlaybackBufferingIndicator() {
+        val view = playerView ?: return
+        val hideBuffering = seamlessPlaybackEnabled && standbyPlayer != null
+        view.setShowBuffering(
+            if (hideBuffering) PlayerView.SHOW_BUFFERING_NEVER
+            else PlayerView.SHOW_BUFFERING_WHEN_PLAYING
+        )
     }
 
     internal fun MainActivity.applyVideoRenderer() {
