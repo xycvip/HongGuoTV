@@ -273,6 +273,8 @@ class MainActivity: Activity() {
     internal var bootSplashAnimator by startupUiState::bootSplashAnimator
     internal var generation by asyncWorkState::generation
     internal var screen by navigationUiState::screen
+    /** 第三方片源页面由主 Activity 托管，跨页面重建保留浏览/播放状态。 */
+    internal var thirdSourceScreen: ThirdSourceScreen? = null
     internal var tab by navigationUiState::tab
     internal var page by navigationUiState::page
     internal var query by searchUiState::query
@@ -755,9 +757,23 @@ class MainActivity: Activity() {
         touchGestureController.dispatch(event, ::dispatchTouchEventToViews)
 
     @Deprecated("TV remote back is handled through the activity")
-    override fun onBackPressed()=goBack()
+    override fun onBackPressed() {
+        if(screen=="third_source") {
+            if(thirdSourceScreen?.onBack()!=true) showCatalog()
+            return
+        }
+        goBack()
+    }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if(screen=="third_source") {
+            if(event.keyCode==KeyEvent.KEYCODE_BACK) {
+                if(event.action==KeyEvent.ACTION_UP) onBackPressed()
+                return true
+            }
+            if(thirdSourceScreen?.onKey(event)==true) return true
+            return super.dispatchKeyEvent(event)
+        }
         if(screen=="player") {
             val key=event.keyCode
             // 控制栏显示期间，遥控器每次按键都重新开始 5 秒倒计时；
@@ -820,6 +836,7 @@ class MainActivity: Activity() {
             // 方向变化只调整现有视图尺寸，不重建播放器、不重新请求视频流。
             "player" -> { playerView?.resizeMode=activeFrameResizeMode(); playerView?.requestLayout(); danmakuView?.requestLayout(); hud.requestLayout() }
             "detail" -> if(detail!=null) showDetail(false)
+            "third_source" -> openThirdSource()
             else -> showCatalog()
         }
     }
@@ -837,6 +854,7 @@ class MainActivity: Activity() {
                 when(screen) {
                     "player" -> playEpisode(episodeIndex,startPosition,autoplay=false)
                     "detail" -> if(detail!=null) showDetail(false) else pendingDetail?.let { openDetail(it,directPlayback,autoplay=false) } ?: showCatalog()
+                    "third_source" -> openThirdSource()
                     else -> showCatalog(load=!localCatalog() && catalog.isEmpty() && (tab==0 || tab==2 || (tab==1 && query.isNotBlank())))
                 }
             } else {
@@ -863,6 +881,7 @@ class MainActivity: Activity() {
         updater.pause()
         foreground=false; main.removeCallbacks(tick); clockTick?.let(main::removeCallbacks); cancelRecovery(); cancelPrefetch(); mediaSession.deactivate()
         sleepTimer.cancel(); favoriteMonitor.stop(); detailAutoplay=false; requestedAutoplay=false; pausedForLifecycle=true
+        if(screen=="third_source") thirdSourceScreen?.pause()
         player?.pause(); if(!resettingAllData) { saveProgress(); library.flush() }; super.onPause()
     }
     override fun onStop() {
@@ -872,6 +891,7 @@ class MainActivity: Activity() {
         stopApiStatusAnimations()
         restoreStoppedPage=true; generation++; cancelWork(); tvTools.close()
         if(screen=="player") { if(!resettingAllData) { startPosition=currentPosition(); saveProgress() }; releasePlayer() }
+        if(screen=="third_source") thirdSourceScreen?.stop()
         artwork.cancelPage(clearMemory=true); if(!resettingAllData) library.flush(); super.onStop()
     }
     override fun onTrimMemory(level: Int) {
@@ -885,7 +905,7 @@ class MainActivity: Activity() {
         stopApiStatusAnimations()
         generation++; cancelWork()
         if(networkRegistered) connectivity.unregisterNetworkCallback(networkCallback)
-        favoriteMonitor.destroy(); tvTools.destroy(); updater.destroy(); if(!resettingAllData) saveProgress(); cloudAccount.destroy(); releasePlayer(); library.close()
+        favoriteMonitor.destroy(); tvTools.destroy(); updater.destroy(); if(!resettingAllData) saveProgress(); cloudAccount.destroy(); releasePlayer(); thirdSourceScreen?.release(); thirdSourceScreen=null; library.close()
         artwork.close(); releaseCatalogViews(); mediaSession.release(); main.removeCallbacksAndMessages(null)
         io.shutdownNow(); prefetchWorker.shutdownNow(); networkCleanup.shutdown(); debugLogExecutor.shutdown()
         Thread({ repository.http.dispatcher.cancelAll(); repository.http.connectionPool.evictAll(); repository.http.dispatcher.executorService.shutdown() },"hongguotv-network-cleanup").start()
