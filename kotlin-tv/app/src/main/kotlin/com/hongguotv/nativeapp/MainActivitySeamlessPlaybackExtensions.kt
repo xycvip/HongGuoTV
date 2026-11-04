@@ -51,6 +51,7 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
 }
 
 /** 在后台解析下一集，并用独立的隐藏输出面预先启动解码器。 */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     val data = detail ?: return
     if (!seamlessPlaybackEnabled || !foreground || screen != "player" || !playbackReady) return
