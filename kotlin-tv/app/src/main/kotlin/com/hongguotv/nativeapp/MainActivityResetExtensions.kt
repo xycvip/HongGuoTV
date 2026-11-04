@@ -82,6 +82,8 @@ import java.util.concurrent.atomic.AtomicLong
         val cacheOption=option("清理缓存","正在计算缓存占用…") {
             optionsDialog.dismiss()
             TvDialog.confirm(this,"清理缓存","清除封面图片、已下载的安装包等缓存数据，不影响收藏和观看记录。") {
+                // ImageView 绑定和监听器只允许在主线程解绑；磁盘清理由 IO 线程执行。
+                artwork.cancelPage(clearMemory = true)
                 io.execute {
                     val result = runCatching {
                         check(artwork.clearDiskCache()) { "封面缓存删除不完整" }
