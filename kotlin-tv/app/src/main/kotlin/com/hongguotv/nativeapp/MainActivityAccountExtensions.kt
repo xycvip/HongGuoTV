@@ -44,7 +44,7 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
-    internal fun MainActivity.showAccountPage() { switchTab(6) }
+    internal fun MainActivity.showAccountPage() { debugLog("页面导航：打开红果账户"); switchTab(6) }
 
     internal fun MainActivity.renderAccountContent(host: FrameLayout) {
         if (!runCatching { cloudAccount }.isSuccess || tab != 6 || screen != "catalog") return
