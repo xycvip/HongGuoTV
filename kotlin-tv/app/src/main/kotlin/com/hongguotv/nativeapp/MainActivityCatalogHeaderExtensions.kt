@@ -16,6 +16,7 @@ import com.hongguotv.core.*
 /** 首页/剧场等主页面共用的顶部导航与四叶接口状态入口。 */
 internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHeader: Boolean) {
         // 四叶状态灯固定在屏幕左上角；快捷功能与主导航分组排列，互不混排。
+        stopApiStatusAnimations()
         apiStatusViews.clear()
         val flower=ApiStatusFlowerView(this).apply {
             isFocusable=false; isFocusableInTouchMode=false; isClickable=false
