@@ -302,6 +302,7 @@ import java.util.concurrent.atomic.AtomicLong
                 .edit().putBoolean("seamless_playback",enabled).apply()
             seamlessPlaybackButton.text="无缝接续  ·  ${if(enabled) "开启" else "关闭"}"
             if(enabled) {
+                standbyFallbackEpisodeId=""
                 cancelPrefetch()
                 preloadManager?.reset()
                 if(screen=="player" && playbackReady && detail!=null && episodeIndex<detail!!.episodes.lastIndex) {
@@ -309,6 +310,7 @@ import java.util.concurrent.atomic.AtomicLong
                 }
                 Toast.makeText(this@settings,"无缝接续已开启，将从下一集开始预备",Toast.LENGTH_SHORT).show()
             } else {
+                standbyFallbackEpisodeId=""
                 clearStandbyPlayer("用户关闭无缝接续")
                 Toast.makeText(this@settings,"无缝接续已关闭，恢复单播放器预加载",Toast.LENGTH_SHORT).show()
             }
