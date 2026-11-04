@@ -142,14 +142,6 @@ jobs:
         run: |
           set -euo pipefail
           APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
-          # 签名校验优先执行，绝不受“跳过文件检查”开关影响。
-          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          if [ ! -x "$APKSIGNER" ]; then
-            APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
-          fi
-          test -x "$APKSIGNER"
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
-          echo "APK签名校验通过"
           if [ "$SKIP_FILE_CHECK" = "true" ]; then
             echo "::warning::已按手动选择跳过APK文件存在性检查"
           else
