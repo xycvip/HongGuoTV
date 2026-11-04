@@ -74,4 +74,42 @@ class AppUpdatesTest {
         file.writeBytes(bytes); assertTrue(UpdateFiles.verify(file, update()))
         file.writeBytes(ByteArray(bytes.size)); assertFalse(UpdateFiles.verify(file, update()))
     }
+
+    @Test fun betaChannelAcceptsOnlyItsOwnPackageAndReleaseAssets() {
+        val betaJson = JSONObject()
+            .put("schema", 1)
+            .put("packageName", AppUpdate.BETA_PACKAGE)
+            .put("versionCode", 2)
+            .put("versionName", "0.0.2")
+            .put("minSdk", 26)
+            .put("tag", "hongguotv-bate-v0.0.2")
+            .put("apk", JSONObject()
+                .put("name", "HongguoTV-0.0.2.apk")
+                .put("size", bytes.size)
+                .put("sha256", MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }))
+        val beta = AppUpdate.parse(
+            betaJson.toString(),
+            AppUpdate.BETA_PACKAGE,
+            AppUpdate.BETA_REPOSITORY,
+            AppUpdate.BETA_TAG_PREFIX,
+            "HongguoTV-"
+        )
+        assertEquals(
+            "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.2/HongguoTV-0.0.2.apk",
+            beta.downloadUrl
+        )
+        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(betaJson.toString()) }
+
+        val crossedChannel = JSONObject(betaJson.toString())
+            .put("tag", "hongguotv-v0.0.2")
+        assertThrows(IllegalArgumentException::class.java) {
+            AppUpdate.parse(
+                crossedChannel.toString(),
+                AppUpdate.BETA_PACKAGE,
+                AppUpdate.BETA_REPOSITORY,
+                AppUpdate.BETA_TAG_PREFIX,
+                "HongguoTV-"
+            )
+        }
+    }
 }
