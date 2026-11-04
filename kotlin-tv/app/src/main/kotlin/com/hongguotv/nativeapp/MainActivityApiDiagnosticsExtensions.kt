@@ -153,15 +153,55 @@ import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.showInterfaceCheck(anchor: TextView) {
         val content=column()
-        val status=text("选择一项开始检测",14f,muted).apply { setPadding(dp(8),0,dp(8),dp(10)) }
+        val status=text("可查看最近一次自动检测结果，也可手动重新检测。",13f,muted)
+            .apply { setPadding(dp(8),0,dp(8),dp(8)) }
         content.addView(status)
-        lateinit var dialog: AlertDialog
+        val snapshot=column().apply {
+            setPadding(dp(8),dp(8),dp(8),dp(8))
+            background=rounded(Color.rgb(31,34,40))
+        }
+        val names=listOf("首页","搜索","播放","联想")
+        fun stateLabel(color:Int):String = when(color) {
+            Color.rgb(70,150,255) -> "检测中"
+            Color.rgb(244,166,64) -> "重试中"
+            Color.rgb(70,190,110) -> "正常"
+            Color.rgb(235,75,75) -> "异常"
+            Color.rgb(238,190,55) -> "未验证"
+            else -> "未知"
+        }
+        fun refreshSnapshot() {
+            snapshot.removeAllViews()
+            names.forEach { name ->
+                val result=apiStatusResults[name]
+                val color=result?.first ?: Color.rgb(238,190,55)
+                val detail=result?.second ?: "尚无检测记录"
+                val elapsed=apiStatusElapsedMs[name]?.let { " · ${it}ms" }.orEmpty()
+                val updated=apiStatusUpdatedAt[name]?.let {
+                    java.text.SimpleDateFormat("HH:mm:ss",Locale.getDefault()).format(java.util.Date(it))
+                } ?: "暂无"
+                val heading=row().apply {
+                    addView(text(name,14f,white).apply { typeface=Typeface.DEFAULT_BOLD },LinearLayout.LayoutParams(0,-2,1f))
+                    addView(text(stateLabel(color)+elapsed,12f,color))
+                }
+                snapshot.addView(heading)
+                snapshot.addView(text(detail,12f,muted).apply { setPadding(0,dp(3),0,dp(2)) })
+                snapshot.addView(text("最近更新：$updated",10.5f,muted).apply { setPadding(0,0,0,dp(8)) })
+            }
+        }
+        refreshSnapshot()
+        content.addView(snapshot)
+        lateinit var dialog:AlertDialog
+        val refreshAll=button("重新检测全部") {
+            runAutomaticApiChecks(force=true)
+            status.text="已开始新一轮检测；正在等待四项接口返回。"
+            refreshSnapshot()
+        }.apply { setPadding(dp(12),dp(8),dp(12),dp(8)) }
+        content.addView(refreshAll,lp(-1,-2))
+        content.addView(text("单项手动检测",13f,muted).apply { setPadding(dp(8),dp(12),dp(8),dp(6)) })
         val actions=row()
-        val buttons=mutableListOf<TextView>()
         val dotIdle=TvStyle.outline
         val dotOk=Color.rgb(86,196,122)
         val dotFail=Color.rgb(235,95,95)
-        // 每个按钮独立的冷却与在检状态，互不影响
         val lastAt=mutableMapOf<String,Long>()
         val busy=mutableSetOf<String>()
         fun dotLabel(name: String,color: Int): CharSequence {
@@ -170,11 +210,11 @@ import java.util.concurrent.atomic.AtomicLong
                 override fun getSize(paint: android.graphics.Paint,text: CharSequence?,start: Int,end: Int,fm: android.graphics.Paint.FontMetricsInt?): Int =
                     (paint.textSize*0.55f).toInt()
                 override fun draw(canvas: android.graphics.Canvas,text: CharSequence?,start: Int,end: Int,x: Float,top: Int,y: Int,bottom: Int,paint: android.graphics.Paint) {
-                    val r=paint.textSize*0.22f
+                    val radius=paint.textSize*0.22f
                     val cy=(top+bottom)/2f
                     val oldColor=paint.color
                     paint.color=color
-                    canvas.drawCircle(x+r,cy,r,paint)
+                    canvas.drawCircle(x+radius,cy,radius,paint)
                     paint.color=oldColor
                 }
             },0,1,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -182,42 +222,59 @@ import java.util.concurrent.atomic.AtomicLong
         }
         fun check(name: String,btn: TextView,probe: ()->String) {
             val now=System.currentTimeMillis()
-            if(name in busy || now-(lastAt[name] ?: 0L)<3_000) { status.text="$name 请稍候再试"; return }
+            if(name in busy || now-(lastAt[name] ?: 0L)<3_000) {
+                status.text="$name 请稍候再试"
+                return
+            }
             lastAt[name]=now
-            busy+=name; status.text="正在检测 $name…"
+            busy+=name
+            status.text="正在检测 $name…"
             btn.text=dotLabel(name,accent)
             val started=android.os.SystemClock.elapsedRealtime()
             io.execute {
                 val result=runCatching(probe)
                 main.post {
-                    if(!dialog.isShowing) return@post
+                    if(!dialog.isShowing || isDestroyed) return@post
                     val elapsed=android.os.SystemClock.elapsedRealtime()-started
                     result.fold(
                         { detail -> status.text="$name · 正常 · $detail · ${elapsed}ms"; btn.text=dotLabel(name,dotOk) },
-                        { problem -> status.text="$name · 失败 · ${(problem.message ?: problem.javaClass.simpleName).take(80)}"; btn.text=dotLabel(name,dotFail) })
+                        { problem -> status.text="$name · 失败 · ${(problem.message ?: problem.javaClass.simpleName).take(80)}"; btn.text=dotLabel(name,dotFail) }
+                    )
                     busy-=name
                 }
             }
         }
-        fun add(name: String,probe: ()->String): TextView {
-            lateinit var btn: TextView
+        fun add(name: String,probe: ()->String) {
+            lateinit var btn:TextView
             btn=button(name) { check(name,btn,probe) }
             btn.text=dotLabel(name,dotIdle)
-            buttons+=btn
             actions.addView(btn,LinearLayout.LayoutParams(0,-2,1f).apply { rightMargin=dp(6) })
-            return btn
         }
-        add("首页") { val page=repository.home(1,library.contentType); "返回 ${page.items.size} 条" }
-        add("搜索") { val page=repository.search("修仙",1,library.contentType); "返回 ${page.items.size} 条" }
+        add("首页") { "返回 ${repository.home(1,library.contentType).items.size} 条" }
+        add("搜索") { "返回 ${repository.search("修仙",1,library.contentType).items.size} 条" }
         add("播放") {
             val progress=library.history().firstOrNull() ?: throw IllegalStateException("暂无观看记录，先播放一集")
-            val info=repository.stream(progress.episodeId,library.maxQuality); "获取成功 · ${info.quality}"
+            val info=repository.stream(progress.episodeId,library.maxQuality)
+            "获取成功 · ${info.quality}"
         }
         add("联想") { "官方接口直连成功 · 返回 ${repository.probeSuggest("修仙")} 个词（已绕过缓存）" }
         content.addView(actions)
-        content.addView(text("说明：每项只发一次请求，签名搜索接口被平台停用时「搜索」会走网站兜底。",12f,muted).apply { setPadding(dp(8),dp(10),dp(8),0) })
-        dialog=AlertDialog.Builder(this).setView(TvDialog.card(this,content)).create()
+        content.addView(text("自动检测结果会随新一轮检测实时更新；单项手动检测不会改变顶部四叶灯的自动检测状态。",11.5f,muted)
+            .apply { setPadding(dp(8),dp(10),dp(8),0) })
+        dialog=AlertDialog.Builder(this).setTitle("接口状态详情").setView(TvDialog.card(this,content)).create()
         TvDialog.styleWindow(this,dialog)
-        dialog.setOnDismissListener { if(anchor.isAttachedToWindow) anchor.requestFocus() }
-        dialog.show(); buttons.first().requestFocus()
+        val refreshTask=object:Runnable {
+            override fun run() {
+                if(dialog.isShowing && !isDestroyed) {
+                    refreshSnapshot()
+                    main.postDelayed(this,500L)
+                }
+            }
+        }
+        dialog.setOnDismissListener {
+            main.removeCallbacks(refreshTask)
+            if(anchor.isAttachedToWindow) anchor.requestFocus()
+        }
+        dialog.show()
+        main.post(refreshTask)
     }
