@@ -261,10 +261,14 @@ import java.util.concurrent.atomic.AtomicLong
                             "Video size ${videoSize.width}x${videoSize.height} pixelRatio=${videoSize.pixelWidthHeightRatio} rotation=${videoSize.unappliedRotationDegrees}"
                         )
                         refreshVideoInfoOverlay()
+                        if(hud.visibility==View.VISIBLE) updatePlaybackText()
                     }
                 }
                 override fun onTracksChanged(tracks: Tracks) {
-                    if(active()) refreshVideoInfoOverlay()
+                    if(active()) {
+                        refreshVideoInfoOverlay()
+                        if(hud.visibility==View.VISIBLE) updatePlaybackText()
+                    }
                 }
                 override fun onPlaybackParametersChanged(parameters: PlaybackParameters) { if(active()) syncMediaSession() }
                 override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,newPosition: Player.PositionInfo,reason: Int) { if(active()) { syncMediaSession(); danmakuView?.seekTo(newPosition.positionMs) } }
