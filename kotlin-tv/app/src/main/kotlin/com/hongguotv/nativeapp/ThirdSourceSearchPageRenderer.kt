@@ -29,6 +29,7 @@ internal class ThirdSourceSearchPageRenderer(
         container: LinearLayout,
         searchInput: String,
         onBack: () -> Unit,
+        onPhoneSearch: (View?) -> Unit,
         onSubmit: (String) -> Unit,
         onTypeChar: (String) -> Unit,
         onDelete: () -> Unit,
@@ -51,6 +52,8 @@ internal class ThirdSourceSearchPageRenderer(
             ellipsize = android.text.TextUtils.TruncateAt.START
         }
         head.addView(display, ui.lp(0, ui.dp(46)).apply { weight = 1f; leftMargin = ui.dp(6) })
+        var phone: TextView? = null
+        phone = ui.addButton(head, "手机扫码输入") { onPhoneSearch(phone) }
         body.addView(head, ui.lp(-1, -2).apply { bottomMargin = ui.dp(6) })
 
         val columns = ui.row().apply { gravity = android.view.Gravity.TOP }
