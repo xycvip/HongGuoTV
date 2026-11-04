@@ -20,6 +20,7 @@ internal class DebugUiState {
     var settingButton: TextView? = null
     var settingRevealedThisSession = false
     var revealTapCount = 0
+    var revealLastTapAt = 0L
     var lastSpeedBytes = 0L
     var lastSpeedAt = 0L
     var currentSpeedBytesPerSecond = 0L
