@@ -393,9 +393,7 @@ import java.util.concurrent.atomic.AtomicLong
         lateinit var interfaceStatusButton:TextView
         interfaceStatusButton=setting(debug,6,"接口状态详情") { showInterfaceCheck(interfaceStatusButton) }
         setting(debug,6,"查看运行诊断") {
-            AlertDialog.Builder(this).setTitle("运行诊断信息")
-                .setMessage(debugEnvironmentSnapshot())
-                .setPositiveButton("关闭",null).show()
+            TvDialog.textViewer(this,"运行诊断信息",debugEnvironmentSnapshot()).show()
         }
         setting(debug,6,"复制诊断信息") {
             val clipboard=getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -457,17 +455,7 @@ import java.util.concurrent.atomic.AtomicLong
                     }.getOrElse { "读取日志失败：${it.message}" }
                     main.post {
                         if(isDestroyed) return@post
-                        val body=TextView(this).apply {
-                            text=content
-                            textSize=11f
-                            typeface=android.graphics.Typeface.MONOSPACE
-                            setTextIsSelectable(true)
-                            setTextColor(Color.WHITE)
-                            setPadding(dp(12),dp(10),dp(12),dp(10))
-                        }
-                        val scroll=ScrollView(this).apply { addView(body) }
-                        AlertDialog.Builder(this).setTitle("调试日志")
-                            .setView(scroll).setPositiveButton("关闭",null).show()
+                        TvDialog.textViewer(this,"调试日志",content,monospace=true).show()
                     }
                 }
             }
