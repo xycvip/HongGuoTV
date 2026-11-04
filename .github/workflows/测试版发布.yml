@@ -119,7 +119,7 @@ jobs:
           APK="app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           mkdir -p "$RUNNER_TEMP/test-release"
-          cp "$APK" "$RUNNER_TEMP/test-release/HongguoTV-测试版-${HONGGUOTV_VERSION_NAME}.apk"
+          cp "$APK" "$RUNNER_TEMP/test-release/HongguoTV-${HONGGUOTV_VERSION_NAME}.apk"
           echo "测试版APK构建完成"
 
       - name: 校验包名、版本号和签名
@@ -130,7 +130,7 @@ jobs:
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           set -euo pipefail
-          APK="$RUNNER_TEMP/test-release/HongguoTV-测试版-$VERSION_NAME.apk"
+          APK="$RUNNER_TEMP/test-release/HongguoTV-$VERSION_NAME.apk"
           AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
           test -x "$AAPT"
@@ -158,7 +158,37 @@ jobs:
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
         run: |
           set -euo pipefail
-          APK="$RUNNER_TEMP/test-release/HongguoTV-测试版-$VERSION_NAME.apk"
+          APK="$RUNNER_TEMP/test-release/HongguoTV-$VERSION_NAME.apk"
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/HongguoTV-$VERSION_NAME.apk"
+          mkdir -p test-update
+          jq -n \
+            --arg sourceCommit "$SOURCE_COMMIT" \
+            --arg versionName "$VERSION_NAME" \
+            --arg tag "$RELEASE_TAG" \
+            --arg apkName "HongguoTV-$VERSION_NAME.apk" \
+            --arg sha256 "$APK_SHA256" \
+            --arg url "$DOWNLOAD_URL" \
+            --arg notes "$RELEASE_NOTES" \
+            --argjson versionCode "$VERSION_CODE" \
+            --argjson size "$APK_SIZE" \
+            '{
+              schema: 1,
+              packageName: "com.x.hongguotv.bate",
+              sourceCommit: $sourceCommit,
+              versionCode: $versionCode,
+              versionName: $versionName,
+              minSdk: 26,
+              tag: $tag,
+              apk: {
+                name: $apkName,
+                size: $size,
+                sha256: $sha256,
+                url: $url
+              },
+              notes: $notes
+            }' > test-update/latest.json
+          cp test-update/latest.json "$RUNNER_TEMP/test-release/update.json"
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           # 红果TV测试版 $VERSION_NAME
 
@@ -172,7 +202,7 @@ jobs:
 
           > 此版本为独立测试包，使用产品签名；不会上传或修改 AppDownload。
           EOF
-          gh release create "$RELEASE_TAG" "$APK" \
+          gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/test-release/update.json" \
             --repo "$GITHUB_REPOSITORY" \
             --title "红果TV测试版 $VERSION_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
@@ -194,8 +224,8 @@ jobs:
           EOF
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add kotlin-tv/test-version.properties
-          git commit -m "递增测试版版本号至 $NEXT_NAME"
+          git add kotlin-tv/test-version.properties test-update/latest.json
+          git commit -m "发布测试版更新清单并递增版本号至 $NEXT_NAME"
           git push origin HEAD:main
           echo "下一次测试版版本号已更新为：$NEXT_NAME"
           echo "下一次 versionCode 已更新为：$NEXT_CODE"
