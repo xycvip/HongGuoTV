@@ -520,7 +520,7 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
     private fun renderEmptySources(container: LinearLayout) {
         val body = ui.column().apply { setPadding(0, ui.dp(24), 0, 0) }
         ui.message(body, "暂无片源信息，请添加源或导入配置")
-        body.addView(ui.text("若重装后没有自动恢复：可能是本机备份文件不存在或未授予存储权限，可在「设置 → 本地备份与恢复」中查看。", 13f, muted)
+        body.addView(ui.text("若重装后没有自动恢复：可能是备份文件不存在或未授予存储权限，可在「设置 → 本地备份与恢复」中查看。", 13f, muted)
             .apply { setPadding(0, ui.dp(2), 0, ui.dp(10)) })
         // 空态同样给全入口：添加 / 导入配置 / 扫码导入导出
         val actions = ui.row().apply { setPadding(0, ui.dp(4), 0, 0) }
