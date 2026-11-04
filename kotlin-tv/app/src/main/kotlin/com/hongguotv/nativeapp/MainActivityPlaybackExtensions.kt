@@ -312,7 +312,7 @@ import java.util.concurrent.atomic.AtomicLong
                 }
             }
             playerListener=listener; p.addListener(listener)
-            val source=prefetchedSource ?: videoSource(remote,requestedId)
+            val source=if(promoteStandby) null else prefetchedSource ?: videoSource(remote,requestedId)
             val introSkip=if(position<=0 && (skipMark?.introSeconds ?: 0)>0) skipMark!!.introSeconds*1000L else position.coerceAtLeast(0)
             if(promoteStandby && p.currentMediaItem?.mediaId==requestedId) {
                 p.volume=1f
@@ -320,7 +320,7 @@ import java.util.concurrent.atomic.AtomicLong
                 p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
                 if(p.playbackState==Player.STATE_READY) listener.onPlaybackStateChanged(p.playbackState)
             } else {
-                p.setMediaSource(source); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
+                p.setMediaSource(source!!); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
             }
             if(introSkip>0 && position<=0) Toast.makeText(this,"已跳过片头 ${skipMark!!.introSeconds} 秒",Toast.LENGTH_SHORT).show()
         }
