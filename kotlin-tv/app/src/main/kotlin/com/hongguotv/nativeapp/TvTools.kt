@@ -198,13 +198,13 @@ class TvTools(private val activity: Activity) {
         val address=connectivity.getLinkProperties(network)?.linkAddresses
             ?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
         if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
-            info("手机文件管理","请让电视和手机连接同一局域网后重试。",anchor)
+            info("远程文件管理","请让电视和手机连接同一局域网后重试。",anchor)
             return
         }
         val content=column()
         content.gravity=Gravity.CENTER_HORIZONTAL
-        content.addView(TvDialog.title(activity,"手机文件管理"))
-        content.addView(label("让手机和电视连接同一个 Wi-Fi，扫码即可管理电视文件。",14f).apply {
+        content.addView(TvDialog.title(activity,"远程文件管理"))
+        content.addView(label("电视与访问设备连接同一局域网后，扫码或输入地址即可管理电视文件。",14f).apply {
             gravity=Gravity.CENTER
             setTextColor(TvStyle.muted)
         })
@@ -221,7 +221,7 @@ class TvTools(private val activity: Activity) {
                         if(this@TvTools.dialog===dialog) {
                             content.removeAllViews()
                             content.addView(TvDialog.title(activity,"文件管理已关闭"))
-                            content.addView(label("本次访问已结束，请重新打开手机文件管理。",15f))
+                            content.addView(label("本次访问已结束，请重新打开远程文件管理。",15f))
                         }
                     }
                 }
@@ -230,7 +230,7 @@ class TvTools(private val activity: Activity) {
                     phone=session
                     content.removeAllViews()
                     content.gravity=Gravity.CENTER_HORIZONTAL
-                    content.addView(TvDialog.title(activity,"手机文件管理"))
+                    content.addView(TvDialog.title(activity,"远程文件管理"))
                     content.addView(label("扫描二维码，打开电视公共存储目录",15f).apply {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
@@ -271,7 +271,7 @@ class TvTools(private val activity: Activity) {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
                     })
-                    val details=label("目录：/storage/emulated/0/\n端口：8765  ·  仅限当前局域网\n可浏览、上传和下载任意文件；关闭此窗口即停止服务。",13f).apply {
+                    val details=label("目录：/storage/emulated/0/\n端口：9981  ·  仅限当前局域网\n可浏览、上传和下载任意文件；关闭此窗口即停止服务。",13f).apply {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
                         setPadding(dp(8),dp(14),dp(8),dp(4))
@@ -281,7 +281,7 @@ class TvTools(private val activity: Activity) {
             } catch(e:Exception) {
                 main.post {
                     if(this@TvTools.dialog===dialog) {
-                        status.text=if(e is java.net.BindException) "端口 8765 已被占用，请关闭占用该端口的应用后重试。"
+                        status.text=if(e is java.net.BindException) "端口 9981 已被占用，请关闭占用该端口的应用后重试。"
                         else "无法打开公共目录：${e.message ?: "请检查存储权限和网络"}"
                     }
                 }
