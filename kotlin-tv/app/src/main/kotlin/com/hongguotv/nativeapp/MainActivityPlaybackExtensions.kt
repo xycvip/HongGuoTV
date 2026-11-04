@@ -197,6 +197,14 @@ import java.util.concurrent.atomic.AtomicLong
                 private fun active()=player===p && generation==ticket && p.currentMediaItem?.mediaId==requestedId
                 override fun onPlaybackStateChanged(state: Int) {
                     if(!active()) return
+                    val stateLabel=when(state) {
+                        Player.STATE_IDLE -> "IDLE"
+                        Player.STATE_BUFFERING -> "BUFFERING"
+                        Player.STATE_READY -> "READY"
+                        Player.STATE_ENDED -> "ENDED"
+                        else -> "UNKNOWN($state)"
+                    }
+                    debugLog("播放器状态变化：$stateLabel；位置=${p.currentPosition}ms；缓冲=${p.bufferedPosition}ms；集号=${episodeIndex+1}")
                     if(state==Player.STATE_READY) {
                         if(!p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)) {
                             playerFailure(PlaybackException("资源没有可解码的视频轨道",null,PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED))
@@ -236,6 +244,7 @@ import java.util.concurrent.atomic.AtomicLong
                 }
                 override fun onIsPlayingChanged(playing: Boolean) {
                     if(active()) {
+                        debugLog("播放器播放状态：isPlaying=$playing；playWhenReady=${p.playWhenReady}；位置=${p.currentPosition}ms")
                         if(playing && playbackReady) markStartupRecommendationPlaying()
                         danmakuView?.setPlaybackActive(playing)
                         if(hud.visibility==View.VISIBLE) showHud()
@@ -244,6 +253,7 @@ import java.util.concurrent.atomic.AtomicLong
                 }
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
                     if(active()) {
+                        debugLog("视频画面尺寸变化：${videoSize.width}x${videoSize.height}；像素比例=${videoSize.pixelWidthHeightRatio}；旋转=${videoSize.unappliedRotationDegrees}")
                         applyVideoOrientation(videoSize)
                         playerView?.resizeMode = activeFrameResizeMode()
                         android.util.Log.i(
