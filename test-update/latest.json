@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "067f3f0123c9570fea0519683687754fab4dc35d",
-  "versionCode": 4,
-  "versionName": "0.0.4",
+  "sourceCommit": "702c9789d739ae382805cd8d9e6153eb8a50afe1",
+  "versionCode": 6,
+  "versionName": "0.0.6",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.4",
+  "tag": "hongguotv-bate-v0.0.6",
   "apk": {
-    "name": "HongguoTV-0.0.4.apk",
-    "size": 1843959,
-    "sha256": "25de916b95d24f73f3f6dcf1f72a167f8ef57e73128d7dab46b314d1850fde98",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.4/HongguoTV-0.0.4.apk"
+    "name": "HongguoTV-0.0.6.apk",
+    "size": 1843979,
+    "sha256": "724991b0d24fafef0b1ce40b9fab65041c8bfb55e1351bb468d9cc55358fd14d",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.6/HongguoTV-0.0.6.apk"
   },
   "notes": "优化使用体验"
 }
