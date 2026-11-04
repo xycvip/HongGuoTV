@@ -49,6 +49,7 @@ import java.util.concurrent.atomic.AtomicLong
     }
 
     internal fun MainActivity.startDebugLogging(anchor: View?) {
+        if(debugStartPending) return
         if(!hasBackupStoragePermission()) {
             pendingBackupAction=2; pendingBackupAnchor=anchor
             ensureBackupStoragePermission()
@@ -59,6 +60,7 @@ import java.util.concurrent.atomic.AtomicLong
             updateDebugSettingLabel()
             return
         }
+        debugStartPending=true
         debugLogExecutor.execute {
             val result=runCatching {
                 val folder=backupFolder()
@@ -70,6 +72,7 @@ import java.util.concurrent.atomic.AtomicLong
                 file
             }
             main.post {
+                debugStartPending=false
                 if(isDestroyed || resettingAllData) return@post
                 result.onSuccess { file ->
                     debugFile=file
