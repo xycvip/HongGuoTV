@@ -119,9 +119,9 @@ import java.util.concurrent.atomic.AtomicLong
         val uptime=android.os.SystemClock.elapsedRealtime()
         val thread=Thread.currentThread().name
         val safeMessage=message
-            .replace(Regex("(?i)(token|authorization|cookie|password|secret|sign|session)=([^&\\s]+)"),"$1=[已隐藏]")
-            .replace(Regex("(https?://[^\\s?]+)\\?[^\\s]+"),"$1?[参数已隐藏]")
-            .replace(Regex("(?im)^(authorization|cookie|set-cookie):.*$"),"$1: [已隐藏]")
+            .replace(Regex("(?i)(token|authorization|cookie|password|secret|sign|session)=([^&\\s]+)"), "\$1=[已隐藏]")
+            .replace(Regex("(https?://[^\\s?]+)\\?[^\\s]+"), "\$1?[参数已隐藏]")
+            .replace(Regex("(?im)^(authorization|cookie|set-cookie):.*$"), "\$1: [已隐藏]")
         val line="$stamp  +${uptime}ms  [$thread]  $safeMessage\n"
         debugLogExecutor.execute {
             runCatching {
@@ -147,8 +147,8 @@ import java.util.concurrent.atomic.AtomicLong
     /** 记录异常堆栈；敏感参数会在写入日志前脱敏。 */
     internal fun MainActivity.debugLogError(tag:String, error:Throwable) {
         val stack=android.util.Log.getStackTraceString(error)
-            .replace(Regex("(?i)(token|authorization|cookie|password|secret|sign|session)=([^&\\s]+)"),"$1=[已隐藏]")
-            .replace(Regex("(https?://[^\\s?]+)\\?[^\\s]+"),"$1?[参数已隐藏]")
+            .replace(Regex("(?i)(token|authorization|cookie|password|secret|sign|session)=([^&\\s]+)"), "\$1=[已隐藏]")
+            .replace(Regex("(https?://[^\\s?]+)\\?[^\\s]+"), "\$1?[参数已隐藏]")
         debugLog("异常[$tag] ${error.javaClass.name}: ${error.message ?: "无异常说明"}\n$stack")
     }
 
