@@ -16,7 +16,7 @@ import java.util.TimerTask
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Temporary, token-protected LAN file access to the TV's public HongGuoTV directory. */
+/** Short-lived LAN file access to the Android shared public-storage directory. */
 class LibraryTransferServer(
     address: String,
     directory: java.io.File,
@@ -91,7 +91,7 @@ class LibraryTransferServer(
             val at=h.indexOf(':');if(at<=0)return respond(socket,400,"请求格式错误")
             if(headers.put(h.substring(0,at).lowercase(Locale.ROOT),h.substring(at+1).trim())!=null)return respond(socket,400,"重复请求头")
         }
-        if(stopped.get()||System.nanoTime()>=deadline)return respond(socket,410,"二维码已过期")
+        if(stopped.get()||System.nanoTime()>=deadline)return respond(socket,410,"文件管理会话已过期")
         val (route,params)=query(request[1])
         if(headers["host"]!=host||route !in listOf("/","/download","/upload"))return respond(socket,404,"页面不存在")
         val origin=headers["origin"]
@@ -149,7 +149,7 @@ class LibraryTransferServer(
             }
             if(entries.isEmpty())append("<p class='muted'>这个目录还是空的</p>")
         }
-        val pathLabel=if(relative.isBlank())"HongGuoTV" else "HongGuoTV/$relative"
+        val pathLabel=if(relative.isBlank())root.absolutePath else root.absolutePath+"/"+relative
         return """<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>电视文件管理</title><style>body{font:16px sans-serif;background:#10131b;color:#f4f5f8;max-width:680px;margin:20px auto;padding:16px;line-height:1.5}h1{font-size:22px}.muted,small{color:#a8b0c0}.entry{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-bottom:1px solid #303644;overflow-wrap:anywhere}.folder{display:block;color:#f4f5f8;text-decoration:none}.download,button{background:#ff634c;color:white;border:0;border-radius:7px;padding:9px 13px;text-decoration:none;white-space:nowrap}section{background:#1a1e28;border-radius:10px;padding:14px;margin:14px 0}input{max-width:100%;margin:8px 0}button{font:inherit;width:100%;padding:12px}#status{font-size:13px;color:#a8b0c0}</style><h1>电视公共文件夹</h1><p class="muted">当前位置：${html(pathLabel)}</p><section><strong>上传文件到当前目录</strong><input id="files" type="file" multiple><button id="upload">上传所选文件</button><p id="status">支持任意文件类型，文件大小不超过电视当前剩余存储空间。</p></section><section><strong>目录内容</strong>$rows</section><p class="muted">仅限当前局域网和本次文件管理会话；关闭电视窗口即失效，最长 5 分钟。</p><script >document.getElementById('upload').onclick=async function(){var files=document.getElementById('files').files,status=document.getElementById('status'),button=this;if(!files.length){status.textContent='请先选择文件';return}button.disabled=true;try{for(var i=0;i<files.length;i++){var f=files[i];status.textContent='正在上传 '+f.name+'（'+(i+1)+'/'+files.length+'）';var url='/upload?path='+encodeURIComponent($jsRelative)+'&name='+encodeURIComponent(f.name);var response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:f});var message=await response.text();if(!response.ok)throw new Error(message)}status.textContent='上传完成，正在刷新目录…';location.reload()}catch(e){status.textContent=e.message||'上传失败';button.disabled=false}};</script></html>"""
     }
     companion object { const val DEFAULT_PORT=8765 }
