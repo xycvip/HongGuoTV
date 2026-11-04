@@ -311,6 +311,8 @@ class MainActivity: Activity() {
     /** 顶栏只读接口状态；结果保留在重建后的页面中。 */
     internal val apiStatusViews get() = apiStatusUiState.views
     internal val apiStatusResults get() = apiStatusUiState.results
+    internal val apiStatusUpdatedAt get() = apiStatusUiState.updatedAt
+    internal val apiStatusElapsedMs get() = apiStatusUiState.elapsedMs
     internal val apiStatusAnimators get() = apiStatusUiState.animators
     internal var catalogNavFrame by apiStatusUiState::catalogNavFrame
     internal var catalogNavFlower by apiStatusUiState::catalogNavFlower
@@ -875,6 +877,8 @@ class MainActivity: Activity() {
     }
     override fun onDestroy() {
         debugLog("生命周期：onDestroy；页面=$screen；正在销毁 Activity")
+        apiStatusUiState.checkBatchId++
+        stopApiStatusAnimations()
         generation++; cancelWork()
         if(networkRegistered) connectivity.unregisterNetworkCallback(networkCallback)
         favoriteMonitor.destroy(); tvTools.destroy(); updater.destroy(); if(!resettingAllData) saveProgress(); cloudAccount.destroy(); releasePlayer(); library.close()
