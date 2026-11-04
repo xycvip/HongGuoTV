@@ -354,7 +354,9 @@ import java.util.concurrent.atomic.AtomicLong
         }
         fileBackup=setting(data,2,"本地备份与恢复") { showFileBackupDialog(fileBackup) }
         backup=setting(data,2,"手机文件管理") {
-            tvTools.libraryTransfer(backup)
+            pendingBackupAction=3
+            pendingBackupAnchor=backup
+            ensureBackupStoragePermission()
         }
         hidden=setting(data,2,"恢复隐藏推荐  ·  ${library.hidden().size} 部") {
             library.unhideAll(); hidden.text="恢复隐藏推荐  ·  0 部"; Toast.makeText(this,"热门推荐已恢复",Toast.LENGTH_SHORT).show()
