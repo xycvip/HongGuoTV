@@ -190,17 +190,14 @@ class ThirdStore(context: Context) {
             it.episodeLabel, it.positionMs, it.updatedAt)
     }
 
-    /** 恢复收藏：同「源接口 + 影片」保留较新的一条，最多 100 条；任何异常都静默忽略。 */
-    fun mergeFavorites(incoming: List<BackupThirdFavorite>) {
+    /** 整机恢复收藏：完全替换当前第三方收藏；空列表也会清空。 */
+    fun restoreFavorites(incoming: List<BackupThirdFavorite>) {
         runCatching {
-            val merged = LinkedHashMap<String, ThirdFavorite>()
-            (favorites() + incoming.map { it.toFavorite() }).forEach { item ->
-                val key = item.sourceApi + "|" + item.videoId
-                val prior = merged[key]
-                if(prior == null || item.updatedAt > prior.updatedAt) merged[key] = item
-            }
-            val next = merged.values.sortedByDescending { it.updatedAt }.take(MAX_FAVORITES)
-            prefs.edit().putString(KEY_FAVORITES, JSONArray(next.map { it.json() }).toString()).apply()
+            val restored = incoming.map { it.toFavorite() }
+                .distinctBy { it.sourceApi + "|" + it.videoId }
+                .sortedByDescending { it.updatedAt }
+                .take(MAX_FAVORITES)
+            prefs.edit().putString(KEY_FAVORITES, JSONArray(restored.map { it.json() }).toString()).apply()
         }
     }
 
@@ -243,39 +240,33 @@ class ThirdStore(context: Context) {
             it.episodeLabel, it.positionMs, it.durationMs, it.updatedAt, it.completed)
     }
 
-    /** 恢复观看历史：同「源接口 + 影片」保留进度较新的一条，最多 100 条；任何异常都静默忽略。 */
-    fun mergeHistory(incoming: List<BackupThirdHistory>) {
+    /** 整机恢复观看历史：完全替换当前第三方历史；空列表也会清空。 */
+    fun restoreHistory(incoming: List<BackupThirdHistory>) {
         runCatching {
-            val merged = LinkedHashMap<String, ThirdHistoryEntry>()
-            (history() + incoming.map { it.toEntry() }).forEach { entry ->
-                val key = entry.sourceApi + "|" + entry.videoId
-                val prior = merged[key]
-                if(prior == null || entry.updatedAt > prior.updatedAt) merged[key] = entry
-            }
-            val next = merged.values.sortedByDescending { it.updatedAt }.take(MAX_HISTORY)
-            prefs.edit().putString(KEY_HISTORY, JSONArray(next.map { it.json() }).toString()).apply()
+            val restored = incoming.map { it.toEntry() }
+                .distinctBy { it.sourceApi + "|" + it.videoId }
+                .sortedByDescending { it.updatedAt }
+                .take(MAX_HISTORY)
+            prefs.edit().putString(KEY_HISTORY, JSONArray(restored.map { it.json() }).toString()).apply()
         }
     }
 
     /** 备份/导出用：只保留名称与接口。 */
     fun backupSources(): List<BackupThirdSource> = sources().map { BackupThirdSource(it.name, it.api) }
 
-    /** 恢复源配置：本地已有的接口一律保留（不覆盖），只追加缺失项；返回新增数量。 */
-    fun mergeRestored(incoming: List<BackupThirdSource>): Int {
-        val local = sources()
-        val known = local.mapTo(HashSet()) { it.api }
-        val room = (ThirdCms.MAX_SOURCES - local.size).coerceAtLeast(0)
-        val added = incoming.asSequence()
-            .filter { ThirdSourceConfig.validApi(it.api) && known.add(it.api) }
-            .take(room)
+    /** 整机恢复片源：以备份列表完全替换当前列表；空列表也会清空。 */
+    fun restoreSources(incoming: List<BackupThirdSource>) {
+        val restored = incoming.asSequence()
+            .filter { ThirdSourceConfig.validApi(it.api) }
+            .distinctBy { it.api }
+            .take(ThirdCms.MAX_SOURCES)
             .map { ThirdSource("u" + it.api.hashCode().toUInt().toString(),
                 it.name.ifBlank { it.api.removePrefix("https://").removePrefix("http://").substringBefore('/') }, it.api) }
             .toList()
-        if(added.isEmpty()) return 0
-        saveSources(local + added)
-        // 恢复后视为已初始化，避免首次启动再覆盖用户配置
-        prefs.edit().putBoolean(KEY_INITIALIZED, true).apply()
-        return added.size
+        saveSources(restored)
+        val editor = prefs.edit().putBoolean(KEY_INITIALIZED, true)
+        if (restored.none { it.id == currentId() }) editor.remove(KEY_CURRENT)
+        editor.apply()
     }
 
     private fun key(sourceId: String, videoId: String) = "$sourceId:$videoId"
