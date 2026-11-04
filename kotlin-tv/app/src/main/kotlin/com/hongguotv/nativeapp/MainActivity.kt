@@ -897,7 +897,7 @@ class MainActivity: Activity() {
     override fun onPause() {
         debugLog("生命周期：onPause；页面=$screen；播放位置=${player?.currentPosition ?: -1}ms")
         updater.pause()
-        foreground=false; main.removeCallbacks(tick); clockTick?.let(main::removeCallbacks); cancelRecovery(); cancelPrefetch(); mediaSession.deactivate()
+        foreground=false; main.removeCallbacks(tick); clockTick?.let(main::removeCallbacks); cancelRecovery(); cancelPrefetch(); clearStandbyPlayer("应用进入后台"); mediaSession.deactivate()
         sleepTimer.cancel(); favoriteMonitor.stop(); detailAutoplay=false; requestedAutoplay=false; pausedForLifecycle=true
         if(screen=="third_source") thirdSourceScreen?.pause()
         player?.pause(); if(!resettingAllData) { saveProgress(); library.flush() }; super.onPause()
