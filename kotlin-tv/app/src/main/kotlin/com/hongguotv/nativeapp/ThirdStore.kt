@@ -192,13 +192,11 @@ class ThirdStore(context: Context) {
 
     /** 整机恢复收藏：完全替换当前第三方收藏；空列表也会清空。 */
     fun restoreFavorites(incoming: List<BackupThirdFavorite>) {
-        runCatching {
-            val restored = incoming.map { it.toFavorite() }
-                .distinctBy { it.sourceApi + "|" + it.videoId }
-                .sortedByDescending { it.updatedAt }
-                .take(MAX_FAVORITES)
-            prefs.edit().putString(KEY_FAVORITES, JSONArray(restored.map { it.json() }).toString()).apply()
-        }
+        val restored = incoming.map { it.toFavorite() }
+            .distinctBy { it.sourceApi + "|" + it.videoId }
+            .sortedByDescending { it.updatedAt }
+            .take(MAX_FAVORITES)
+        prefs.edit().putString(KEY_FAVORITES, JSONArray(restored.map { it.json() }).toString()).apply()
     }
 
     /** 探活结果缓存（按接口地址），TTL 由调用方判断。 */
@@ -242,13 +240,11 @@ class ThirdStore(context: Context) {
 
     /** 整机恢复观看历史：完全替换当前第三方历史；空列表也会清空。 */
     fun restoreHistory(incoming: List<BackupThirdHistory>) {
-        runCatching {
-            val restored = incoming.map { it.toEntry() }
-                .distinctBy { it.sourceApi + "|" + it.videoId }
-                .sortedByDescending { it.updatedAt }
-                .take(MAX_HISTORY)
-            prefs.edit().putString(KEY_HISTORY, JSONArray(restored.map { it.json() }).toString()).apply()
-        }
+        val restored = incoming.map { it.toEntry() }
+            .distinctBy { it.sourceApi + "|" + it.videoId }
+            .sortedByDescending { it.updatedAt }
+            .take(MAX_HISTORY)
+        prefs.edit().putString(KEY_HISTORY, JSONArray(restored.map { it.json() }).toString()).apply()
     }
 
     /** 备份/导出用：只保留名称与接口。 */
