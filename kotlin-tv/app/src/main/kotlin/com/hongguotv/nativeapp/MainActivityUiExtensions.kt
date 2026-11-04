@@ -180,6 +180,11 @@ import java.util.concurrent.atomic.AtomicLong
     }
 
     internal fun MainActivity.releaseCatalogViews() {
+        // 目录页面重建或离开时，停止四叶灯动画并解除旧 View 引用。
+        stopApiStatusAnimations()
+        apiStatusViews.clear()
+        catalogNavFlower=null
+        catalogNavFrame=null
         homeScreen?.let { homePosition=it.capturePosition() }
         (catalogRecycler?.layoutManager as? GridLayoutManager)?.let { val first=it.findFirstVisibleItemPosition(); scrollPositions[catalogPageKey]=if(tab==2 || tab==7) (first-1).coerceAtLeast(0) else first }
         homeScreen=null; selectionPreview=null; catalogRecycler=null; catalogAdapter=null; loadingMore=false
