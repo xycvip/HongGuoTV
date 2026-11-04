@@ -12,7 +12,7 @@ class LibraryTransferServerTest {
         val uri=URI(server.url)
         return Socket("127.0.0.1",uri.port).use{socket->
             socket.soTimeout=5000
-            val path=uri.path+target
+            val path=if(uri.path=="/") target.ifBlank{"/"} else uri.path+target
             val head="$method $path HTTP/1.1\r\nHost: ${uri.authority}\r\n$headers"+(if(method=="POST")"Content-Type: application/octet-stream\r\nContent-Length: ${body.size}\r\n\r\n" else "\r\n")
             socket.getOutputStream().apply{write(head.toByteArray());write(body);flush()}
             socket.getInputStream().readBytes()
@@ -20,12 +20,13 @@ class LibraryTransferServerTest {
     }
     private fun body(response:ByteArray)=response.toString(Charsets.UTF_8).substringAfter("\r\n\r\n")
     private fun encoded(value:String)=URLEncoder.encode(value,"UTF-8")
+    private fun freePort()=java.net.ServerSocket(0).use{it.localPort}
 
     @Test fun `phone page lists public folder and supports upload and download of arbitrary files`() {
         val root=Files.createTempDirectory("hongguotv-files").toFile()
         val nested=java.io.File(root,"子目录").apply{mkdirs()}
         java.io.File(nested,"电视说明.txt").writeText("existing")
-        LibraryTransferServer("127.0.0.1",root).use{server->
+        LibraryTransferServer("127.0.0.1",root,port=freePort()).use{server->
             val page=request(server).toString(Charsets.UTF_8)
             assertTrue(page.startsWith("HTTP/1.1 200"))
             assertTrue(page.contains("电视公共文件夹"))
@@ -64,7 +65,7 @@ class LibraryTransferServerTest {
 
     @Test fun `session expires and closes its listener`() {
         val root=Files.createTempDirectory("hongguotv-files").toFile()
-        LibraryTransferServer("127.0.0.1",root,{},50).use{server->
+        LibraryTransferServer("127.0.0.1",root,{},50,freePort()).use{server->
             Thread.sleep(120)
             assertTrue(runCatching{request(server)}.isFailure)
         }
