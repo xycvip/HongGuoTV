@@ -31,6 +31,7 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
         runCatching { player.playWhenReady = false; player.stop(); player.clearMediaItems(); player.release() }
     }
     standbyPlayer = null
+    updatePlaybackBufferingIndicator()
     standbyOutputView?.let { view ->
         if (view.parent === root) root.removeView(view)
     }
@@ -201,6 +202,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     })
                     standbyRemote = prepared
                     standbyPlayer = secondary
+                    updatePlaybackBufferingIndicator()
                     secondary.setMediaSource(videoSource(prepared, id) { counterGate.get() })
                     secondary.prepare()
                     debugLog("无缝接续：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
