@@ -2,6 +2,8 @@
 
 基于 Android 原生技术构建的红果短剧客户端项目。
 
+- [当前功能说明与静态审计结果](功能说明.md)
+
 ## 项目来源
 
 本应用派生于 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV)，并在 [jycao2/hongguoTV](https://github.com/jycao2/hongguoTV) 基础上改动。
@@ -120,7 +122,7 @@ Media3 原生播放基础来自 N3urda/hongguoTV 的 Kotlin 工程；后续播�
 
 - 使用 JUnit 编写 JVM 单元测试，覆盖内容解析、签名、加密媒体、播放规则、第三方片源及状态协调等逻辑。
 - 使用 Android Gradle Plugin、Kotlin Gradle Plugin 和 Gradle Wrapper 构建。
-- GitHub Actions 执行测试、Release Lint、APK 构建及发布步骤。
+- 仓库包含发布构建配置与发布脚本；当前配置文件位置和脚本引用存在待核查项，详见 [功能说明](功能说明.md) 的静态审计记录，暂不据此认定自动发布链路已可用。
 - Release 构建从环境变量或本地属性读取签名配置；签名密钥不应提交到源码仓库。
 
 Gradle / Kotlin 原生构建基础来自上游原生工程；当前工作流和发布逻辑以本仓库实际配置为准。
