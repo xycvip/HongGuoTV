@@ -119,6 +119,14 @@ class MainActivity: Activity() {
     internal var standbyReady by playbackPipelineState::standbyReady
     internal var standbyFallbackEpisodeId by playbackPipelineState::standbyFallbackEpisodeId
     internal var standbyJob by playbackPipelineState::standbyJob
+    internal var standbyOutputView by playbackPipelineState::standbyOutputView
+    internal var standbyByteCounterEnabled by playbackPipelineState::standbyByteCounterEnabled
+    internal var standbyPrepareStartedAt by playbackPipelineState::standbyPrepareStartedAt
+    internal var standbyReadyAt by playbackPipelineState::standbyReadyAt
+    internal var standbyFirstFrameAt by playbackPipelineState::standbyFirstFrameAt
+    internal var standbyPromotionAt by playbackPipelineState::standbyPromotionAt
+    internal var standbyAttachedAt by playbackPipelineState::standbyAttachedAt
+    internal var standbyVisibleFirstFrameAt by playbackPipelineState::standbyVisibleFirstFrameAt
     internal val seamlessPlaybackEnabled: Boolean
         get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE).getBoolean("seamless_playback", false)
     internal var prefetchJob by playbackPipelineState::prefetchJob
