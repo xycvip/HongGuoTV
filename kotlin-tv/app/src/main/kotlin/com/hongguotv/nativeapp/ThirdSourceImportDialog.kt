@@ -4,11 +4,14 @@ package com.hongguotv.nativeapp
 import android.app.Activity
 import android.app.AlertDialog
 import android.widget.ScrollView
+import com.hongguotv.core.PhoneField
+import com.hongguotv.core.PhoneForm
 
-/** TVBox 明文配置导入入口：电视端链接输入、后台解析与候选清单交接。 */
+/** TVBox 明文配置导入入口：链接输入、扫码回填、后台解析与候选清单交接。 */
 internal class ThirdSourceImportDialog(
     private val activity: Activity,
     private val ui: ThirdSourceUi,
+    private val tvTools: TvTools,
     private val requests: ThirdSourceImportRequestCoordinator,
     private val generation: () -> Int,
     private val onParsed: (List<ThirdTvboxSite>, Int) -> Unit,
@@ -22,8 +25,10 @@ internal class ThirdSourceImportDialog(
         val actions = ui.row().apply { setPadding(0, ui.dp(12), 0, 0) }
         lateinit var dialog: AlertDialog
         val parse = TvDialog.capsuleButton(activity, "解析") { }
+        val scan = TvDialog.capsuleButton(activity, "扫码填写") { }
         val cancel = TvDialog.capsuleButton(activity, "取消") { dialog.dismiss() }
         actions.addView(parse, ui.lp(-2, -2).apply { rightMargin = ui.dp(10) })
+        actions.addView(scan, ui.lp(-2, -2).apply { rightMargin = ui.dp(10) })
         actions.addView(cancel, ui.lp(-2, -2))
         form.addView(actions)
         val content = ui.column()
@@ -47,8 +52,22 @@ internal class ThirdSourceImportDialog(
             }
         }
         parse.setOnClickListener { runParse(urlEdit.text.toString()) }
+        scan.setOnClickListener {
+            // 导入配置只需一个配置链接，手机页文案与字段都要对应导入场景而不是搜索剧名
+            tvTools.phoneForm(parse, PhoneForm(
+                heading = "导入 TVBox 配置",
+                description = "在手机浏览器里粘贴 TVBox 配置链接（明文 JSON），提交后电视会自动解析并列出可导入的 CMS 源。",
+                fields = listOf(PhoneField("url", "TVBox 配置链接", "http://…/tv", 300)),
+                doneHint = "请回到电视查看解析结果。",
+                invalidMessage = "请填写以 http 开头的配置链接"
+            )) { values ->
+                val value = values["url"].orEmpty()
+                if(value.startsWith("http")) { urlEdit.setText(value); runParse(value) }
+                else errorText.text = "请输入以 http 开头的配置链接"
+            }
+        }
         dialog.show()
-        // 默认聚焦「解析」，不主动弹出软键盘
+        // 默认聚焦「解析」，不弹软键盘，方便直接走扫码填写
         dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         parse.requestFocus()
     }
