@@ -42,7 +42,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         val shortcuts=row().apply {
             gravity=Gravity.CENTER_VERTICAL
             setPadding(dp(4),dp(4),dp(4),dp(4))
-            background=TvStyle.navGlass(this)
+            background=null
         }
         val randomShortcut=FrameLayout(this).apply {
             id=View.generateViewId()
@@ -104,7 +104,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         val pageNav=row().apply {
             setPadding(dp(5),dp(4),dp(5),dp(4))
             gravity=Gravity.CENTER_VERTICAL
-            background=TvStyle.navGlass(this)
+            background=null
         }
         val pageNavItems=mutableListOf<View>()
         listOf(0 to "首页",7 to "剧场",2 to "排行榜",3 to "收藏",4 to "最近观看",5 to "设置",6 to "红果账户").forEach { (tabId,label) ->
@@ -151,8 +151,10 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         }
         val navFrame=FrameLayout(this)
         val headerContent=row().apply {
-            // 将快捷入口与全部页面导航视为一个整体计算宽度，并在可用空间内整体居中。
+            // 快捷入口与页面导航共用一整条主题磨砂玻璃底，形成连续的导航栏表面。
             gravity=Gravity.CENTER
+            setPadding(dp(7),0,dp(7),0)
+            background=TvStyle.navGlass(this@renderCatalogHeader)
             addView(shortcuts,lp(-2,dp(48)).apply { rightMargin=dp(10) })
             addView(pageNav,lp(-2,dp(48)))
         }
