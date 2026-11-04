@@ -57,12 +57,13 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
         .callTimeout(25, TimeUnit.SECONDS)
         .build()
     standbyHttp = http
+    val source = ContentRepository(http)
     val requestGeneration = generation
     val requestSeries = data.series.id
     standbyJob = prefetchWorker.submit {
         var remote: com.hongguotv.core.RemoteVideo? = null
         try {
-            val prepared = RemoteVideo(http, repository.stream(id, quality)).also {
+            val prepared = RemoteVideo(http, source.stream(id, quality)).also {
                 remote = it
                 it.prepare()
             }
