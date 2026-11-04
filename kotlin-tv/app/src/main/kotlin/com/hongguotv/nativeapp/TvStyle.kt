@@ -24,6 +24,30 @@ object TvStyle {
     val outline get() = if (theme == Theme.NIGHT) Color.rgb(43,55,70) else Color.rgb(206,195,176)
     val selectedSurface get() = if (theme == Theme.NIGHT) Color.rgb(61,39,34) else Color.rgb(224,206,188)
     val badgeSurface get() = if (theme == Theme.NIGHT) Color.rgb(28,31,39) else Color.rgb(80,70,60)
+
+    /**
+     * 顶部导航磨砂玻璃材质：按当前主题提供半透明渐变与柔和描边。
+     * 使用原生 GradientDrawable，兼容 Android 8.0+，不依赖新系统模糊 API。
+     */
+    fun navGlass(context: Context)=GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        if(theme==Theme.NIGHT) intArrayOf(
+            Color.argb(232,42,51,64),
+            Color.argb(218,24,31,42),
+            Color.argb(224,17,23,32)
+        ) else intArrayOf(
+            Color.argb(238,255,253,247),
+            Color.argb(226,246,239,226),
+            Color.argb(220,235,225,208)
+        )
+    ).apply {
+        cornerRadius=16*context.resources.displayMetrics.density
+        setStroke(
+            (1*context.resources.displayMetrics.density).toInt().coerceAtLeast(1),
+            if(theme==Theme.NIGHT) Color.argb(150,151,166,184) else Color.argb(175,255,255,255)
+        )
+    }
+
     const val POSTER_ASPECT=.7f
     fun shape(context: Context,color: Int,border: Int=Color.TRANSPARENT,radius: Int=10)=GradientDrawable().apply {
         setColor(color); cornerRadius=radius*context.resources.displayMetrics.density
