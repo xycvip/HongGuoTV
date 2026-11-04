@@ -199,6 +199,8 @@ jobs:
               },
               notes: $notes
             }' > hongguoTV/latest.json
+          # Releases API 主线路读取 update.json；Raw 备用线路读取 latest.json，两份内容必须一致。
+          cp hongguoTV/latest.json "$RUNNER_TEMP/release/update.json"
 
           cat > hongguoTV/README.md <<EOF
           # 红果TV正式版分发
@@ -215,7 +217,7 @@ jobs:
           EOF
 
           # 先创建正式版发布及APK附件，确认下载资源已存在后再更新 latest.json
-          gh release create "$RELEASE_TAG" "$APK" \
+          gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/release/update.json" \
             --repo xycvip/AppDownload \
             --title "红果TV正式版 $VERSION_NAME" \
             --notes "$RELEASE_NOTES"
