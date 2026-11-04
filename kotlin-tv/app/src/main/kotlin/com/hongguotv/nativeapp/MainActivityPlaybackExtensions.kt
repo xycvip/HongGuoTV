@@ -59,6 +59,8 @@ import java.util.concurrent.atomic.AtomicLong
         val prefetched=if(promoteStandby) standbyRemote else if(position==0L && !recovering && !forceRebuild) preparedNext.take(standbyKey) else null
         val prefetchedSource=if(prefetched!=null && !promoteStandby) preloadManager?.getMediaSource(videoItem(data.episodes[selectedIndex])) else null
         val claimedHttp=if(promoteStandby) standbyHttp.also { standbyHttp=null } else if(prefetched!=null) prefetchHttp.also { prefetchHttp=null } else null
+        // 必须在替换活动播放器前保存旧集进度，不能从尚未播放的备用播放器读取旧集位置。
+        saveProgress()
         if(promoteStandby) {
             val oldPlayer=player
             playerListener?.let { oldPlayer?.removeListener(it) }
@@ -76,7 +78,7 @@ import java.util.concurrent.atomic.AtomicLong
         } else if(seamlessPlaybackEnabled && standbyEpisodeId.isNotEmpty()) {
             clearStandbyPlayer("目标剧集未能由备用播放器接管")
         }
-        saveProgress(); library.flush(); invalidatePage(); favoriteMonitor.stop(); releaseCatalogViews(); stopDanmaku()
+        library.flush(); invalidatePage(); favoriteMonitor.stop(); releaseCatalogViews(); stopDanmaku()
         if(reuse) {
             cancelRecovery(); cancelPrefetch(keepMediaSource=prefetchedSource!=null); tvTools.close()
             episodePanel?.dismiss(); episodePanel=null; speedDialog?.dismiss(); speedDialog=null
@@ -109,7 +111,7 @@ import java.util.concurrent.atomic.AtomicLong
             startupPreviewLastTickAt=0L
         }
         panel=false; playError=false; playbackReady=false; quality=""; pausedForLifecycle=!autoplay
-        player?.playWhenReady=requestedAutoplay
+        player?.playWhenReady=if(promoteStandby) false else requestedAutoplay
         prefetchAttempts=0; prefetchAttemptAt=0
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if(!reuse) {
