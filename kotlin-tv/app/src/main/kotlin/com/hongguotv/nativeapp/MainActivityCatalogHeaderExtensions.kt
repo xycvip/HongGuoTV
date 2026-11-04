@@ -160,7 +160,25 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             val navScroll=HorizontalScrollView(this).apply {
                 isHorizontalScrollBarEnabled=false; isFillViewport=true; clipToPadding=false
                 setPadding(0,0,0,dp(2))
-                addView(headerContent,ViewGroup.LayoutParams(-2,dp(50)))
+            }
+            // 内容未超出屏幕时让导航整体居中；超出时按实际内容宽度滚动，不把新增/隐藏项留下偏移。
+            val scrollContent=FrameLayout(this).apply {
+                clipChildren=false
+                addView(headerContent,FrameLayout.LayoutParams(-2,dp(50),Gravity.CENTER))
+            }
+            navScroll.addView(scrollContent,ViewGroup.LayoutParams(-1,dp(50)))
+            navScroll.post {
+                if(!navScroll.isAttachedToWindow) return@post
+                scrollContent.measure(
+                    View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED),
+                    View.MeasureSpec.makeMeasureSpec(dp(50),View.MeasureSpec.EXACTLY)
+                )
+                val requiredWidth=maxOf(navScroll.width,scrollContent.measuredWidth)
+                val params=scrollContent.layoutParams
+                if(params.width!=requiredWidth) {
+                    params.width=requiredWidth
+                    scrollContent.layoutParams=params
+                }
             }
             navFrame.addView(navScroll,FrameLayout.LayoutParams(-1,dp(52),Gravity.CENTER))
         } else {
