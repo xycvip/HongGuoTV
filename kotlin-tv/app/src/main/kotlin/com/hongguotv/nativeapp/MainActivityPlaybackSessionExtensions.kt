@@ -61,8 +61,18 @@ internal fun MainActivity.cancelPrefetch(keepMediaSource: Boolean=false) {
 
 internal fun MainActivity.maybePrefetch(force: Boolean=false) {
         val p=player ?: return; val data=detail ?: return
-        if(seamlessPlaybackEnabled && !force && standbyFallbackEpisodeId!=data.episodes.getOrNull(episodeIndex)) return
         if(!foreground || !p.isPlaying || !library.autoNext || playError || sleepStopped || episodeIndex>=data.episodes.lastIndex) return
+        val currentEpisodeId=data.episodes.getOrNull(episodeIndex).orEmpty()
+        val expectedStandbyKey="${data.episodes[episodeIndex+1]}:${library.maxQuality}"
+        val standbyHasRendered=standbyReady && standbyFirstFrameAt>0L && standbyEpisodeId==expectedStandbyKey
+        if(seamlessPlaybackEnabled && !force && standbyFallbackEpisodeId!=currentEpisodeId) {
+            if(standbyHasRendered) return
+            if(!PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
+            // 临近片尾仍未真正渲染备用首帧，不能只凭 READY 赌切集；主动释放备用资源并启用旧预加载兜底。
+            standbyFallbackEpisodeId=currentEpisodeId
+            clearStandbyPlayer("临近片尾备用首帧尚未就绪，切换单播放器预加载兜底")
+            debugLog("无缝接续：下一集未完成首帧预备，已启用单播放器兜底")
+        }
         if(!PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
         val id=data.episodes[episodeIndex+1]; val quality=library.maxQuality; val key="$id:$quality"
         if(preparedNext.isFresh(key) || prefetchJob?.isDone==false) return
