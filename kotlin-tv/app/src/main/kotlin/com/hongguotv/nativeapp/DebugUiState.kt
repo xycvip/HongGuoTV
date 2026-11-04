@@ -19,10 +19,13 @@ internal class DebugUiState {
     var playbackReadyAt = 0L
     var firstFrameAt = 0L
     var settingButton: TextView? = null
-    var settingRevealedThisSession = false
-    var revealTapCount = 0
-    var revealLastTapAt = 0L
     var lastSpeedBytes = 0L
     var lastSpeedAt = 0L
     var currentSpeedBytesPerSecond = 0L
+}
+
+internal object DebugUiProcessState {
+    @Volatile var settingRevealedThisSession = false
+    var revealTapCount = 0
+    var revealLastTapAt = 0L
 }
