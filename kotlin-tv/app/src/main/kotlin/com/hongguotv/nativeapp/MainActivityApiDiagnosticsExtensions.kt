@@ -191,16 +191,11 @@ import java.util.concurrent.atomic.AtomicLong
             }
         }
         refreshSnapshot()
-        val snapshotScroll=ScrollView(this).apply {
-            isFillViewport=true
-            isFocusable=true
-            isFocusableInTouchMode=true
-            descendantFocusability=ViewGroup.FOCUS_BEFORE_DESCENDANTS
-            addView(snapshot,ViewGroup.LayoutParams(-1,-2))
-        }
-        snapshotScroll.id=View.generateViewId()
-        val snapshotHeight=(resources.displayMetrics.heightPixels*0.30f).toInt().coerceAtLeast(dp(110))
-        content.addView(snapshotScroll,LinearLayout.LayoutParams(-1,snapshotHeight))
+        // 四项接口状态数量固定，直接完整展开；电视遥控器无需在状态框内滚动。
+        snapshot.isFocusable=false
+        snapshot.isFocusableInTouchMode=false
+        snapshot.descendantFocusability=ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        content.addView(snapshot,LinearLayout.LayoutParams(-1,-2))
 
         lateinit var dialog:AlertDialog
         val refreshAll=TvDialog.capsuleButton(this,"重新检测全部") {
@@ -209,8 +204,6 @@ import java.util.concurrent.atomic.AtomicLong
             refreshSnapshot()
         }
         refreshAll.id=View.generateViewId()
-        refreshAll.nextFocusUpId=snapshotScroll.id
-        snapshotScroll.nextFocusDownId=refreshAll.id
         content.addView(refreshAll,LinearLayout.LayoutParams(-1,-2).apply {
             topMargin=dp(10)
         })
