@@ -110,7 +110,7 @@ internal fun MainActivity.backupFolder(): java.io.File {
         if (resettingAllData) return
         val payload = data.accountState?.takeIf { it.isNotBlank() }
         if (payload == null) {
-            // 备份没有账户信息时，沿用当前登录账号，只把现有收藏补充到该账号。
+            // 备份没有账户信息时，沿用当前登录账号，只把本机收藏补充到该账号。
             cloudAccount.syncLocalFavorites(library.favorites())
             return
         }
@@ -125,7 +125,7 @@ internal fun MainActivity.backupFolder(): java.io.File {
     internal fun MainActivity.exportLibraryBackupToPublicFolder(anchor: View?) {
         if (resettingAllData) return
         val snapshot = runCatching { library.snapshot().copy(accountState = cloudAccount.backupJson(), playbackExtras = extras.backupSnapshot(library.skipMarksSnapshot())) }.getOrElse {
-            tvTools.info("备份失败", "无法读取当前记录，请稍后重试。", anchor)
+            tvTools.info("备份失败", "无法读取当前本机记录，请稍后重试。", anchor)
             return
         }
         io.execute {
@@ -204,7 +204,7 @@ internal fun MainActivity.backupFolder(): java.io.File {
     internal fun MainActivity.exportLibraryBackup(uri: Uri) {
         if (resettingAllData) return
         val snapshot=runCatching { library.snapshot().copy(accountState = cloudAccount.backupJson(), playbackExtras = extras.backupSnapshot(library.skipMarksSnapshot())) }.getOrElse {
-            tvTools.info("备份失败","无法读取当前记录，请稍后重试。",null)
+            tvTools.info("备份失败","无法读取当前本机记录，请稍后重试。",null)
             return
         }
         io.execute {
@@ -258,11 +258,11 @@ internal fun MainActivity.backupFolder(): java.io.File {
                             val restoreSettings = choice == 2
                             val accountNote = if (data.accountState.isNullOrBlank()) "\n备份中没有账户登录信息。" else "\n备份包含明文红果账户凭据，恢复时会尝试登录并刷新云端数据；云端观影资料本身不在备份中。"
                             val preferenceNote = when (choice) {
-                                0 -> "\n当前播放偏好设置将恢复默认值。"
-                                1 -> "\n当前播放偏好设置将保持不变。"
+                                0 -> "\n本机播放偏好设置将恢复默认值。"
+                                1 -> "\n本机当前播放偏好设置将保持不变。"
                                 else -> "\n将恢复备份中的播放偏好设置。"
                             }
-                            val message = "备份包含 ${data.favorites.size} 部收藏、${data.history.size} 条观看记录、${data.later.size} 部稍后看和 ${data.searches.size} 条搜索记录。\n\n红果收藏、历史等主记录将按备份内容恢复；第三方片源只追加当前缺少的源，第三方观看历史和收藏按更新时间合并，避免覆盖较新的记录。${preferenceNote}${accountNote}"
+                            val message = "备份包含 ${data.favorites.size} 部收藏、${data.history.size} 条观看记录、${data.later.size} 部稍后看和 ${data.searches.size} 条搜索记录。\n\n本次将以所选备份文件为准覆盖本机对应记录，不与当前记录合并。${preferenceNote}${accountNote}"
                             tvTools.confirm("确认恢复备份", message, anchor) {
                                 runCatching {
                                     favoriteMonitor.stop()
