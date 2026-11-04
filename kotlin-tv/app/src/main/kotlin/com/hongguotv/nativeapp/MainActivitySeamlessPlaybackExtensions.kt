@@ -73,6 +73,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     prepared.close()
                     closeTransport(http)
                     if (standbyHttp === http) standbyHttp = null
+                    if (standbyEpisodeId == key) { standbyEpisodeId = ""; standbyReady = false }
                     return@post
                 }
                 try {
@@ -112,11 +113,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     secondary.prepare()
                     debugLog("无缝接续：第二播放器开始准备下一集 index=${index + 1}")
                 } catch (problem: Exception) {
-                    prepared.close()
-                    closeTransport(http)
-                    if (standbyHttp === http) standbyHttp = null
-                    standbyEpisodeId = ""
-                    standbyReady = false
+                    clearStandbyPlayer("第二播放器初始化异常")
                     standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
                     debugLog("无缝接续：第二播放器初始化失败，回退单播放器：${problem.message}")
                     maybePrefetch(force = true)
