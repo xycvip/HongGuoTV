@@ -195,27 +195,33 @@ class TvTools(private val activity: Activity) {
         val connectivity=activity.getSystemService(ConnectivityManager::class.java)
         val network=connectivity.activeNetwork
         val capabilities=connectivity.getNetworkCapabilities(network)
-        val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
+        val address=connectivity.getLinkProperties(network)?.linkAddresses
+            ?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
         if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
             info("手机文件管理","请让电视和手机连接同一局域网后重试。",anchor)
             return
         }
         val content=column()
+        content.gravity=Gravity.CENTER_HORIZONTAL
         content.addView(TvDialog.title(activity,"手机文件管理"))
-        val status=label("正在开启公共目录…")
+        content.addView(label("让手机和电视连接同一个 Wi-Fi，扫码即可管理电视文件。",14f).apply {
+            gravity=Gravity.CENTER
+            setTextColor(TvStyle.muted)
+        })
+        val status=label("正在启动文件服务…",14f).apply { gravity=Gravity.CENTER }
         content.addView(status)
         val dialog=AlertDialog.Builder(activity).setView(TvDialog.card(activity,content)).create()
         TvDialog.styleWindow(activity,dialog)
         open(dialog,anchor)
         worker.execute {
             try {
-                val folder=java.io.File(android.os.Environment.getExternalStorageDirectory(),"HongGuoTV")
+                val folder=android.os.Environment.getExternalStorageDirectory()
                 val session=LibraryTransferServer(address,folder) {
                     main.post {
                         if(this@TvTools.dialog===dialog) {
                             content.removeAllViews()
                             content.addView(TvDialog.title(activity,"文件管理已关闭"))
-                            content.addView(label("二维码已过期，请重新打开手机文件管理。",16f))
+                            content.addView(label("本次访问已结束，请重新打开手机文件管理。",15f))
                         }
                     }
                 }
@@ -223,20 +229,62 @@ class TvTools(private val activity: Activity) {
                     if(this@TvTools.dialog!==dialog) { session.close(); return@post }
                     phone=session
                     content.removeAllViews()
-                    val row=LinearLayout(activity).apply { gravity=Gravity.CENTER_VERTICAL }
-                    row.addView(qr(session.url),LinearLayout.LayoutParams(dp(185),dp(185)))
-                    val instructions=column()
-                    instructions.addView(label("手机扫码后直接浏览电视的 HongGuoTV 公共目录。可以下载目录中的文件，也可以上传任意类型文件；支持进入子文件夹。
-
-不会生成临时备份，不会自动导出收藏、历史或账户信息。文件只在你主动上传或下载时传输。
-
-仅限同一局域网；关闭窗口即失效，最长 5 分钟。",16f))
-                    instructions.addView(label(session.url,12f).apply { setTextColor(TvStyle.muted) })
-                    row.addView(instructions,LinearLayout.LayoutParams(0,-2,1f))
-                    content.addView(row)
+                    content.gravity=Gravity.CENTER_HORIZONTAL
+                    content.addView(TvDialog.title(activity,"手机文件管理"))
+                    content.addView(label("扫描二维码，打开电视公共存储目录",15f).apply {
+                        gravity=Gravity.CENTER
+                        setTextColor(TvStyle.muted)
+                    })
+                    val qrCard=LinearLayout(activity).apply {
+                        gravity=Gravity.CENTER
+                        setPadding(dp(16),dp(16),dp(16),dp(16))
+                        background=GradientDrawable().apply {
+                            setColor(Color.WHITE)
+                            cornerRadius=dp(22).toFloat()
+                            setStroke(dp(1),TvStyle.outline)
+                        }
+                    }
+                    qrCard.addView(qr(session.url),LinearLayout.LayoutParams(dp(220),dp(220)))
+                    content.addView(qrCard,LinearLayout.LayoutParams(-2,-2).apply {
+                        topMargin=dp(16); bottomMargin=dp(14)
+                    })
+                    val addressLabel=label(session.url,17f).apply {
+                        gravity=Gravity.CENTER
+                        setTextColor(TvStyle.text)
+                        setPadding(dp(14),dp(12),dp(14),dp(12))
+                        background=GradientDrawable().apply {
+                            setColor(TvStyle.surface)
+                            cornerRadius=dp(12).toFloat()
+                            setStroke(dp(1),TvStyle.outline)
+                        }
+                        isClickable=true
+                        setOnClickListener {
+                            val clipboard=activity.getSystemService(android.content.ClipboardManager::class.java)
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("电视文件管理地址",session.url))
+                            Toast.makeText(activity,"地址已复制",Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    content.addView(addressLabel,LinearLayout.LayoutParams(-1,-2).apply {
+                        leftMargin=dp(8); rightMargin=dp(8)
+                    })
+                    content.addView(label("点击地址可复制，也可以在手机浏览器手动输入。",12f).apply {
+                        gravity=Gravity.CENTER
+                        setTextColor(TvStyle.muted)
+                    })
+                    val details=label("目录：/storage/emulated/0/\n端口：8765  ·  仅限当前局域网\n可浏览、上传和下载任意文件；关闭此窗口即停止服务。",13f).apply {
+                        gravity=Gravity.CENTER
+                        setTextColor(TvStyle.muted)
+                        setPadding(dp(8),dp(14),dp(8),dp(4))
+                    }
+                    content.addView(details)
                 }
             } catch(e:Exception) {
-                main.post { if(this@TvTools.dialog===dialog) status.text="无法打开公共目录：${e.message ?: "请检查存储权限和网络"}" }
+                main.post {
+                    if(this@TvTools.dialog===dialog) {
+                        status.text=if(e is java.net.BindException) "端口 8765 已被占用，请关闭占用该端口的应用后重试。"
+                        else "无法打开公共目录：${e.message ?: "请检查存储权限和网络"}"
+                    }
+                }
             }
         }
     }
