@@ -35,7 +35,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         releaseRepository = AppUpdate.BETA_REPOSITORY,
         releaseTagPrefix = AppUpdate.BETA_TAG_PREFIX,
         latestManifestUrl = AppUpdate.BETA_LATEST_MANIFEST,
-        apkFilePrefix = "HongguoTV-Beta-"
+        apkFilePrefix = "HongguoTV-"
     ) else AppUpdateRepository()
     private val preferences = activity.getSharedPreferences("app_updates", Activity.MODE_PRIVATE)
     private var apk = File(activity.cacheDir, "updates/update.apk")
