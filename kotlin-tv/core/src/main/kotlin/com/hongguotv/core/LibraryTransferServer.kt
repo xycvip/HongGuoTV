@@ -8,113 +8,156 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.security.SecureRandom
 import java.util.Locale
 import java.util.Timer
 import java.util.TimerTask
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
-/** Short-lived LAN transfer. Uploaded records are validated here, but only the TV may apply them. */
-class LibraryTransferServer(address: String,private val backup: String,private val onImport: (BackupData)->Unit,
-    private val onExpired: ()->Unit={},ttlMillis: Long=300_000): Closeable {
+/** Temporary, token-protected LAN file access to the TV's public HongGuoTV directory. */
+class LibraryTransferServer(
+    address: String,
+    directory: java.io.File,
+    private val onExpired: () -> Unit = {},
+    ttlMillis: Long = 300_000
+) : Closeable {
     private val stopped=AtomicBoolean(false)
-    private val expiry=Timer("hongguotv-transfer-expiry",true)
+    private val expiry=Timer("hongguotv-file-transfer-expiry",true)
+    private val root=directory.canonicalFile
     private val local=InetAddress.getByName(address).also { require(it.isLoopbackAddress || it.isSiteLocalAddress) }
     private val listener=ServerSocket(0,4,local).apply { soTimeout=250 }
-    private val activeSockets = ConcurrentHashMap.newKeySet<Socket>()
-    private val deadline=System.nanoTime()+ttlMillis.coerceIn(1,300_000)*1_000_000
-    private val token=ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it.toInt() and 255) }
+    private val activeSockets=ConcurrentHashMap.newKeySet<Socket>()
+    private val lifetime=ttlMillis.coerceIn(1,300_000)
+    private val deadline=System.nanoTime()+lifetime*1_000_000
+    private val token=ByteArray(24).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it.toInt() and 255) }
     private val host="${local.hostAddress}:${listener.localPort}"
     val url="http://$host/$token"
-    // 文件名带打开时间，手机「下载」列表里能一眼看出哪份最新
-    private val fileName="hongguotv-library-${java.text.SimpleDateFormat("yyyyMMdd-HHmm",Locale.CHINA).format(java.util.Date())}.json"
-    private val downloaded=AtomicBoolean(false)
+
     init {
-        require(backup.toByteArray(Charsets.UTF_8).size<=LibraryBackup.MAX_BYTES)
-        expiry.schedule(object: TimerTask() { override fun run()=expire() },ttlMillis.coerceIn(1,300_000))
-        Thread({ serve() },"hongguotv-library-transfer").apply { isDaemon=true; start() }
+        if(!root.exists() && !root.mkdirs()) error("无法创建公共目录")
+        require(root.isDirectory && root.canRead() && root.canWrite()) { "公共目录不可读写" }
+        expiry.schedule(object:TimerTask(){override fun run()=expire()},lifetime)
+        Thread({serve()},"hongguotv-file-transfer").apply { isDaemon=true; start() }
     }
-    private fun expire() { if(stopped.compareAndSet(false,true)) { close(); onExpired() } }
-    override fun close() { stopped.set(true); expiry.cancel(); runCatching { listener.close() }; activeSockets.toList().forEach { socket -> runCatching { socket.close() } } }
-    private fun serve() {
-        try {
-            while(!stopped.get() && System.nanoTime()<deadline) {
-                val socket=try { listener.accept() } catch(_: SocketTimeoutException) { continue }
-                // 每个连接单独处理：手机系统下载器可能排队很久才发请求，串行处理会把后续请求一起堵死
+    private fun expire(){if(stopped.compareAndSet(false,true)){close();onExpired()}}
+    override fun close(){stopped.set(true);expiry.cancel();runCatching{listener.close()};activeSockets.toList().forEach{runCatching{it.close()}}}
+    private fun serve(){
+        try{
+            while(!stopped.get() && System.nanoTime()<deadline){
+                val socket=try{listener.accept()}catch(_:SocketTimeoutException){continue}
                 Thread({
                     activeSockets.add(socket)
-                    try {
-                        socket.use { it.soTimeout=10_000; if(!stopped.get()) handle(it) }
-                    } catch (_: Exception) {
-                        // A closed transfer session or disconnected phone ends only this connection.
-                    } finally {
-                        activeSockets.remove(socket)
-                    }
-                },"hongguotv-library-transfer-conn").apply { isDaemon=true; start() }
+                    try{socket.use{it.soTimeout=30_000;if(!stopped.get())handle(it)}}
+                    catch(_:Exception){}
+                    finally{activeSockets.remove(socket)}
+                },"hongguotv-file-transfer-conn").apply{isDaemon=true;start()}
             }
-        } catch(_: Exception) { /* Closing the TV dialog interrupts accept/read. */ }
-        finally { if(!stopped.get()) expire() else close() }
+        }catch(_:Exception){}
+        finally{if(!stopped.get())expire() else close()}
     }
-    private fun line(input: InputStream,max: Int): String {
+    private fun line(input:InputStream,max:Int):String{
         val out=ByteArrayOutputStream()
-        while(out.size()<max) {
-            val next=input.read(); if(next<0) throw java.io.EOFException()
-            if(next==10) return out.toString("US-ASCII").trimEnd('\r')
-            out.write(next)
-        }
-        throw java.io.IOException("Header too large")
+        while(out.size()<max){val b=input.read();if(b<0)throw java.io.EOFException();if(b==10)return out.toString("US-ASCII").trimEnd('\r');out.write(b)}
+        throw java.io.IOException("请求头过长")
     }
-    private fun handle(socket: Socket) {
-        if(!socket.inetAddress.let { it.isLoopbackAddress || it.isSiteLocalAddress }) return
-        val input=socket.getInputStream().buffered(); val request=line(input,1024).split(' ')
-        if(request.size!=3) return
-        val headers=mutableMapOf<String,String>(); var size=0
-        while(true) {
-            val next=line(input,4096); size+=next.length+2
-            if(size>8192) return respond(socket,431,"请求过大")
-            if(next.isEmpty()) break
-            val at=next.indexOf(':'); if(at<=0) return respond(socket,400,"请求格式错误")
-            if(headers.put(next.substring(0,at).lowercase(Locale.ROOT),next.substring(at+1).trim())!=null) return respond(socket,400,"重复请求头")
-        }
-        if(stopped.get() || System.nanoTime()>=deadline) return respond(socket,410,"二维码已过期")
-        if(headers["host"]!=host || request[1] !in listOf("/$token","/$token/download","/$token/import")) return respond(socket,404,"页面不存在")
-        if(foreignOrigin(headers["origin"], local.hostAddress)) return respond(socket,403,"来源不匹配")
-        if(headers["sec-fetch-site"]=="cross-site") return respond(socket,403,"来源不匹配")
-        if(request[0]=="GET" && request[1]=="/$token") return respond(socket,200,page())
-        if((request[0]=="GET" || request[0]=="HEAD") && request[1]=="/$token/download") {
-            val headOnly=request[0]=="HEAD"
-            if(!headOnly && !downloaded.compareAndSet(false,true)) return respond(socket,410,"本次备份已下载，请在电视上重新打开二维码")
-            respond(socket,200,if(headOnly) "" else backup,"application/json; charset=utf-8","Content-Disposition: attachment; filename=$fileName\r\n")
-            return
-        }
-        if(request[0]!="POST" || request[1]!="/$token/import") return respond(socket,405,"不支持的操作")
-        if(headers.containsKey("transfer-encoding") || headers["content-type"]?.substringBefore(';')!="application/json") return respond(socket,400,"请选择 JSON 备份文件")
-        val length=headers["content-length"]?.toIntOrNull()?.takeIf { it in 1..LibraryBackup.MAX_BYTES } ?: return respond(socket,413,"备份不能超过 2 MB")
-        val bytes=ByteArray(length); var offset=0
-        // A total deadline also bounds slow clients that keep individual reads below the socket timeout.
-        val uploadDeadline=minOf(deadline,System.nanoTime()+10_000_000_000)
-        while(offset<length) {
-            if(stopped.get() || System.nanoTime()>=uploadDeadline) return respond(socket,408,"上传超时，请重试")
-            val count=input.read(bytes,offset,minOf(8192,length-offset)); if(count<0) return; offset+=count
-        }
-        val data=runCatching { LibraryBackup.decode(bytes.toString(Charsets.UTF_8)) }.getOrNull() ?: return respond(socket,400,"备份格式无效，请选择本应用导出的 JSON 文件")
-        // Atomically claim the one-shot session. If the user closed/expired the dialog
-        // first, this upload must not be delivered by a late connection thread.
-        if (System.nanoTime() >= deadline || !stopped.compareAndSet(false, true))
-            return respond(socket,410,"二维码已过期")
-        try { respond(socket,200,"已发送到电视，请用遥控器确认恢复。确认前不会更改记录。") }
-        finally { close(); onImport(data) }
+    private fun query(target:String):Pair<String,Map<String,String>>{
+        val at=target.indexOf('?')
+        if(at<0)return target to emptyMap()
+        val values=target.substring(at+1).split('&').mapNotNull{part->
+            val p=part.indexOf('=')
+            if(p<0)null else runCatching{URLDecoder.decode(part.substring(0,p),"UTF-8") to URLDecoder.decode(part.substring(p+1),"UTF-8")}.getOrNull()
+        }.toMap()
+        return target.substring(0,at) to values
     }
-    private fun page(): String {
-        // 浏览器直接下载会再连一次电视，容易被系统下载器卡在「连接中」；
-        // 这里优先用页面内数据在手机本地生成文件，不依赖第二次网络请求。
-        val inline=backup.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-        return """<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>红果 TV · 备份与恢复</title><style>body{font:18px sans-serif;background:#10131b;color:#f4f5f8;max-width:540px;margin:32px auto;padding:20px;line-height:1.6}a,button{display:block;background:#ff634c;color:white;border:0;border-radius:8px;padding:14px;text-align:center;text-decoration:none;font:inherit;margin:16px 0;box-sizing:border-box;width:100%}input{max-width:100%;font:inherit}textarea{width:100%;height:110px;box-sizing:border-box;font:12px monospace;background:#1a1e28;color:#c9cedb;border:1px solid #2a3040;border-radius:8px;padding:10px}h2{font-size:18px;margin-top:26px}p.small{font-size:14px;color:#a8b0c0}</style><h1>备份与恢复</h1><p>保存本机收藏、观看位置、稍后看、隐藏推荐、搜索记录和播放设置。如果已登录，备份文件还会包含明文红果账户登录凭据（Cookie、设备信息等）。请妥善保管，不要转发或上传到公开网盘。</p><button id="save">下载电视备份</button><p id="saved" class="small">将保存为 $fileName（时间戳为本次打开时间），不需要联网。</p><p class="small">如果没有弹出保存提示，请长按下面的文本全选复制，或点右上角「在浏览器打开」。</p><textarea id="data" readonly>$inline</textarea><h2>从备份恢复</h2><input id="file" type="file" accept="*/*"><button id="send">发送到电视确认</button><p id="status" class="small">最多 2 MB；需要在电视上确认后才会合并。</p><p class="small">关闭电视窗口即失效，最长 5 分钟。</p><script nonce="$token">document.getElementById('save').onclick=function(){var text=document.getElementById('data').value,hint=document.getElementById('saved');try{var blob=new Blob([text],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='$fileName';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url)},4000);hint.textContent='已生成文件，请到手机「下载」里查看。'}catch(e){hint.textContent='当前浏览器不支持保存，请长按下方文本全选复制。'}};document.getElementById('send').onclick=function(){var file=document.getElementById('file').files[0],status=document.getElementById('status'),button=this;if(!file){status.textContent='请先选择备份文件';return}if(!/\.json$/i.test(file.name)){status.textContent='请选择 .json 后缀的备份文件';return}if(file.size>2097152){status.textContent='备份文件不能超过 2 MB';return}button.disabled=true;var reader=new FileReader();reader.onerror=function(){status.textContent='文件读取失败';button.disabled=false};reader.onload=function(){fetch('/$token/import',{method:'POST',headers:{'Content-Type':'application/json'},body:reader.result}).then(function(r){return r.text().then(function(t){status.textContent=t;if(!r.ok)button.disabled=false})}).catch(function(){status.textContent='连接已失效，请在电视上重新打开二维码';button.disabled=false})};reader.readAsText(file)};</script></html>"""
+    private fun resolve(relative:String):java.io.File{
+        val target=java.io.File(root,relative.trimStart('/')).canonicalFile
+        require(target.path==root.path || target.path.startsWith(root.path+java.io.File.separator)){"路径无效"}
+        return target
     }
-    private fun respond(socket: Socket,code: Int,message: String,type: String=if(message.startsWith("<!doctype")) "text/html; charset=utf-8" else "text/plain; charset=utf-8",extra: String="") {
+    private fun enc(value:String)=URLEncoder.encode(value,"UTF-8")
+    private fun html(value:String)=value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;").replace("'","&#39;")
+    private fun handle(socket:Socket){
+        if(!socket.inetAddress.let{it.isLoopbackAddress||it.isSiteLocalAddress})return
+        val input=socket.getInputStream().buffered()
+        val request=line(input,2048).split(' ')
+        if(request.size!=3)return
+        val headers=mutableMapOf<String,String>();var total=0
+        while(true){
+            val h=line(input,4096);total+=h.length+2
+            if(total>8192)return respond(socket,431,"请求头过大")
+            if(h.isEmpty())break
+            val at=h.indexOf(':');if(at<=0)return respond(socket,400,"请求格式错误")
+            if(headers.put(h.substring(0,at).lowercase(Locale.ROOT),h.substring(at+1).trim())!=null)return respond(socket,400,"重复请求头")
+        }
+        if(stopped.get()||System.nanoTime()>=deadline)return respond(socket,410,"二维码已过期")
+        val (route,params)=query(request[1])
+        if(headers["host"]!=host||!route.startsWith("/$token")||route !in listOf("/$token","/$token/download","/$token/upload"))return respond(socket,404,"页面不存在")
+        if(foreignOrigin(headers["origin"],local.hostAddress)||headers["sec-fetch-site"]=="cross-site")return respond(socket,403,"来源不匹配")
+        if(request[0]=="GET"&&route=="/$token"){
+            val folder=runCatching{resolve(params["path"].orEmpty())}.getOrNull()?:return respond(socket,400,"目录路径无效")
+            if(!folder.isDirectory)return respond(socket,404,"目录不存在")
+            return respond(socket,200,page(folder))
+        }
+        if((request[0]=="GET"||request[0]=="HEAD")&&route=="/$token/download"){
+            val file=runCatching{resolve(params["path"].orEmpty())}.getOrNull()?:return respond(socket,400,"文件路径无效")
+            if(!file.isFile||!file.canRead())return respond(socket,404,"文件不存在")
+            return streamFile(socket,file,request[0]=="HEAD")
+        }
+        if(request[0]=="POST"&&route=="/$token/upload"){
+            val relative=params["path"].orEmpty()
+            val folder=runCatching{resolve(relative)}.getOrNull()?:return respond(socket,400,"目录路径无效")
+            if(!folder.isDirectory||!folder.canWrite())return respond(socket,404,"目标目录不可写")
+            val name=params["name"]?.takeIf{it.isNotBlank()&&it!="."&&it!=".."&&it.none{c->c=='/'||c=='\\'||c.isISOControl()}}?:return respond(socket,400,"文件名无效")
+            val length=headers["content-length"]?.toLongOrNull()?.takeIf{it in 1..1_073_741_824L}?:return respond(socket,413,"文件为空或超过 1 GB")
+            val destination=java.io.File(folder,name).canonicalFile
+            if(destination.parentFile!=folder.canonicalFile)return respond(socket,400,"文件名无效")
+            val temp=java.io.File(folder,".$name.${token.take(8)}.uploading")
+            return try{
+                temp.outputStream().buffered().use{out->
+                    val buffer=ByteArray(64*1024);var remaining=length
+                    while(remaining>0){
+                        if(stopped.get()||System.nanoTime()>=deadline)throw java.io.IOException("传输会话已结束")
+                        val count=input.read(buffer,0,minOf(buffer.size.toLong(),remaining).toInt())
+                        if(count<0)throw java.io.EOFException()
+                        out.write(buffer,0,count);remaining-=count
+                    }
+                }
+                if(destination.exists()&&!destination.delete())throw java.io.IOException("同名文件无法覆盖")
+                if(!temp.renameTo(destination))throw java.io.IOException("无法保存上传文件")
+                respond(socket,200,"上传完成：${html(name)}")
+            }catch(e:Exception){temp.delete();respond(socket,500,"上传失败：${html(e.message?: "未知错误")}") }
+        }
+        respond(socket,405,"不支持的操作")
+    }
+    private fun page(folder:java.io.File):String{
+        val relative=folder.relativeTo(root).invariantSeparatorsPath
+        val encoded=enc(relative)
+        val parent=folder.parentFile?.takeIf{it.canonicalFile.path.startsWith(root.path)&&it.canonicalFile!=folder.canonicalFile}
+        val entries=folder.listFiles()?.sortedWith(compareBy<java.io.File>({!it.isDirectory},{it.name.lowercase(Locale.ROOT)})).orEmpty()
+        val rows=buildString{
+            if(parent!=null)append("<a class='entry folder' href='/$token?path=${enc(parent.relativeTo(root).invariantSeparatorsPath)}'>⬆️ 返回上一级</a>")
+            entries.forEach{item->
+                val rel=if(relative.isBlank())item.name else "$relative/${item.name}"
+                if(item.isDirectory)append("<a class='entry folder' href='/$token?path=${enc(rel)}'>📁 ${html(item.name)}/</a>")
+                else append("<div class='entry'><span>📄 ${html(item.name)} <small>${size(item.length())}</small></span><a class='download' href='/$token/download?path=${enc(rel)}'>下载</a></div>")
+            }
+            if(entries.isEmpty())append("<p class='muted'>这个目录还是空的</p>")
+        }
+        val pathLabel=if(relative.isBlank())"HongGuoTV" else "HongGuoTV/$relative"
+        return """<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>电视文件管理</title><style>body{font:16px sans-serif;background:#10131b;color:#f4f5f8;max-width:680px;margin:20px auto;padding:16px;line-height:1.5}h1{font-size:22px}.muted,small{color:#a8b0c0}.entry{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-bottom:1px solid #303644;overflow-wrap:anywhere}.folder{display:block;color:#f4f5f8;text-decoration:none}.download,button{background:#ff634c;color:white;border:0;border-radius:7px;padding:9px 13px;text-decoration:none;white-space:nowrap}section{background:#1a1e28;border-radius:10px;padding:14px;margin:14px 0}input{max-width:100%;margin:8px 0}button{font:inherit;width:100%;padding:12px}#status{font-size:13px;color:#a8b0c0}</style><h1>电视公共文件夹</h1><p class="muted">当前位置：${html(pathLabel)}</p><section><strong>上传文件到当前目录</strong><input id="files" type="file" multiple><button id="upload">上传所选文件</button><p id="status">支持任意文件类型，单个文件最大 1 GB。</p></section><section><strong>目录内容</strong>$rows</section><p class="muted">仅限当前局域网和本次二维码；关闭电视窗口即失效，最长 5 分钟。</p><script nonce="$token">document.getElementById('upload').onclick=async function(){var files=document.getElementById('files').files,status=document.getElementById('status'),button=this;if(!files.length){status.textContent='请先选择文件';return}button.disabled=true;try{for(var i=0;i<files.length;i++){var f=files[i];status.textContent='正在上传 '+f.name+'（'+(i+1)+'/'+files.length+'）';var url='/$token/upload?path='+encodeURIComponent('$relative')+'&name='+encodeURIComponent(f.name);var response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:f});var message=await response.text();if(!response.ok)throw new Error(message)}status.textContent='上传完成，正在刷新目录…';location.reload()}catch(e){status.textContent=e.message||'上传失败';button.disabled=false}};</script></html>"""
+    }
+    private fun size(bytes:Long):String=when{bytes<1024->"$bytes B";bytes<1024*1024->"${bytes/1024} KB";bytes<1024L*1024*1024->"%.1f MB".format(Locale.ROOT,bytes/1048576.0);else->"%.2f GB".format(Locale.ROOT,bytes/1073741824.0)}
+    private fun streamFile(socket:Socket,file:java.io.File,head:Boolean){
+        val name=URLEncoder.encode(file.name,"UTF-8").replace("+","%20")
+        val header="HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ${file.length()}\r\nContent-Disposition: attachment; filename*=UTF-8''$name\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n\r\n"
+        socket.getOutputStream().apply{write(header.toByteArray(Charsets.US_ASCII));if(!head)file.inputStream().buffered().use{it.copyTo(this)};flush()}
+    }
+    private fun respond(socket:Socket,code:Int,message:String,type:String="text/plain; charset=utf-8"){
         val body=message.toByteArray(Charsets.UTF_8)
-        val header="HTTP/1.1 $code Response\r\nContent-Type: $type\r\nContent-Length: ${body.size}\r\nConnection: close\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-$token'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'\r\n$extra\r\n"
-        socket.getOutputStream().apply { write(header.toByteArray(Charsets.US_ASCII)); write(body); flush() }
+        val header="HTTP/1.1 $code Response\r\nContent-Type: $type\r\nContent-Length: ${body.size}\r\nConnection: close\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-$token'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'\r\n\r\n"
+        socket.getOutputStream().apply{write(header.toByteArray(Charsets.US_ASCII));write(body);flush()}
     }
 }
