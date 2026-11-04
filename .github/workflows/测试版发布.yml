@@ -85,11 +85,17 @@ jobs:
           VERSION_CODE="$(sed -n 's/^TEST_VERSION_CODE=//p' "$VERSION_FILE" | tail -n 1)"
           [[ "$VERSION_NAME" =~ ^0\.0\.[0-9]+$ ]] || { echo "::error::测试版版本号格式错误：$VERSION_NAME"; exit 1; }
           [[ "$VERSION_CODE" =~ ^[0-9]+$ ]] || { echo "::error::测试版 versionCode 格式错误：$VERSION_CODE"; exit 1; }
-          TAG="hongguotv-bate-v$VERSION_NAME"
-          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "::error::测试版标签已存在：$TAG，为防止覆盖，停止发布"
-            exit 1
-          fi
+          # 如果上一次已创建Release、但版本记录提交失败，则自动跳过已占用版本，避免卡死
+          while true; do
+            TAG="hongguotv-bate-v$VERSION_NAME"
+            if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+              break
+            fi
+            echo "发现已发布版本 $TAG，自动递增后继续"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NAME"
+            VERSION_NAME="$MAJOR.$MINOR.$((PATCH + 1))"
+            VERSION_CODE="$((VERSION_CODE + 1))"
+          done
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
