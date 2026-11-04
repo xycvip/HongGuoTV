@@ -237,6 +237,7 @@ import java.util.concurrent.atomic.AtomicLong
                             android.util.Log.i("HongguoTV","Playback ready episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${readySince-playbackStarted}")
                             debugLog("Playback READY elapsedMs=${readySince-playbackStarted} quality=$quality")
                             startDanmaku()
+                            if(seamlessPlaybackEnabled && episodeIndex<data.episodes.lastIndex) prepareStandbyEpisode(episodeIndex+1)
                         }
                         updateDebugOverlay()
                         if(hud.visibility==View.VISIBLE) updatePlaybackText()
