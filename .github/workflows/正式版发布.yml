@@ -230,14 +230,7 @@ jobs:
           git commit -m "发布红果TV正式版 $VERSION_NAME"
           git push origin HEAD:main
 
-          # 新版本发布且清单更新成功后，清理旧红果TV正式版，只保留最新正式版
-          OLD_TAGS="$(gh release list --repo xycvip/AppDownload --limit 100 --json tagName --jq '.[].tagName | select(startswith("hongguotv-v"))')"
-          while IFS= read -r OLD_TAG; do
-            [ -n "$OLD_TAG" ] || continue
-            [ "$OLD_TAG" = "$RELEASE_TAG" ] && continue
-            echo "清理旧正式版：$OLD_TAG"
-            gh release delete "$OLD_TAG" --repo xycvip/AppDownload --yes --cleanup-tag
-          done <<< "$OLD_TAGS"
+          # 保留AppDownload中的全部历史正式版Release，不自动删除旧版本。
 
       - name: 输出正式发布结果
         if: success()
