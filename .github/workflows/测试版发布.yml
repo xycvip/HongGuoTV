@@ -108,6 +108,7 @@ jobs:
         shell: bash
         env:
           HONGGUOTV_APPLICATION_ID: com.x.hongguotv.bate
+          HONGGUOTV_APP_LABEL: 红果测试版
           HONGGUOTV_STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
           HONGGUOTV_KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
           HONGGUOTV_KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
