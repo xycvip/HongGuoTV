@@ -7,6 +7,7 @@ import java.util.concurrent.Executors
 
 internal class DebugUiState {
     @Volatile var file: File? = null
+    @Volatile var startPending = false
     val logExecutor = Executors.newSingleThreadExecutor()
     val lock = Any()
     var overlayText: TextView? = null
