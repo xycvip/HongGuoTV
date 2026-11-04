@@ -76,6 +76,7 @@ import java.util.concurrent.atomic.AtomicLong
                     getSharedPreferences("debug-mode-v1",Context.MODE_PRIVATE).edit().putBoolean("enabled",true).apply()
                     updateDebugSettingLabel()
                     debugLog("调试模式已开启，日志文件：${file.absolutePath}")
+                    debugLog(debugEnvironmentSnapshot())
                     attachDebugOverlay()
                     Toast.makeText(this,"调试模式已开启，日志保存在 HongGuoTV 文件夹",Toast.LENGTH_LONG).show()
                 }.onFailure { error ->
@@ -139,7 +140,7 @@ import java.util.concurrent.atomic.AtomicLong
         val stack=android.util.Log.getStackTraceString(error)
             .replace(Regex("(?i)(token|authorization|cookie|password|secret|sign|session)=([^&\\s]+)"),"$1=[已隐藏]")
             .replace(Regex("(https?://[^\\s?]+)\\?[^\\s]+"),"$1?[参数已隐藏]")
-        debugLog("异常[$tag] ${error.javaClass.name}: ${error.message ?: "无异常说明"}\\n$stack")
+        debugLog("异常[$tag] ${error.javaClass.name}: ${error.message ?: "无异常说明"}\n$stack")
     }
 
     /** 不依赖正在播放的视频，供设置页查看应用、设备、网络和资源状态。 */
@@ -176,7 +177,7 @@ import java.util.concurrent.atomic.AtomicLong
             "播放器：${player?.let { "state=${it.playbackState}, isPlaying=${it.isPlaying}, pos=${it.currentPosition}ms" } ?: "未创建"}",
             "当前内容：${detail?.series?.title.orEmpty()}；集数索引=${episodeIndex+1}",
             "解码器：${activeDecoderName.ifBlank { "尚未识别" }}"
-        ).joinToString("\\n")
+        ).joinToString("\n")
     }
 
     internal fun MainActivity.attachDebugOverlay() {
