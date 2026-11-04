@@ -85,7 +85,7 @@ import java.util.concurrent.atomic.AtomicLong
     }
 
     internal fun MainActivity.runAutomaticApiChecks(force: Boolean = false) {
-        if(!library.isLoaded || isDestroyed || tab!=0 || (!force && apiStatusCheckStarted)) return
+        if(!library.isLoaded || isDestroyed || (!force && (tab!=0 || apiStatusCheckStarted))) return
         val batch=++apiStatusUiState.checkBatchId
         if(!hasValidatedInternet()) {
             val failed=Color.rgb(235,75,75)
