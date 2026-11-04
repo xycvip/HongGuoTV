@@ -121,6 +121,7 @@ import java.util.concurrent.atomic.AtomicLong
         val safeMessage=message
             .replace(Regex("(?i)(token|authorization|cookie|password|secret|sign|session)=([^&\\s]+)"),"$1=[已隐藏]")
             .replace(Regex("(https?://[^\\s?]+)\\?[^\\s]+"),"$1?[参数已隐藏]")
+            .replace(Regex("(?im)^(authorization|cookie|set-cookie):.*$"),"$1: [已隐藏]")
         val line="$stamp  +${uptime}ms  [$thread]  $safeMessage\n"
         debugLogExecutor.execute {
             runCatching {
@@ -133,6 +134,11 @@ import java.util.concurrent.atomic.AtomicLong
                         file.appendText("===== 调试日志分卷 =====\n",Charsets.UTF_8)
                     }
                     file.appendText(line,Charsets.UTF_8)
+                    val retained=file.parentFile?.listFiles()
+                        ?.filter { it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log") }
+                        ?.sortedByDescending { it.lastModified() }
+                        .orEmpty()
+                    retained.drop(5).forEach { runCatching { it.delete() } }
                 }
             }
         }
