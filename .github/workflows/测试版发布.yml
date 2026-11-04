@@ -8,7 +8,7 @@ on:
         description: 本次测试版更新说明
         required: true
         type: string
-      confirm_release:
+      confirm_beta_release:
         description: 确认构建并发布测试版到 HongGuoTV 仓库
         required: true
         type: boolean
@@ -29,7 +29,7 @@ concurrency:
 jobs:
   release:
     name: 构建、签名并发布测试版
-    if: ${{ inputs.confirm_release }}
+    if: ${{ inputs.confirm_beta_release }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
