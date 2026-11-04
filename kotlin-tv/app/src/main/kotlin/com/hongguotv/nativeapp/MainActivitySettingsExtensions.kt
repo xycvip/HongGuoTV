@@ -196,6 +196,23 @@ import java.util.concurrent.atomic.AtomicLong
             rechainSettings()
         }
 
+        // 调试模式关闭时，在「启动时播放推荐」设置项上 5 秒内连续点击 4 次，临时显示调试入口。
+        // 每次点击仍正常切换启动推荐开关；四次点击后开关状态自然回到原值。
+        fun recordDebugRevealTap() {
+            if(debugEnabled || debugSettingRevealedThisSession) return
+            val now=android.os.SystemClock.elapsedRealtime()
+            if(debugRevealTapCount==0 || now-debugRevealLastTapAt>5000L) {
+                debugRevealTapCount=0
+            }
+            debugRevealLastTapAt=now
+            debugRevealTapCount++
+            if(debugRevealTapCount>=4) {
+                debugRevealTapCount=0
+                setDebugCategoryVisible(true)
+                Toast.makeText(this@settings,"调试入口已显示，本次运行期间不会自动隐藏",Toast.LENGTH_LONG).show()
+            }
+        }
+
         lateinit var startupAutoplayButton:TextView
         lateinit var qualityButton:TextView
         lateinit var defaultSpeed:TextView
@@ -231,6 +248,7 @@ import java.util.concurrent.atomic.AtomicLong
             val enabled=!startupAutoplayEnabled()
             getSharedPreferences("startup_playback",Context.MODE_PRIVATE).edit().putBoolean("autoplay_recommendation",enabled).apply()
             paintStartupAutoplayButton()
+            recordDebugRevealTap()
         }
         paintStartupAutoplayButton(false)
         startupAutoplayButton.setOnFocusChangeListener { _,focused ->
@@ -336,21 +354,6 @@ import java.util.concurrent.atomic.AtomicLong
             library.showClock=!library.showClock
             clockButton.text="显示系统时间  ·  ${if(library.showClock) "开启" else "关闭"}"
             applyClock()
-            // 仅在调试模式关闭且入口尚未解锁时，才需要连续点击 5 次。
-            // 调试模式开启时，分类入口由持久化开关直接保持可见。
-            if(!debugEnabled && !debugSettingRevealedThisSession) {
-                val revealNow=android.os.SystemClock.elapsedRealtime()
-                if(debugRevealTapCount==0 || revealNow-debugRevealLastTapAt>5000L) {
-                    debugRevealTapCount=0
-                    debugRevealLastTapAt=revealNow
-                }
-                debugRevealTapCount++
-                if(debugRevealTapCount>=5) {
-                    setDebugCategoryVisible(true)
-                    Toast.makeText(this@settings,"调试入口已显示，本次运行期间不会自动隐藏",Toast.LENGTH_LONG).show()
-                }
-            }
-
         }
         sourceDisplayButton=setting(appearance,4,"片源显示  ·  ${if(getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE).getBoolean("show_third_source",false)) "开启" else "关闭"}") {
             val prefs=getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE)
