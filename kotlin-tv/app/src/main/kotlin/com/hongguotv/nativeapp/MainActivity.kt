@@ -146,6 +146,7 @@ class MainActivity: Activity() {
     // 入口显示状态仅在当前应用进程内保留；进程重启后按调试模式状态重新决定。
     // Activity 构造阶段 Context 尚未挂接，不能在属性初始化时读取 SharedPreferences。
     internal var debugSettingRevealedThisSession by debugUiState::settingRevealedThisSession
+    internal var debugRevealTapCount by debugUiState::revealTapCount
     internal var lastSpeedBytes by debugUiState::lastSpeedBytes
     internal var lastSpeedAt by debugUiState::lastSpeedAt
     internal var currentSpeedBytesPerSecond by debugUiState::currentSpeedBytesPerSecond
@@ -479,8 +480,7 @@ class MainActivity: Activity() {
     override fun onCreate(state: Bundle?) {
         TvStyle.apply(getSharedPreferences("native-library-v1", Context.MODE_PRIVATE).getString("theme", null))
         super.onCreate(state)
-        // Context 完成挂接后再读取调试模式，避免 Activity 构造阶段触发启动崩溃。
-        debugSettingRevealedThisSession=debugEnabled
+        // 调试入口的显示状态仅保存在进程内；调试模式本身仍由持久化开关控制。
         applyDeviceOrientationPolicy()
         applyImmersiveFullscreen()
         library=Library(this); artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
@@ -815,6 +815,8 @@ class MainActivity: Activity() {
     }
     override fun onResume() {
         super.onResume(); foreground=true; main.removeCallbacks(tick); main.post(tick)
+        if(debugEnabled && debugFile==null) startDebugLogging(null)
+        debugLog("生命周期：onResume；页面=$screen；调试模式=${if(debugEnabled) "开启" else "关闭"}")
         // A page rebuild can also schedule the clock while resuming; replace any queued copy.
         clockTick?.let { main.removeCallbacks(it); it.run() }
         updater.resume()
@@ -836,10 +838,6 @@ class MainActivity: Activity() {
             }
             if(screen=="player") {
                 syncMediaSession()
-                if(debugEnabled && debugFile==null) {
-                    if(hasBackupStoragePermission()) startDebugLogging(null)
-                    else getSharedPreferences("debug-mode-v1",MODE_PRIVATE).edit().putBoolean("enabled",false).apply()
-                }
                 attachDebugOverlay()
             }
         } else libraryLoadError?.let(::showLibraryError)
@@ -851,6 +849,7 @@ class MainActivity: Activity() {
 
 
     override fun onPause() {
+        debugLog("生命周期：onPause；页面=$screen；播放位置=${player?.currentPosition ?: -1}ms")
         updater.pause()
         foreground=false; main.removeCallbacks(tick); clockTick?.let(main::removeCallbacks); cancelRecovery(); cancelPrefetch(); mediaSession.deactivate()
         sleepTimer.cancel(); favoriteMonitor.stop(); detailAutoplay=false; requestedAutoplay=false; pausedForLifecycle=true
@@ -867,6 +866,7 @@ class MainActivity: Activity() {
         if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) cancelPrefetch()
     }
     override fun onDestroy() {
+        debugLog("生命周期：onDestroy；页面=$screen；正在销毁 Activity")
         generation++; cancelWork()
         if(networkRegistered) connectivity.unregisterNetworkCallback(networkCallback)
         favoriteMonitor.destroy(); tvTools.destroy(); updater.destroy(); if(!resettingAllData) saveProgress(); cloudAccount.destroy(); releasePlayer(); library.close()
