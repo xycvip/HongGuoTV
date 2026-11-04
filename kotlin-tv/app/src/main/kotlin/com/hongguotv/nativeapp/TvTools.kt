@@ -17,8 +17,6 @@ import android.widget.*
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import com.hongguotv.core.EpisodeTarget
-import com.hongguotv.core.PhoneForm
-import com.hongguotv.core.PhoneInputServer
 import com.hongguotv.core.ThirdSourceTransferServer
 import com.hongguotv.core.BackupThirdSource
 import com.hongguotv.core.LibraryTransferServer
@@ -128,38 +126,6 @@ class TvTools(private val activity: Activity) {
         val pixels=IntArray(360*360) { i->if(bits[i%360,i/360]) Color.BLACK else Color.WHITE }
         setImageBitmap(Bitmap.createBitmap(pixels,360,360,Bitmap.Config.ARGB_8888))
         contentDescription="二维码"
-    }
-    /** 搜索剧名场景的手机输入（文案固定为剧名）。 */
-    fun phoneInput(anchor: View?,submit: (String)->Unit)=phoneForm(anchor,PhoneForm.search()) { values->submit(values["query"].orEmpty()) }
-    /** 通用手机填写页：表单内容由调用方定义，填写完成后回传全部字段值。 */
-    fun phoneForm(anchor: View?,form: PhoneForm,onSubmit: (Map<String,String>)->Unit) {
-        val connectivity=activity.getSystemService(ConnectivityManager::class.java)
-        val network=connectivity.activeNetwork
-        val capabilities=connectivity.getNetworkCapabilities(network)
-        val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
-        if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
-            info("手机填写","请让电视和手机连接同一局域网（Wi-Fi 或有线网络）后重试。",anchor); return
-        }
-        val content=column(); content.addView(TvDialog.title(activity,form.heading))
-        val status=label("正在生成二维码…"); content.addView(status)
-        val dialog=AlertDialog.Builder(activity).setView(TvDialog.card(activity,content)).create()
-        TvDialog.styleWindow(activity,dialog)
-        open(dialog,anchor)
-        worker.execute {
-            try {
-                val session=PhoneInputServer(address,form,{ values -> main.post { if(this@TvTools.dialog===dialog) { dialog.dismiss(); onSubmit(values) } } },{ main.post { if(this@TvTools.dialog===dialog) { content.removeAllViews(); content.addView(label("二维码已过期，请关闭后重新打开。")) } } })
-                main.post {
-                    if(this@TvTools.dialog!==dialog) { session.close(); return@post }
-                    phone=session; content.removeAllViews()
-                    val row=LinearLayout(activity).apply { gravity=Gravity.CENTER_VERTICAL }
-                    row.addView(qr(session.url),LinearLayout.LayoutParams(dp(185),dp(185)))
-                    val instructions=column()
-                    instructions.addView(label("手机扫码后用浏览器打开，按页面提示填写，提交后内容会发送到电视。\n需连接同一局域网；关闭窗口即失效，最长 5 分钟。",16f))
-                    instructions.addView(label(session.url,12f).apply { setTextColor(TvStyle.muted) })
-                    row.addView(instructions,LinearLayout.LayoutParams(0,-2,1f)); content.addView(row)
-                }
-            } catch(_: Exception) { main.post { if(this@TvTools.dialog===dialog) status.text="无法开启手机填写，请检查网络后重试。" } }
-        }
     }
     /** 源配置的手机扫码导入导出：手机页可下载当前源配置，也可上传配置文件追加到电视。 */
     fun sourceTransfer(config: String,anchor: View?,restore: (List<BackupThirdSource>)->Unit) {
