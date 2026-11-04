@@ -131,6 +131,7 @@ class MainActivity: Activity() {
     internal var activeDecoderName by playbackPipelineState::activeDecoderName
     internal val playbackBytes get() = playbackPipelineState.playbackBytes
     internal var debugFile by debugUiState::file
+    internal var debugStartPending by debugUiState::startPending
     internal val debugLogExecutor get() = debugUiState.logExecutor
     internal val debugLock get() = debugUiState.lock
     internal var debugOverlayText by debugUiState::overlayText
