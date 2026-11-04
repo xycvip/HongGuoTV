@@ -237,7 +237,24 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add kotlin-tv/test-version.properties test-update/latest.json
           git commit -m "发布测试版更新清单并递增版本号至 $NEXT_NAME"
-          git push origin HEAD:main
+
+          # 发布期间 main 可能有文档或代码新提交。先同步远端再重放版本更新提交，
+          # 避免 APK 已发布后仅因非快进推送而把整个工作流标记为失败。
+          git fetch origin main
+          if ! git rebase origin/main; then
+            git rebase --abort || true
+            echo "::warning::测试版 APK 已发布，但版本记录与远端 main 发生冲突；本次跳过版本记录推送。下次发布会根据已占用的 Release 标签自动递增版本号。"
+            exit 0
+          fi
+
+          if ! git push origin HEAD:main; then
+            git fetch origin main
+            if ! git rebase origin/main || ! git push origin HEAD:main; then
+              git rebase --abort || true
+              echo "::warning::测试版 APK 已发布，但版本记录推送遇到并发更新；下次发布会根据已占用的 Release 标签自动递增版本号。"
+              exit 0
+            fi
+          fi
           echo "下一次测试版版本号已更新为：$NEXT_NAME"
           echo "下一次 versionCode 已更新为：$NEXT_CODE"
 
