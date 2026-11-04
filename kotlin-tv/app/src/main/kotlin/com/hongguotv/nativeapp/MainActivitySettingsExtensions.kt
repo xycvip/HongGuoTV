@@ -431,6 +431,8 @@ import java.util.concurrent.atomic.AtomicLong
                 ensureBackupStoragePermission()
             }
         }
+        lateinit var interfaceStatusButton:TextView
+        interfaceStatusButton=setting(debug,6,"接口状态详情") { showInterfaceCheck(interfaceStatusButton) }
         setting(debug,6,"查看运行诊断") {
             AlertDialog.Builder(this).setTitle("运行诊断信息")
                 .setMessage(debugEnvironmentSnapshot())
