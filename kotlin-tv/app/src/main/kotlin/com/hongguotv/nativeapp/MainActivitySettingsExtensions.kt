@@ -297,11 +297,11 @@ import java.util.concurrent.atomic.AtomicLong
             Toast.makeText(this@settings,actual,Toast.LENGTH_LONG).show()
         }
         lateinit var seamlessPlaybackButton:TextView
-        seamlessPlaybackButton=setting(playback,0,"无缝接续  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
+        seamlessPlaybackButton=setting(playback,0,"无缝连播  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
             val enabled=!seamlessPlaybackEnabled
             getSharedPreferences("playback-settings-v1",Context.MODE_PRIVATE)
                 .edit().putBoolean("seamless_playback",enabled).apply()
-            seamlessPlaybackButton.text="无缝接续  ·  ${if(enabled) "开启" else "关闭"}"
+            seamlessPlaybackButton.text="无缝连播  ·  ${if(enabled) "开启" else "关闭"}"
             if(enabled) {
                 standbyFallbackEpisodeId=""
                 cancelPrefetch()
@@ -309,11 +309,11 @@ import java.util.concurrent.atomic.AtomicLong
                 if(screen=="player" && playbackReady && detail!=null && episodeIndex<detail!!.episodes.lastIndex) {
                     prepareStandbyEpisode(episodeIndex+1)
                 }
-                Toast.makeText(this@settings,"无缝接续已开启，将从下一集开始预备",Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@settings,"无缝连播已开启，将从下一集开始预备",Toast.LENGTH_SHORT).show()
             } else {
                 standbyFallbackEpisodeId=""
-                clearStandbyPlayer("用户关闭无缝接续")
-                Toast.makeText(this@settings,"无缝接续已关闭，恢复单播放器预加载",Toast.LENGTH_SHORT).show()
+                clearStandbyPlayer("用户关闭无缝连播")
+                Toast.makeText(this@settings,"无缝连播已关闭，恢复单播放器预加载",Toast.LENGTH_SHORT).show()
             }
         }
         autoNextButton=setting(playback,0,"自动连播  ·  ${if(library.autoNext) "开启" else "关闭"}") {
