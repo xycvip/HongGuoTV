@@ -51,6 +51,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
         if(next==0) {
             // 点击首页后刷新内容，但重建页面时焦点固定恢复到“首页”导航项。
             refreshAllHome(focusNav=true)
+            if(!apiStatusCheckStarted) main.post { runAutomaticApiChecks() }
         } else {
             showCatalog(load=(next==7 || (next<=2 && catalog.isEmpty() && (next!=1 || query.isNotBlank()))))
         }
