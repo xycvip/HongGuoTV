@@ -141,7 +141,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         SurfaceView(this).apply { alpha = 0f; isFocusable = false }
                     }
                     output.importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                    root.addView(output, FrameLayout.LayoutParams(1, 1, Gravity.BOTTOM or Gravity.END))
+                    root.addView(output, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.BOTTOM or Gravity.END))
                     standbyOutputView = output
                     when (output) {
                         is TextureView -> secondary.setVideoTextureView(output)
