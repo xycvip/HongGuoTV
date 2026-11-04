@@ -189,6 +189,7 @@ jobs:
               notes: $notes
             }' > test-update/latest.json
           cp test-update/latest.json "$RUNNER_TEMP/test-release/update.json"
+          printf '%s  %s\\n' "$APK_SHA256" "HongguoTV-$VERSION_NAME.apk" > "$RUNNER_TEMP/test-release/SHA256SUMS"
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           # 红果TV测试版 $VERSION_NAME
 
@@ -202,7 +203,7 @@ jobs:
 
           > 此版本为独立测试包，使用产品签名；不会上传或修改 AppDownload。
           EOF
-          gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/test-release/update.json" \
+          gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/test-release/SHA256SUMS" "$RUNNER_TEMP/test-release/update.json" \
             --repo "$GITHUB_REPOSITORY" \
             --title "红果TV测试版 $VERSION_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
