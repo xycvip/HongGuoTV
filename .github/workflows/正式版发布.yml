@@ -9,7 +9,7 @@ on:
         required: true
         type: boolean
         default: false
-      skip_validation:
+      skip_file_check:
         description: 跳过APK文件存在性检查（签名校验始终执行）
         required: true
         type: boolean
@@ -130,7 +130,7 @@ jobs:
         shell: bash
         env:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
-          SKIP_FILE_CHECK: ${{ inputs.skip_validation }}
+          SKIP_FILE_CHECK: ${{ inputs.skip_file_check }}
         run: |
           set -euo pipefail
           APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
