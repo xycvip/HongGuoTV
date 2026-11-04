@@ -49,19 +49,38 @@ import java.util.concurrent.atomic.AtomicLong
         val playbackStarted=android.os.SystemClock.elapsedRealtime()
         debugPlaybackStartedAt=playbackStarted; debugPlaybackReadyAt=0L; debugFirstFrameAt=0L
         debugLog("开始播放 index=${index+1} position=$position autoplay=$autoplay recovering=$recovering")
+        val selectedIndex=index.coerceIn(0,data.episodes.lastIndex)
+        val standbyKey="${data.episodes[selectedIndex]}:${library.maxQuality}"
+        val promoteStandby=position==0L && !recovering && !forceRebuild && seamlessPlaybackEnabled &&
+            standbyEpisodeId==standbyKey && standbyReady && standbyPlayer!=null && standbyRemote!=null
         val reuse=screen=="player" && player!=null && playerView!=null && !recovering && !playError && !forceRebuild
         library.setWatched(data.series.id,false)
-        val selectedIndex=index.coerceIn(0,data.episodes.lastIndex)
         val isStartupPreview=bootAutoPlaybackPending && autoplay && !recovering
-        val prefetched=if(position==0L && !recovering && !forceRebuild) preparedNext.take("${data.episodes[selectedIndex]}:${library.maxQuality}") else null
-        val prefetchedSource=if(prefetched!=null) preloadManager?.getMediaSource(videoItem(data.episodes[selectedIndex])) else null
-        val claimedHttp=if(prefetched!=null) prefetchHttp.also { prefetchHttp=null } else null
+        val prefetched=if(promoteStandby) standbyRemote else if(position==0L && !recovering && !forceRebuild) preparedNext.take(standbyKey) else null
+        val prefetchedSource=if(prefetched!=null && !promoteStandby) preloadManager?.getMediaSource(videoItem(data.episodes[selectedIndex])) else null
+        val claimedHttp=if(promoteStandby) standbyHttp.also { standbyHttp=null } else if(prefetched!=null) prefetchHttp.also { prefetchHttp=null } else null
+        if(promoteStandby) {
+            val oldPlayer=player
+            playerListener?.let { oldPlayer?.removeListener(it) }
+            playerListener=null
+            oldPlayer?.release()
+            player=standbyPlayer
+            playerView?.player=player
+            standbyPlayer=null
+            standbyRemote=null
+            standbyEpisodeId=""
+            standbyReady=false
+            standbyJob=null
+            debugLog("无缝接续：备用播放器接管第 ${selectedIndex+1} 集")
+        } else if(seamlessPlaybackEnabled && standbyEpisodeId.isNotEmpty() && standbyEpisodeId!=standbyKey) {
+            clearStandbyPlayer("用户切换到其他剧集")
+        }
         saveProgress(); library.flush(); invalidatePage(); favoriteMonitor.stop(); releaseCatalogViews(); stopDanmaku()
         if(reuse) {
             cancelRecovery(); cancelPrefetch(keepMediaSource=prefetchedSource!=null); tvTools.close()
             episodePanel?.dismiss(); episodePanel=null; speedDialog?.dismiss(); speedDialog=null
             playerListener?.let { player?.removeListener(it) }; playerListener=null
-            player?.stop(); player?.clearMediaItems()
+            if(!promoteStandby) { player?.stop(); player?.clearMediaItems() }
             closeActiveVideo(); closeTransport(playbackHttp); playbackHttp=null
             main.removeCallbacks(hideHud); main.removeCallbacks(seekRunnable); main.removeCallbacks(singleTapPlayback); pendingSeek=null
         progressUserSeeking=false; lastTapAt=0L
@@ -282,7 +301,14 @@ import java.util.concurrent.atomic.AtomicLong
             playerListener=listener; p.addListener(listener)
             val source=prefetchedSource ?: videoSource(remote,requestedId)
             val introSkip=if(position<=0 && (skipMark?.introSeconds ?: 0)>0) skipMark!!.introSeconds*1000L else position.coerceAtLeast(0)
-            p.setMediaSource(source); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
+            if(promoteStandby && p.currentMediaItem?.mediaId==requestedId) {
+                p.volume=1f
+                p.seekTo(introSkip)
+                p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
+                if(p.playbackState==Player.STATE_READY) listener.onPlaybackStateChanged(p.playbackState)
+            } else {
+                p.setMediaSource(source); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
+            }
             if(introSkip>0 && position<=0) Toast.makeText(this,"已跳过片头 ${skipMark!!.introSeconds} 秒",Toast.LENGTH_SHORT).show()
         }, { problem -> playerFailure(problem) })
     }
