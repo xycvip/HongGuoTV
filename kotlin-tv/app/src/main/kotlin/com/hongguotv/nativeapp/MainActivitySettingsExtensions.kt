@@ -135,7 +135,8 @@ import java.util.concurrent.atomic.AtomicLong
         val remote=section("按键","自定义方向键与确认键操作").second
         val appearance=section("外观","界面风格与播放画面显示").second
         val system=section("关于","软件信息与恢复设置").second
-        val debug=section("调试模式","日志采集、查看、复制与清理").second
+        val debugSection=section("调试模式","运行状态、诊断信息与日志管理")
+        val debug=debugSection.second
 
         // 左侧主设置分类卡片的右边缘，动态对齐导航栏搜索按钮背景框的右边缘。
         fun alignCategoryCardsToSearchShortcut() {
@@ -328,6 +329,18 @@ import java.util.concurrent.atomic.AtomicLong
             library.showClock=!library.showClock
             clockButton.text="显示系统时间  ·  ${if(library.showClock) "开启" else "关闭"}"
             applyClock()
+            // 连续点击 5 次显示隐藏调试分类；显示后保持到进程结束。
+            if(!debugSettingRevealedThisSession) {
+                debugRevealTapCount++
+                if(debugRevealTapCount>=5) {
+                    debugSettingRevealedThisSession=true
+                    categoryHeadingCards.getOrNull(6)?.visibility=View.VISIBLE
+                    debugSection.first.visibility=View.VISIBLE
+                    categoryItems.getOrNull(6)?.forEach { it.visibility=View.VISIBLE }
+                    rechainSettings()
+                    Toast.makeText(this@settings,"调试入口已显示，本次运行期间不会自动隐藏",Toast.LENGTH_LONG).show()
+                }
+            }
 
         }
         fileBackup=setting(data,2,"本地备份与恢复") { showFileBackupDialog(fileBackup) }
@@ -475,6 +488,12 @@ import java.util.concurrent.atomic.AtomicLong
                 }
             }.show()
         }
+
+        // 调试分类只在当前进程内记忆；重启应用后必须重新触发隐藏入口。
+        val revealDebug=debugSettingRevealedThisSession
+        categoryHeadingCards.getOrNull(6)?.visibility=if(revealDebug) View.VISIBLE else View.GONE
+        debugSection.first.visibility=if(revealDebug) View.VISIBLE else View.GONE
+        categoryItems.getOrNull(6)?.forEach { it.visibility=if(revealDebug) View.VISIBLE else View.GONE }
 
         rechainSettings={
             val visibleByCategory=categoryItems.map { items -> items.filter { it.visibility==View.VISIBLE } }
