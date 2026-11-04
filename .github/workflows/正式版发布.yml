@@ -201,7 +201,7 @@ jobs:
             }' > hongguoTV/latest.json
           # Releases API 主线路读取 update.json；Raw 备用线路读取 latest.json，两份内容必须一致。
           cp hongguoTV/latest.json "$RUNNER_TEMP/release/update.json"
-          printf '%s  %s\\n' "$APK_SHA256" "HongguoTV-$VERSION_NAME.apk" > "$RUNNER_TEMP/release/SHA256SUMS"
+          printf '%s  %s\n' "$APK_SHA256" "HongguoTV-$VERSION_NAME.apk" > "$RUNNER_TEMP/release/SHA256SUMS"
 
           cat > hongguoTV/README.md <<EOF
           # 红果TV正式版分发
