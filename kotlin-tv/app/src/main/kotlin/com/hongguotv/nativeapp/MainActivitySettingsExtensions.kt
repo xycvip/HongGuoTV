@@ -135,6 +135,7 @@ import java.util.concurrent.atomic.AtomicLong
         val remote=section("按键","自定义方向键与确认键操作").second
         val appearance=section("外观","界面风格与播放画面显示").second
         val system=section("关于","软件信息与恢复设置").second
+        val debug=section("调试模式","日志采集、查看、复制与清理").second
 
         // 左侧主设置分类卡片的右边缘，动态对齐导航栏搜索按钮背景框的右边缘。
         fun alignCategoryCardsToSearchShortcut() {
@@ -407,15 +408,88 @@ import java.util.concurrent.atomic.AtomicLong
 
         resetButton=setting(system,5,"重置软件") { showResetOptions(resetButton) }
         aboutButton=setting(system,5,"关于软件") { updater.show(aboutButton,aboutMode=true) }
-        debugSettingButton=setting(system,5,debugSettingLabel()) {
+
+        // 调试能力独立成左侧主分类，避免藏在“关于”设置项中。
+        debugSettingButton=setting(debug,6,debugSettingLabel()) {
             if(debugEnabled) stopDebugLogging() else {
                 pendingBackupAction=2
                 pendingBackupAnchor=debugSettingButton
                 ensureBackupStoragePermission()
             }
         }
-        // 调试模式开启时显示；本次运行中手动解锁或关闭调试模式后，入口仍保留到下次启动。
-        debugSettingButton?.visibility=if(debugEnabled || debugSettingRevealedThisSession) View.VISIBLE else View.GONE
+        setting(debug,6,"显示日志") {
+            val target=debugFile ?: runCatching {
+                backupFolder().listFiles()?.filter { it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log") }
+                    ?.maxByOrNull { it.lastModified() }
+            }.getOrNull()
+            if(target==null || !target.exists()) {
+                Toast.makeText(this,"暂时没有调试日志",Toast.LENGTH_SHORT).show()
+            } else {
+                io.execute {
+                    val content=runCatching {
+                        val length=target.length()
+                        if(length>2L*1024*1024) {
+                            val raf=java.io.RandomAccessFile(target,"r")
+                            raf.use { it.seek(length-2L*1024*1024); it.readBytes().toString(Charsets.UTF_8) }
+                        } else target.readText(Charsets.UTF_8)
+                    }.getOrElse { "读取日志失败：${it.message}" }
+                    main.post {
+                        if(isDestroyed) return@post
+                        val body=TextView(this).apply {
+                            text=content
+                            textSize=11f
+                            typeface=android.graphics.Typeface.MONOSPACE
+                            setTextIsSelectable(true)
+                            setTextColor(Color.WHITE)
+                            setPadding(dp(12),dp(10),dp(12),dp(10))
+                        }
+                        val scroll=ScrollView(this).apply { addView(body) }
+                        AlertDialog.Builder(this).setTitle("调试日志")
+                            .setView(scroll).setPositiveButton("关闭",null).show()
+                    }
+                }
+            }
+        }
+        setting(debug,6,"复制日志") {
+            val target=debugFile ?: runCatching {
+                backupFolder().listFiles()?.filter { it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log") }
+                    ?.maxByOrNull { it.lastModified() }
+            }.getOrNull()
+            if(target==null || !target.exists()) {
+                Toast.makeText(this,"暂时没有调试日志",Toast.LENGTH_SHORT).show()
+            } else io.execute {
+                val result=runCatching { target.readText(Charsets.UTF_8) }
+                main.post {
+                    result.onSuccess { content ->
+                        val clipboard=getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("HongGuoTV 调试日志",content))
+                        Toast.makeText(this,"日志已复制",Toast.LENGTH_SHORT).show()
+                    }.onFailure { Toast.makeText(this,"复制失败：${it.message}",Toast.LENGTH_LONG).show() }
+                }
+            }
+        }
+        setting(debug,6,"清理日志") {
+            val target=debugFile ?: runCatching {
+                backupFolder().listFiles()?.filter { it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log") }
+                    ?.maxByOrNull { it.lastModified() }
+            }.getOrNull()
+            if(target==null || !target.exists()) {
+                Toast.makeText(this,"没有可清理的日志",Toast.LENGTH_SHORT).show()
+            } else TvDialog.confirm(this,"清理调试日志","清空当前调试日志文件，之后仍可继续记录。") {
+                debugLogExecutor.execute {
+                    val result=runCatching {
+                        synchronized(debugLock) {
+                            target.writeText("",Charsets.UTF_8)
+                            if(debugFile==null) debugFile=target
+                        }
+                    }
+                    main.post {
+                        result.onSuccess { Toast.makeText(this,"日志已清理",Toast.LENGTH_SHORT).show() }
+                            .onFailure { Toast.makeText(this,"清理失败：${it.message}",Toast.LENGTH_LONG).show() }
+                    }
+                }
+            }.show()
+        }
 
         rechainSettings={
             val visibleByCategory=categoryItems.map { items -> items.filter { it.visibility==View.VISIBLE } }
