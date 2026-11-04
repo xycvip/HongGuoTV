@@ -191,52 +191,53 @@ class TvTools(private val activity: Activity) {
             } catch(_: Exception) { main.post { if(this@TvTools.dialog===dialog) status.text="无法开启源配置传输，请检查网络后重试。" } }
         }
     }
-    fun libraryTransfer(backup: String,anchor: View?,restore: (BackupData,Boolean)->Unit) {
+    fun libraryTransfer(anchor: View?) {
         val connectivity=activity.getSystemService(ConnectivityManager::class.java)
-        val network=connectivity.activeNetwork; val capabilities=connectivity.getNetworkCapabilities(network)
+        val network=connectivity.activeNetwork
+        val capabilities=connectivity.getNetworkCapabilities(network)
         val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
         if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
-            info("备份与恢复","请让电视和手机连接同一局域网后重试。",anchor); return
+            info("手机文件管理","请让电视和手机连接同一局域网后重试。",anchor)
+            return
         }
-        val content=column(); content.addView(TvDialog.title(activity,"手机备份与恢复"))
-        val status=label("正在生成二维码…"); content.addView(status)
+        val content=column()
+        content.addView(TvDialog.title(activity,"手机文件管理"))
+        val status=label("正在开启公共目录…")
+        content.addView(status)
         val dialog=AlertDialog.Builder(activity).setView(TvDialog.card(activity,content)).create()
         TvDialog.styleWindow(activity,dialog)
         open(dialog,anchor)
         worker.execute {
             try {
-                val session=LibraryTransferServer(address,backup,{ data -> main.post {
-                    if(this@TvTools.dialog!==dialog) return@post
-                    dialog.dismiss()
-                    val preview=column()
-                    preview.addView(TvDialog.title(activity,"确认恢复本机记录"))
-                    preview.addView(label("备份含 ${data.favorites.size} 部收藏、${data.history.size} 条观看记录、${data.searches.size} 条搜索、${data.later.size} 部稍后看、${data.hidden.size} 部已隐藏推荐。\n\n恢复后将以备份文件中的记录覆盖本机对应记录，不会合并现有数据。",16f))
-                    val settings=CheckBox(activity).apply { text="同时恢复播放偏好设置和内容分类"; isChecked=false; setTextColor(TvStyle.text) }; preview.addView(settings)
-                    val confirmDialog=AlertDialog.Builder(activity).setView(TvDialog.card(activity,preview)).create()
-                    TvDialog.styleWindow(activity,confirmDialog)
-                    val actions=LinearLayout(activity).apply {
-                        orientation=LinearLayout.HORIZONTAL
-                        gravity=Gravity.END
-                        setPadding(0,dp(14),0,0)
+                val folder=java.io.File(android.os.Environment.getExternalStorageDirectory(),"HongGuoTV")
+                val session=LibraryTransferServer(address,folder) {
+                    main.post {
+                        if(this@TvTools.dialog===dialog) {
+                            content.removeAllViews()
+                            content.addView(TvDialog.title(activity,"文件管理已关闭"))
+                            content.addView(label("二维码已过期，请重新打开手机文件管理。",16f))
+                        }
                     }
-                    val cancel=TvDialog.capsuleButton(activity,"取消") { confirmDialog.dismiss() }
-                    val ok=TvDialog.capsuleButton(activity,"恢复备份") { confirmDialog.dismiss(); restore(data,settings.isChecked) }
-                    actions.addView(cancel,LinearLayout.LayoutParams(-2,-2).apply { rightMargin=dp(12) })
-                    actions.addView(ok,LinearLayout.LayoutParams(-2,-2))
-                    preview.addView(actions)
-                    open(confirmDialog,anchor); cancel.requestFocus()
-                } },{ main.post { if(this@TvTools.dialog===dialog) { content.removeAllViews(); content.addView(label("二维码已过期，请关闭后重新打开。")) } } })
+                }
                 main.post {
                     if(this@TvTools.dialog!==dialog) { session.close(); return@post }
-                    phone=session; content.removeAllViews()
+                    phone=session
+                    content.removeAllViews()
                     val row=LinearLayout(activity).apply { gravity=Gravity.CENTER_VERTICAL }
                     row.addView(qr(session.url),LinearLayout.LayoutParams(dp(185),dp(185)))
                     val instructions=column()
-                    instructions.addView(label("手机扫码，用浏览器下载备份或选择备份文件恢复。\n备份含明文红果账户凭据，请勿分享文件；云端账户观影资料不写入备份。\n仅限同一局域网；关闭即失效，最长 5 分钟。恢复需在电视确认。",16f))
+                    instructions.addView(label("手机扫码后直接浏览电视的 HongGuoTV 公共目录。可以下载目录中的文件，也可以上传任意类型文件；支持进入子文件夹。
+
+不会生成临时备份，不会自动导出收藏、历史或账户信息。文件只在你主动上传或下载时传输。
+
+仅限同一局域网；关闭窗口即失效，最长 5 分钟。",16f))
                     instructions.addView(label(session.url,12f).apply { setTextColor(TvStyle.muted) })
-                    row.addView(instructions,LinearLayout.LayoutParams(0,-2,1f)); content.addView(row)
+                    row.addView(instructions,LinearLayout.LayoutParams(0,-2,1f))
+                    content.addView(row)
                 }
-            } catch(_: Exception) { main.post { if(this@TvTools.dialog===dialog) status.text="无法开启备份传输，请检查网络后重试。" } }
+            } catch(e:Exception) {
+                main.post { if(this@TvTools.dialog===dialog) status.text="无法打开公共目录：${e.message ?: "请检查存储权限和网络"}" }
+            }
         }
     }
     fun backdropTransfer(anchor: View?,onImage: (ByteArray,String)->Unit) {
