@@ -13,6 +13,7 @@ internal fun MainActivity.createNetworkCallback(): ConnectivityManager.NetworkCa
             main.post {
                 // A callback already in flight may enqueue work after unregister/cleanup.
                 if (isDestroyed) return@post
+                val wasUnavailable=apiNetworkUnavailable
                 val online = hasValidatedInternet()
                 if (!online) {
                     if (connectivity.isActiveNetworkMetered || !networkAvailable()) cancelPrefetch()
@@ -29,6 +30,7 @@ internal fun MainActivity.createNetworkCallback(): ConnectivityManager.NetworkCa
                     apiStatusCheckStarted = false
                     if (library.isLoaded && !isDestroyed && tab == 0) runAutomaticApiChecks()
                 }
+                if(wasUnavailable!=apiNetworkUnavailable) debugLog("网络连通状态变化：${if(online) "已恢复" else "不可用"}；页面=$screen")
                 if (foreground && screen == "player" && playError && autoRecovery) scheduleRecovery()
             }
         }
