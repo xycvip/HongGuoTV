@@ -28,7 +28,6 @@ internal class SearchUiState {
     var suggestFocusIndex: Int = -1
     var searchBody: LinearLayout? = null
     var searchColumns: Int = 6
-    var phoneSearched: Boolean = false
     var keyboardLastLabel: String? = null
     var keyboardKeys: Map<String,TextView> = emptyMap()
     var keyboardRows: List<List<TextView>> = emptyList()
