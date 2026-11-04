@@ -51,7 +51,7 @@ internal fun MainActivity.backupFolder(): java.io.File {
 
     internal fun MainActivity.showFileBackupDialog(anchor: View) {
         tvTools.choose(
-            "本机资料备份与恢复",
+            "备份与恢复",
             listOf("导出备份文件","从备份文件恢复"),
             anchor,
             { choice ->
@@ -302,7 +302,7 @@ internal fun MainActivity.handleBackupPermissionResult(requestCode: Int, grantRe
         tvTools.info(
             "需要存储权限",
             if (action == 2) "调试模式需要访问公共存储目录，才能将诊断日志保存到 HongGuoTV 文件夹。允许存储权限后可重新开启。"
-            else if (action == 3) "手机文件管理需要访问 HongGuoTV 公共目录，允许存储权限后才能通过手机浏览和传输文件。"
+            else if (action == 3) "远程文件管理需要访问电视公共存储目录，允许存储权限后才能通过局域网浏览和传输文件。"
             else "红果 TV 需要访问公共存储目录，才能在 HongGuoTV 文件夹中保存或读取备份。你可以在系统设置中允许存储权限后重试。",
             pendingBackupAnchor
         )
