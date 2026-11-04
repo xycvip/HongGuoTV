@@ -5,6 +5,10 @@ import com.hongguotv.core.ContentRepository
 import com.hongguotv.core.RemoteVideo
 
 import android.content.Context
+import android.view.Gravity
+import android.view.SurfaceView
+import android.view.TextureView
+import android.widget.FrameLayout
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -14,25 +18,38 @@ import androidx.media3.exoplayer.ExoPlayer
 import okhttp3.Dispatcher
 import okhttp3.ConnectionPool
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** 清理备用播放器及其独立网络会话；不会触碰当前正在播放的主播放器。 */
 internal fun MainActivity.clearStandbyPlayer(reason: String) {
     standbyJob?.cancel(true)
     standbyJob = null
+    standbyByteCounterEnabled?.set(false)
+    standbyByteCounterEnabled = null
     standbyPlayer?.let { player ->
         runCatching { player.playWhenReady = false; player.stop(); player.clearMediaItems(); player.release() }
     }
     standbyPlayer = null
+    standbyOutputView?.let { view ->
+        if (view.parent === root) root.removeView(view)
+    }
+    standbyOutputView = null
     standbyRemote?.close()
     standbyRemote = null
     closeTransport(standbyHttp)
     standbyHttp = null
     standbyEpisodeId = ""
     standbyReady = false
+    standbyPrepareStartedAt = 0L
+    standbyReadyAt = 0L
+    standbyFirstFrameAt = 0L
+    standbyPromotionAt = 0L
+    standbyAttachedAt = 0L
+    standbyVisibleFirstFrameAt = 0L
     debugLog("无缝接续：备用播放器已清理，原因=$reason")
 }
 
-/** 在后台创建第二个 ExoPlayer，独立解析并缓冲下一集；不启动声音、不抢占主播放器控制权。 */
+/** 在后台解析下一集，并用独立的隐藏输出面预先启动解码器。 */
 internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     val data = detail ?: return
     if (!seamlessPlaybackEnabled || !foreground || screen != "player" || !playbackReady) return
@@ -53,6 +70,9 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     clearStandbyPlayer("准备新的下一集")
     standbyFallbackEpisodeId = ""
     standbyEpisodeId = key
+    standbyPrepareStartedAt = android.os.SystemClock.elapsedRealtime()
+    val counterGate = AtomicBoolean(false)
+    standbyByteCounterEnabled = counterGate
     val http = repository.http.newBuilder()
         .dispatcher(Dispatcher())
         .connectionPool(ConnectionPool())
@@ -65,7 +85,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     val requestGeneration = generation
     val requestSeries = data.series.id
     standbyJob = prefetchWorker.submit {
-        var remote: com.hongguotv.core.RemoteVideo? = null
+        var remote: RemoteVideo? = null
         try {
             val prepared = RemoteVideo(http, source.stream(id, quality)).also {
                 remote = it
@@ -85,7 +105,6 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
                     val secondary = ExoPlayer.Builder(this)
                         .setRenderersFactory(renderers)
-                        // 备用播放器只保留短缓冲，避免把主播放器的缓冲预算再复制一份。
                         .setLoadControl(
                             DefaultLoadControl.Builder()
                                 .setBufferDurationsMs(1_000, 8_000, 1_000, 1_500)
@@ -99,17 +118,55 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     )
                     secondary.volume = 0f
                     secondary.playWhenReady = false
+
+                    // READY 只代表播放器管线可播放；隐藏输出面让解码器先真正输出首帧。
+                    // 这不是整集缓存，仍只保留播放器短缓冲。
+                    val output: android.view.View = if (resolvedVideoRendererMode() == 2) {
+                        TextureView(this).apply { alpha = 0f; isFocusable = false }
+                    } else {
+                        SurfaceView(this).apply { alpha = 0f; isFocusable = false }
+                    }
+                    output.importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    root.addView(output, FrameLayout.LayoutParams(1, 1, Gravity.BOTTOM or Gravity.END))
+                    standbyOutputView = output
+                    when (output) {
+                        is TextureView -> secondary.setVideoTextureView(output)
+                        is SurfaceView -> secondary.setVideoSurfaceView(output)
+                    }
+
                     secondary.addListener(object : Player.Listener {
                         override fun onPlaybackStateChanged(state: Int) {
                             if (standbyPlayer !== secondary || standbyEpisodeId != key) return
                             if (state == Player.STATE_READY) {
+                                if (!secondary.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)) {
+                                    debugLog("无缝接续：备用播放器 READY 但没有已选视频轨道，拒绝接管")
+                                    clearStandbyPlayer("备用播放器没有可用视频轨道")
+                                    standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
+                                    maybePrefetch(force = true)
+                                    return
+                                }
                                 standbyReady = true
+                                standbyReadyAt = android.os.SystemClock.elapsedRealtime()
                                 standbyFallbackEpisodeId = ""
-                                debugLog("无缝接续：备用播放器 READY，下一集已预备 index=${index + 1}")
+                                debugLog("无缝接续：备用播放器 READY，耗时=${standbyReadyAt - standbyPrepareStartedAt}ms，下一集 index=${index + 1}")
                             } else if (state == Player.STATE_IDLE && standbyReady) {
                                 standbyReady = false
                             }
                         }
+
+                        override fun onRenderedFirstFrame() {
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (standbyPlayer === secondary && standbyEpisodeId == key) {
+                                if (standbyFirstFrameAt == 0L) {
+                                    standbyFirstFrameAt = now
+                                    debugLog("无缝接续：备用播放器隐藏输出已渲染首帧，距准备开始=${now - standbyPrepareStartedAt}ms，距 READY=${if (standbyReadyAt > 0L) now - standbyReadyAt else -1L}ms")
+                                }
+                            } else if (player === secondary && standbyPromotionAt > 0L && standbyVisibleFirstFrameAt == 0L) {
+                                standbyVisibleFirstFrameAt = now
+                                debugLog("无缝接续：接管后可见首帧，切换到画面=${now - standbyPromotionAt}ms，Surface 接入=${standbyAttachedAt - standbyPromotionAt}ms")
+                            }
+                        }
+
                         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                             if (standbyPlayer !== secondary || standbyEpisodeId != key) return
                             debugLog("无缝接续：备用播放器准备失败 ${error.errorCodeName} ${error.message}")
@@ -118,11 +175,11 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                             maybePrefetch(force = true)
                         }
                     })
-                    secondary.setMediaSource(videoSource(prepared, id))
                     standbyRemote = prepared
                     standbyPlayer = secondary
+                    secondary.setMediaSource(videoSource(prepared, id) { counterGate.get() })
                     secondary.prepare()
-                    debugLog("无缝接续：第二播放器开始准备下一集 index=${index + 1}")
+                    debugLog("无缝接续：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
                 } catch (problem: Exception) {
                     clearStandbyPlayer("第二播放器初始化异常")
                     standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
