@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: false
+      skip_validation:
+        description: 跳过APK包名、版本号和签名校验（仍会构建APK并计算SHA-256）
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -122,27 +127,33 @@ jobs:
           cp "$APK" "$RUNNER_TEMP/test-release/HongguoTV-${HONGGUOTV_VERSION_NAME}.apk"
           echo "测试版APK构建完成"
 
-      - name: 校验包名、版本号和签名
+      - name: 检查测试版APK并计算发布信息
         id: apk
         shell: bash
         env:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          SKIP_VALIDATION: ${{ inputs.skip_validation }}
         run: |
           set -euo pipefail
           APK="$RUNNER_TEMP/test-release/HongguoTV-$VERSION_NAME.apk"
-          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)"
-          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
-          test -x "$AAPT"
-          test -x "$APKSIGNER"
-          BADGING="$("$AAPT" dump badging "$APK")"
-          echo "$BADGING" | grep -F "package: name='com.x.hongguotv.bate' versionCode='$VERSION_CODE' versionName='$VERSION_NAME'"
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          test -s "$APK"
+          if [ "$SKIP_VALIDATION" = "true" ]; then
+            echo "::warning::已按手动选择跳过APK包名、版本号和签名校验"
+          else
+            AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)"
+            APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+            test -x "$AAPT"
+            test -x "$APKSIGNER"
+            BADGING="$("$AAPT" dump badging "$APK")"
+            echo "$BADGING" | grep -F "package: name='com.x.hongguotv.bate' versionCode='$VERSION_CODE' versionName='$VERSION_NAME'"
+            "$APKSIGNER" verify --verbose --print-certs "$APK"
+            echo "包名、版本号、versionCode和签名校验通过"
+          fi
           SIZE="$(stat -c '%s' "$APK")"
           SHA256="$(sha256sum "$APK" | awk '{print $1}')"
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
-          echo "包名、版本号、versionCode和签名校验通过"
           echo "APK大小：$SIZE 字节"
           echo "APK SHA-256：$SHA256"
 
