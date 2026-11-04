@@ -217,7 +217,6 @@ import java.util.concurrent.atomic.AtomicLong
         lateinit var fileBackup:TextView
         lateinit var backup:TextView
         lateinit var hidden:TextView
-        lateinit var clearCache:TextView
         lateinit var resetButton:TextView
         lateinit var aboutButton:TextView
 
@@ -361,31 +360,6 @@ import java.util.concurrent.atomic.AtomicLong
         hidden=setting(data,2,"恢复隐藏推荐  ·  ${library.hidden().size} 部") {
             library.unhideAll(); hidden.text="恢复隐藏推荐  ·  0 部"; Toast.makeText(this,"热门推荐已恢复",Toast.LENGTH_SHORT).show()
         }
-        fun cacheBytes()=listOfNotNull(cacheDir,externalCacheDir).sumOf { dir -> dir.walkBottomUp().filter { it.isFile }.sumOf { it.length() } }
-        fun cacheLabel(bytes:Long?)="清理缓存  ·  ${when {
-            bytes==null -> "计算中…"
-            bytes in 0..1023 -> "$bytes B"
-            bytes in 1024..1048575 -> "${bytes/1024} KB"
-            else -> "%.1f MB".format(bytes/1048576f)
-        }}"
-        clearCache=setting(data,2,cacheLabel(null)) {
-            TvDialog.confirm(this,"清理缓存","清除封面图片和已下载的安装包等缓存数据，不影响收藏和观看记录。") {
-                io.execute {
-                    listOfNotNull(cacheDir,externalCacheDir).forEach { dir -> dir.listFiles()?.forEach { it.deleteRecursively() } }
-                    val remaining=cacheBytes()
-                    main.post {
-                        if(isDestroyed || resettingAllData) return@post
-                        clearCache.text=cacheLabel(remaining)
-                        Toast.makeText(this,"缓存已清理",Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }.show()
-        }
-        io.execute {
-            val bytes=cacheBytes()
-            main.post { if(!isDestroyed) clearCache.text=cacheLabel(bytes) }
-        }
-
         resetButton=setting(system,5,"重置软件") { showResetOptions(resetButton) }
         aboutButton=setting(system,5,"关于软件") { updater.show(aboutButton,aboutMode=true) }
 
