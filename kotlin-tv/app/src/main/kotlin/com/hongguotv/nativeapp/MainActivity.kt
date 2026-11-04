@@ -886,6 +886,9 @@ class MainActivity: Activity() {
             if(screen=="player") {
                 syncMediaSession()
                 attachDebugOverlay()
+                if(seamlessPlaybackEnabled && playbackReady && detail!=null && episodeIndex<detail!!.episodes.lastIndex) {
+                    prepareStandbyEpisode(episodeIndex+1)
+                }
             }
         } else libraryLoadError?.let(::showLibraryError)
     }
