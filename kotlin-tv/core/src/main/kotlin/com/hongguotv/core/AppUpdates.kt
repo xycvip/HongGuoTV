@@ -16,11 +16,14 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
                      val downloadUrl: String) {
     fun newerThan(installed: Long, sdk: Int) = versionCode > installed && minSdk <= sdk
     companion object {
-        const val REPOSITORY = "xycvip/hongguoTV"
-        const val RELEASES = "https://github.com/$REPOSITORY/releases"
-        const val DOWNLOAD_REPOSITORY = "https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV"
-        const val API_RELEASES = "https://api.github.com/repos/xycvip/AppDownload/releases?per_page=100"
-        const val LATEST_MANIFEST = "$DOWNLOAD_REPOSITORY/latest.json"
+        const val OFFICIAL_PACKAGE = "com.x.hongguotv"
+        const val OFFICIAL_REPOSITORY = "xycvip/AppDownload"
+        const val OFFICIAL_TAG_PREFIX = "hongguotv-v"
+        const val OFFICIAL_LATEST_MANIFEST = "https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json"
+        const val BETA_PACKAGE = "com.x.hongguotv.bate"
+        const val BETA_REPOSITORY = "xycvip/HongGuoTV"
+        const val BETA_TAG_PREFIX = "hongguotv-bate-v"
+        const val BETA_LATEST_MANIFEST = "https://raw.githubusercontent.com/xycvip/HongGuoTV/main/test-update/latest.json"
         const val MAX_APK_BYTES = 80L * 1024 * 1024
         /**
          * Public GitHub is often slow or unreachable from mainland China home networks.
@@ -46,23 +49,29 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             "objects.githubusercontent.com",
             "gh-proxy.com", "ghfast.top", "gh-proxy.net",
         )
-        fun parse(json: String): AppUpdate {
+        fun parse(
+            json: String,
+            expectedPackageName: String = OFFICIAL_PACKAGE,
+            releaseRepository: String = OFFICIAL_REPOSITORY,
+            releaseTagPrefix: String = OFFICIAL_TAG_PREFIX,
+            apkFilePrefix: String = "HongguoTV-"
+        ): AppUpdate {
             val o = JSONObject(json)
-            require(o.getInt("schema") == 1 && o.getString("packageName") == "com.x.hongguotv") { "更新信息不匹配" }
+            require(o.getInt("schema") == 1 && o.getString("packageName") == expectedPackageName) { "更新信息与当前安装通道不匹配" }
             val apk = o.getJSONObject("apk")
             val manifestVersionName = o.getString("versionName")
             val manifestApkName = apk.getString("name")
-            val fallbackDownloadUrl = "https://github.com/xycvip/AppDownload/releases/download/hongguotv-v$manifestVersionName/$manifestApkName"
+            val manifestTag = o.getString("tag")
+            val fallbackDownloadUrl = "https://github.com/$releaseRepository/releases/download/$manifestTag/$manifestApkName"
             val update = AppUpdate(o.getLong("versionCode"), manifestVersionName, o.getInt("minSdk"),
-                o.getString("tag"), manifestApkName, apk.getLong("size"), apk.getString("sha256").lowercase(), o.optString("notes").take(1500),
+                manifestTag, manifestApkName, apk.getLong("size"), apk.getString("sha256").lowercase(), o.optString("notes").take(1500),
                 apk.optString("url").takeIf { it.isNotBlank() } ?: fallbackDownloadUrl)
             require(update.versionCode in 1..Int.MAX_VALUE.toLong() && update.minSdk in 26..100)
             require(update.versionName.matches(Regex("[0-9][0-9A-Za-z.+-]{0,63}")))
-            require(update.tag.matches(Regex("hongguotv-v[0-9][0-9A-Za-z.+-]{0,80}")))
-            require(update.downloadUrl.startsWith("https://github.com/xycvip/AppDownload/releases/download/hongguotv-v"))
-            require(update.downloadUrl.endsWith("/${update.fileName}"))
-            // Keep this in sync with scripts/publish-tv-update.py: HongguoTV-<version>.apk
-            require(update.fileName.matches(Regex("HongguoTV-[0-9][0-9A-Za-z.+-]{0,80}\\.apk")))
+            require(update.tag.matches(Regex(Regex.escape(releaseTagPrefix) + "[0-9][0-9A-Za-z.+-]{0,80}")))
+            val expectedDownloadPrefix = "https://github.com/$releaseRepository/releases/download/${update.tag}/"
+            require(update.downloadUrl.startsWith(expectedDownloadPrefix) && update.downloadUrl.endsWith("/${update.fileName}"))
+            require(update.fileName.matches(Regex(Regex.escape(apkFilePrefix) + "[0-9][0-9A-Za-z.+-]{0,80}\\.apk")))
             require(update.size in 1..MAX_APK_BYTES && update.sha256.matches(Regex("[0-9a-f]{64}")))
             return update
         }
@@ -104,7 +113,17 @@ object UpdateFiles {
     }
 }
 
-class AppUpdateRepository : java.io.Closeable {
+class AppUpdateRepository(
+    private val expectedPackageName: String = AppUpdate.OFFICIAL_PACKAGE,
+    private val releaseRepository: String = AppUpdate.OFFICIAL_REPOSITORY,
+    private val releaseTagPrefix: String = AppUpdate.OFFICIAL_TAG_PREFIX,
+    private val latestManifestUrl: String = AppUpdate.OFFICIAL_LATEST_MANIFEST,
+    private val apkFilePrefix: String = "HongguoTV-"
+) : java.io.Closeable {
+    private val apiReleasesUrl = "https://api.github.com/repos/$releaseRepository/releases?per_page=100"
+    private fun parseManifest(json: String) =
+        AppUpdate.parse(json, expectedPackageName, releaseRepository, releaseTagPrefix, apkFilePrefix)
+
     private val http = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
         .callTimeout(6, TimeUnit.MINUTES).addNetworkInterceptor { chain ->
             val url = chain.request().url
@@ -149,7 +168,7 @@ class AppUpdateRepository : java.io.Closeable {
      * to the stable Raw manifest URL and then its configured proxy mirrors.
      */
     private fun latestFromApi(): AppUpdate {
-        val apiUrl = "${AppUpdate.API_RELEASES}&cachebust=${System.currentTimeMillis()}"
+        val apiUrl = "${apiReleasesUrl}&cachebust=${System.currentTimeMillis()}"
         val releasesJson = http.newCall(request(apiUrl).newBuilder()
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
@@ -165,7 +184,7 @@ class AppUpdateRepository : java.io.Closeable {
         for (i in 0 until releases.length()) {
             val release = releases.optJSONObject(i) ?: continue
             if (release.optBoolean("draft", false)) continue
-            if (!release.optString("tag_name").startsWith("hongguotv-v")) continue
+            if (!release.optString("tag_name").startsWith(releaseTagPrefix)) continue
             val assets = release.optJSONArray("assets") ?: continue
             for (j in 0 until assets.length()) {
                 val asset = assets.optJSONObject(j) ?: continue
@@ -188,7 +207,7 @@ class AppUpdateRepository : java.io.Closeable {
                 }
                 out.toByteArray()
             } ?: throw IOException("更新信息为空")
-            try { AppUpdate.parse(bytes.toString(Charsets.UTF_8)) }
+            try { parseManifest(bytes.toString(Charsets.UTF_8)) }
             catch (_: Exception) { throw IOException("Release 更新信息格式不正确") }
         }
     }
@@ -198,7 +217,7 @@ class AppUpdateRepository : java.io.Closeable {
         try {
             return latestFromApi()
         } catch (apiError: Exception) {
-            val base = "${AppUpdate.LATEST_MANIFEST}?cachebust=${System.currentTimeMillis()}"
+            val base = "${latestManifestUrl}?cachebust=${System.currentTimeMillis()}"
             try {
                 return tryMirrors(base, 12) { response, _ ->
                     val bytes = response.body?.byteStream()?.use { input ->
