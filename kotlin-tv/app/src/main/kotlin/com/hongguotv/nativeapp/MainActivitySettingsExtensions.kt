@@ -443,7 +443,9 @@ import java.util.concurrent.atomic.AtomicLong
                     if(length>512L*1024) {
                         java.io.RandomAccessFile(target,"r").use { raf ->
                             raf.seek(length-512L*1024)
-                            "[日志较长，仅分享最后 512KB]\n"+raf.readBytes().toString(Charsets.UTF_8)
+                            val bytes=ByteArray((length-raf.filePointer).toInt())
+                            raf.readFully(bytes)
+                            "[日志较长，仅分享最后 512KB]\n"+String(bytes,Charsets.UTF_8)
                         }
                     } else target.readText(Charsets.UTF_8)
                 }
@@ -473,8 +475,12 @@ import java.util.concurrent.atomic.AtomicLong
                     val content=runCatching {
                         val length=target.length()
                         if(length>2L*1024*1024) {
-                            val raf=java.io.RandomAccessFile(target,"r")
-                            raf.use { it.seek(length-2L*1024*1024); it.readBytes().toString(Charsets.UTF_8) }
+                            java.io.RandomAccessFile(target,"r").use { raf ->
+                                raf.seek(length-2L*1024*1024)
+                                val bytes=ByteArray((length-raf.filePointer).toInt())
+                                raf.readFully(bytes)
+                                String(bytes,Charsets.UTF_8)
+                            }
                         } else target.readText(Charsets.UTF_8)
                     }.getOrElse { "读取日志失败：${it.message}" }
                     main.post {
