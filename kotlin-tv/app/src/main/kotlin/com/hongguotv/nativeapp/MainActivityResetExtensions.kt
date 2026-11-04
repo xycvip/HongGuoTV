@@ -92,8 +92,9 @@ import java.util.concurrent.atomic.AtomicLong
                             check(children != null || !dir.exists()) { "无法读取缓存目录：${dir.name}" }
                             children.orEmpty().forEach { child ->
                                 // artwork-v1 已由 ArtworkLoader 在同步锁内清理，避免与图片任务竞争。
-                                if (dir.absolutePath == cacheDir.absolutePath && child.name == "artwork-v1") return@forEach
-                                check(child.deleteRecursively()) { "无法删除缓存：${child.name}" }
+                                if (dir.absolutePath != cacheDir.absolutePath || child.name != "artwork-v1") {
+                                    check(child.deleteRecursively()) { "无法删除缓存：${child.name}" }
+                                }
                             }
                         }
                     }
