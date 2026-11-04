@@ -15,6 +15,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import okhttp3.Dispatcher
 import okhttp3.ConnectionPool
 import java.util.concurrent.TimeUnit
@@ -98,7 +99,17 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     prepared.close()
                     closeTransport(http)
                     if (standbyHttp === http) standbyHttp = null
-                    if (standbyEpisodeId == key) { standbyEpisodeId = ""; standbyReady = false }
+                    if (standbyByteCounterEnabled === counterGate) {
+                        counterGate.set(false)
+                        standbyByteCounterEnabled = null
+                    }
+                    if (standbyEpisodeId == key) {
+                        standbyEpisodeId = ""
+                        standbyReady = false
+                        standbyPrepareStartedAt = 0L
+                        standbyReadyAt = 0L
+                        standbyFirstFrameAt = 0L
+                    }
                     return@post
                 }
                 try {
@@ -134,6 +145,16 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         is SurfaceView -> secondary.setVideoSurfaceView(output)
                     }
 
+                    secondary.addAnalyticsListener(object : AnalyticsListener {
+                        override fun onVideoDecoderInitialized(
+                            eventTime: AnalyticsListener.EventTime,
+                            decoderName: String,
+                            initializedTimestampMs: Long,
+                            initializationDurationMs: Long
+                        ) {
+                            debugLog("无缝接续：备用解码器初始化 name=$decoderName init=${initializationDurationMs}ms")
+                        }
+                    })
                     secondary.addListener(object : Player.Listener {
                         override fun onPlaybackStateChanged(state: Int) {
                             if (standbyPlayer !== secondary || standbyEpisodeId != key) return
@@ -192,9 +213,16 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
             closeTransport(http)
             main.post {
                 if (standbyHttp === http) standbyHttp = null
+                if (standbyByteCounterEnabled === counterGate) {
+                    counterGate.set(false)
+                    standbyByteCounterEnabled = null
+                }
                 if (standbyEpisodeId == key) {
                     standbyEpisodeId = ""
                     standbyReady = false
+                    standbyPrepareStartedAt = 0L
+                    standbyReadyAt = 0L
+                    standbyFirstFrameAt = 0L
                     standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
                     debugLog("无缝接续：下一集预备失败，回退单播放器：${problem.message}")
                     maybePrefetch(force = true)
