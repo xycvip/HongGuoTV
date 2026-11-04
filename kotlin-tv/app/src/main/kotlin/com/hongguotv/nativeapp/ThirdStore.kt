@@ -250,6 +250,39 @@ class ThirdStore(context: Context) {
     /** 备份/导出用：只保留名称与接口。 */
     fun backupSources(): List<BackupThirdSource> = sources().map { BackupThirdSource(it.name, it.api) }
 
+    /** 扫码导入片源：只追加不存在的接口，不覆盖或删除当前已有片源；返回实际新增数量。 */
+    fun mergeRestored(incoming: List<BackupThirdSource>): Int {
+        val current = sources()
+        val existingApis = current.mapTo(HashSet()) { it.api }
+        val usedIds = current.mapTo(HashSet()) { it.id }
+        val remaining = (ThirdCms.MAX_SOURCES - current.size).coerceAtLeast(0)
+        if (remaining == 0) return 0
+
+        val additions = incoming.asSequence()
+            .filter { ThirdSourceConfig.validApi(it.api) }
+            .filter { existingApis.add(it.api) }
+            .take(remaining)
+            .map { item ->
+                val baseId = "u" + item.api.hashCode().toUInt().toString()
+                var id = baseId
+                var suffix = 2
+                while (!usedIds.add(id)) {
+                    id = "$baseId-$suffix"
+                    suffix++
+                }
+                val name = item.name.ifBlank {
+                    item.api.removePrefix("https://").removePrefix("http://").substringBefore('/')
+                }
+                ThirdSource(id, name, item.api)
+            }
+            .toList()
+
+        if (additions.isEmpty()) return 0
+        saveSources(current + additions)
+        prefs.edit().putBoolean(KEY_INITIALIZED, true).apply()
+        return additions.size
+    }
+
     /** 整机恢复片源：以备份列表完全替换当前列表；空列表也会清空。 */
     fun restoreSources(incoming: List<BackupThirdSource>) {
         val restored = incoming.asSequence()
