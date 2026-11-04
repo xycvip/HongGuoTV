@@ -55,6 +55,7 @@ import java.util.concurrent.atomic.AtomicLong
     }
 
     internal fun MainActivity.openDetail(series: Series,resume: Boolean=false,autoplay: Boolean=true,randomLoading: Boolean=false) {
+        debugLog("页面导航：打开剧集详情 title=${series.title} resume=$resume autoplay=$autoplay random=$randomLoading")
         val startupAttempt=bootAutoPlaybackPending
         pendingDetail=series; detailAutoplay=autoplay
         invalidatePage(); releaseCatalogViews(); screen="detail"; directPlayback=resume; detail=null; synopsisExpanded=false
@@ -101,6 +102,7 @@ import java.util.concurrent.atomic.AtomicLong
     }
 
     internal fun MainActivity.showDetail(focusEpisode: Boolean) {
+        debugLog("页面渲染：剧集详情 focusEpisode=$focusEpisode title=${detail?.series?.title.orEmpty()}")
         detailSeasonLine=null; detailSeasonSection=null
         detailEpisodeButtons.clear(); detailRelatedCards.clear()
         invalidatePage(); releaseCatalogViews(); screen="detail"; applyDeviceOrientationPolicy(); val data=detail ?: return showCatalog()
