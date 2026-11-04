@@ -260,9 +260,9 @@ class Library(context: Context) {
         }
         persist("favorites", "later", "progress", "watched", "hidden", "searches", "favoriteUpdates", "favoriteGroups")
         // 第三方片源、观看历史和收藏均按备份内容完整替换；空列表也会清空对应数据。
-        runCatching { thirdSourcesRestore?.invoke(incoming.thirdSources) }
-        runCatching { thirdHistoryRestore?.invoke(incoming.thirdHistory) }
-        runCatching { thirdFavoritesRestore?.invoke(incoming.thirdFavorites) }
+        thirdSourcesRestore?.invoke(incoming.thirdSources)
+        thirdHistoryRestore?.invoke(incoming.thirdHistory)
+        thirdFavoritesRestore?.invoke(incoming.thirdFavorites)
         writes.submit(mapOf("quality" to { restored.settings.quality }, "playbackSpeed" to { restored.settings.speed },
             "autoNext" to { restored.settings.autoNext }, "contentType" to { restored.settings.type.storedValue }, "frameMode" to { restored.settings.frame.name },
             "autoSeason" to { restored.settings.autoSeason }, "danmaku" to { restored.settings.danmaku },
