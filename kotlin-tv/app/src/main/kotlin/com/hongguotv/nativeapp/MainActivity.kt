@@ -866,6 +866,10 @@ class MainActivity: Activity() {
         player?.pause(); if(!resettingAllData) { saveProgress(); library.flush() }; super.onPause()
     }
     override fun onStop() {
+        // Activity 进入后台后停止四叶灯动画，并使未完成的旧检测批次失效；回到前台时重新检测。
+        apiStatusUiState.checkBatchId++
+        apiStatusCheckStarted=false
+        stopApiStatusAnimations()
         restoreStoppedPage=true; generation++; cancelWork(); tvTools.close()
         if(screen=="player") { if(!resettingAllData) { startPosition=currentPosition(); saveProgress() }; releasePlayer() }
         artwork.cancelPage(clearMemory=true); if(!resettingAllData) library.flush(); super.onStop()
