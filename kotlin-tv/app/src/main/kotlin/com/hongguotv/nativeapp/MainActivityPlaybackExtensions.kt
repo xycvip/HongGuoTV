@@ -63,6 +63,7 @@ import java.util.concurrent.atomic.AtomicLong
             val oldPlayer=player
             playerListener?.let { oldPlayer?.removeListener(it) }
             playerListener=null
+            playerView?.player=null
             oldPlayer?.release()
             player=standbyPlayer
             playerView?.player=player
@@ -72,8 +73,8 @@ import java.util.concurrent.atomic.AtomicLong
             standbyReady=false
             standbyJob=null
             debugLog("无缝接续：备用播放器接管第 ${selectedIndex+1} 集")
-        } else if(seamlessPlaybackEnabled && standbyEpisodeId.isNotEmpty() && standbyEpisodeId!=standbyKey) {
-            clearStandbyPlayer("用户切换到其他剧集")
+        } else if(seamlessPlaybackEnabled && standbyEpisodeId.isNotEmpty()) {
+            clearStandbyPlayer("目标剧集未能由备用播放器接管")
         }
         saveProgress(); library.flush(); invalidatePage(); favoriteMonitor.stop(); releaseCatalogViews(); stopDanmaku()
         if(reuse) {
