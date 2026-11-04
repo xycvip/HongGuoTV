@@ -170,12 +170,12 @@ import java.util.concurrent.atomic.AtomicLong
         updater.destroy()
         cloudAccount.stopForReset()
         cancelWork(); cancelPrefetch()
-        // 这两个执行器也可能持有预取/网络清理任务，清除前必须停止并等待。
-        prefetchWorker.shutdownNow()
-        networkCleanup.shutdownNow()
         artwork.close()
         tvTools.destroy()
         player?.pause(); saveProgress(); releasePlayer()
+        // 先释放播放器及其网络资源，再关闭可能参与收尾工作的执行器。
+        prefetchWorker.shutdownNow()
+        networkCleanup.shutdownNow()
         stopDebugLoggingForReset()
         debugLogExecutor.shutdown()
         Toast.makeText(this,"正在清除本机数据…",Toast.LENGTH_SHORT).show()
