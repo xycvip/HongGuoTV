@@ -151,17 +151,17 @@ jobs:
         shell: bash
         env:
           APPDOWNLOAD_TOKEN: ${{ secrets.APPDOWNLOAD_TOKEN || secrets.APPDOWNLOAD_UPLOAD_TOKEN }}
+          GH_TOKEN: ${{ secrets.APPDOWNLOAD_TOKEN || secrets.APPDOWNLOAD_UPLOAD_TOKEN }}
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
           RELEASE_NOTES: ${{ inputs.release_notes }}
           APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
-          SOURCE_COMMIT: ${{ github.sha }}
-          GH_TOKEN: ${{ secrets.APPDOWNLOAD_TOKEN || secrets.APPDOWNLOAD_UPLOAD_TOKEN }}
         run: |
           set -euo pipefail
           APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
+          SOURCE_COMMIT="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
           git clone --depth 1 "https://x-access-token:$APPDOWNLOAD_TOKEN@github.com/xycvip/AppDownload.git" "$RUNNER_TEMP/AppDownload"
           cd "$RUNNER_TEMP/AppDownload"
 
@@ -171,8 +171,8 @@ jobs:
           fi
 
           mkdir -p hongguoTV
-
           DOWNLOAD_URL="https://github.com/xycvip/AppDownload/releases/download/$RELEASE_TAG/HongguoTV-$VERSION_NAME.apk"
+
           jq -n \
             --arg sourceCommit "$SOURCE_COMMIT" \
             --arg versionName "$VERSION_NAME" \
@@ -214,18 +214,26 @@ jobs:
           $RELEASE_NOTES
           EOF
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "hongguoTV/HongguoTV-$VERSION_NAME.apk" hongguoTV/latest.json hongguoTV/README.md
-          git commit -m "发布红果TV正式版 $VERSION_NAME"
-          git push origin HEAD:main
-
-          gh release create "$RELEASE_TAG" "hongguoTV/HongguoTV-$VERSION_NAME.apk" \
+          # 先创建正式版发布及APK附件，确认下载资源已存在后再更新 latest.json
+          gh release create "$RELEASE_TAG" "$APK" \
             --repo xycvip/AppDownload \
             --title "红果TV正式版 $VERSION_NAME" \
             --notes "$RELEASE_NOTES"
-        env:
-          GH_TOKEN: ${{ secrets.APPDOWNLOAD_TOKEN || secrets.APPDOWNLOAD_UPLOAD_TOKEN }}
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add hongguoTV/latest.json hongguoTV/README.md
+          git commit -m "发布红果TV正式版 $VERSION_NAME"
+          git push origin HEAD:main
+
+          # 新版本发布且清单更新成功后，清理旧红果TV正式版，只保留最新正式版
+          OLD_TAGS="$(gh release list --repo xycvip/AppDownload --limit 100 --json tagName --jq '.[].tagName | select(startswith("hongguotv-v"))')"
+          while IFS= read -r OLD_TAG; do
+            [ -n "$OLD_TAG" ] || continue
+            [ "$OLD_TAG" = "$RELEASE_TAG" ] && continue
+            echo "清理旧正式版：$OLD_TAG"
+            gh release delete "$OLD_TAG" --repo xycvip/AppDownload --yes --cleanup-tag
+          done <<< "$OLD_TAGS"
 
       - name: 输出正式发布结果
         if: success()
