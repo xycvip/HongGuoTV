@@ -193,6 +193,7 @@ import java.util.concurrent.atomic.AtomicLong
     internal fun MainActivity.message(parent: LinearLayout,label: String) { parent.addView(text(label,17f,muted).apply { setPadding(0,dp(28),0,dp(18)) }) }
 
     internal fun MainActivity.error(parent: LinearLayout,problem: Throwable,retry: ()->Unit) {
+        debugLogError("页面加载",problem)
         message(parent,"暂时无法加载，请检查网络后重试。")
         val detail=if(problem is java.net.UnknownHostException) "无法连接内容网站" else if(problem is java.net.SocketTimeoutException) "连接超时" else problem.message.orEmpty().replace(Regex("https?://\\S+"),"[地址]").take(160)
         parent.addView(text(detail,13f,muted)); addButton(parent,"重试",onClick=retry).requestFocus()
