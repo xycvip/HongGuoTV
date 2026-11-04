@@ -196,6 +196,39 @@ object TvDialog {
         return dialog
     }
 
+    /** 可滚动文本查看弹窗：沿用统一卡片和胶囊按钮，适合诊断信息与日志。 */
+    fun textViewer(activity: Activity, title: String, message: String, monospace: Boolean = false): AlertDialog {
+        val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(title(activity, title))
+        val text = TextView(activity).apply {
+            this.text = message
+            textSize = if (monospace) 11f else 14f
+            setTextColor(TvStyle.text)
+            setLineSpacing(0f, 1.15f)
+            setTextIsSelectable(true)
+            if (monospace) typeface = android.graphics.Typeface.MONOSPACE
+            setPadding(dp(activity, 2), dp(activity, 2), dp(activity, 8), dp(activity, 8))
+        }
+        val scroll = android.widget.ScrollView(activity).apply {
+            isFillViewport = true
+            addView(text, ViewGroup.LayoutParams(-1, -2))
+        }
+        val maxHeight = (activity.resources.displayMetrics.heightPixels * 0.52f).toInt()
+        content.addView(scroll, LinearLayout.LayoutParams(-1, maxHeight.coerceAtLeast(dp(activity, 120))))
+        val buttons = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(activity, 14), 0, 0)
+        }
+        val close = capsuleButton(activity, "关闭") {}
+        buttons.addView(close, LinearLayout.LayoutParams(-2, -2))
+        content.addView(buttons)
+        val dialog = AlertDialog.Builder(activity).setView(card(activity, content)).create()
+        styleWindow(activity, dialog, widthFraction = 0.72f, maxWidthDp = 760) { close.requestFocus() }
+        close.setOnClickListener { dialog.dismiss() }
+        return dialog
+    }
+
     /** 确认弹窗：标题 + 正文 + 取消/确认双按钮。 */
     fun confirm(activity: Activity, title: String, message: String, onCancel: (() -> Unit)? = null, action: () -> Unit): AlertDialog {
         val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
