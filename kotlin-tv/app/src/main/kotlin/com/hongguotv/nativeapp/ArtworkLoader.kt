@@ -193,10 +193,7 @@ class ArtworkLoader(context: Context) {
     fun cancelAll(clearMemory: Boolean = false) = cancelPage(clearMemory)
 
     /** Cancel pending artwork work, then clear disk data without racing a cache writer. */
-    fun clearDiskCache(): Boolean {
-        cancelPage(clearMemory = true)
-        return synchronized(diskLock) { disk.clear() }
-    }
+    fun clearDiskCache(): Boolean = synchronized(diskLock) { disk.clear() }
 
     @Suppress("DEPRECATION") // Android 8 devices still report the running-memory pressure levels.
     fun trimMemory(level: Int) {
