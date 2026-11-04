@@ -70,7 +70,7 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             require(update.versionName.matches(Regex("[0-9][0-9A-Za-z.+-]{0,63}")))
             require(update.tag.matches(Regex(Regex.escape(releaseTagPrefix) + "[0-9][0-9A-Za-z.+-]{0,80}")))
             val expectedDownloadPrefix = "https://github.com/$releaseRepository/releases/download/${update.tag}/"
-            require(update.downloadUrl.startsWith(expectedDownloadPrefix) && update.downloadUrl.endsWith("/${update.fileName}"))
+            require(update.downloadUrl == expectedDownloadPrefix + update.fileName)
             require(update.fileName.matches(Regex(Regex.escape(apkFilePrefix) + "[0-9][0-9A-Za-z.+-]{0,80}\\.apk")))
             require(update.size in 1..MAX_APK_BYTES && update.sha256.matches(Regex("[0-9a-f]{64}")))
             return update
@@ -163,7 +163,7 @@ class AppUpdateRepository(
     private fun hostOf(url: String) = url.removePrefix("https://").substringBefore("/")
 
     /**
-     * Prefer the AppDownload Releases API so each app can identify its own release
+     * Prefer the selected channel Releases API so each installed package can identify its own release
      * by tag prefix. If the API or its update.json asset is unavailable, fall back
      * to the stable Raw manifest URL and then its configured proxy mirrors.
      */
