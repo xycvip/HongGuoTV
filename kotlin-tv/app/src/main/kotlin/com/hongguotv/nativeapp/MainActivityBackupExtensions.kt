@@ -262,7 +262,7 @@ internal fun MainActivity.backupFolder(): java.io.File {
                                 1 -> "\n本机当前播放偏好设置将保持不变。"
                                 else -> "\n将恢复备份中的播放偏好设置。"
                             }
-                            val message = "备份包含 ${data.favorites.size} 部收藏、${data.history.size} 条观看记录、${data.later.size} 部稍后看和 ${data.searches.size} 条搜索记录。\n\n本次将以所选备份文件为准覆盖本机对应记录，不与当前记录合并。${preferenceNote}${accountNote}"
+                            val message = "备份包含 ${data.favorites.size} 部收藏、${data.history.size} 条观看记录、${data.later.size} 部稍后看和 ${data.searches.size} 条搜索记录。\n第三方片源、第三方观看历史和第三方收藏也将按备份内容完整覆盖，备份中没有的对应数据会被清除。\n\n本次将以所选备份文件为准覆盖对应记录，不与当前记录合并。${preferenceNote}${accountNote}"
                             tvTools.confirm("确认恢复备份", message, anchor) {
                                 runCatching {
                                     favoriteMonitor.stop()
