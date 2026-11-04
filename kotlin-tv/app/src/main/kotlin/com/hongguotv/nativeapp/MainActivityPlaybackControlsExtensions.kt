@@ -116,7 +116,7 @@ internal fun MainActivity.videoRendererModeLabel(mode: Int = videoRendererMode):
 
 internal fun MainActivity.resolvedVideoRendererMode(): Int =
     if(videoRendererMode != 0) videoRendererMode
-    else if(isTelevisionDevice) 2 else 1
+    else if(isTelevisionDevice && seamlessPlaybackEnabled) 2 else 1
 
 internal fun MainActivity.frameResizeMode()=when(library.frameMode) {
     VideoFrameMode.FIT -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
