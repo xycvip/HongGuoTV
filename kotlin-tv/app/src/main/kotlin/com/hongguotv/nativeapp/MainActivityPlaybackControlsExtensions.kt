@@ -115,7 +115,8 @@ internal fun MainActivity.videoRendererModeLabel(mode: Int = videoRendererMode):
     listOf("自动", "SurfaceView", "TextureView")[mode.coerceIn(0, 2)]
 
 internal fun MainActivity.resolvedVideoRendererMode(): Int =
-    if(videoRendererMode == 0) 1 else videoRendererMode
+    if(videoRendererMode != 0) videoRendererMode
+    else if(isTelevisionDevice) 2 else 1
 
 internal fun MainActivity.frameResizeMode()=when(library.frameMode) {
     VideoFrameMode.FIT -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
