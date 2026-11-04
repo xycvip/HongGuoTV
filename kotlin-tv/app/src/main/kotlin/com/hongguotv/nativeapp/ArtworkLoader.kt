@@ -58,6 +58,7 @@ class ArtworkLoader(context: Context) {
         override fun sizeOf(key: Key, value: Bitmap) = value.allocationByteCount
     }
     private val disk = ArtworkCache(File(context.applicationContext.cacheDir, "artwork-v1"))
+    private val diskLock = Any()
     // This client owns its dispatcher and pool; cancelling artwork never cancels video or catalog calls.
     private val http = OkHttpClient.Builder().connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS).callTimeout(12, TimeUnit.SECONDS).build()
@@ -191,6 +192,12 @@ class ArtworkLoader(context: Context) {
 
     fun cancelAll(clearMemory: Boolean = false) = cancelPage(clearMemory)
 
+    /** Cancel pending artwork work, then clear disk data without racing a cache writer. */
+    fun clearDiskCache(): Boolean {
+        cancelPage(clearMemory = true)
+        return synchronized(diskLock) { disk.clear() }
+    }
+
     @Suppress("DEPRECATION") // Android 8 devices still report the running-memory pressure levels.
     fun trimMemory(level: Int) {
         when {
@@ -258,7 +265,7 @@ class ArtworkLoader(context: Context) {
     }
 
     private fun fetch(job: Job): Bitmap? {
-        val bytes = disk.get(job.key.url) ?: run {
+        val bytes = synchronized(diskLock) { if (job.cancelled) null else disk.get(job.key.url) } ?: run {
             if (job.cancelled) return null
             val call = http.newCall(Request.Builder().url(job.key.url).build())
             job.call = call
@@ -277,7 +284,7 @@ class ArtworkLoader(context: Context) {
                     }
                 }
                 if (job.cancelled) return null
-                out.toByteArray().also { disk.put(job.key.url, it) }
+                out.toByteArray().also { data -> synchronized(diskLock) { if (!job.cancelled) disk.put(job.key.url, data) } }
             }
         }
         if (job.cancelled) return null
