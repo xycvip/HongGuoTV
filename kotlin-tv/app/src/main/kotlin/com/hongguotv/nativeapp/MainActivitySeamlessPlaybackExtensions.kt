@@ -112,6 +112,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     }
                     return@post
                 }
+                var secondaryPlayer: ExoPlayer? = null
                 try {
                     val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
                     val secondary = ExoPlayer.Builder(this)
@@ -123,6 +124,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                                 .build()
                         )
                         .build()
+                    secondaryPlayer = secondary
                     secondary.setAudioAttributes(
                         AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
                             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true
@@ -202,6 +204,10 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     secondary.prepare()
                     debugLog("无缝接续：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
                 } catch (problem: Exception) {
+                    if (secondaryPlayer != null && standbyPlayer !== secondaryPlayer) {
+                        runCatching { secondaryPlayer?.release() }
+                    }
+                    if (standbyRemote !== prepared) runCatching { prepared.close() }
                     clearStandbyPlayer("第二播放器初始化异常")
                     standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
                     debugLog("无缝接续：第二播放器初始化失败，回退单播放器：${problem.message}")
