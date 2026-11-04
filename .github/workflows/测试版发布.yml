@@ -162,10 +162,10 @@ jobs:
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           # 红果TV测试版 $VERSION_NAME
 
-          - 应用包名：`com.x.hongguotv.bate`
-          - versionCode：`$VERSION_CODE`
-          - APK大小：`$APK_SIZE` 字节
-          - SHA-256：`$APK_SHA256`
+          - 应用包名：com.x.hongguotv.bate
+          - versionCode：$VERSION_CODE
+          - APK大小：$APK_SIZE 字节
+          - SHA-256：$APK_SHA256
 
           ## 更新说明
           $RELEASE_NOTES
