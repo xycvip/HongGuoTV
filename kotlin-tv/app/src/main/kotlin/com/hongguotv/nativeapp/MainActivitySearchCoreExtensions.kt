@@ -44,13 +44,11 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
-    internal fun MainActivity.runSearch(value: String,type: ContentType=library.contentType,fromPhone: Boolean=false,aggregate: Boolean=true) {
+    internal fun MainActivity.runSearch(value: String,type: ContentType=library.contentType,aggregate: Boolean=true) {
         val clean=value.trim(); if(clean.isEmpty() || clean.length>80) return
         (searchInput as? EditText)?.let { (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(it.windowToken,0) }
         aggregateSearch=aggregate
         if(!aggregate && library.contentType!=type) { library.contentType=type; for(index in 0..1) { tabState.remove(index); tabFocus.remove(index) } }
-        // 手机输入的精确剧名默认不再联想，纯首拼或编辑输入后恢复
-        phoneSearched=fromPhone
         library.rememberSearch(clean,type); query=clean; tab=1; page=1; catalogFocus=""; searchFocusPending=true; showCatalog(true)
     }
 
@@ -78,11 +76,9 @@ import java.util.concurrent.atomic.AtomicLong
             // 已提交搜索后（输入框显示的就是搜索词）隐藏联想栏：否则联想卡片在结果未加载时渲染，
             // nextFocusRight 指向自身，导致右键回不到搜索结果、左键又跳进联想列形成焦点陷阱。
             // 用户重新编辑输入框时联想自然恢复
-            val keep=if(!phoneSearched && lastSuggestWords.isNotEmpty() && key==lastSuggestKey && key!=query) lastSuggestWords else emptyList()
+            val keep=if(lastSuggestWords.isNotEmpty() && key==lastSuggestKey && key!=query) lastSuggestWords else emptyList()
             renderSuggest(keep); return
         }
-        // 手机输入的精确剧名直接出结果，不展示联想；纯首拼仍提供联想辅助
-        if(phoneSearched && !key.matches(Regex("[a-zA-Z]+"))) { suggestTicket++; renderSuggest(emptyList()); return }
         val ticket=++suggestTicket
         io.execute {
             val words=repository.suggest(key)
