@@ -415,6 +415,39 @@ import java.util.concurrent.atomic.AtomicLong
                 ensureBackupStoragePermission()
             }
         }
+        setting(debug,6,"查看运行诊断") {
+            AlertDialog.Builder(this).setTitle("运行诊断信息")
+                .setMessage(debugEnvironmentSnapshot())
+                .setPositiveButton("关闭",null).show()
+        }
+        setting(debug,6,"复制诊断信息") {
+            val clipboard=getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("HongGuoTV 运行诊断",debugEnvironmentSnapshot()))
+            Toast.makeText(this,"诊断信息已复制",Toast.LENGTH_SHORT).show()
+        }
+        setting(debug,6,"分享日志文件") {
+            val target=debugFile ?: runCatching {
+                backupFolder().listFiles()?.filter { it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log") }
+                    ?.maxByOrNull { it.lastModified() }
+            }.getOrNull()
+            if(target==null || !target.exists()) {
+                Toast.makeText(this,"暂时没有调试日志",Toast.LENGTH_SHORT).show()
+            } else io.execute {
+                val result=runCatching { target.readText(Charsets.UTF_8) }
+                main.post {
+                    result.onSuccess { content ->
+                        runCatching {
+                            val share=Intent(Intent.ACTION_SEND).apply {
+                                type="text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT,"HongGuoTV 调试日志")
+                                putExtra(Intent.EXTRA_TEXT,content)
+                            }
+                            startActivity(Intent.createChooser(share,"分享调试日志"))
+                        }.onFailure { Toast.makeText(this,"无法分享日志：${it.message}",Toast.LENGTH_LONG).show() }
+                    }.onFailure { Toast.makeText(this,"读取日志失败：${it.message}",Toast.LENGTH_LONG).show() }
+                }
+            }
+        }
         setting(debug,6,"显示日志") {
             val target=debugFile ?: runCatching {
                 backupFolder().listFiles()?.filter { it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log") }
