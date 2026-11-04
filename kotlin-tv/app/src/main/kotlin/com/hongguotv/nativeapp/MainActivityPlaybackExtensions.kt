@@ -1,0 +1,276 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package com.hongguotv.nativeapp
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.os.Bundle
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
+import android.graphics.drawable.GradientDrawable
+import android.view.*
+import android.view.inputmethod.InputMethodManager
+import android.content.Context
+import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Uri
+import android.net.Network
+import android.widget.*
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.media3.common.*
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.preload.DefaultPreloadManager
+import androidx.media3.ui.PlayerView
+import com.hongguotv.core.*
+import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
+
+    internal fun MainActivity.playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false,forceRebuild: Boolean=false) {
+        updater.interrupt()
+        val data=detail ?: return
+        val playbackStarted=android.os.SystemClock.elapsedRealtime()
+        debugPlaybackStartedAt=playbackStarted; debugPlaybackReadyAt=0L; debugFirstFrameAt=0L
+        debugLog("开始播放 index=${index+1} position=$position autoplay=$autoplay recovering=$recovering")
+        val reuse=screen=="player" && player!=null && playerView!=null && !recovering && !playError && !forceRebuild
+        library.setWatched(data.series.id,false)
+        val selectedIndex=index.coerceIn(0,data.episodes.lastIndex)
+        val isStartupPreview=bootAutoPlaybackPending && autoplay && !recovering
+        val prefetched=if(position==0L && !recovering && !forceRebuild) preparedNext.take("${data.episodes[selectedIndex]}:${library.maxQuality}") else null
+        val prefetchedSource=if(prefetched!=null) preloadManager?.getMediaSource(videoItem(data.episodes[selectedIndex])) else null
+        val claimedHttp=if(prefetched!=null) prefetchHttp.also { prefetchHttp=null } else null
+        saveProgress(); library.flush(); invalidatePage(); favoriteMonitor.stop(); releaseCatalogViews(); stopDanmaku()
+        if(reuse) {
+            cancelRecovery(); cancelPrefetch(keepMediaSource=prefetchedSource!=null); tvTools.close()
+            episodePanel?.dismiss(); episodePanel=null; speedDialog?.dismiss(); speedDialog=null
+            playerListener?.let { player?.removeListener(it) }; playerListener=null
+            player?.stop(); player?.clearMediaItems()
+            closeActiveVideo(); closeTransport(playbackHttp); playbackHttp=null
+            main.removeCallbacks(hideHud); main.removeCallbacks(seekRunnable); main.removeCallbacks(singleTapPlayback); pendingSeek=null
+        progressUserSeeking=false; lastTapAt=0L
+        } else releasePlayer()
+        artwork.cancelPage(clearMemory=true)
+        playbackHttp=claimedHttp; video=prefetched
+        var firstReady=true; var firstFrame=true
+        if(!recovering) recovery.reset()
+        autoRecovery=false; readySince=0; startPosition=position.coerceAtLeast(0); requestedAutoplay=autoplay
+        val skipMark=library.skipMark(data.series.id)
+        outroSkipSeconds=skipMark?.outroSeconds ?: 0; outroTriggered=false; ffActive=false
+        if(autoplay) sleepStopped=false
+        screen="player"; randomLoadingLabel=null; applyDeviceOrientationPolicy(); episodeIndex=selectedIndex; group=episodeIndex/20
+        playbackBytes.set(0L); lastSpeedBytes=0L; lastSpeedAt=android.os.SystemClock.elapsedRealtime(); currentSpeedBytesPerSecond=0L
+        activeVideoFormat=null; if(!reuse) activeDecoderName=""
+        if(commentPanel!=null) { commentReplyCursors.clear(); commentPanel?.setEpisode(data.series.title,episodeIndex+1); loadOfficialComments(false) }
+        if(isStartupPreview) {
+            startupPreviewEpisodeId=data.episodes[selectedIndex]
+            startupPreviewPlayedMs=0L
+            startupPreviewLastTickAt=0L
+        } else if(!recovering) {
+            // 用户手动选集/正常进入播放时立即恢复原有历史记录逻辑。
+            startupPreviewEpisodeId=null
+            startupPreviewPlayedMs=0L
+            startupPreviewLastTickAt=0L
+        }
+        panel=false; playError=false; playbackReady=false; quality=""; pausedForLifecycle=!autoplay
+        player?.playWhenReady=requestedAutoplay
+        prefetchAttempts=0; prefetchAttemptAt=0
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if(!reuse) {
+            root.removeAllViews(); root.setBackgroundColor(Color.BLACK)
+            val view=createPlayerView()
+            playerView=view; root.addView(view,FrameLayout.LayoutParams(-1,-1))
+            val danmakuLayer=DanmakuView(this).apply {
+                isClickable=false
+                importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                elevation=dp(4).toFloat()
+                clipToOutline=false
+            }
+            danmakuView=danmakuLayer
+            danmakuLayer.setBlockedFilter { text -> extras.blocks(text) }
+            danmakuLayer.applyPrefs(library.danmakuOpacity,library.danmakuFont,library.danmakuSpeed,library.danmakuRows)
+            danmakuLayer.setColorMode(danmakuColorMode)
+            root.addView(danmakuLayer,FrameLayout.LayoutParams(-1,(resources.displayMetrics.heightPixels*.38f).toInt(),Gravity.TOP).apply { topMargin=dp(12) })
+            // 手机竖屏可用宽度有限，控制栏贴近屏幕两侧；横屏与电视沿用原有留白。
+            val phonePortraitHud=isPhoneDevice && heightDp()>widthDp()
+            val hudHorizontalInset=if(phonePortraitHud) dp(2) else dp(widthDp()*.05f)
+            hud=column().apply { setPadding(hudHorizontalInset,dp(20),hudHorizontalInset,(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(240,11,15,21))) }
+            playbackTitle=text("",23f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setTypeface(null,Typeface.BOLD) }; hud.addView(playbackTitle)
+            playbackText=text("",15f,muted).apply { setPadding(0,dp(10),0,dp(9)) }; hud.addView(playbackText)
+            progressBar=(if(isPhoneDevice) SeekBar(this) else ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal)).apply {
+                max=1000
+                progressTintList=android.content.res.ColorStateList.valueOf(accent)
+                progressBackgroundTintList=android.content.res.ColorStateList.valueOf(surface)
+                if(this is SeekBar) {
+                    isFocusable=false
+                    isFocusableInTouchMode=false
+                    setOnSeekBarChangeListener(object: SeekBar.OnSeekBarChangeListener {
+                        override fun onStartTrackingTouch(seekBar: SeekBar) { progressUserSeeking=true; main.removeCallbacks(seekRunnable) }
+                        override fun onProgressChanged(seekBar: SeekBar,progress: Int,fromUser: Boolean) {
+                            if(fromUser) {
+                                val duration=player?.duration?.coerceAtLeast(0L) ?: 0L
+                                if(duration>0L) {
+                                    pendingSeek=duration*progress/1000L
+                                    playbackText.text="定位播放  ·  " + formatTime(pendingSeek ?: 0L) + " / " + formatTime(duration)
+                                }
+                            }
+                        }
+                        override fun onStopTrackingTouch(seekBar: SeekBar) {
+                            progressUserSeeking=false
+                            val duration=player?.duration?.coerceAtLeast(0L) ?: 0L
+                            if(duration>0L) seekTo(duration*seekBar.progress/1000L) else pendingSeek=null
+                        }
+                    })
+                }
+            }
+            if(isPhoneDevice && heightDp()>widthDp()) progressBar.setPadding(0,progressBar.paddingTop,0,progressBar.paddingBottom)
+            hud.addView(progressBar,lp(-1,if(isPhoneDevice) dp(36) else dp(4)))
+            hud.addView(text(if(isPhoneDevice) "拖动进度条定位    左右滑动快进/快退    双击播放/暂停" else "确认 播放/暂停    ↑ 上一集    ↓ 下一集    左右 快退/快进    菜单 播放菜单    返回 收起 / 退出",13f,muted).apply { setPadding(0,dp(12),0,0) })
+            controls=column().apply { setPadding(0,dp(12),0,0); visibility=View.GONE }; hud.addView(controls)
+            root.addView(ScrollView(this).apply {
+                isVerticalScrollBarEnabled=false
+                clipChildren=false
+                clipToPadding=false
+                elevation=dp(8).toFloat()
+                addView(hud)
+            },FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
+        }
+        if(bootAutoPlaybackPending && !reuse) showBootSplash()
+        applyClock()
+        attachDebugOverlay()
+        playbackTitle.text="${data.series.title}  ·  第 ${episodeIndex+1} 集 / 共 ${data.episodes.size} 集"
+        playbackText.text="正在获取播放地址…"; progressBar.progress=0; progressBar.visibility=View.VISIBLE; hidePlaybackOverlay()
+        controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
+        syncMediaSession()
+        val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
+        work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality)).prepare() }, { remote ->
+            video=remote; quality=remote.info.quality
+            val p=player ?: run {
+                val renderers=androidx.media3.exoplayer.DefaultRenderersFactory(this).setEnableDecoderFallback(true)
+                val preloadBuilder=DefaultPreloadManager.Builder(this) { _: Int ->
+                    DefaultPreloadManager.PreloadStatus.specifiedRangeLoaded(3000)
+                }.setRenderersFactory(renderers).setLoadControl(buildPlaybackLoadControl())
+                preloadManager=preloadBuilder.build()
+                preloadBuilder.buildExoPlayer().also {
+                    player=it; playerView?.player=it
+                    it.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true)
+                    it.setHandleAudioBecomingNoisy(true)
+                    it.addAnalyticsListener(object: AnalyticsListener {
+                        override fun onVideoDecoderInitialized(
+                            eventTime: AnalyticsListener.EventTime,
+                            decoderName: String,
+                            initializedTimestampMs: Long,
+                            initializationDurationMs: Long
+                        ) {
+                            val kind=when {
+                                decoderName.contains("ffmpeg",true) -> "software/FFmpeg"
+                                decoderName.contains("google",true) || decoderName.contains("c2.android",true) -> "system software"
+                                else -> "platform decoder (hardware status depends on device implementation)"
+                            }
+                            android.util.Log.i("HongguoTV","Video decoder initialized: $decoderName kind=$kind init=${initializationDurationMs}ms")
+                            if(player===it) {
+                                activeDecoderName=decoderName
+                                main.post { if(player===it) refreshVideoInfoOverlay() }
+                            }
+                        }
+                    })
+                }
+            }
+            p.setPlaybackSpeed(library.playbackSpeed)
+            val listener=object: Player.Listener {
+                private fun active()=player===p && generation==ticket && p.currentMediaItem?.mediaId==requestedId
+                override fun onPlaybackStateChanged(state: Int) {
+                    if(!active()) return
+                    if(state==Player.STATE_READY) {
+                        if(!p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)) {
+                            playerFailure(PlaybackException("资源没有可解码的视频轨道",null,PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED))
+                            return
+                        }
+                        playbackReady=true; incompatibleSkips=0
+                        if(firstReady) preloadManager?.remove(videoItem(requestedId))
+                        if(firstReady) {
+                            firstReady=false; readySince=android.os.SystemClock.elapsedRealtime()
+                            debugPlaybackReadyAt=android.os.SystemClock.elapsedRealtime()
+                            android.util.Log.i("HongguoTV","Playback ready episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${readySince-playbackStarted}")
+                            debugLog("Playback READY elapsedMs=${readySince-playbackStarted} quality=$quality")
+                            startDanmaku()
+                        }
+                        updateDebugOverlay()
+                        if(hud.visibility==View.VISIBLE) updatePlaybackText()
+                    }
+                    syncMediaSession()
+                    if(state==Player.STATE_ENDED) {
+                        saveProgress(true)
+                        if(sleepTimer.episodeEnded()) stopForSleep()
+                        else if(foreground && requestedAutoplay && !pausedForLifecycle && library.autoNext && episodeIndex<data.episodes.lastIndex) playEpisode(episodeIndex+1)
+                        else if(foreground && requestedAutoplay && !pausedForLifecycle && continueToNextSeason()) { /* season jump in progress */ }
+                        else { requestedAutoplay=false; p.pause(); showEndedPanel() }
+                    }
+                }
+                override fun onRenderedFirstFrame() {
+                    if(active() && firstFrame) {
+                        firstFrame=false
+                        hideBootSplash()
+                        markStartupRecommendationPlaying()
+                        // 不在首帧后立即保存：开机推荐必须累计真实播放 30 秒，才允许写入观看历史。
+                        debugFirstFrameAt=android.os.SystemClock.elapsedRealtime()
+                        android.util.Log.i("HongguoTV","Playback first frame episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${debugFirstFrameAt-playbackStarted}")
+                        debugLog("Playback first frame elapsedMs=${debugFirstFrameAt-playbackStarted}")
+                    }
+                }
+                override fun onIsPlayingChanged(playing: Boolean) {
+                    if(active()) {
+                        if(playing && playbackReady) markStartupRecommendationPlaying()
+                        danmakuView?.setPlaybackActive(playing)
+                        if(hud.visibility==View.VISIBLE) showHud()
+                        syncMediaSession()
+                    }
+                }
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    if(active()) {
+                        applyVideoOrientation(videoSize)
+                        playerView?.resizeMode = activeFrameResizeMode()
+                        android.util.Log.i(
+                            "HongguoTV",
+                            "Video size ${videoSize.width}x${videoSize.height} pixelRatio=${videoSize.pixelWidthHeightRatio} rotation=${videoSize.unappliedRotationDegrees}"
+                        )
+                        refreshVideoInfoOverlay()
+                    }
+                }
+                override fun onTracksChanged(tracks: Tracks) {
+                    if(active()) refreshVideoInfoOverlay()
+                }
+                override fun onPlaybackParametersChanged(parameters: PlaybackParameters) { if(active()) syncMediaSession() }
+                override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,newPosition: Player.PositionInfo,reason: Int) { if(active()) { syncMediaSession(); danmakuView?.seekTo(newPosition.positionMs) } }
+                override fun onPlayerError(error: PlaybackException) {
+                    if(active()) {
+                        debugLog("Player error code=${error.errorCode} name=${error.errorCodeName} message=${error.message}")
+                        playerFailure(error)
+                    }
+                }
+            }
+            playerListener=listener; p.addListener(listener)
+            val source=prefetchedSource ?: videoSource(remote,requestedId)
+            val introSkip=if(position<=0 && (skipMark?.introSeconds ?: 0)>0) skipMark!!.introSeconds*1000L else position.coerceAtLeast(0)
+            p.setMediaSource(source); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
+            if(introSkip>0 && position<=0) Toast.makeText(this,"已跳过片头 ${skipMark!!.introSeconds} 秒",Toast.LENGTH_SHORT).show()
+        }, { problem -> playerFailure(problem) })
+    }
+
+

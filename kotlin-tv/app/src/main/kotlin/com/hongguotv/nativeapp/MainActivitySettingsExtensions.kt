@@ -1,0 +1,453 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package com.hongguotv.nativeapp
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.os.Bundle
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
+import android.graphics.drawable.GradientDrawable
+import android.view.*
+import android.view.inputmethod.InputMethodManager
+import android.content.Context
+import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Uri
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.widget.*
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.media3.common.*
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.preload.DefaultPreloadManager
+import androidx.media3.ui.PlayerView
+import com.hongguotv.core.*
+import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
+
+    internal fun MainActivity.settings(parent: LinearLayout, footerHost: LinearLayout) {
+        val settingRows=mutableListOf<TextView>()
+        val categoryItems=mutableListOf<MutableList<TextView>>()
+        val categoryIndicators=mutableListOf<TextView>()
+        val categoryHeadingCards=mutableListOf<LinearLayout>()
+        // 左侧主分类只显示分类名称；获得右侧具体设置项焦点时，才显示该子项说明。
+        val categoryHeadingSubtitles=mutableListOf<TextView>()
+        val categoryHeadingTitles=mutableListOf<TextView>()
+
+        // Settings sections are listed in the same order as the left navigation.
+
+        val columns=when {
+            widthDp()<600f -> 2
+            widthDp()<1100f -> 3
+            else -> 4
+        }
+        // A single seamless settings surface: subtle separators define sections instead of nested cards.
+        val contentHost=row().apply { gravity=Gravity.TOP }
+        parent.addView(contentHost,lp())
+        // 左侧分类栏按当前可用屏幕尺寸自适应，避免手机端过窄、电视端比例失衡。
+        val screenWidthDp=widthDp().coerceAtLeast(1f)
+        val screenHeightDp=heightDp().coerceAtLeast(1f)
+        val headingWidth=(screenWidthDp*0.125f).toInt().coerceIn(84,168)
+        val categoryScale=minOf(
+            (screenWidthDp/800f).coerceIn(0.88f,1.16f),
+            (screenHeightDp/600f).coerceIn(0.88f,1.12f)
+        )
+        // 设置页采用更克制的字号层级，避免分类标题过大、说明文字过小。
+        val categoryTitleSize=(16.5f*categoryScale).coerceIn(15f,19f)
+        val categoryTitleHeight=(headingWidth*0.40f*categoryScale).toInt().coerceIn(44,60)
+        val categorySubtitleSize=(12.5f*categoryScale).coerceIn(11.5f,14f)
+        val categoryController = SettingsCategoryController(
+            activity = this@settings,
+            categoryHeadingCards = categoryHeadingCards,
+            categoryIndicators = categoryIndicators,
+            categoryHeadingSubtitles = categoryHeadingSubtitles,
+            categoryHeadingTitles = categoryHeadingTitles,
+            categoryScale = categoryScale,
+            categoryTitleSize = categoryTitleSize,
+            categoryTitleHeight = categoryTitleHeight,
+            categorySubtitleSize = categorySubtitleSize,
+            muted = muted,
+            white = white,
+            dp = { value -> dp(value) },
+            rounded = { color -> rounded(color) },
+        )
+        val categoryCardExtension=(8f*categoryScale).toInt().coerceIn(6,10)
+        val categoryCard=column().apply {
+            // 分类背景卡片向右适度延伸；允许子卡片绘制到列宽之外。
+            clipChildren=false
+            clipToPadding=false
+        }
+        contentHost.addView(categoryCard,lp(dp(headingWidth),-2))
+        // 左右两栏保留与设置项外边距一致的留白，不绘制竖向分割线。
+        val columnGap=(5f*categoryScale).toInt().coerceIn(3,7)
+        contentHost.addView(Space(this),lp(dp(columnGap),1))
+        val sectionsHost=column()
+        contentHost.addView(sectionsHost,LinearLayout.LayoutParams(0,-2,1f))
+
+        val sectionFactory = SettingsSectionFactory(
+            activity = this@settings,
+            categoryIndicators = categoryIndicators,
+            categoryHeadingSubtitles = categoryHeadingSubtitles,
+            categoryHeadingTitles = categoryHeadingTitles,
+            categoryHeadingCards = categoryHeadingCards,
+            categoryItems = categoryItems,
+            categoryController = categoryController,
+            categoryScale = categoryScale,
+            categoryTitleSize = categoryTitleSize,
+            categoryTitleHeight = categoryTitleHeight,
+            categorySubtitleSize = categorySubtitleSize,
+            categoryCardExtension = categoryCardExtension,
+            headingWidth = headingWidth,
+            columns = columns,
+            categoryCard = categoryCard,
+            sectionsHost = sectionsHost,
+            white = white,
+            muted = muted,
+            dp = { value -> dp(value) },
+            createText = { value, size, color -> text(value, size, color) },
+            createColumn = { column() },
+            layoutParams = { width, height -> lp(width, height) },
+            rounded = { color -> rounded(color) }
+        )
+        val section: (String, String) -> Pair<LinearLayout, GridLayout> = sectionFactory::section
+        val playback=section("播放","清晰度、倍速与连播设置").second
+        val danmaku=section("弹幕","官方弹幕、显示效果与屏蔽词设置").second
+        val data=section("数据","备份记录、统计与缓存管理").second
+        val remote=section("按键","自定义方向键与确认键操作").second
+        val appearance=section("外观","界面风格与播放画面显示").second
+        val system=section("关于","软件信息与恢复设置").second
+
+        // 左侧主设置分类卡片的右边缘，动态对齐导航栏搜索按钮背景框的右边缘。
+        fun alignCategoryCardsToSearchShortcut() {
+            val search=searchNavShortcut ?: return
+            if(categoryCard.width<=0 || search.width<=0) return
+            val categoryLocation=IntArray(2)
+            val searchLocation=IntArray(2)
+            categoryCard.getLocationOnScreen(categoryLocation)
+            search.getLocationOnScreen(searchLocation)
+            val alignedWidth=(searchLocation[0]+search.width-categoryLocation[0]).coerceAtLeast(dp(1))
+            val categoryParams=categoryCard.layoutParams as? LinearLayout.LayoutParams
+            if(categoryParams!=null && categoryParams.width!=alignedWidth) {
+                categoryParams.width=alignedWidth
+                categoryCard.layoutParams=categoryParams
+            }
+            categoryHeadingCards.forEach { card ->
+                val params=card.layoutParams as? LinearLayout.LayoutParams ?: return@forEach
+                if(params.width!=alignedWidth || params.rightMargin!=0) {
+                    params.width=alignedWidth
+                    params.rightMargin=0
+                    card.layoutParams=params
+                }
+            }
+        }
+        categoryCard.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> alignCategoryCardsToSearchShortcut() }
+        searchNavShortcut?.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> alignCategoryCardsToSearchShortcut() }
+        parent.post { alignCategoryCardsToSearchShortcut() }
+
+        // 右侧设置项与左侧分类栏共用屏幕缩放系数，保持两侧视觉比例一致。
+        val settingTextSize=(13.5f*categoryScale).coerceIn(12.5f,14.5f)
+        val settingItemHeight=(64f*categoryScale).toInt().coerceIn(54,72)
+        val settingHorizontalPadding=(10f*categoryScale).toInt().coerceIn(7,13)
+        val settingVerticalPadding=(8f*categoryScale).toInt().coerceIn(6,11)
+        val settingFactory = SettingsItemFactory(
+            activity = this@settings,
+            settingRows = settingRows,
+            categoryItems = categoryItems,
+            categoryController = categoryController,
+            settingTextSize = settingTextSize,
+            settingItemHeight = settingItemHeight,
+            settingHorizontalPadding = settingHorizontalPadding,
+            settingVerticalPadding = settingVerticalPadding,
+            categoryScale = categoryScale,
+            dp = { value -> dp(value) },
+            createButton = { label, action -> button(label, onClick = action) },
+        )
+        fun setting(group:GridLayout,category:Int,label:String,action:()->Unit):TextView =
+            settingFactory.setting(group,category,label,action)
+
+
+        var rechainSettings:()->Unit={}
+        // 调试入口仅在本次进程运行期间解锁；应用重启后自然恢复隐藏。
+        var debugRevealTapCount=0
+        var debugRevealLastTapAt=0L
+
+        lateinit var startupAutoplayButton:TextView
+        lateinit var qualityButton:TextView
+        lateinit var defaultSpeed:TextView
+        lateinit var frame:TextView
+        lateinit var videoRendererButton:TextView
+        lateinit var autoNextButton:TextView
+        lateinit var autoSeasonButton:TextView
+        lateinit var danmakuButton:TextView
+        lateinit var danmakuOpacity:TextView
+        lateinit var danmakuFont:TextView
+        lateinit var danmakuColor:TextView
+        lateinit var danmakuSpeed:TextView
+        lateinit var danmakuRows:TextView
+        lateinit var danmakuReset:TextView
+        lateinit var blockedWords:TextView
+        lateinit var keySettings:TextView
+        lateinit var themeButton:TextView
+        lateinit var clockButton:TextView
+        lateinit var fileBackup:TextView
+        lateinit var backup:TextView
+        lateinit var hidden:TextView
+        lateinit var clearCache:TextView
+        lateinit var resetButton:TextView
+        lateinit var aboutButton:TextView
+
+        fun paintStartupAutoplayButton(focused:Boolean=startupAutoplayButton.hasFocus()) {
+            val enabled=startupAutoplayEnabled()
+            startupAutoplayButton.text="启动时播放推荐  ·  ${if(enabled) "开启" else "关闭"}"
+            // 开启/关闭仅作为文字状态显示，不在失焦后留下类似光标的选中底色。
+            startupAutoplayButton.background=TvStyle.card(this@settings,focused)
+        }
+        startupAutoplayButton=setting(playback,0,"启动时播放推荐") {
+            val enabled=!startupAutoplayEnabled()
+            getSharedPreferences("startup_playback",Context.MODE_PRIVATE).edit().putBoolean("autoplay_recommendation",enabled).apply()
+            paintStartupAutoplayButton()
+        }
+        paintStartupAutoplayButton(false)
+        startupAutoplayButton.setOnFocusChangeListener { _,focused ->
+            paintStartupAutoplayButton(focused)
+            if(focused) {
+                categoryController.markFocusedCategory(0)
+                categoryController.showSettingDescription(0,"启动时播放推荐")
+            } else {
+                startupAutoplayButton.post {
+                    if(settingRows.none { it.hasFocus() }) categoryController.restoreCategoryDescription(categoryController.focusedCategory)
+                }
+            }
+        }
+        lateinit var sleepActionButton: TextView
+        // 屏幕方向是手机端专属设置，电视端不显示此选项。
+        if (isPhoneDevice) {
+            lateinit var orientationButton: TextView
+            orientationButton=setting(playback,0,"屏幕方向  ·  ${listOf("跟随视频","固定竖屏","固定横屏")[phoneOrientationMode]}") {
+                val next=(phoneOrientationMode+1)%3
+                getSharedPreferences("playback-device-v1", Context.MODE_PRIVATE).edit().putInt("phone_orientation_mode",next).apply()
+                orientationButton.text="屏幕方向  ·  ${listOf("跟随视频","固定竖屏","固定横屏")[next]}"
+                applyDeviceOrientationPolicy()
+                player?.videoSize?.let(::applyVideoOrientation)
+            }
+        }
+        sleepActionButton=setting(playback,0,"定时关闭·${sleepActionLabel()}") {
+            if(shouldShowSleepSettingHint()) {
+                Toast.makeText(this@settings,"请在播放视频页面启用定时功能",Toast.LENGTH_LONG).show()
+            }
+            val next=(sleepActionMode+1)%2
+            getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit().putInt("sleep_action_mode",next).apply()
+            sleepActionButton.text="定时关闭·${sleepActionLabel(next)}"
+        }
+        qualityButton=setting(playback,0,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
+        defaultSpeed=setting(playback,0,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
+        frame=setting(playback,0,"画面模式  ·  ${library.frameMode.label}") { showFramePicker(frame,false) }
+        videoRendererButton=setting(playback,0,"渲染方式  ·  ${videoRendererModeLabel()}") {
+            val next=(videoRendererMode+1)%3
+            getSharedPreferences("playback-renderer-v1", Context.MODE_PRIVATE).edit()
+                .putInt("video_renderer_mode",next).apply()
+            videoRendererButton.text="渲染方式  ·  ${videoRendererModeLabel(next)}"
+            applyVideoRenderer()
+            val actual=if(next==0) {
+                "自动当前使用 SurfaceView（默认高效输出）"
+            } else "当前已切换为 ${videoRendererModeLabel(next)}"
+            Toast.makeText(this@settings,actual,Toast.LENGTH_LONG).show()
+        }
+        autoNextButton=setting(playback,0,"自动连播  ·  ${if(library.autoNext) "开启" else "关闭"}") {
+            library.autoNext=!library.autoNext
+            autoNextButton.text="自动连播  ·  ${if(library.autoNext) "开启" else "关闭"}"
+        }
+        autoSeasonButton=setting(playback,0,"系列剧连播  ·  ${if(library.autoSeason) "开启" else "关闭"}") {
+            library.autoSeason=!library.autoSeason
+            autoSeasonButton.text="系列剧连播  ·  ${if(library.autoSeason) "开启" else "关闭"}"
+        }
+
+        danmakuButton=setting(danmaku,1,"官方弹幕  ·  ${if(library.danmaku) "开启" else "关闭"}") {
+            library.danmaku=!library.danmaku
+            danmakuButton.text="官方弹幕  ·  ${if(library.danmaku) "开启" else "关闭"}"
+        }
+        danmakuOpacity=setting(danmaku,1,"不透明度  ·  ${library.danmakuOpacity}%") { showDanmakuOpacityPicker(danmakuOpacity) }
+        danmakuFont=setting(danmaku,1,"字体大小  ·  ${DanmakuPrefs.fontLabel(library.danmakuFont)}") { showDanmakuFontPicker(danmakuFont) }
+        danmakuColor=setting(danmaku,1,"弹幕颜色  ·  ${danmakuColorModeLabel()}") { showDanmakuColorPicker(danmakuColor) }
+        danmakuSpeed=setting(danmaku,1,"移动速度  ·  ${DanmakuPrefs.speedLabel(library.danmakuSpeed)}") { showDanmakuSpeedPicker(danmakuSpeed) }
+        danmakuRows=setting(danmaku,1,"展示行数  ·  ${library.danmakuRows} 行") { showDanmakuRowsPicker(danmakuRows) }
+        danmakuReset=setting(danmaku,1,"恢复弹幕默认") {
+            resetDanmakuPrefs()
+            danmakuOpacity.text="不透明度  ·  ${library.danmakuOpacity}%"
+            danmakuFont.text="字体大小  ·  ${DanmakuPrefs.fontLabel(library.danmakuFont)}"
+            danmakuColor.text="弹幕颜色  ·  ${danmakuColorModeLabel()}"
+            danmakuSpeed.text="移动速度  ·  ${DanmakuPrefs.speedLabel(library.danmakuSpeed)}"
+            danmakuRows.text="展示行数  ·  ${library.danmakuRows} 行"
+            Toast.makeText(this,"弹幕设置已恢复默认",Toast.LENGTH_SHORT).show()
+        }
+        blockedWords=setting(danmaku,1,"屏蔽词  ·  ${extras.blockedWords.size} 个") { showBlockedWordDialog(blockedWords) }
+
+        val remoteActions = SETTINGS_REMOTE_ACTIONS
+        val remoteActionLabels = SETTINGS_REMOTE_ACTION_LABELS
+        fun remoteActionLabel(value:String)=remoteActionLabels.getOrNull(remoteActions.indexOf(value)) ?: "无"
+        fun remoteKeySetting(title:String,current:()->String,update:(String)->Unit):TextView {
+            lateinit var item:TextView
+            fun sync() { item.text="$title  ·  ${remoteActionLabel(current())}" }
+            item=setting(remote,3,"$title  ·  ${remoteActionLabel(current())}") {
+                TvDialog.choose(this,"${title}功能",remoteActionLabels,{ index ->
+                    update(remoteActions[index])
+                    sync()
+                    item.requestFocus()
+                }).show()
+            }
+            return item
+        }
+        remoteKeySetting("上方向键",{ extras.remoteUpAction },{ extras.remoteUpAction=it })
+        remoteKeySetting("下方向键",{ extras.remoteDownAction },{ extras.remoteDownAction=it })
+        remoteKeySetting("确认键",{ extras.remoteConfirmAction },{ extras.remoteConfirmAction=it })
+        remoteKeySetting("菜单键",{ extras.remoteMenuAction },{ extras.remoteMenuAction=it })
+
+        themeButton=setting(appearance,4,"系统风格  ·  ${TvStyle.theme.label}") {
+            library.theme=TvStyle.toggle().name
+            settingsFocusKey="系统风格"
+            showCatalog()
+        }
+        clockButton=setting(appearance,4,"显示系统时间  ·  ${if(library.showClock) "开启" else "关闭"}") {
+            library.showClock=!library.showClock
+            clockButton.text="显示系统时间  ·  ${if(library.showClock) "开启" else "关闭"}"
+            applyClock()
+
+            // 连续快速点击「显示系统时间」5 次，才临时显示隐藏的调试入口。
+            val now=android.os.SystemClock.elapsedRealtime()
+            if(now-debugRevealLastTapAt>2500L) debugRevealTapCount=0
+            debugRevealLastTapAt=now
+            debugRevealTapCount++
+            if(debugRevealTapCount>=5 && debugSettingButton?.visibility!=View.VISIBLE) {
+                debugRevealTapCount=0
+                debugSettingRevealedThisSession=true
+                debugSettingButton?.visibility=View.VISIBLE
+                rechainSettings()
+                Toast.makeText(this,"调试模式入口已显示",Toast.LENGTH_SHORT).show()
+            }
+        }
+        fileBackup=setting(data,2,"本地备份与恢复") { showFileBackupDialog(fileBackup) }
+        backup=setting(data,2,"手机备份与恢复") {
+            runCatching {
+                val snapshot=library.snapshot()
+                val completeSettings=snapshot.settings.copy(
+                    startupAutoplay=startupAutoplayEnabled(),
+                    sleepActionMode=sleepActionMode,
+                    theme=library.theme,
+                    videoInfoMode=library.videoInfoMode,
+                    showNetworkSpeed=library.showNetworkSpeed
+                )
+                LibraryBackup.encode(snapshot.copy(
+                    settings=completeSettings,
+                    accountState=cloudAccount.backupJson(),
+                    playbackExtras=extras.backupSnapshot(library.skipMarksSnapshot())
+                ))
+            }.onSuccess { encoded ->
+                tvTools.libraryTransfer(encoded,backup) { restored,restoreSettings ->
+                    favoriteMonitor.stop(); library.restore(restored,restoreSettings)
+                    if(restoreSettings) {
+                        val restoredExtras=restored.playbackExtras ?: BackupPlaybackExtras()
+                        extras.restoreBackup(restoredExtras)
+                        library.restoreSkipMarks(restoredExtras.skipMarks)
+                        TvStyle.apply(library.theme)
+                    }
+                    tabState.clear(); tabFocus.clear(); catalogFocus=""; page=1
+                    showCatalog()
+                    favoriteMonitor.check()
+                    Toast.makeText(this,"备份记录已恢复",Toast.LENGTH_LONG).show()
+                    restoreBackupAccount(restored,backup)
+                }
+            }.onFailure { tvTools.info("无法生成备份","本机记录暂时无法导出，请重试。",backup) }
+        }
+        hidden=setting(data,2,"恢复隐藏推荐  ·  ${library.hidden().size} 部") {
+            library.unhideAll(); hidden.text="恢复隐藏推荐  ·  0 部"; Toast.makeText(this,"热门推荐已恢复",Toast.LENGTH_SHORT).show()
+        }
+        fun cacheBytes()=listOfNotNull(cacheDir,externalCacheDir).sumOf { dir -> dir.walkBottomUp().filter { it.isFile }.sumOf { it.length() } }
+        fun cacheLabel(bytes:Long?)="清理缓存  ·  ${when {
+            bytes==null -> "计算中…"
+            bytes in 0..1023 -> "$bytes B"
+            bytes in 1024..1048575 -> "${bytes/1024} KB"
+            else -> "%.1f MB".format(bytes/1048576f)
+        }}"
+        clearCache=setting(data,2,cacheLabel(null)) {
+            TvDialog.confirm(this,"清理缓存","清除封面图片和已下载的安装包等缓存数据，不影响收藏和观看记录。") {
+                io.execute {
+                    listOfNotNull(cacheDir,externalCacheDir).forEach { dir -> dir.listFiles()?.forEach { it.deleteRecursively() } }
+                    val remaining=cacheBytes()
+                    main.post {
+                        if(isDestroyed || resettingAllData) return@post
+                        clearCache.text=cacheLabel(remaining)
+                        Toast.makeText(this,"缓存已清理",Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.show()
+        }
+        io.execute {
+            val bytes=cacheBytes()
+            main.post { if(!isDestroyed) clearCache.text=cacheLabel(bytes) }
+        }
+
+        resetButton=setting(system,5,"重置软件") { showResetOptions(resetButton) }
+        aboutButton=setting(system,5,"关于软件") { updater.show(aboutButton,aboutMode=true) }
+        debugSettingButton=setting(system,5,debugSettingLabel()) {
+            if(debugEnabled) stopDebugLogging() else {
+                pendingBackupAction=2
+                pendingBackupAnchor=debugSettingButton
+                ensureBackupStoragePermission()
+            }
+        }
+        // 调试模式开启时显示；本次运行中手动解锁或关闭调试模式后，入口仍保留到下次启动。
+        debugSettingButton?.visibility=if(debugEnabled || debugSettingRevealedThisSession) View.VISIBLE else View.GONE
+
+        rechainSettings={
+            val visibleByCategory=categoryItems.map { items -> items.filter { it.visibility==View.VISIBLE } }
+            visibleByCategory.forEachIndexed { category,visible ->
+                visible.forEachIndexed { index,view ->
+                    val col=index%columns
+                    val rowStart=(index/columns)*columns
+                    val rowEnd=minOf(rowStart+columns,visible.size)-1
+                    view.nextFocusLeftId=if(col>0) visible[index-1].id else categoryIndicators[category].id
+                    // At the row edge, return to the category label instead of trapping focus.
+                    view.nextFocusRightId=if(index<rowEnd) visible[index+1].id else categoryIndicators[category].id
+                    view.nextFocusUpId=visible.getOrNull(index-columns)?.id ?: navForTab().id
+                    view.nextFocusDownId=visible.getOrNull(index+columns)?.id
+                        ?: categoryIndicators.getOrNull(category+1)?.id ?: navForTab().id
+                }
+                val indicator=categoryIndicators[category]
+                indicator.nextFocusLeftId=navForTab().id
+                indicator.nextFocusRightId=visible.firstOrNull()?.id ?: navForTab().id
+                indicator.nextFocusUpId=categoryIndicators.getOrNull(category-1)?.id ?: navForTab().id
+                indicator.nextFocusDownId=categoryIndicators.getOrNull(category+1)?.id ?: navForTab().id
+            }
+            navForTab().nextFocusDownId=settingRows.firstOrNull()?.id ?: navForTab().id
+        }
+        rechainSettings()
+
+        val wanted=settingsFocusKey.also { settingsFocusKey=null }
+        val target=wanted?.let { key -> settingRows.firstOrNull { it.text.toString().startsWith(key) } }
+        val targetCategory=target?.let { view -> categoryItems.indexOfFirst { view in it } } ?: 0
+        categoryController.markFocusedCategory(targetCategory.coerceAtLeast(0))
+        if(target!=null) {
+            target.requestFocus()
+        } else {
+            settingRows.firstOrNull()?.requestFocus()
+        }
+    }

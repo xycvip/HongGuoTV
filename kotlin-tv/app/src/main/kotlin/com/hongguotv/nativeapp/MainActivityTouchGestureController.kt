@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package com.hongguotv.nativeapp
+
+import android.os.Handler
+import android.view.MotionEvent
+import android.view.View
+import android.widget.SeekBar
+
+/** 手机播放器画面触控协调器：进度条/HUD 命中测试、横向拖动预览与单/双击手势。 */
+internal class MainActivityTouchGestureController(
+    private val state: PlaybackUiState,
+    private val main: Handler,
+    private val isPhonePlayer: () -> Boolean,
+    private val progressBar: () -> View?,
+    private val hud: () -> View?,
+    private val hasBlockingPanel: () -> Boolean,
+    private val playerDuration: () -> Long,
+    private val screenWidthPx: () -> Float,
+    private val dp: (Int) -> Float,
+    private val currentPosition: () -> Long,
+    private val seekRunnable: Runnable,
+    private val singleTapPlayback: Runnable,
+    private val showHud: () -> Unit,
+    private val updatePlaybackText: () -> Unit,
+    private val seekTo: (Long) -> Unit,
+    private val showPanel: () -> Unit
+) {
+    fun dispatch(event: MotionEvent, dispatchToView: (MotionEvent) -> Boolean): Boolean {
+        val action = event.actionMasked
+        if(!isPhonePlayer()) {
+            if(action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) clearGesture()
+            return dispatchToView(event)
+        }
+
+        if(action == MotionEvent.ACTION_DOWN) {
+            state.touchOnProgressBar = false
+            state.touchOnHud = false
+            progressBar()?.takeIf { it is SeekBar && it.visibility == View.VISIBLE && it.isShown }?.let { bar ->
+                val location = IntArray(2)
+                bar.getLocationOnScreen(location)
+                state.touchOnProgressBar = event.rawX >= location[0] &&
+                    event.rawX <= location[0] + bar.width &&
+                    event.rawY >= location[1] &&
+                    event.rawY <= location[1] + bar.height
+            }
+            if(!state.touchOnProgressBar) {
+                hud()?.takeIf { it.visibility == View.VISIBLE && it.isShown }?.let { panel ->
+                    val location = IntArray(2)
+                    panel.getLocationOnScreen(location)
+                    state.touchOnHud = event.rawX >= location[0] &&
+                        event.rawX <= location[0] + panel.width &&
+                        event.rawY >= location[1] &&
+                        event.rawY <= location[1] + panel.height
+                }
+            }
+        }
+
+        if(state.touchOnProgressBar) {
+            val handled = dispatchToView(event)
+            if(action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                state.touchOnProgressBar = false
+                state.touchTracking = false
+                state.touchSeekGesture = false
+                state.touchSeekTarget = null
+            }
+            return handled
+        }
+
+        if(state.touchOnHud) {
+            val handled = dispatchToView(event)
+            if(action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) state.touchOnHud = false
+            return handled
+        }
+
+        if(hasBlockingPanel()) {
+            if(action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                state.touchTracking = false
+                state.touchSeekGesture = false
+                state.touchSeekTarget = null
+                state.touchOnHud = false
+            }
+            return dispatchToView(event)
+        }
+
+        when(action) {
+            MotionEvent.ACTION_DOWN -> {
+                state.touchTracking = true
+                state.touchStartX = event.x
+                state.touchStartY = event.y
+                state.touchSeekStart = currentPosition()
+                state.touchSeekTarget = null
+                state.touchSeekGesture = false
+            }
+            MotionEvent.ACTION_MOVE -> if(state.touchTracking) {
+                val dx = event.x - state.touchStartX
+                val dy = event.y - state.touchStartY
+                if(!state.touchSeekGesture && kotlin.math.abs(dx) > dp(24) &&
+                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f
+                ) state.touchSeekGesture = true
+                if(state.touchSeekGesture) {
+                    val duration = playerDuration().coerceAtLeast(0L)
+                    if(duration > 0L) {
+                        main.removeCallbacks(seekRunnable)
+                        val maxDelta = minOf(duration, 180_000L)
+                        val fraction = (dx / screenWidthPx().coerceAtLeast(1f)).coerceIn(-1f, 1f)
+                        val target = (state.touchSeekStart + (fraction * maxDelta).toLong())
+                            .coerceIn(0L, (duration - 500L).coerceAtLeast(0L))
+                        state.touchSeekTarget = target
+                        state.pendingSeek = target
+                        showHud()
+                        updatePlaybackText()
+                        return true
+                    }
+                }
+            }
+            MotionEvent.ACTION_UP -> if(state.touchTracking) {
+                state.touchTracking = false
+                if(state.touchSeekGesture) {
+                    val target = state.touchSeekTarget ?: state.pendingSeek
+                    state.touchSeekGesture = false
+                    state.touchSeekTarget = null
+                    if(target != null) seekTo(target) else showHud()
+                    return true
+                }
+                if(kotlin.math.abs(event.x - state.touchStartX) <= dp(24) &&
+                    kotlin.math.abs(event.y - state.touchStartY) <= dp(24)
+                ) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val doubleTap = now - state.lastTapAt <= 300L &&
+                        kotlin.math.abs(event.x - state.lastTapX) <= dp(48) &&
+                        kotlin.math.abs(event.y - state.lastTapY) <= dp(48)
+                    if(doubleTap) {
+                        main.removeCallbacks(singleTapPlayback)
+                        state.lastTapAt = 0L
+                        showPanel()
+                    } else {
+                        state.lastTapAt = now
+                        state.lastTapX = event.x
+                        state.lastTapY = event.y
+                        main.removeCallbacks(singleTapPlayback)
+                        main.postDelayed(singleTapPlayback, 300L)
+                    }
+                    return true
+                }
+                showHud()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                state.touchTracking = false
+                state.touchSeekGesture = false
+                state.touchSeekTarget = null
+                state.pendingSeek = null
+            }
+        }
+        return dispatchToView(event)
+    }
+
+    private fun clearGesture() {
+        state.touchTracking = false
+        state.touchSeekGesture = false
+        state.touchSeekTarget = null
+        state.touchOnProgressBar = false
+    }
+}
