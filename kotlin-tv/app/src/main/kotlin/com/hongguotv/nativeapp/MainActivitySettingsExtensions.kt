@@ -353,37 +353,8 @@ import java.util.concurrent.atomic.AtomicLong
 
         }
         fileBackup=setting(data,2,"本地备份与恢复") { showFileBackupDialog(fileBackup) }
-        backup=setting(data,2,"手机备份与恢复") {
-            runCatching {
-                val snapshot=library.snapshot()
-                val completeSettings=snapshot.settings.copy(
-                    startupAutoplay=startupAutoplayEnabled(),
-                    sleepActionMode=sleepActionMode,
-                    theme=library.theme,
-                    videoInfoMode=library.videoInfoMode,
-                    showNetworkSpeed=library.showNetworkSpeed
-                )
-                LibraryBackup.encode(snapshot.copy(
-                    settings=completeSettings,
-                    accountState=cloudAccount.backupJson(),
-                    playbackExtras=extras.backupSnapshot(library.skipMarksSnapshot())
-                ))
-            }.onSuccess { encoded ->
-                tvTools.libraryTransfer(encoded,backup) { restored,restoreSettings ->
-                    favoriteMonitor.stop(); library.restore(restored,restoreSettings)
-                    if(restoreSettings) {
-                        val restoredExtras=restored.playbackExtras ?: BackupPlaybackExtras()
-                        extras.restoreBackup(restoredExtras)
-                        library.restoreSkipMarks(restoredExtras.skipMarks)
-                        TvStyle.apply(library.theme)
-                    }
-                    tabState.clear(); tabFocus.clear(); catalogFocus=""; page=1
-                    showCatalog()
-                    favoriteMonitor.check()
-                    Toast.makeText(this,"备份记录已恢复",Toast.LENGTH_LONG).show()
-                    restoreBackupAccount(restored,backup)
-                }
-            }.onFailure { tvTools.info("无法生成备份","本机记录暂时无法导出，请重试。",backup) }
+        backup=setting(data,2,"手机文件管理") {
+            tvTools.libraryTransfer(backup)
         }
         hidden=setting(data,2,"恢复隐藏推荐  ·  ${library.hidden().size} 部") {
             library.unhideAll(); hidden.text="恢复隐藏推荐  ·  0 部"; Toast.makeText(this,"热门推荐已恢复",Toast.LENGTH_SHORT).show()
