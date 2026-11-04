@@ -101,6 +101,12 @@ internal fun MainActivity.createPlayerView(): PlayerView {
 internal fun MainActivity.videoItem(id: String)=MediaItem.Builder()
     .setMediaId(id).setUri("hongguotv://episode/$id").setMimeType(MimeTypes.VIDEO_MP4).build()
 
-internal fun MainActivity.videoSource(remote: RemoteVideo,id: String)=ProgressiveMediaSource.Factory {
-    VideoDataSource(remote) { count -> playbackBytes.addAndGet(count.toLong()) }
+internal fun MainActivity.videoSource(
+    remote: RemoteVideo,
+    id: String,
+    includeInPlaybackStats: () -> Boolean = { true }
+)=ProgressiveMediaSource.Factory {
+    VideoDataSource(remote) { count ->
+        if(includeInPlaybackStats()) playbackBytes.addAndGet(count.toLong())
+    }
 }.createMediaSource(videoItem(id))
