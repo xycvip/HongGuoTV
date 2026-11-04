@@ -916,7 +916,7 @@ class MainActivity: Activity() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if(::artwork.isInitialized) artwork.trimMemory(level)
-        if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) { cancelPrefetch(); clearStandbyPlayer("系统内存压力") }
+        if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) { cancelPrefetch(); standbyFallbackEpisodeId=detail?.episodes?.getOrNull(episodeIndex).orEmpty(); clearStandbyPlayer("系统内存压力") }
     }
     override fun onDestroy() {
         debugLog("生命周期：onDestroy；页面=$screen；正在销毁 Activity")
