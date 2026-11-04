@@ -241,4 +241,4 @@ import java.util.concurrent.atomic.AtomicLong
         main.post(tick)
     }
 
-internal fun MainActivity.debugSettingLabel()="调试模式  ·  ${if(debugEnabled) "开启" else "关闭"}"
+internal fun MainActivity.debugSettingLabel()=if(debugEnabled) "关闭调试模式" else "打开调试模式"
