@@ -153,9 +153,11 @@ import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.showInterfaceCheck(anchor: TextView) {
         val content=column()
+        content.addView(TvDialog.title(this,"接口状态详情"))
         val status=text("可查看最近一次自动检测结果，也可手动重新检测。",13f,muted)
             .apply { setPadding(dp(8),0,dp(8),dp(8)) }
         content.addView(status)
+
         val snapshot=column().apply {
             setPadding(dp(8),dp(8),dp(8),dp(8))
             background=rounded(Color.rgb(31,34,40))
@@ -189,16 +191,30 @@ import java.util.concurrent.atomic.AtomicLong
             }
         }
         refreshSnapshot()
-        content.addView(snapshot)
+        val snapshotScroll=ScrollView(this).apply {
+            isFillViewport=true
+            isFocusable=true
+            isFocusableInTouchMode=true
+            descendantFocusability=ViewGroup.FOCUS_BEFORE_DESCENDANTS
+            addView(snapshot,ViewGroup.LayoutParams(-1,-2))
+        }
+        val snapshotHeight=(resources.displayMetrics.heightPixels*0.30f).toInt().coerceAtLeast(dp(110))
+        content.addView(snapshotScroll,LinearLayout.LayoutParams(-1,snapshotHeight))
+
         lateinit var dialog:AlertDialog
-        val refreshAll=button("重新检测全部") {
+        val refreshAll=TvDialog.capsuleButton(this,"重新检测全部") {
             runAutomaticApiChecks(force=true)
             status.text="已开始新一轮检测；正在等待四项接口返回。"
             refreshSnapshot()
-        }.apply { setPadding(dp(12),dp(8),dp(12),dp(8)) }
-        content.addView(refreshAll,lp(-1,-2))
+        }
+        content.addView(refreshAll,LinearLayout.LayoutParams(-1,-2).apply {
+            topMargin=dp(10)
+        })
         content.addView(text("单项手动检测",13f,muted).apply { setPadding(dp(8),dp(12),dp(8),dp(6)) })
-        val actions=row()
+        val actions=row().apply {
+            isFocusable=false
+            descendantFocusability=ViewGroup.FOCUS_AFTER_DESCENDANTS
+        }
         val dotIdle=TvStyle.outline
         val dotOk=Color.rgb(86,196,122)
         val dotFail=Color.rgb(235,95,95)
@@ -245,10 +261,13 @@ import java.util.concurrent.atomic.AtomicLong
             }
         }
         fun add(name: String,probe: ()->String) {
-            lateinit var btn:TextView
-            btn=button(name) { check(name,btn,probe) }
+            lateinit var btn:Button
+            btn=TvDialog.capsuleButton(this,name) { check(name,btn,probe) }
             btn.text=dotLabel(name,dotIdle)
-            actions.addView(btn,LinearLayout.LayoutParams(0,-2,1f).apply { rightMargin=dp(6) })
+            btn.textSize=13f
+            btn.minWidth=0
+            btn.setPadding(dp(6),0,dp(6),0)
+            actions.addView(btn,LinearLayout.LayoutParams(0,-2,1f).apply { rightMargin=dp(5) })
         }
         add("首页") { "返回 ${repository.home(1,library.contentType).items.size} 条" }
         add("搜索") { "返回 ${repository.search("修仙",1,library.contentType).items.size} 条" }
@@ -261,8 +280,11 @@ import java.util.concurrent.atomic.AtomicLong
         content.addView(actions)
         content.addView(text("自动检测结果会随新一轮检测实时更新；单项手动检测不会改变顶部四叶灯的自动检测状态。",11.5f,muted)
             .apply { setPadding(dp(8),dp(10),dp(8),0) })
-        dialog=AlertDialog.Builder(this).setTitle("接口状态详情").setView(TvDialog.card(this,content)).create()
-        TvDialog.styleWindow(this,dialog)
+
+        dialog=AlertDialog.Builder(this).setView(TvDialog.card(this,content)).create()
+        TvDialog.styleWindow(this,dialog,widthFraction=0.72f,maxWidthDp=760) {
+            refreshAll.requestFocus()
+        }
         val refreshTask=object:Runnable {
             override fun run() {
                 if(dialog.isShowing && !isDestroyed) {
