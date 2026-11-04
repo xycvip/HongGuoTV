@@ -78,6 +78,7 @@ import java.util.concurrent.atomic.AtomicLong
             standbyOutputView=null
             oldPlayer?.release()
             standbyPlayer=null
+            updatePlaybackBufferingIndicator()
             standbyRemote=null
             standbyByteCounterEnabled=null
             standbyEpisodeId=""
