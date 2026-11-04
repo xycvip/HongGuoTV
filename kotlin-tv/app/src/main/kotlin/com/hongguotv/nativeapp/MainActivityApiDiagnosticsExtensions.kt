@@ -198,6 +198,7 @@ import java.util.concurrent.atomic.AtomicLong
             descendantFocusability=ViewGroup.FOCUS_BEFORE_DESCENDANTS
             addView(snapshot,ViewGroup.LayoutParams(-1,-2))
         }
+        snapshotScroll.id=View.generateViewId()
         val snapshotHeight=(resources.displayMetrics.heightPixels*0.30f).toInt().coerceAtLeast(dp(110))
         content.addView(snapshotScroll,LinearLayout.LayoutParams(-1,snapshotHeight))
 
@@ -207,6 +208,9 @@ import java.util.concurrent.atomic.AtomicLong
             status.text="已开始新一轮检测；正在等待四项接口返回。"
             refreshSnapshot()
         }
+        refreshAll.id=View.generateViewId()
+        refreshAll.nextFocusUpId=snapshotScroll.id
+        snapshotScroll.nextFocusDownId=refreshAll.id
         content.addView(refreshAll,LinearLayout.LayoutParams(-1,-2).apply {
             topMargin=dp(10)
         })
@@ -220,6 +224,7 @@ import java.util.concurrent.atomic.AtomicLong
         val dotFail=Color.rgb(235,95,95)
         val lastAt=mutableMapOf<String,Long>()
         val busy=mutableSetOf<String>()
+        val actionButtons=mutableListOf<Button>()
         fun dotLabel(name: String,color: Int): CharSequence {
             val span=android.text.SpannableString("●  $name")
             span.setSpan(object: android.text.style.ReplacementSpan() {
@@ -263,8 +268,12 @@ import java.util.concurrent.atomic.AtomicLong
         fun add(name: String,probe: ()->String) {
             lateinit var btn:Button
             btn=TvDialog.capsuleButton(this,name) { check(name,btn,probe) }
+            btn.id=View.generateViewId()
             btn.text=dotLabel(name,dotIdle)
             btn.textSize=13f
+            btn.nextFocusUpId=refreshAll.id
+            btn.nextFocusDownId=refreshAll.id
+            actionButtons+=btn
             btn.minWidth=0
             btn.setPadding(dp(6),0,dp(6),0)
             actions.addView(btn,LinearLayout.LayoutParams(0,-2,1f).apply { rightMargin=dp(5) })
@@ -277,6 +286,10 @@ import java.util.concurrent.atomic.AtomicLong
             "获取成功 · ${info.quality}"
         }
         add("联想") { "官方接口直连成功 · 返回 ${repository.probeSuggest("修仙")} 个词（已绕过缓存）" }
+        actionButtons.forEachIndexed { index,btn ->
+            btn.nextFocusLeftId=actionButtons.getOrNull(index-1)?.id ?: actionButtons.last().id
+            btn.nextFocusRightId=actionButtons.getOrNull(index+1)?.id ?: actionButtons.first().id
+        }
         content.addView(actions)
         content.addView(text("自动检测结果会随新一轮检测实时更新；单项手动检测不会改变顶部四叶灯的自动检测状态。",11.5f,muted)
             .apply { setPadding(dp(8),dp(10),dp(8),0) })
