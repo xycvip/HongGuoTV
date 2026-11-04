@@ -147,6 +147,7 @@ class MainActivity: Activity() {
     // Activity 构造阶段 Context 尚未挂接，不能在属性初始化时读取 SharedPreferences。
     internal var debugSettingRevealedThisSession by debugUiState::settingRevealedThisSession
     internal var debugRevealTapCount by debugUiState::revealTapCount
+    internal var debugRevealLastTapAt by debugUiState::revealLastTapAt
     internal var lastSpeedBytes by debugUiState::lastSpeedBytes
     internal var lastSpeedAt by debugUiState::lastSpeedAt
     internal var currentSpeedBytesPerSecond by debugUiState::currentSpeedBytesPerSecond
