@@ -71,6 +71,38 @@ import java.util.concurrent.atomic.AtomicLong
                 addView(text(title,16f).apply { setTypeface(null,Typeface.BOLD); setTextColor(white) })
                 addView(text(description,13f,muted).apply { setPadding(0,dp(5),0,0) })
             }
+        fun cacheBytes():Long = listOfNotNull(cacheDir,externalCacheDir).sumOf { dir ->
+            dir.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+        }
+        fun cacheSizeLabel(bytes:Long):String = when {
+            bytes < 1024L -> "$bytes B"
+            bytes < 1024L*1024L -> "${bytes/1024L} KB"
+            else -> "%.1f MB".format(bytes/1048576f)
+        }
+        val cacheOption=option("清理缓存","正在计算缓存占用…") {
+            optionsDialog.dismiss()
+            TvDialog.confirm(this,"清理缓存","清除封面图片、已下载的安装包等缓存数据，不影响收藏和观看记录。") {
+                io.execute {
+                    listOfNotNull(cacheDir,externalCacheDir).forEach { dir ->
+                        dir.listFiles()?.forEach { it.deleteRecursively() }
+                    }
+                    main.post {
+                        if(isDestroyed || resettingAllData) return@post
+                        Toast.makeText(this,"缓存已清理",Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.show()
+        }
+        val cacheDescription=cacheOption.getChildAt(1) as TextView
+        io.execute {
+            val bytes=cacheBytes()
+            main.post {
+                if(!isDestroyed && optionsDialog.isShowing) {
+                    cacheDescription.text="当前占用：${cacheSizeLabel(bytes)}"
+                }
+            }
+        }
+
         val settingsOption=option("恢复软件设置","恢复播放、弹幕、界面和遥控器默认值；保留观看记录、收藏、稍后看及片源配置。") {
             optionsDialog.dismiss()
             TvDialog.confirm(this,"恢复软件设置","将恢复默认播放与界面设置。观看记录、收藏、稍后看、片源配置和账号信息都会保留。") {
@@ -96,6 +128,7 @@ import java.util.concurrent.atomic.AtomicLong
         val buttons=LinearLayout(this).apply { gravity=Gravity.END; setPadding(0,dp(14),0,0) }
         val cancel=TvDialog.capsuleButton(this,"取消") {}
         buttons.addView(cancel)
+        content.addView(cacheOption,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(10) })
         content.addView(settingsOption,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(10) })
         content.addView(allOption,LinearLayout.LayoutParams(-1,-2))
         content.addView(buttons)
