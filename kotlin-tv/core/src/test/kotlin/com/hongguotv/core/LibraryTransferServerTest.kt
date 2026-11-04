@@ -27,6 +27,7 @@ class LibraryTransferServerTest {
         val nested=java.io.File(root,"子目录").apply{mkdirs()}
         java.io.File(nested,"电视说明.txt").writeText("existing")
         LibraryTransferServer("127.0.0.1",root,port=freePort()).use{server->
+            assertEquals("/",URI(server.url).path)
             val page=request(server).toString(Charsets.UTF_8)
             assertTrue(page.startsWith("HTTP/1.1 200"))
             assertTrue(page.contains("电视公共文件夹"))
@@ -49,7 +50,7 @@ class LibraryTransferServerTest {
     @Test fun `rejects traversal and cross origin requests`() {
         val root=Files.createTempDirectory("hongguotv-files").toFile()
         val outside=Files.createTempFile("outside",".txt").toFile().apply{writeText("secret")}
-        LibraryTransferServer("127.0.0.1",root).use{server->
+        LibraryTransferServer("127.0.0.1",root,port=freePort()).use{server->
             val traversal=request(server,"?path=${encoded("../${outside.name}")}").toString(Charsets.UTF_8)
             assertTrue(traversal.startsWith("HTTP/1.1 400"))
             val uri=URI(server.url)
