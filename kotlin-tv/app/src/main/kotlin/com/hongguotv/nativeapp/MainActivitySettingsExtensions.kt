@@ -291,8 +291,8 @@ import java.util.concurrent.atomic.AtomicLong
             videoRendererButton.text="渲染方式  ·  ${videoRendererModeLabel(next)}"
             applyVideoRenderer()
             val actual=if(next==0) {
-                if(isTelevisionDevice) "电视自动使用 TextureView（提升双播放器画面交接兼容性）"
-                else "手机自动使用 SurfaceView（默认高效输出）"
+                if(isTelevisionDevice && seamlessPlaybackEnabled) "电视无缝连播自动使用 TextureView"
+                else "自动使用 SurfaceView"
             } else "当前已切换为 ${videoRendererModeLabel(next)}"
             Toast.makeText(this@settings,actual,Toast.LENGTH_LONG).show()
         }
@@ -302,6 +302,7 @@ import java.util.concurrent.atomic.AtomicLong
             getSharedPreferences("playback-settings-v1",Context.MODE_PRIVATE)
                 .edit().putBoolean("seamless_playback",enabled).apply()
             seamlessPlaybackButton.text="无缝连播  ·  ${if(enabled) "开启" else "关闭"}"
+            applyVideoRenderer()
             if(enabled) {
                 standbyFallbackEpisodeId=""
                 cancelPrefetch()
@@ -313,6 +314,7 @@ import java.util.concurrent.atomic.AtomicLong
             } else {
                 standbyFallbackEpisodeId=""
                 clearStandbyPlayer("用户关闭无缝连播")
+                applyVideoRenderer()
                 Toast.makeText(this@settings,"无缝连播已关闭，恢复单播放器预加载",Toast.LENGTH_SHORT).show()
             }
         }
