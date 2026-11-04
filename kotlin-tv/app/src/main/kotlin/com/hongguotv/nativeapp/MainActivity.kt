@@ -495,7 +495,17 @@ class MainActivity: Activity() {
         // 调试入口的显示状态仅保存在进程内；调试模式本身仍由持久化开关控制。
         applyDeviceOrientationPolicy()
         applyImmersiveFullscreen()
-        library=Library(this); artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
+        library=Library(this)
+        // 第三方片源独立存储，但源配置、观看历史和收藏必须进入整机备份。
+        // ThirdSourceScreen 使用同一 SharedPreferences，因此这里注入的快照/恢复回调可直接覆盖其数据。
+        val thirdStore = ThirdStore(applicationContext)
+        library.thirdSourcesProvider = { thirdStore.backupSources() }
+        library.thirdSourcesRestore = { thirdStore.mergeRestored(it) }
+        library.thirdHistoryProvider = { thirdStore.backupHistory() }
+        library.thirdHistoryRestore = { thirdStore.mergeHistory(it) }
+        library.thirdFavoritesProvider = { thirdStore.backupFavorites() }
+        library.thirdFavoritesRestore = { thirdStore.mergeFavorites(it) }
+        artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
         updater=AppUpdater(this) { foreground && library.isLoaded && screen=="catalog" && !tvTools.showing }
         cloudAccount = AccountController(this) { remote ->
             pendingCloudProgress = remote
