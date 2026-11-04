@@ -15,7 +15,7 @@ class ArtworkCache(private val directory: File) {
     /** Remove every cached artwork file and report incomplete deletion. */
     @Synchronized fun clear(): Boolean {
         val files = directory.listFiles() ?: return !directory.exists()
-        return files.all { it.deleteRecursively() }
+        return files.map { it.deleteRecursively() }.all { it }
     }
     @Synchronized fun put(url: String,bytes: ByteArray) {
         if(bytes.size>4*1024*1024) return
