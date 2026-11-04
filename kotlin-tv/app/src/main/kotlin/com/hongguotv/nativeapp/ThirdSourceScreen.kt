@@ -32,8 +32,6 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.hongguotv.core.PhoneField
-import com.hongguotv.core.PhoneForm
 import com.hongguotv.core.PlaybackSpeed
 import com.hongguotv.core.ThirdSourceConfig
 import java.util.concurrent.Executors
@@ -91,7 +89,6 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
         ThirdSourceAddSourceDialog(
             activity = activity,
             ui = ui,
-            tvTools = tvTools,
             probeRequests = probeRequests,
             store = store,
             sources = { sources },
@@ -1256,7 +1253,7 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
         rebuild()
     }
 
-    // ================= 搜索页（独立全屏：键盘 + 联想 + 历史 + 手机扫码） =================
+    // ================= 搜索页（独立全屏：键盘 + 联想 + 历史） =================
 
     private var searchPageRenderer: ThirdSourceSearchPageRenderer? = null
     private var searchPageViews: ThirdSourceSearchPageViews? = null
@@ -1285,7 +1282,6 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
             container = container,
             searchInput = searchPageState.input,
             onBack = { onBack(); Unit },
-            onPhoneSearch = ::phoneSearch,
             onSubmit = { submitSearch(it) },
             onTypeChar = ::typeChar,
             onDelete = {
@@ -1365,19 +1361,6 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
         catalogPageState.categoryId = null
         mode = ThirdSourceScreenMode.BROWSE
         rebuild()
-    }
-
-    private fun phoneSearch(anchor: View?) {
-        tvTools.phoneForm(anchor, PhoneForm(
-            heading = "搜索片源",
-            description = "输入片名或关键词，提交后电视会立即按当前片源搜索。",
-            fields = listOf(PhoneField("query", "片名或关键词", "例如：爱情", 40)),
-            doneHint = "请回到电视查看搜索结果。",
-            invalidMessage = "请输入 1—40 个字符的关键词"
-        )) { values ->
-            val word = values["query"].orEmpty()
-            if(word.isNotBlank()) submitSearch(word)
-        }
     }
 
     private fun showAllHistory(history: List<String>) {
