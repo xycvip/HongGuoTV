@@ -36,6 +36,8 @@ jobs:
           set -euo pipefail
           rsync -a --delete \
             --exclude='.git/' \
+            --exclude='.github/workflows/android-ci.yml' \
+            --exclude='.github/workflows/build-test.yml' \
             --exclude='docs/' \
             --exclude='README*' \
             --exclude='*.md' \
