@@ -44,10 +44,15 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
-    internal fun MainActivity.setApiStatus(name: String,color: Int,detail: String) {
-        apiStatusAnimators.remove(name)?.cancel()
+    internal fun MainActivity.setApiStatus(name: String,color: Int,detail: String,elapsedMs: Long? = null) {
+        apiStatusAnimators.remove(name)?.let { animator ->
+            animator.removeAllUpdateListeners()
+            animator.cancel()
+        }
         apiStatusViews[name]?.alpha=1f
         apiStatusResults[name]=color to detail
+        apiStatusUpdatedAt[name]=System.currentTimeMillis()
+        apiStatusElapsedMs[name]=elapsedMs
         val chip=apiStatusViews[name] ?: return
         chip.setLeafColor(name,color)
         chip.setLeafAlpha(name,1f)
@@ -66,12 +71,27 @@ import java.util.concurrent.atomic.AtomicLong
         animator.start()
     }
 
-    internal fun MainActivity.runAutomaticApiChecks() {
-        if(apiStatusCheckStarted || !library.isLoaded || isDestroyed || tab!=0) return
+    /** 页面重建、离开或 Activity 销毁时统一释放四片叶子的闪烁动画。 */
+    internal fun MainActivity.stopApiStatusAnimations() {
+        apiStatusAnimators.values.toList().forEach { animator ->
+            animator.removeAllUpdateListeners()
+            animator.cancel()
+        }
+        apiStatusAnimators.clear()
+        apiStatusViews.values.distinct().forEach { flower ->
+            listOf("首页","搜索","播放","联想").forEach { flower.setLeafAlpha(it,1f) }
+            flower.alpha=1f
+        }
+    }
+
+    internal fun MainActivity.runAutomaticApiChecks(force: Boolean = false) {
+        if(!library.isLoaded || isDestroyed || tab!=0 || (!force && apiStatusCheckStarted)) return
+        val batch=++apiStatusUiState.checkBatchId
         if(!hasValidatedInternet()) {
             val failed=Color.rgb(235,75,75)
             listOf("首页","搜索","播放","联想").forEach { setApiStatus(it,failed,"网络不可用") }
             apiNetworkUnavailable=true
+            apiStatusCheckStarted=false
             return
         }
         apiNetworkUnavailable=false
@@ -85,13 +105,22 @@ import java.util.concurrent.atomic.AtomicLong
         val progress=runCatching { library.history().firstOrNull() }.getOrNull()
 
         fun probe(name: String,action: ()->String) {
+            val started=android.os.SystemClock.elapsedRealtime()
             io.execute {
                 var final: Pair<Int,String>?=null
                 var lastError="请求失败"
                 for(attempt in 0..3) {
+                    if(Thread.currentThread().isInterrupted) return@execute
                     if(attempt>0) {
-                        main.post { if(!isDestroyed) animateApiStatus(name,retrying,"重试中（$attempt/3）") }
-                        try { Thread.sleep(650L) } catch (_: InterruptedException) { Thread.currentThread().interrupt(); return@execute }
+                        main.post {
+                            if(!isDestroyed && batch==apiStatusUiState.checkBatchId) {
+                                animateApiStatus(name,retrying,"重试中（$attempt/3）")
+                            }
+                        }
+                        try { Thread.sleep(650L) } catch (_: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                            return@execute
+                        }
                     }
                     val result=runCatching(action)
                     if(result.isSuccess) {
@@ -101,10 +130,12 @@ import java.util.concurrent.atomic.AtomicLong
                     lastError=(result.exceptionOrNull()?.message ?: result.exceptionOrNull()?.javaClass?.simpleName ?: "请求失败").take(100)
                 }
                 val result=final ?: (failed to lastError)
+                val elapsed=android.os.SystemClock.elapsedRealtime()-started
                 main.post {
-                    if(!isDestroyed) {
-                        if(hasValidatedInternet()) setApiStatus(name,result.first,result.second)
-                        else setApiStatus(name,failed,"网络已断开")
+                    // 只允许当前批次写入结果，迟到的旧请求不得覆盖新一轮检测。
+                    if(!isDestroyed && batch==apiStatusUiState.checkBatchId) {
+                        if(hasValidatedInternet()) setApiStatus(name,result.first,result.second,elapsed)
+                        else setApiStatus(name,failed,"网络已断开",elapsed)
                     }
                 }
             }
