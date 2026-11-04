@@ -162,6 +162,7 @@ internal fun MainActivity.hasValidatedInternet(): Boolean {
 
 internal fun MainActivity.playerFailure(problem: Throwable) {
         debugLog("播放器故障 type=${problem.javaClass.simpleName} message=${problem.message}")
+        debugLogError("播放器故障",problem)
         val startupFailure=startupAutoPlaybackActive
         retryPosition=currentPosition().coerceAtLeast(0); retryAutoplay=requestedAutoplay && !sleepStopped
         saveProgress(); hideBootSplash(); bootAutoPlaybackPending=false; cancelRecovery(); cancelPrefetch()
