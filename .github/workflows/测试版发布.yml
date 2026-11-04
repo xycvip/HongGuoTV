@@ -4,21 +4,16 @@ name: 红果TV测试版发布
 on:
   workflow_dispatch:
     inputs:
-      release_notes:
-        description: 本次测试版更新说明（可留空，默认显示“优化使用体验”）
-        required: false
-        type: string
-        default: ""
       confirm_beta_release:
         description: 确认构建并发布测试版到 HongGuoTV 仓库
         required: true
         type: boolean
-        default: false
+        default: true
       skip_file_check:
         description: 跳过APK文件存在性检查（包名、版本号和签名校验始终执行）
         required: true
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
@@ -167,12 +162,11 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-          RELEASE_NOTES: ${{ inputs.release_notes }}
+          RELEASE_NOTES: 优化使用体验
           APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
         run: |
           set -euo pipefail
-          RELEASE_NOTES="${RELEASE_NOTES:-优化使用体验}"
           APK="$RUNNER_TEMP/test-release/HongguoTV-$VERSION_NAME.apk"
           SOURCE_COMMIT="$(git rev-parse HEAD)"
           DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/HongguoTV-$VERSION_NAME.apk"
