@@ -114,7 +114,7 @@ class LibraryTransferServer(
             val length=headers["content-length"]?.toLongOrNull()?.takeIf{it>0&&it<=folder.usableSpace}?:return respond(socket,413,"文件为空或超过电视当前剩余存储空间")
             val destination=java.io.File(folder,name).canonicalFile
             if(destination.parentFile!=folder.canonicalFile)return respond(socket,400,"文件名无效")
-            val temp=java.io.File(folder,".$name.${token.take(8)}.uploading")
+            val temp=java.io.File(folder,".$name.$token.${System.nanoTime()}.uploading")
             return try{
                 temp.outputStream().buffered().use{out->
                     val buffer=ByteArray(64*1024);var remaining=length
@@ -135,7 +135,7 @@ class LibraryTransferServer(
         val relative=folder.relativeTo(root).invariantSeparatorsPath
         val jsRelative=org.json.JSONObject.quote(relative)
         val parent=folder.parentFile?.takeIf{it.canonicalFile.path.startsWith(root.path)&&it.canonicalFile!=folder.canonicalFile}
-        val entries=folder.listFiles()?.filter{item->runCatching{val p=item.canonicalFile.path;p==root.path||p.startsWith(root.path+java.io.File.separator)}.getOrDefault(false)}?.sortedWith(compareBy<java.io.File>({!it.isDirectory},{it.name.lowercase(Locale.ROOT)})).orEmpty()
+        val entries=folder.listFiles()?.filter{item->!item.name.endsWith(".uploading")&&runCatching{val p=item.canonicalFile.path;p==root.path||p.startsWith(root.path+java.io.File.separator)}.getOrDefault(false)}?.sortedWith(compareBy<java.io.File>({!it.isDirectory},{it.name.lowercase(Locale.ROOT)})).orEmpty()
         val rows=buildString{
             if(parent!=null)append("<a class='entry folder' href='/$token?path=${enc(parent.relativeTo(root).invariantSeparatorsPath)}'>⬆️ 返回上一级</a>")
             entries.forEach{item->
