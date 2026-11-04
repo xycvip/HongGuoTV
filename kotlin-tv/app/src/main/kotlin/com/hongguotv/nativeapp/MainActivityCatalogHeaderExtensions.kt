@@ -42,7 +42,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         val shortcuts=row().apply {
             gravity=Gravity.CENTER_VERTICAL
             setPadding(dp(4),dp(4),dp(4),dp(4))
-            background=rounded(Color.rgb(35,37,43))
+            background=TvStyle.navGlass(this)
         }
         val randomShortcut=FrameLayout(this).apply {
             id=View.generateViewId()
@@ -104,7 +104,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         val pageNav=row().apply {
             setPadding(dp(5),dp(4),dp(5),dp(4))
             gravity=Gravity.CENTER_VERTICAL
-            background=rounded(Color.rgb(27,29,34))
+            background=TvStyle.navGlass(this)
         }
         val pageNavItems=mutableListOf<View>()
         listOf(0 to "首页",7 to "剧场",2 to "排行榜",3 to "收藏",4 to "最近观看",5 to "设置",6 to "红果账户").forEach { (tabId,label) ->
