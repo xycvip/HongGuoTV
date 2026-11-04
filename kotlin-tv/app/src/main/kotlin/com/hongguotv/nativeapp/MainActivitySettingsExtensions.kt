@@ -302,6 +302,8 @@ import java.util.concurrent.atomic.AtomicLong
                 .edit().putBoolean("seamless_playback",enabled).apply()
             seamlessPlaybackButton.text="无缝接续  ·  ${if(enabled) "开启" else "关闭"}"
             if(enabled) {
+                cancelPrefetch()
+                preloadManager?.reset()
                 if(screen=="player" && playbackReady && detail!=null && episodeIndex<detail!!.episodes.lastIndex) {
                     prepareStandbyEpisode(episodeIndex+1)
                 }
