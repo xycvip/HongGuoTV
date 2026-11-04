@@ -144,7 +144,7 @@ class MainActivity: Activity() {
     internal var debugFirstFrameAt by debugUiState::firstFrameAt
     internal var debugSettingButton by debugUiState::settingButton
     internal val debugEnabled get()=getSharedPreferences("debug-mode-v1",MODE_PRIVATE).getBoolean("enabled",false)
-    // 调试分类显示状态只保留在当前进程；进程重启后无条件隐藏。
+    // 手动解锁状态只保留在当前进程；若调试开关保持开启，则由持久化开关决定重启后继续显示。
     // Activity 构造阶段 Context 尚未挂接，不能在属性初始化时读取 SharedPreferences。
     internal var debugSettingRevealedThisSession: Boolean
         get()=DebugUiProcessState.settingRevealedThisSession
