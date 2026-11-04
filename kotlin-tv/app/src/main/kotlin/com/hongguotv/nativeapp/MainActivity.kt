@@ -112,6 +112,14 @@ class MainActivity: Activity() {
     internal var prefetchHttp by playbackPipelineState::prefetchHttp
     internal var playbackHttp by playbackPipelineState::playbackHttp
     internal val preparedNext get() = playbackPipelineState.preparedNext
+    internal var standbyPlayer by playbackPipelineState::standbyPlayer
+    internal var standbyRemote by playbackPipelineState::standbyRemote
+    internal var standbyHttp by playbackPipelineState::standbyHttp
+    internal var standbyEpisodeId by playbackPipelineState::standbyEpisodeId
+    internal var standbyReady by playbackPipelineState::standbyReady
+    internal var standbyJob by playbackPipelineState::standbyJob
+    internal val seamlessPlaybackEnabled: Boolean
+        get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE).getBoolean("seamless_playback", false)
     internal var prefetchJob by playbackPipelineState::prefetchJob
     internal var prefetchScope by playbackPipelineState::prefetchScope
     internal var prefetchedFor by playbackPipelineState::prefetchedFor
