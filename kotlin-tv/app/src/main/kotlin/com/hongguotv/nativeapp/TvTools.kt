@@ -216,7 +216,7 @@ class TvTools(private val activity: Activity) {
         worker.execute {
             try {
                 val folder=android.os.Environment.getExternalStorageDirectory()
-                val session=LibraryTransferServer(address,folder) {
+                val session=LibraryTransferServer(address,folder,onExpired = {
                     main.post {
                         if(this@TvTools.dialog===dialog) {
                             content.removeAllViews()
@@ -224,7 +224,7 @@ class TvTools(private val activity: Activity) {
                             content.addView(label("本次访问已结束，请重新打开远程文件管理。",15f))
                         }
                     }
-                }
+                })
                 main.post {
                     if(this@TvTools.dialog!==dialog) { session.close(); return@post }
                     phone=session
