@@ -1,0 +1,243 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package com.hongguotv.nativeapp
+
+import android.graphics.Color
+import android.graphics.Typeface
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import com.hongguotv.core.*
+
+/** 首页/剧场等主页面共用的顶部导航与四叶接口状态入口。 */
+internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHeader: Boolean) {
+        // 四叶状态灯固定在屏幕左上角；快捷功能与主导航分组排列，互不混排。
+        apiStatusViews.clear()
+        val flower=ApiStatusFlowerView(this).apply {
+            isFocusable=false; isFocusableInTouchMode=false; isClickable=false
+            background=null
+            contentDescription="四项接口状态指示灯"
+        }
+        listOf("首页","搜索","播放","联想").forEach { name ->
+            apiStatusViews[name]=flower
+            apiStatusResults[name]?.let { (color,detail) ->
+                if(detail.startsWith("检测中") || detail.startsWith("重试中")) animateApiStatus(name,color,detail)
+                else setApiStatus(name,color,detail)
+            }
+        }
+        catalogNavFlower=flower
+        // 指示灯直接挂在导航栏容器内，使用 CENTER_VERTICAL 对齐导航栏中心线。
+        // 叶片绘制尺寸变化不会参与定位计算，缩放时中心坐标始终固定。
+
+        // 四叶接口状态灯迁移到原随机播放快捷入口，点击仍执行随机播放。
+        val shortcuts=row().apply {
+            gravity=Gravity.CENTER_VERTICAL
+            setPadding(dp(4),dp(4),dp(4),dp(4))
+            background=rounded(Color.rgb(35,37,43))
+        }
+        val randomShortcut=FrameLayout(this).apply {
+            id=View.generateViewId()
+            contentDescription="随便播放"
+            isFocusable=true
+            isFocusableInTouchMode=true
+            isClickable=true
+            minimumWidth=dp(40)
+            minimumHeight=dp(40)
+            background=rounded(Color.TRANSPARENT)
+            // 四叶指示灯放大至 21sp；仍以快捷入口背景框中心定位，不改变点击区域与焦点布局。
+            val flowerSize=android.util.TypedValue.applyDimension(
+                android.util.TypedValue.COMPLEX_UNIT_SP,21f,resources.displayMetrics
+            ).toInt().coerceAtLeast(1)
+            addView(flower,FrameLayout.LayoutParams(flowerSize,flowerSize,Gravity.CENTER))
+            setOnClickListener { showRandomPicks() }
+            fun paint(focused:Boolean) {
+                background=rounded(if(focused) white else Color.TRANSPARENT)
+                elevation=if(focused) dp(4).toFloat() else 0f
+            }
+            paint(false)
+            setOnFocusChangeListener { _,focused ->
+                paint(focused)
+                if(focused) revealCatalogNavForFocus()
+            }
+        }
+        shortcuts.addView(randomShortcut,lp(dp(40),dp(40)))
+        nav+=randomShortcut
+        val searchShortcut=addButton(shortcuts,"⌕",tab==1) { switchTab(1) }.apply {
+            contentDescription="搜索"
+            gravity=Gravity.CENTER
+            textSize=21f
+            minWidth=dp(40)
+            minHeight=dp(40)
+            setPadding(dp(8),dp(5),dp(8),dp(5))
+            (layoutParams as? LinearLayout.LayoutParams)?.let { params ->
+                params.width=LinearLayout.LayoutParams.WRAP_CONTENT
+                params.height=LinearLayout.LayoutParams.WRAP_CONTENT
+                params.rightMargin=0
+                layoutParams=params
+            }
+            fun paint(focused:Boolean) {
+                val active=tab==1
+                setTextColor(if(focused) bg else if(active) accent else muted)
+                background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
+                typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
+                elevation=if(focused) dp(4).toFloat() else 0f
+            }
+            // 与首页、剧场等导航标签使用完全相同的未选中透明背景规则。
+            paint(false)
+            setOnFocusChangeListener { _,focused ->
+                paint(focused)
+                if(focused) revealCatalogNavForFocus()
+            }
+        }
+        searchNavShortcut=searchShortcut
+
+        // 所有页面导航共享同一个连续背景，不再让每个标签各自成为独立卡片。
+        val pageNav=row().apply {
+            setPadding(dp(5),dp(4),dp(5),dp(4))
+            gravity=Gravity.CENTER_VERTICAL
+            background=rounded(Color.rgb(27,29,34))
+        }
+        val pageNavItems=mutableListOf<View>()
+        listOf(0 to "首页",7 to "剧场",2 to "排行榜",3 to "收藏",4 to "最近观看",5 to "设置",6 to "红果账户").forEach { (tabId,label) ->
+            val item=addButton(pageNav,label,tabId==tab || (tabId==6 && screen=="account")) { switchTab(tabId) }
+            item.textSize=if(compactHeader) 13.5f else 14f
+            item.minHeight=dp(40)
+            item.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
+            fun paint(focused:Boolean) {
+                val active=tabId==tab || (tabId==6 && screen=="account")
+                item.setTextColor(if(focused) bg else if(active) accent else muted)
+                item.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
+                item.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
+                item.animate().cancel()
+                item.scaleX=1f
+                item.scaleY=1f
+                item.elevation=if(focused) dp(5).toFloat() else 0f
+            }
+            paint(false)
+            item.setOnFocusChangeListener { _,focused -> paint(focused); if(focused) revealCatalogNavForFocus() }
+            nav+=item
+            navByTab[tabId]=item
+            pageNavItems+=item
+        }
+        val navFrame=FrameLayout(this)
+        val headerContent=row().apply {
+            // 将快捷入口与全部页面导航视为一个整体计算宽度，并在可用空间内整体居中。
+            gravity=Gravity.CENTER
+            addView(shortcuts,lp(-2,dp(48)).apply { rightMargin=dp(10) })
+            addView(pageNav,lp(-2,dp(48)))
+        }
+        if(compactHeader) {
+            val navScroll=HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled=false; isFillViewport=true; clipToPadding=false
+                setPadding(0,0,0,dp(2))
+                addView(headerContent,ViewGroup.LayoutParams(-2,dp(50)))
+            }
+            navFrame.addView(navScroll,FrameLayout.LayoutParams(-1,dp(52),Gravity.CENTER))
+        } else {
+            navFrame.addView(headerContent,FrameLayout.LayoutParams(-2,dp(50),Gravity.CENTER))
+        }
+        // 顶部导航建立固定的单行焦点链：随机 → 搜索 → 首页 → 其他页面。
+        randomShortcut.nextFocusLeftId=randomShortcut.id
+        randomShortcut.nextFocusRightId=searchShortcut.id
+        searchShortcut.nextFocusLeftId=randomShortcut.id
+        searchShortcut.nextFocusRightId=pageNavItems.firstOrNull()?.id ?: searchShortcut.id
+        pageNavItems.forEachIndexed { index, item ->
+            item.nextFocusLeftId=if(index==0) searchShortcut.id else pageNavItems[index-1].id
+            item.nextFocusRightId=pageNavItems.getOrNull(index+1)?.id ?: item.id
+        }
+        nav.forEach { it.nextFocusUpId=it.id }
+        catalogNavFrame=navFrame
+        catalogNavVisible=true
+        container.addView(navFrame,lp(-1,dp(52)))
+}
+
+internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
+
+            val heading=row().apply { setPadding(0,dp(14),0,dp(6)) }
+            heading.addView(text(if(tab==3) "我的收藏" else "接着上次看",25f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
+            if(tab==3) {
+                favoriteCheck=addButton(heading,"检查更新") {
+                    if(favoriteMonitor.running) Toast.makeText(this,"正在检查收藏更新…",Toast.LENGTH_SHORT).show()
+                    else if(library.favorites().isEmpty()) Toast.makeText(this,"先收藏几部剧，再来检查更新",Toast.LENGTH_SHORT).show()
+                    else { favoriteMonitor.check(force=true); Toast.makeText(this,"开始检查收藏更新…",Toast.LENGTH_SHORT).show() }
+                }.apply { nextFocusUpId=navForTab().id }
+            }
+            if(tab==4) {
+                historyManage=null
+                lateinit var stats:TextView
+                stats=addButton(heading,"观看统计") { showWatchStats(stats) }.apply {
+                    tag="recent:watch-stats"
+                    nextFocusUpId=navForTab().id
+                }
+                if(library.history().isNotEmpty()) historyManage=addButton(heading,"管理记录") {
+                    val rows=library.history()
+                    tvTools.choose("选择要管理的观看记录",rows.map { it.series.title },historyManage,{ index -> manageHistory(rows[index].series,historyManage) },"清空记录") {
+                        tvTools.confirm("清空观看记录","将删除本机所有观看进度，收藏会保留。",historyManage) { library.clearHistory(); catalogFocus=""; showCatalog() }
+                    }
+                }.apply {
+                    tag="recent:manage-history"
+                    nextFocusUpId=stats.id
+                    nextFocusLeftId=stats.id
+                }
+                stats.nextFocusRightId=historyManage?.id ?: View.NO_ID
+            }
+            container.addView(heading)
+            if(tab==3) {
+                favoriteStatus=text(favoriteMonitor.status,13f,muted).apply { setPadding(0,0,0,dp(6)) }; container.addView(favoriteStatus)
+            }
+
+}
+
+internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav: List<View>,loading: Boolean) {
+
+            // 排行榜页直接从榜单筛选栏开始，不再显示重复的「热播榜」标题及其占位空间。
+            val boardRow=row().apply { setPadding(0,0,0,dp(8)) }
+            val boardFocusItems=mutableListOf<View>()
+            listOf(RankBoard.REAL, RankBoard.COMIC, RankBoard.AI).forEachIndexed { index, board ->
+                val focusTag = "rank:board:${board.name}"
+                val boardButton=addButton(boardRow, "${board.label}榜", rankBoard == board) {
+                    if (rankBoard != board) {
+                        pendingRefreshFocus=focusTag
+                        rankBoard=board
+                        aiCatalog=false
+                        aiGenre=null
+                        page=1
+                        catalogFocus=""
+                        tabState.remove(2)
+                        tabFocus.remove(2)
+                        showCatalog(true)
+                    }
+                }.apply {
+                    tag=focusTag
+                    nextFocusUpId=navForTab().id
+                }
+                boardFocusItems+=boardButton
+                if(index==0) rankSwitch=boardButton
+            }
+            genreButton=addButton(boardRow,genre?.let { "题材 · ${it.name}" } ?: "题材") { showGenrePicker() }.apply {
+                tag="rank:genre"
+                nextFocusUpId=navForTab().id
+            }.also { boardFocusItems+=it }
+            rankRefresh=addButton(boardRow,"刷新") {
+                pendingRefreshFocus="rank:refresh"
+                page=1
+                catalogFocus=""
+                showCatalog(true)
+            }.apply {
+                tag="rank:refresh"
+                nextFocusUpId=navForTab().id
+            }.also { boardFocusItems+=it }
+            boardFocusItems.forEachIndexed { index, view ->
+                view.nextFocusLeftId=boardFocusItems.getOrNull(index-1)?.id ?: view.id
+                view.nextFocusRightId=boardFocusItems.getOrNull(index+1)?.id ?: view.id
+            }
+            container.addView(boardRow)
+            val defaultSource="来源：红果${rankBoard.label}热播榜"
+            rankSubtitle=text(if(loading) "正在读取最新榜单…" else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,13f,muted).apply { setPadding(0,0,0,dp(8)) }
+            container.addView(rankSubtitle)
+            nav.forEach { it.nextFocusDownId=boardRow.getChildAt(0)?.id ?: View.NO_ID }
+}
