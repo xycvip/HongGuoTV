@@ -352,7 +352,7 @@ import java.util.concurrent.atomic.AtomicLong
             }
 
         }
-        fileBackup=setting(data,2,"本地备份与恢复") { showFileBackupDialog(fileBackup) }
+        fileBackup=setting(data,2,"本机资料备份与恢复") { showFileBackupDialog(fileBackup) }
         backup=setting(data,2,"手机文件管理") {
             pendingBackupAction=3
             pendingBackupAnchor=backup
