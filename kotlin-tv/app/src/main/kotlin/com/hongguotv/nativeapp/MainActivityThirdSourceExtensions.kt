@@ -20,7 +20,8 @@ internal fun MainActivity.openThirdSource() {
                 val host=base()
                 thirdSourceScreen?.show(host)
             }
-        }
+        },
+        backupRequest = { if(!isFinishing && !isDestroyed) library.flush() }
     ).also { thirdSourceScreen=it }
     instance.show(container)
 }
