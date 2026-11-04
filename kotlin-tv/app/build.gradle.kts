@@ -9,6 +9,7 @@ android {
     compileSdk = 36
     defaultConfig {
         applicationId = System.getenv("HONGGUOTV_APPLICATION_ID") ?: "com.x.hongguotv"
+        manifestPlaceholders["appLabel"] = System.getenv("HONGGUOTV_APP_LABEL") ?: "红果TV"
         minSdk = 26
         targetSdk = 28
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 12
