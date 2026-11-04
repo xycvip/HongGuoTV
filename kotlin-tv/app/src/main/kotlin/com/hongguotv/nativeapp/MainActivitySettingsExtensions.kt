@@ -336,8 +336,9 @@ import java.util.concurrent.atomic.AtomicLong
             library.showClock=!library.showClock
             clockButton.text="显示系统时间  ·  ${if(library.showClock) "开启" else "关闭"}"
             applyClock()
-            // 连续点击 5 次显示隐藏调试分类；显示后保持到进程结束。
-            if(!debugSettingRevealedThisSession) {
+            // 仅在调试模式关闭且入口尚未解锁时，才需要连续点击 5 次。
+            // 调试模式开启时，分类入口由持久化开关直接保持可见。
+            if(!debugEnabled && !debugSettingRevealedThisSession) {
                 val revealNow=android.os.SystemClock.elapsedRealtime()
                 if(debugRevealTapCount==0 || revealNow-debugRevealLastTapAt>5000L) {
                     debugRevealTapCount=0
@@ -549,7 +550,7 @@ import java.util.concurrent.atomic.AtomicLong
             }.show()
         }
 
-        // 调试开关开启时跨重启常驻显示；关闭时仅保留本次进程内的手动解锁状态。
+        // 开关优先级最高：开启时跨重启显示；关闭时只读取本进程的临时解锁状态。
         val revealDebug=debugEnabled || debugSettingRevealedThisSession
         categoryHeadingCards.getOrNull(6)?.visibility=if(revealDebug) View.VISIBLE else View.GONE
         debugSection.first.visibility=if(revealDebug) View.VISIBLE else View.GONE
