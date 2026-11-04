@@ -52,7 +52,8 @@ import java.util.concurrent.atomic.AtomicLong
         val selectedIndex=index.coerceIn(0,data.episodes.lastIndex)
         val standbyKey="${data.episodes[selectedIndex]}:${library.maxQuality}"
         val promoteStandby=position==0L && !recovering && !forceRebuild && seamlessPlaybackEnabled &&
-            standbyEpisodeId==standbyKey && standbyReady && standbyFirstFrameAt>0L && standbyPlayer!=null && standbyRemote!=null
+            standbyEpisodeId==standbyKey && standbyReady && standbyFirstFrameAt>0L &&
+            standbyPlayer?.currentMediaItem?.mediaId==data.episodes[selectedIndex] && standbyRemote!=null
         val reuse=screen=="player" && player!=null && playerView!=null && !recovering && !playError && !forceRebuild
         library.setWatched(data.series.id,false)
         val isStartupPreview=bootAutoPlaybackPending && autoplay && !recovering
@@ -312,7 +313,7 @@ import java.util.concurrent.atomic.AtomicLong
                 }
             }
             playerListener=listener; p.addListener(listener)
-            val source=if(promoteStandby) null else prefetchedSource ?: videoSource(remote,requestedId)
+            val source=prefetchedSource ?: videoSource(remote,requestedId)
             val introSkip=if(position<=0 && (skipMark?.introSeconds ?: 0)>0) skipMark!!.introSeconds*1000L else position.coerceAtLeast(0)
             if(promoteStandby && p.currentMediaItem?.mediaId==requestedId) {
                 p.volume=1f
@@ -320,7 +321,7 @@ import java.util.concurrent.atomic.AtomicLong
                 p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
                 if(p.playbackState==Player.STATE_READY) listener.onPlaybackStateChanged(p.playbackState)
             } else {
-                p.setMediaSource(source!!); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
+                p.setMediaSource(source); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
             }
             if(introSkip>0 && position<=0) Toast.makeText(this,"已跳过片头 ${skipMark!!.introSeconds} 秒",Toast.LENGTH_SHORT).show()
         }
