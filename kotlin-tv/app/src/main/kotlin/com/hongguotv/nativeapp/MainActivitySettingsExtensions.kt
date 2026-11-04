@@ -331,6 +331,9 @@ import java.util.concurrent.atomic.AtomicLong
             applyClock()
             // 连续点击 5 次显示隐藏调试分类；显示后保持到进程结束。
             if(!debugSettingRevealedThisSession) {
+                val revealNow=android.os.SystemClock.elapsedRealtime()
+                if(revealNow-debugRevealLastTapAt>5000L) debugRevealTapCount=0
+                debugRevealLastTapAt=revealNow
                 debugRevealTapCount++
                 if(debugRevealTapCount>=5) {
                     debugSettingRevealedThisSession=true
