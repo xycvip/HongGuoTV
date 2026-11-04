@@ -188,6 +188,13 @@ import java.util.concurrent.atomic.AtomicLong
 
 
         var rechainSettings:()->Unit={}
+        fun setDebugCategoryVisible(visible:Boolean) {
+            debugSettingRevealedThisSession=visible
+            categoryHeadingCards.getOrNull(6)?.visibility=if(visible) View.VISIBLE else View.GONE
+            debugSection.first.visibility=if(visible) View.VISIBLE else View.GONE
+            categoryItems.getOrNull(6)?.forEach { it.visibility=if(visible) View.VISIBLE else View.GONE }
+            rechainSettings()
+        }
 
         lateinit var startupAutoplayButton:TextView
         lateinit var qualityButton:TextView
@@ -338,11 +345,7 @@ import java.util.concurrent.atomic.AtomicLong
                 }
                 debugRevealTapCount++
                 if(debugRevealTapCount>=5) {
-                    debugSettingRevealedThisSession=true
-                    categoryHeadingCards.getOrNull(6)?.visibility=View.VISIBLE
-                    debugSection.first.visibility=View.VISIBLE
-                    categoryItems.getOrNull(6)?.forEach { it.visibility=View.VISIBLE }
-                    rechainSettings()
+                    setDebugCategoryVisible(true)
                     Toast.makeText(this@settings,"调试入口已显示，本次运行期间不会自动隐藏",Toast.LENGTH_LONG).show()
                 }
             }
@@ -414,7 +417,12 @@ import java.util.concurrent.atomic.AtomicLong
 
         // 调试能力独立成左侧主分类，避免藏在“关于”设置项中。
         debugSettingButton=setting(debug,6,debugSettingLabel()) {
-            if(debugEnabled) stopDebugLogging() else {
+            if(debugEnabled) {
+                stopDebugLogging()
+                setDebugCategoryVisible(false)
+            } else {
+                // 用户主动开启调试后，入口随调试状态常驻；重启后也会根据持久化开关显示。
+                setDebugCategoryVisible(true)
                 pendingBackupAction=2
                 pendingBackupAnchor=debugSettingButton
                 ensureBackupStoragePermission()
@@ -541,8 +549,8 @@ import java.util.concurrent.atomic.AtomicLong
             }.show()
         }
 
-        // 调试分类只在当前进程内记忆；重启应用后必须重新触发隐藏入口。
-        val revealDebug=debugSettingRevealedThisSession
+        // 调试开关开启时跨重启常驻显示；关闭时仅保留本次进程内的手动解锁状态。
+        val revealDebug=debugEnabled || debugSettingRevealedThisSession
         categoryHeadingCards.getOrNull(6)?.visibility=if(revealDebug) View.VISIBLE else View.GONE
         debugSection.first.visibility=if(revealDebug) View.VISIBLE else View.GONE
         categoryItems.getOrNull(6)?.forEach { it.visibility=if(revealDebug) View.VISIBLE else View.GONE }
