@@ -133,11 +133,11 @@ import java.util.concurrent.atomic.AtomicLong
         content.addView(allOption,LinearLayout.LayoutParams(-1,-2))
         content.addView(buttons)
         optionsDialog=AlertDialog.Builder(this).setView(TvDialog.card(this,content)).create()
-        TvDialog.styleWindow(this,optionsDialog,0.72f,720) { settingsOption.requestFocus() }
+        TvDialog.styleWindow(this,optionsDialog,0.72f,720) { cacheOption.requestFocus() }
         cancel.setOnClickListener { optionsDialog.dismiss() }
         optionsDialog.setOnDismissListener { if(anchor.isAttachedToWindow) anchor.requestFocus() }
         optionsDialog.show()
-        settingsOption.post { if(optionsDialog.isShowing) settingsOption.requestFocus() }
+        cacheOption.post { if(optionsDialog.isShowing) cacheOption.requestFocus() }
     }
 
     internal fun MainActivity.clearAllLocalData() {
