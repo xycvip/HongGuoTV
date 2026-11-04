@@ -135,7 +135,7 @@ class LibraryTransferServer(
         val relative=folder.relativeTo(root).invariantSeparatorsPath
         val jsRelative=org.json.JSONObject.quote(relative)
         val parent=folder.parentFile?.takeIf{it.canonicalFile.path.startsWith(root.path)&&it.canonicalFile!=folder.canonicalFile}
-        val entries=folder.listFiles()?.sortedWith(compareBy<java.io.File>({!it.isDirectory},{it.name.lowercase(Locale.ROOT)})).orEmpty()
+        val entries=folder.listFiles()?.filter{item->runCatching{val p=item.canonicalFile.path;p==root.path||p.startsWith(root.path+java.io.File.separator)}.getOrDefault(false)}?.sortedWith(compareBy<java.io.File>({!it.isDirectory},{it.name.lowercase(Locale.ROOT)})).orEmpty()
         val rows=buildString{
             if(parent!=null)append("<a class='entry folder' href='/$token?path=${enc(parent.relativeTo(root).invariantSeparatorsPath)}'>⬆️ 返回上一级</a>")
             entries.forEach{item->
