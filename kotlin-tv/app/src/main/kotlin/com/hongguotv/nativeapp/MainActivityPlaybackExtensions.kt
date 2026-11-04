@@ -63,18 +63,27 @@ import java.util.concurrent.atomic.AtomicLong
         saveProgress()
         if(promoteStandby) {
             val oldPlayer=player
+            val promoted=standbyPlayer
             playerListener?.let { oldPlayer?.removeListener(it) }
             playerListener=null
-            playerView?.player=null
+            standbyPromotionAt=android.os.SystemClock.elapsedRealtime()
+            standbyVisibleFirstFrameAt=0L
+            standbyByteCounterEnabled?.set(true)
+            player=promoted
+            // 让 PlayerView 在一次 setPlayer 中完成输出面交接，避免先置空造成额外黑屏。
+            playerView?.player=promoted
+            standbyAttachedAt=android.os.SystemClock.elapsedRealtime()
+            standbyOutputView?.let { output -> if(output.parent===root) root.removeView(output) }
+            standbyOutputView=null
             oldPlayer?.release()
-            player=standbyPlayer
-            playerView?.player=player
             standbyPlayer=null
             standbyRemote=null
+            standbyByteCounterEnabled=null
             standbyEpisodeId=""
             standbyReady=false
+            standbyFallbackEpisodeId=""
             standbyJob=null
-            debugLog("无缝接续：备用播放器接管第 ${selectedIndex+1} 集")
+            debugLog("无缝接续：备用播放器接管第 ${selectedIndex+1} 集；READY等待=${if(standbyReadyAt>0L) standbyPromotionAt-standbyReadyAt else -1L}ms；预渲染首帧=${if(standbyFirstFrameAt>0L) standbyPromotionAt-standbyFirstFrameAt else -1L}ms；PlayerView交接=${standbyAttachedAt-standbyPromotionAt}ms")
         } else if(seamlessPlaybackEnabled && standbyEpisodeId.isNotEmpty()) {
             clearStandbyPlayer("目标剧集未能由备用播放器接管")
         }
@@ -181,7 +190,7 @@ import java.util.concurrent.atomic.AtomicLong
         controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
         syncMediaSession()
         val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
-        work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality)).prepare() }, { remote ->
+        val attachPrepared: (RemoteVideo) -> Unit = { remote ->
             video=remote; quality=remote.info.quality
             val p=player ?: run {
                 val renderers=androidx.media3.exoplayer.DefaultRenderersFactory(this).setEnableDecoderFallback(true)
@@ -314,7 +323,14 @@ import java.util.concurrent.atomic.AtomicLong
                 p.setMediaSource(source); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
             }
             if(introSkip>0 && position<=0) Toast.makeText(this,"已跳过片头 ${skipMark!!.introSeconds} 秒",Toast.LENGTH_SHORT).show()
-        }, { problem -> playerFailure(problem) })
+        }
+        if(promoteStandby) {
+            // 备用 RemoteVideo 与播放器均已准备完成，直接在主线程接管，不再绕进 IO 工作队列。
+            cancelWork()
+            attachPrepared(prefetched!!)
+        } else {
+            work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality)).prepare() }, attachPrepared, { problem -> playerFailure(problem) })
+        }
     }
 
 
