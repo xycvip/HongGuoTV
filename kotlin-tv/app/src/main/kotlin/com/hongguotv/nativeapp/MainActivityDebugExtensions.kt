@@ -271,6 +271,8 @@ import java.util.concurrent.atomic.AtomicLong
             "读取：${playbackBytes.get()} bytes  读取速率：${byteRate/1024} KB/s  资源总长：${video?.total ?: 0} bytes",
             "Range缓存：$stats",
             "首帧耗时：${if(debugFirstFrameAt>0) debugFirstFrameAt-debugPlaybackStartedAt else -1}ms  READY耗时：${if(debugPlaybackReadyAt>0) debugPlaybackReadyAt-debugPlaybackStartedAt else -1}ms",
+            "无缝接续：${if(seamlessPlaybackEnabled) "开启" else "关闭"}  备用：${if(standbyReady) "READY" else if(standbyEpisodeId.isNotBlank()) "准备中" else "无"}  备用首帧：${if(standbyFirstFrameAt>0L) standbyFirstFrameAt-standbyPrepareStartedAt else -1L}ms",
+            "切集交接：${if(standbyPromotionAt>0L) "已接管" else "未发生"}  接管后可见首帧：${if(standbyVisibleFirstFrameAt>0L) standbyVisibleFirstFrameAt-standbyPromotionAt else -1L}ms  Surface接入：${if(standbyAttachedAt>0L && standbyPromotionAt>0L) standbyAttachedAt-standbyPromotionAt else -1L}ms",
             "播放错误：${if(playError) "是" else "否"}  自动恢复：$autoRecovery  资源重试：${recovery.attempts}/3"
         ).joinToString("\n")
     }
