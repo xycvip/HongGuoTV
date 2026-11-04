@@ -438,7 +438,15 @@ import java.util.concurrent.atomic.AtomicLong
             if(target==null || !target.exists()) {
                 Toast.makeText(this,"暂时没有调试日志",Toast.LENGTH_SHORT).show()
             } else io.execute {
-                val result=runCatching { target.readText(Charsets.UTF_8) }
+                val result=runCatching {
+                    val length=target.length()
+                    if(length>512L*1024) {
+                        java.io.RandomAccessFile(target,"r").use { raf ->
+                            raf.seek(length-512L*1024)
+                            "[日志较长，仅分享最后 512KB]\\n"+raf.readBytes().toString(Charsets.UTF_8)
+                        }
+                    } else target.readText(Charsets.UTF_8)
+                }
                 main.post {
                     result.onSuccess { content ->
                         runCatching {
