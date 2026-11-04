@@ -103,7 +103,6 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
         ThirdSourceImportDialog(
             activity = activity,
             ui = ui,
-            tvTools = tvTools,
             requests = importRequests,
             generation = { generation },
             onParsed = ::showImportChecklist,
