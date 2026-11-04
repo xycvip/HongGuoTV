@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package com.hongguotv.core
+
+import okhttp3.Call
+import okhttp3.Response
+import java.io.IOException
+import java.io.InterruptedIOException
+
+/** Cancels only the work owned by one navigation/playback intent, including body reads. */
+class RequestScope {
+    private var cancelled = false
+    private val calls = mutableSetOf<Call>()
+
+    @Synchronized fun cancel() {
+        cancelled = true
+        calls.forEach { it.cancel() }
+        calls.clear()
+    }
+
+    @Synchronized private fun attach(call: Call) {
+        if (cancelled || Thread.currentThread().isInterrupted) {
+            call.cancel()
+            throw IOException("请求已取消")
+        }
+        calls += call
+    }
+
+    @Synchronized private fun detach(call: Call) { calls -= call }
+
+    fun <T> run(action: () -> T): T {
+        val previous = current.get()
+        current.set(this)
+        try {
+            synchronized(this) { if (cancelled) throw IOException("请求已取消") }
+            return action()
+        } finally {
+            if (previous == null) current.remove() else current.set(previous)
+        }
+    }
+
+    @Synchronized private fun ensureActiveInternal() {
+        if (cancelled) throw InterruptedIOException("请求已取消")
+    }
+
+    companion object {
+        private val current = ThreadLocal<RequestScope>()
+        internal fun currentScope(): RequestScope? = current.get()
+
+        /** Retry/backoff code must respect both navigation cancellation and thread interruption. */
+        fun ensureActive() {
+            if (Thread.currentThread().isInterrupted) throw InterruptedIOException("请求已取消")
+            current.get()?.ensureActiveInternal()
+        }
+        fun <T> execute(call: Call, consume: (Response) -> T): T {
+            val owner = current.get()
+            owner?.attach(call)
+            try { return call.execute().use(consume) }
+            finally { owner?.detach(call) }
+        }
+    }
+}
