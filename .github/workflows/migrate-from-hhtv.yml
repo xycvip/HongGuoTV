@@ -41,7 +41,6 @@ jobs:
             --exclude='*.md' \
             --exclude='.github/workflows/migrate-from-hhtv.yml' \
             /tmp/HHTV/ ./
-          rm -f .github/workflows/migrate-from-hhtv.yml
           test -f kotlin-tv/settings.gradle.kts
           test -f kotlin-tv/app/build.gradle.kts
           test -f kotlin-tv/gradlew
