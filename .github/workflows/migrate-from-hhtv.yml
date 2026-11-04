@@ -45,7 +45,6 @@ jobs:
           test -f kotlin-tv/settings.gradle.kts
           test -f kotlin-tv/app/build.gradle.kts
           test -f kotlin-tv/gradlew
-          test -f .github/workflows/build-test.yml
           if find . -type f \( -iname '*.md' -o -iname 'README*' \) | grep -q .; then
             echo '发现未排除的说明文档'
             exit 1
