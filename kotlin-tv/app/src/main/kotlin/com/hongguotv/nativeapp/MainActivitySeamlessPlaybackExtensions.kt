@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
+import com.hongguotv.core.ContentRepository
+import com.hongguotv.core.RemoteVideo
+
 import android.content.Context
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
