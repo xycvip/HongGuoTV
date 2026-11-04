@@ -154,7 +154,7 @@ class TvTools(private val activity: Activity) {
                     val row=LinearLayout(activity).apply { gravity=Gravity.CENTER_VERTICAL }
                     row.addView(qr(session.url),LinearLayout.LayoutParams(dp(185),dp(185)))
                     val instructions=column()
-                    instructions.addView(label("手机扫码后用浏览器打开，按页面提示填写，提交后内容会发送到电视。\n需连接同一局域网；关闭窗口即失效，最长 5 分钟。",16f))
+                    instructions.addView(label("扫码后用浏览器打开，按页面提示填写，提交后内容会发送到电视。\n需连接同一局域网；关闭窗口即失效，最长 5 分钟。",16f))
                     instructions.addView(label(session.url,12f).apply { setTextColor(TvStyle.muted) })
                     row.addView(instructions,LinearLayout.LayoutParams(0,-2,1f)); content.addView(row)
                 }
@@ -167,7 +167,7 @@ class TvTools(private val activity: Activity) {
         val network=connectivity.activeNetwork; val capabilities=connectivity.getNetworkCapabilities(network)
         val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
         if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
-            info("源配置导入/导出","请让电视和手机连接同一局域网后重试。",anchor); return
+            info("源配置导入/导出","请让电视与访问设备连接同一局域网后重试。",anchor); return
         }
         val content=column(); content.addView(TvDialog.title(activity,"源配置导入/导出"))
         val status=label("正在生成二维码…"); content.addView(status)
@@ -198,7 +198,7 @@ class TvTools(private val activity: Activity) {
         val address=connectivity.getLinkProperties(network)?.linkAddresses
             ?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
         if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
-            info("远程文件管理","请让电视和手机连接同一局域网后重试。",anchor)
+            info("远程文件管理","请让电视与访问设备连接同一局域网后重试。",anchor)
             return
         }
         val content=column()
@@ -314,7 +314,7 @@ class TvTools(private val activity: Activity) {
                     val row=LinearLayout(activity).apply { gravity=Gravity.CENTER_VERTICAL }
                     row.addView(qr(session.url),LinearLayout.LayoutParams(dp(185),dp(185)))
                     val instructions=column()
-                    instructions.addView(label("手机扫码，或用浏览器打开下方地址，上传图片设为电视背景。\n手机和电视需连接同一无线网；关闭窗口即失效，最长 5 分钟。",16f))
+                    instructions.addView(label("扫码或用浏览器打开下方地址，上传图片设为电视背景。\n手机和电视需连接同一无线网；关闭窗口即失效，最长 5 分钟。",16f))
                     instructions.addView(label(session.url,12f).apply { setTextColor(TvStyle.muted) })
                     row.addView(instructions,LinearLayout.LayoutParams(0,-2,1f)); content.addView(row)
                 }
