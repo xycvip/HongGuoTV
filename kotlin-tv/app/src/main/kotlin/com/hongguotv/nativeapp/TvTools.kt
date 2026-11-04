@@ -271,7 +271,7 @@ class TvTools(private val activity: Activity) {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
                     })
-                    val details=label("目录：/storage/emulated/0/\n端口：9981  ·  仅限当前局域网\n可浏览、上传和下载任意文件；关闭此窗口即停止服务。",13f).apply {
+                    val details=label("目录：/storage/emulated/0/\n端口：${LibraryTransferServer.DEFAULT_PORT}  ·  仅限当前局域网\n可浏览、上传和下载任意文件；关闭此窗口即停止服务。",13f).apply {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
                         setPadding(dp(8),dp(14),dp(8),dp(4))
@@ -281,7 +281,7 @@ class TvTools(private val activity: Activity) {
             } catch(e:Exception) {
                 main.post {
                     if(this@TvTools.dialog===dialog) {
-                        status.text=if(e is java.net.BindException) "端口 9981 已被占用，请关闭占用该端口的应用后重试。"
+                        status.text=if(e is java.net.BindException) "端口 ${LibraryTransferServer.DEFAULT_PORT} 已被占用，请关闭占用该端口的应用后重试。"
                         else "无法打开公共目录：${e.message ?: "请检查存储权限和网络"}"
                     }
                 }
