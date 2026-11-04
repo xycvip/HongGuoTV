@@ -259,7 +259,7 @@ class Library(context: Context) {
                 .apply()
         }
         persist("favorites", "later", "progress", "watched", "hidden", "searches", "favoriteUpdates", "favoriteGroups")
-        // 同样按备份内容恢复三方数据，空列表也代表清空对应本机记录。
+        // 第三方片源、观看历史和收藏均按备份内容完整替换；空列表也会清空对应数据。
         runCatching { thirdSourcesRestore?.invoke(incoming.thirdSources) }
         runCatching { thirdHistoryRestore?.invoke(incoming.thirdHistory) }
         runCatching { thirdFavoritesRestore?.invoke(incoming.thirdFavorites) }
