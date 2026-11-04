@@ -497,14 +497,14 @@ class MainActivity: Activity() {
         applyImmersiveFullscreen()
         library=Library(this)
         // 第三方片源独立存储，但源配置、观看历史和收藏必须进入整机备份。
-        // ThirdSourceScreen 使用同一 SharedPreferences，因此这里注入的快照/恢复回调可直接读取并合并其数据。
+        // ThirdSourceScreen 使用同一 SharedPreferences；整机恢复时三类数据均按备份内容完整替换。
         val thirdStore = ThirdStore(applicationContext)
         library.thirdSourcesProvider = { thirdStore.backupSources() }
-        library.thirdSourcesRestore = { thirdStore.mergeRestored(it) }
+        library.thirdSourcesRestore = { thirdStore.restoreSources(it) }
         library.thirdHistoryProvider = { thirdStore.backupHistory() }
-        library.thirdHistoryRestore = { thirdStore.mergeHistory(it) }
+        library.thirdHistoryRestore = { thirdStore.restoreHistory(it) }
         library.thirdFavoritesProvider = { thirdStore.backupFavorites() }
-        library.thirdFavoritesRestore = { thirdStore.mergeFavorites(it) }
+        library.thirdFavoritesRestore = { thirdStore.restoreFavorites(it) }
         artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
         updater=AppUpdater(this) { foreground && library.isLoaded && screen=="catalog" && !tvTools.showing }
         cloudAccount = AccountController(this) { remote ->
