@@ -146,9 +146,15 @@ class MainActivity: Activity() {
     internal val debugEnabled get()=getSharedPreferences("debug-mode-v1",MODE_PRIVATE).getBoolean("enabled",false)
     // 入口显示状态仅在当前应用进程内保留；进程重启后按调试模式状态重新决定。
     // Activity 构造阶段 Context 尚未挂接，不能在属性初始化时读取 SharedPreferences。
-    internal var debugSettingRevealedThisSession by debugUiState::settingRevealedThisSession
-    internal var debugRevealTapCount by debugUiState::revealTapCount
-    internal var debugRevealLastTapAt by debugUiState::revealLastTapAt
+    internal var debugSettingRevealedThisSession: Boolean
+        get()=DebugUiProcessState.settingRevealedThisSession
+        set(value) { DebugUiProcessState.settingRevealedThisSession=value }
+    internal var debugRevealTapCount: Int
+        get()=DebugUiProcessState.revealTapCount
+        set(value) { DebugUiProcessState.revealTapCount=value }
+    internal var debugRevealLastTapAt: Long
+        get()=DebugUiProcessState.revealLastTapAt
+        set(value) { DebugUiProcessState.revealLastTapAt=value }
     internal var lastSpeedBytes by debugUiState::lastSpeedBytes
     internal var lastSpeedAt by debugUiState::lastSpeedAt
     internal var currentSpeedBytesPerSecond by debugUiState::currentSpeedBytesPerSecond
