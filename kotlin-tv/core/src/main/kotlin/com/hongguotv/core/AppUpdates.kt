@@ -229,7 +229,7 @@ class AppUpdateRepository(
                         }
                         out.toByteArray()
                     } ?: throw IOException("更新信息为空")
-                    try { AppUpdate.parse(bytes.toString(Charsets.UTF_8)) }
+                    try { parseManifest(bytes.toString(Charsets.UTF_8)) }
                     catch (_: Exception) { throw IOException("Raw 更新信息格式不正确") }
                 }
             } catch (rawError: Exception) {
