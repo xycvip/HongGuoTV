@@ -83,12 +83,25 @@ import java.util.concurrent.atomic.AtomicLong
             optionsDialog.dismiss()
             TvDialog.confirm(this,"清理缓存","清除封面图片、已下载的安装包等缓存数据，不影响收藏和观看记录。") {
                 io.execute {
-                    listOfNotNull(cacheDir,externalCacheDir).forEach { dir ->
-                        dir.listFiles()?.forEach { it.deleteRecursively() }
+                    val result = runCatching {
+                        check(artwork.clearDiskCache()) { "封面缓存删除不完整" }
+                        listOfNotNull(cacheDir, externalCacheDir).distinctBy { it.absolutePath }.forEach { dir ->
+                            val children = dir.listFiles()
+                            check(children != null || !dir.exists()) { "无法读取缓存目录：${dir.name}" }
+                            children.orEmpty().forEach { child ->
+                                // artwork-v1 已由 ArtworkLoader 在同步锁内清理，避免与图片任务竞争。
+                                if (dir.absolutePath == cacheDir.absolutePath && child.name == "artwork-v1") return@forEach
+                                check(child.deleteRecursively()) { "无法删除缓存：${child.name}" }
+                            }
+                        }
                     }
                     main.post {
                         if(isDestroyed || resettingAllData) return@post
-                        Toast.makeText(this,"缓存已清理",Toast.LENGTH_SHORT).show()
+                        val message = result.fold(
+                            onSuccess = { "缓存已清理" },
+                            onFailure = { "缓存清理失败：${it.message ?: "存储访问失败"}" }
+                        )
+                        Toast.makeText(this,message,Toast.LENGTH_LONG).show()
                     }
                 }
             }.show()
@@ -113,7 +126,14 @@ import java.util.concurrent.atomic.AtomicLong
                 getSharedPreferences("startup_playback",Context.MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences("app_updates",Context.MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences("random_pool",Context.MODE_PRIVATE).edit().clear().apply()
+                // 这些偏好独立于 Library：恢复定时关闭、弹幕颜色、渲染方式、片源入口和设备方向默认值。
+                getSharedPreferences("playback-settings-v1",Context.MODE_PRIVATE).edit().clear().apply()
+                getSharedPreferences("playback-renderer-v1",Context.MODE_PRIVATE).edit().clear().apply()
+                getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE).edit().clear().apply()
+                getSharedPreferences("playback-device-v1",Context.MODE_PRIVATE).edit().clear().apply()
                 TvStyle.apply(library.theme)
+                applyDeviceOrientationPolicy()
+                applyVideoRenderer()
                 settingsFocusKey="重置软件"
                 showCatalog()
                 Toast.makeText(this,"软件设置已恢复默认，个人记录已保留",Toast.LENGTH_LONG).show()
@@ -148,6 +168,9 @@ import java.util.concurrent.atomic.AtomicLong
         updater.destroy()
         cloudAccount.stopForReset()
         cancelWork(); cancelPrefetch()
+        // 这两个执行器也可能持有预取/网络清理任务，清除前必须停止并等待。
+        prefetchWorker.shutdownNow()
+        networkCleanup.shutdownNow()
         artwork.close()
         tvTools.destroy()
         player?.pause(); saveProgress(); releasePlayer()
@@ -162,7 +185,9 @@ import java.util.concurrent.atomic.AtomicLong
                 val favoriteStopped = favoriteMonitor.awaitStopped(20, java.util.concurrent.TimeUnit.SECONDS)
                 val toolsStopped = tvTools.awaitStopped(20, java.util.concurrent.TimeUnit.SECONDS)
                 val debugStopped = debugLogExecutor.awaitTermination(20, java.util.concurrent.TimeUnit.SECONDS)
-                accountStopped && updaterStopped && artworkStopped && favoriteStopped && toolsStopped && debugStopped
+                val prefetchStopped = prefetchWorker.awaitTermination(20, java.util.concurrent.TimeUnit.SECONDS)
+                val networkStopped = networkCleanup.awaitTermination(20, java.util.concurrent.TimeUnit.SECONDS)
+                accountStopped && updaterStopped && artworkStopped && favoriteStopped && toolsStopped && debugStopped && prefetchStopped && networkStopped
             }.getOrDefault(false)
             if (!ownersStopped) {
                 main.post {
@@ -200,9 +225,16 @@ import java.util.concurrent.atomic.AtomicLong
                 preferenceNames.distinct().forEach { name ->
                     check(getSharedPreferences(name,Context.MODE_PRIVATE).edit().clear().commit()) { "无法清除本机设置：$name" }
                 }
-                listOf(filesDir,cacheDir,codeCacheDir,noBackupFilesDir,externalCacheDir)
-                    .filterNotNull().forEach { dir -> dir.listFiles()?.forEach { check(it.deleteRecursively()) { "无法删除文件：${it.name}" } } }
-                getExternalFilesDirs(null).filterNotNull().forEach { dir -> dir.listFiles()?.forEach { check(it.deleteRecursively()) { "无法删除外部文件：${it.name}" } } }
+                fun deleteChildren(dir: java.io.File) {
+                    val children = dir.listFiles()
+                    check(children != null || !dir.exists()) { "无法读取目录：${dir.name}" }
+                    children.orEmpty().forEach { child ->
+                        check(child.deleteRecursively()) { "无法删除文件：${child.name}" }
+                    }
+                }
+                listOfNotNull(filesDir,cacheDir,codeCacheDir,noBackupFilesDir,externalCacheDir)
+                    .distinctBy { it.absolutePath }.forEach(::deleteChildren)
+                getExternalFilesDirs(null).filterNotNull().distinctBy { it.absolutePath }.forEach(::deleteChildren)
             }.onFailure { error ->
                 main.post {
                     // Library 与 IO 执行器已关闭；失败时重启可重新创建它们并保留未完成写入队列引用。
