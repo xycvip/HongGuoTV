@@ -40,12 +40,14 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
 
     val manager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
     if (manager.isLowRamDevice || manager.memoryClass <= 128) {
+        standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
         debugLog("无缝接续：设备内存等级较低，回退单播放器预加载")
         maybePrefetch(force = true)
         return
     }
 
     clearStandbyPlayer("准备新的下一集")
+    standbyFallbackEpisodeId = ""
     standbyEpisodeId = key
     val http = repository.http.newBuilder()
         .dispatcher(Dispatcher())
@@ -90,6 +92,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                             if (standbyPlayer !== secondary || standbyEpisodeId != key) return
                             if (state == Player.STATE_READY) {
                                 standbyReady = true
+                                standbyFallbackEpisodeId = ""
                                 debugLog("无缝接续：备用播放器 READY，下一集已预备 index=${index + 1}")
                             } else if (state == Player.STATE_IDLE && standbyReady) {
                                 standbyReady = false
@@ -99,6 +102,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                             if (standbyPlayer !== secondary || standbyEpisodeId != key) return
                             debugLog("无缝接续：备用播放器准备失败 ${error.errorCodeName} ${error.message}")
                             clearStandbyPlayer("备用播放器准备失败")
+                            standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
                             maybePrefetch(force = true)
                         }
                     })
@@ -113,6 +117,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     if (standbyHttp === http) standbyHttp = null
                     standbyEpisodeId = ""
                     standbyReady = false
+                    standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
                     debugLog("无缝接续：第二播放器初始化失败，回退单播放器：${problem.message}")
                     maybePrefetch(force = true)
                 }
@@ -125,6 +130,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                 if (standbyEpisodeId == key) {
                     standbyEpisodeId = ""
                     standbyReady = false
+                    standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
                     debugLog("无缝接续：下一集预备失败，回退单播放器：${problem.message}")
                     maybePrefetch(force = true)
                 }
