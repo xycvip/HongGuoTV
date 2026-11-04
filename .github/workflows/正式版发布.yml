@@ -210,7 +210,8 @@ jobs:
 
           - 应用安装包：[下载 HongguoTV-$VERSION_NAME.apk]($DOWNLOAD_URL)
           - 应用内更新清单：[latest.json](https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json)
-          - versionCode：`$VERSION_CODE`\n          - SHA-256：`$APK_SHA256`
+          - versionCode：`$VERSION_CODE`
+          - SHA-256：`$APK_SHA256`
 
           ## 本次更新说明
 
