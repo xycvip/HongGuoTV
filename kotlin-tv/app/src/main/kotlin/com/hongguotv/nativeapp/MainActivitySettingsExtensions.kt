@@ -291,7 +291,8 @@ import java.util.concurrent.atomic.AtomicLong
             videoRendererButton.text="渲染方式  ·  ${videoRendererModeLabel(next)}"
             applyVideoRenderer()
             val actual=if(next==0) {
-                "自动当前使用 SurfaceView（默认高效输出）"
+                if(isTelevisionDevice) "电视自动使用 TextureView（提升双播放器画面交接兼容性）"
+                else "手机自动使用 SurfaceView（默认高效输出）"
             } else "当前已切换为 ${videoRendererModeLabel(next)}"
             Toast.makeText(this@settings,actual,Toast.LENGTH_LONG).show()
         }
