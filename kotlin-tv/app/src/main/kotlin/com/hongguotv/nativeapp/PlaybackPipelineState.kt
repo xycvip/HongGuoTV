@@ -29,6 +29,7 @@ internal class PlaybackPipelineState {
     var standbyHttp: OkHttpClient? = null
     var standbyEpisodeId: String = ""
     var standbyReady: Boolean = false
+    var standbyFallbackEpisodeId: String = ""
     var standbyJob: Future<*>? = null
     var playerListener: Player.Listener? = null
     var directPlayback = false
