@@ -29,7 +29,14 @@ import java.util.concurrent.Future
 class AppUpdater(private val activity: Activity, private val idle: () -> Boolean) {
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
-    private val repository = AppUpdateRepository()
+    private val isBetaChannel = BuildConfig.APPLICATION_ID == AppUpdate.BETA_PACKAGE
+    private val repository = if (isBetaChannel) AppUpdateRepository(
+        expectedPackageName = AppUpdate.BETA_PACKAGE,
+        releaseRepository = AppUpdate.BETA_REPOSITORY,
+        releaseTagPrefix = AppUpdate.BETA_TAG_PREFIX,
+        latestManifestUrl = AppUpdate.BETA_LATEST_MANIFEST,
+        apkFilePrefix = "HongguoTV-Beta-"
+    ) else AppUpdateRepository()
     private val preferences = activity.getSharedPreferences("app_updates", Activity.MODE_PRIVATE)
     private var apk = File(activity.cacheDir, "updates/update.apk")
     private var task: Future<*>? = null
