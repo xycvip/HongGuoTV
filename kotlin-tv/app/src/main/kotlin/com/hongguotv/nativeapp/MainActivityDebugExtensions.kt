@@ -111,7 +111,13 @@ import java.util.concurrent.atomic.AtomicLong
     internal fun MainActivity.debugLog(message: String) {
         if(!debugEnabled) return
         val target=debugFile ?: return
-        val line="${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS",Locale.US).format(java.util.Date())}  $message\n"
+        val stamp=java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS",Locale.US).format(java.util.Date())
+        val uptime=android.os.SystemClock.elapsedRealtime()
+        val thread=Thread.currentThread().name
+        val safeMessage=message
+            .replace(Regex("(?i)(token|authorization|cookie|password|secret|sign|session)=([^&\\s]+)"),"$1=[已隐藏]")
+            .replace(Regex("(https?://[^\\s?]+)\\?[^\\s]+"),"$1?[参数已隐藏]")
+        val line="$stamp  +${uptime}ms  [$thread]  $safeMessage\n"
         debugLogExecutor.execute {
             runCatching {
                 synchronized(debugLock) {
@@ -126,6 +132,51 @@ import java.util.concurrent.atomic.AtomicLong
                 }
             }
         }
+    }
+
+    /** 记录异常堆栈；敏感参数会在写入日志前脱敏。 */
+    internal fun MainActivity.debugLogError(tag:String, error:Throwable) {
+        val stack=android.util.Log.getStackTraceString(error)
+            .replace(Regex("(?i)(token|authorization|cookie|password|secret|sign|session)=([^&\\s]+)"),"$1=[已隐藏]")
+            .replace(Regex("(https?://[^\\s?]+)\\?[^\\s]+"),"$1?[参数已隐藏]")
+        debugLog("异常[$tag] ${error.javaClass.name}: ${error.message ?: "无异常说明"}\\n$stack")
+    }
+
+    /** 不依赖正在播放的视频，供设置页查看应用、设备、网络和资源状态。 */
+    internal fun MainActivity.debugEnvironmentSnapshot():String {
+        val info=runCatching { packageManager.getPackageInfo(packageName,0) }.getOrNull()
+        val version=info?.versionName ?: "未知"
+        val versionCode=if(Build.VERSION.SDK_INT>=28) info?.longVersionCode ?: 0L else (info?.versionCode ?: 0).toLong()
+        val memory=android.app.ActivityManager.MemoryInfo()
+        (getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)?.getMemoryInfo(memory)
+        val runtime=Runtime.getRuntime()
+        val storage=runCatching { filesDir.usableSpace }.getOrDefault(-1L)
+        val active=connectivity.activeNetwork
+        val caps=active?.let { connectivity.getNetworkCapabilities(it) }
+        val network=when {
+            caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)==true -> "Wi-Fi"
+            caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)==true -> "以太网"
+            caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)==true -> "移动网络"
+            else -> "无网络/未知"
+        }
+        return listOf(
+            "红果TV 运行诊断",
+            "应用版本：$version（versionCode=$versionCode）",
+            "应用包名：$packageName",
+            "设备：${Build.MANUFACTURER} ${Build.MODEL}",
+            "系统：Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}",
+            "ABI：${Build.SUPPORTED_ABIS.joinToString(",")}",
+            "屏幕：${resources.displayMetrics.widthPixels}x${resources.displayMetrics.heightPixels}px；密度=${resources.displayMetrics.density}",
+            "当前页面：$screen；主导航页签=$tab",
+            "调试模式：${if(debugEnabled) "开启" else "关闭"}；入口：${if(debugSettingRevealedThisSession) "已显示" else "隐藏"}",
+            "网络：$network；已连接=${active!=null}",
+            "进程内存：已用 ${(runtime.totalMemory()-runtime.freeMemory())/1024/1024}MB / 已分配 ${runtime.totalMemory()/1024/1024}MB",
+            "系统可用内存：${memory.availMem/1024/1024}MB；低内存状态=${memory.lowMemory}",
+            "应用存储可用空间：${if(storage>=0) storage/1024/1024 else -1}MB",
+            "播放器：${player?.let { "state=${it.playbackState}, isPlaying=${it.isPlaying}, pos=${it.currentPosition}ms" } ?: "未创建"}",
+            "当前内容：${detail?.series?.title.orEmpty()}；集数索引=${episodeIndex+1}",
+            "解码器：${activeDecoderName.ifBlank { "尚未识别" }}"
+        ).joinToString("\\n")
     }
 
     internal fun MainActivity.attachDebugOverlay() {
