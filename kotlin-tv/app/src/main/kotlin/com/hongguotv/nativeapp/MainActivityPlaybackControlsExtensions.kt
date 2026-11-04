@@ -49,7 +49,7 @@ internal fun MainActivity.hidePlaybackOverlay() {
         val p=player ?: return
         val duration=p.duration.coerceAtLeast(0); val position=pendingSeek ?: p.currentPosition
         val state=when { ffActive -> "3× 快进中"; p.playbackState==Player.STATE_BUFFERING -> "缓冲中"; p.playbackState==Player.STATE_ENDED -> "本集已结束"; !p.playWhenReady -> "已暂停"; else -> "正在播放" }
-        playbackText.text="$state  ·  ${formatTime(position)} / ${formatTime(duration)}  ·  $quality  ·  ${PlaybackSpeed.label(p.playbackParameters.speed)}"+(if(sleepTimer.active) "  ·  定时 ${sleepTimer.label()}" else "")
+        playbackText.text="$state  ·  ${formatTime(position)} / ${formatTime(duration)}  ·  ${actualVideoResolutionLabel()}  ·  ${PlaybackSpeed.label(p.playbackParameters.speed)}"+(if(sleepTimer.active) "  ·  定时 ${sleepTimer.label()}" else "")
         if(!progressUserSeeking) progressBar.progress=if(duration>0) (position*1000/duration).toInt().coerceIn(0,1000) else 0
     }
 
@@ -156,6 +156,18 @@ internal fun MainActivity.shouldShowSleepSettingHint(): Boolean {
         sleepSettingHintShown=true
         return true
     }
+
+/** 显示当前实际视频画面尺寸，不使用用户请求的清晰度档位代替。 */
+internal fun MainActivity.actualVideoResolutionLabel(): String {
+        val size=player?.videoSize
+        val width=size?.width?.takeIf { it>0 }
+        val height=size?.height?.takeIf { it>0 }
+        if(width!=null && height!=null) return "${width}×${height}"
+        val format=selectedVideoFormat()
+        val trackWidth=format?.width?.takeIf { it>0 }
+        val trackHeight=format?.height?.takeIf { it>0 }
+        return if(trackWidth!=null && trackHeight!=null) "${trackWidth}×${trackHeight}" else "分辨率未知"
+}
 
 internal fun MainActivity.selectedVideoFormat(): Format? {
         val p=player ?: return activeVideoFormat
