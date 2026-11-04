@@ -419,8 +419,10 @@ import java.util.concurrent.atomic.AtomicLong
         // 调试能力独立成左侧主分类，避免藏在“关于”设置项中。
         debugSettingButton=setting(debug,6,debugSettingLabel()) {
             if(debugEnabled) {
+                // 关闭只停止日志并清除持久化开关；入口保留到本次进程结束。
+                // 下次启动时进程级临时状态会重置，因此入口自动隐藏。
                 stopDebugLogging()
-                setDebugCategoryVisible(false)
+                setDebugCategoryVisible(true)
             } else {
                 // 用户主动开启调试后，入口随调试状态常驻；重启后也会根据持久化开关显示。
                 setDebugCategoryVisible(true)
