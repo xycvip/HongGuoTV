@@ -68,6 +68,10 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
         if(seamlessPlaybackEnabled && !force && standbyFallbackEpisodeId!=currentEpisodeId) {
             if(standbyHasRendered) return
             if(!PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
+            val standbyPending=standbyEpisodeId==expectedStandbyKey
+            val standbyAge=if(standbyPrepareStartedAt>0L) android.os.SystemClock.elapsedRealtime()-standbyPrepareStartedAt else Long.MAX_VALUE
+            // 短剧可能全程都处于 30 秒窗口；给备用解析 / 解码至少 10 秒机会，避免刚启动就被兜底逻辑取消。
+            if(standbyPending && standbyAge<10_000L) return
             // 临近片尾仍未真正渲染备用首帧，不能只凭 READY 赌切集；主动释放备用资源并启用旧预加载兜底。
             standbyFallbackEpisodeId=currentEpisodeId
             clearStandbyPlayer("临近片尾备用首帧尚未就绪，切换单播放器预加载兜底")
