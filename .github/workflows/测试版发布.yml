@@ -5,9 +5,10 @@ on:
   workflow_dispatch:
     inputs:
       release_notes:
-        description: 本次测试版更新说明
-        required: true
+        description: 本次测试版更新说明（可留空，默认显示“优化使用体验”）
+        required: false
         type: string
+        default: ""
       confirm_beta_release:
         description: 确认构建并发布测试版到 HongGuoTV 仓库
         required: true
@@ -171,6 +172,7 @@ jobs:
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
         run: |
           set -euo pipefail
+          RELEASE_NOTES="${RELEASE_NOTES:-优化使用体验}"
           APK="$RUNNER_TEMP/test-release/HongguoTV-$VERSION_NAME.apk"
           SOURCE_COMMIT="$(git rev-parse HEAD)"
           DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/HongguoTV-$VERSION_NAME.apk"
