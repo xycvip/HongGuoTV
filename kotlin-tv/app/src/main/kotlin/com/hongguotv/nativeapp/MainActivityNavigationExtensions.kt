@@ -36,6 +36,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
 }
 
     internal fun MainActivity.switchTab(next: Int) {
+        debugLog("页面导航：主导航页签 $tab -> $next")
         leaveCollection()
         tabState[tab]=CatalogState(page,catalog,hasMore,ranking,rankBoard,genre,aiCatalog,aiGenre); tabFocus[tab]=catalogFocus
         // 从其他模块切回搜索页时重置为全新搜索状态，不保留上次的搜索词与结果
@@ -58,6 +59,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
     }
 
     internal fun MainActivity.switchContentType(type: ContentType) {
+        debugLog("内容类型切换：$type；当前页签=$tab")
         if(library.contentType==type && (tab!=1 || !aggregateSearch)) return
         if(tab==1) aggregateSearch=false
         leaveCollection()
@@ -72,6 +74,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
     }
 
     internal fun MainActivity.switchAggregateSearch() {
+        debugLog("搜索模式切换：聚合搜索；关键词长度=${query.length}")
         if(tab!=1 || aggregateSearch) return
         leaveCollection()
         aggregateSearch=true
