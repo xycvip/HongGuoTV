@@ -114,7 +114,7 @@ class LibraryTransferServer(
             val length=headers["content-length"]?.toLongOrNull()?.takeIf{it>0&&it<=folder.usableSpace}?:return respond(socket,413,"文件为空或超过电视当前剩余存储空间")
             val destination=java.io.File(folder,name).canonicalFile
             if(destination.parentFile!=folder.canonicalFile)return respond(socket,400,"文件名无效")
-            val temp=java.io.File(folder,".$name.$token.${System.nanoTime()}.uploading")
+            val temp=java.io.File(folder,".hongguotv-upload-${java.util.UUID.randomUUID()}.uploading")
             return try{
                 temp.outputStream().buffered().use{out->
                     val buffer=ByteArray(64*1024);var remaining=length
