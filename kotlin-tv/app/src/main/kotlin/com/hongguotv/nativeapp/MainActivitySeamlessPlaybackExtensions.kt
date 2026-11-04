@@ -6,6 +6,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import okhttp3.Dispatcher
 import okhttp3.ConnectionPool
@@ -81,7 +82,13 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
                     val secondary = ExoPlayer.Builder(this)
                         .setRenderersFactory(renderers)
-                        .setLoadControl(buildPlaybackLoadControl())
+                        // 备用播放器只保留短缓冲，避免把主播放器的缓冲预算再复制一份。
+                        .setLoadControl(
+                            DefaultLoadControl.Builder()
+                                .setBufferDurationsMs(1_000, 8_000, 1_000, 1_500)
+                                .setTargetBufferBytes(3 * 1024 * 1024)
+                                .build()
+                        )
                         .build()
                     secondary.setAudioAttributes(
                         AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
