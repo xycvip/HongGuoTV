@@ -4,10 +4,6 @@ name: 红果TV正式版发布
 on:
   workflow_dispatch:
     inputs:
-      release_notes:
-        description: 本次正式版更新说明（可填写多行）
-        required: true
-        type: string
       confirm_release:
         description: 确认发布到 AppDownload 正式分发仓库
         required: true
@@ -155,13 +151,44 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-          RELEASE_NOTES: ${{ inputs.release_notes }}
           APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
         run: |
           set -euo pipefail
           APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
           SOURCE_COMMIT="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
+
+          # 自动整理本次正式版相对上一正式版的功能变化。
+          # 比较基准不可用或比较失败时，使用约定兜底文案，不阻断发布。
+          RELEASE_NOTES="优化使用体验"
+          LATEST_URL="https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json"
+          if curl --fail --silent --show-error --location "$LATEST_URL" -o "$RUNNER_TEMP/previous-official.json"; then
+            PREVIOUS_COMMIT="$(jq -r '.sourceCommit // empty' "$RUNNER_TEMP/previous-official.json" 2>/dev/null || true)"
+            if [ -n "$PREVIOUS_COMMIT" ] && git -C "$GITHUB_WORKSPACE" cat-file -e "$PREVIOUS_COMMIT^{commit}" 2>/dev/null; then
+              if git -C "$GITHUB_WORKSPACE" diff --quiet "$PREVIOUS_COMMIT" "$SOURCE_COMMIT" --; then
+                RELEASE_NOTES="优化使用体验"
+              else
+                if git -C "$GITHUB_WORKSPACE" log --no-merges --format='%s' "$PREVIOUS_COMMIT..$SOURCE_COMMIT" > "$RUNNER_TEMP/release-commit-subjects.txt"; then
+                  awk '
+                    {
+                      line=$0
+                      if (line ~ /^(Merge |合并分支|更新说明文档|补充.*说明|修正.*换行|格式整理|代码格式|重命名变量|拆分.*文件|模块化拆分|更新依赖锁文件)/) next
+                      if (line ~ /^(docs?:|test:|chore:|style:|refactor:)/) next
+                      if (line == "" || seen[line]++) next
+                      print "- " line
+                    }
+                  ' "$RUNNER_TEMP/release-commit-subjects.txt" > "$RUNNER_TEMP/release-notes.txt"
+                  if [ -s "$RUNNER_TEMP/release-notes.txt" ]; then
+                    RELEASE_NOTES="$(cat "$RUNNER_TEMP/release-notes.txt")"
+                  fi
+                fi
+              fi
+            fi
+          fi
+          printf '%s\\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes-final.txt"
+          echo "本次正式版更新说明："
+          cat "$RUNNER_TEMP/release-notes-final.txt"
+
           git clone --depth 1 "https://x-access-token:$APPDOWNLOAD_TOKEN@github.com/xycvip/AppDownload.git" "$RUNNER_TEMP/AppDownload"
           cd "$RUNNER_TEMP/AppDownload"
 
@@ -203,20 +230,30 @@ jobs:
           cp hongguoTV/latest.json "$RUNNER_TEMP/release/update.json"
           printf '%s  %s\n' "$APK_SHA256" "HongguoTV-$VERSION_NAME.apk" > "$RUNNER_TEMP/release/SHA256SUMS"
 
-          cat > hongguoTV/README.md <<EOF
+          # README 只在首次创建时写入固定说明；已有文件绝不覆盖。
+          if [ ! -f hongguoTV/README.md ]; then
+            cat > hongguoTV/README.md <<'EOF'
           # 红果TV正式版分发
 
-          当前正式版本：**$VERSION_NAME**
-
-          - 应用安装包：[下载 HongguoTV-$VERSION_NAME.apk]($DOWNLOAD_URL)
-          - 应用内更新清单：[latest.json](https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json)
-          - versionCode：`$VERSION_CODE`
-          - SHA-256：`$APK_SHA256`
-
-          ## 本次更新说明
-
-          $RELEASE_NOTES
+          本页面按发布时间追加正式版记录，历史版本说明不会覆盖。
+          最新安装包请以本页最新记录及应用内更新提示为准。
           EOF
+          fi
+
+          # 每次发布只追加一条新记录，保留文件原有全部内容。
+          {
+            printf '\\n'
+            printf '%s\\n' "## 红果TV正式版 $VERSION_NAME"
+            printf '\\n'
+            printf '%s\\n' "- 下载：[HongguoTV-$VERSION_NAME.apk]($DOWNLOAD_URL)"
+            printf '%s\\n' "- versionCode：\`$VERSION_CODE\`"
+            printf '%s\\n' "- SHA-256：\`$APK_SHA256\`"
+            printf '\\n'
+            printf '%s\\n' "### 本次更新"
+            cat "$RUNNER_TEMP/release-notes-final.txt"
+            printf '\\n'
+            printf '%s\\n' "---"
+          } >> hongguoTV/README.md
 
           # 先创建正式版发布及APK附件，确认下载资源已存在后再更新 latest.json
           gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/release/SHA256SUMS" "$RUNNER_TEMP/release/update.json" \
