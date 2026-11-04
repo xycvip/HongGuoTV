@@ -1,0 +1,242 @@
+# 正式版发布：仅手动触发
+name: 红果TV正式版发布
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: 本次正式版更新说明（可填写多行）
+        required: true
+        type: string
+      confirm_release:
+        description: 确认发布到 AppDownload 正式分发仓库
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hongguotv-official-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: 构建、签名并发布正式版
+    if: ${{ inputs.confirm_release }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 检出红果TV源码
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: 配置Java环境
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: 检查发布凭据
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
+          APPDOWNLOAD_TOKEN: ${{ secrets.APPDOWNLOAD_TOKEN || secrets.APPDOWNLOAD_UPLOAD_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$KEYSTORE_B64" ] || missing+=("HONGGUOTV_KEYSTORE_B64")
+          [ -n "$STORE_PASSWORD" ] || missing+=("HONGGUOTV_STORE_PASSWORD")
+          [ -n "$KEY_ALIAS" ] || missing+=("HONGGUOTV_KEY_ALIAS")
+          [ -n "$KEY_PASSWORD" ] || missing+=("HONGGUOTV_KEY_PASSWORD")
+          [ -n "$APPDOWNLOAD_TOKEN" ] || missing+=("APPDOWNLOAD_TOKEN（或 APPDOWNLOAD_UPLOAD_TOKEN）")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::缺少正式发布凭据：%s\n' "$(IFS='、'; echo "${missing[*]}")"
+            exit 1
+          fi
+          echo "正式签名与分发凭据检查通过"
+
+      - name: 准备正式签名文件
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/hongguotv-release.p12"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+          echo "HONGGUOTV_KEYSTORE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "正式签名文件已准备"
+
+      - name: 从AppDownload读取并生成正式版本号
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          LATEST_URL="https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json"
+          curl --fail --silent --show-error --location "$LATEST_URL" -o "$RUNNER_TEMP/latest.json"
+          jq -e '
+            .packageName == "com.x.hongguotv"
+            and (.versionName | type == "string")
+            and (.versionCode | type == "number")
+          ' "$RUNNER_TEMP/latest.json" >/dev/null
+
+          OLD_NAME="$(jq -r '.versionName' "$RUNNER_TEMP/latest.json")"
+          OLD_CODE="$(jq -r '.versionCode' "$RUNNER_TEMP/latest.json")"
+          if [[ ! "$OLD_NAME" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::AppDownload中的版本名称不是标准的主版本.次版本.修订版本格式：$OLD_NAME"
+            exit 1
+          fi
+          NEXT_NAME="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+          NEXT_CODE="$((OLD_CODE + 1))"
+          TAG="hongguotv-v$NEXT_NAME"
+
+          echo "version_name=$NEXT_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$NEXT_CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "上一个正式版：$OLD_NAME（versionCode：$OLD_CODE）"
+          echo "本次正式版：$NEXT_NAME（versionCode：$NEXT_CODE）"
+          echo "版本号由AppDownload最新清单递增生成，不使用工作流运行编号"
+
+      - name: 构建正式版APK
+        working-directory: kotlin-tv
+        shell: bash
+        env:
+          HONGGUOTV_STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
+          HONGGUOTV_KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
+          HONGGUOTV_KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
+          HONGGUOTV_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          HONGGUOTV_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          mkdir -p "$RUNNER_TEMP/release"
+          cp "$APK" "$RUNNER_TEMP/release/HongguoTV-${HONGGUOTV_VERSION_NAME}.apk"
+          echo "正式版APK构建完成"
+
+      - name: 校验APK签名与安装包信息
+        id: apk
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          if [ ! -x "$APKSIGNER" ]; then
+            APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          fi
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          SIZE="$(stat -c '%s' "$APK")"
+          SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "APK大小：$SIZE 字节"
+          echo "APK SHA-256：$SHA256"
+
+      - name: 发布到AppDownload正式分发仓库
+        shell: bash
+        env:
+          APPDOWNLOAD_TOKEN: ${{ secrets.APPDOWNLOAD_TOKEN || secrets.APPDOWNLOAD_UPLOAD_TOKEN }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+          APK_SIZE: ${{ steps.apk.outputs.size }}
+          APK_SHA256: ${{ steps.apk.outputs.sha256 }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
+          git clone --depth 1 "https://x-access-token:$APPDOWNLOAD_TOKEN@github.com/xycvip/AppDownload.git" "$RUNNER_TEMP/AppDownload"
+          cd "$RUNNER_TEMP/AppDownload"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::正式版本标签已存在：$RELEASE_TAG，停止发布以防覆盖"
+            exit 1
+          fi
+
+          mkdir -p hongguoTV
+          cp "$APK" "hongguoTV/HongguoTV-$VERSION_NAME.apk"
+
+          DOWNLOAD_URL="https://github.com/xycvip/AppDownload/releases/download/$RELEASE_TAG/HongguoTV-$VERSION_NAME.apk"
+          jq -n \
+            --arg sourceCommit "$SOURCE_COMMIT" \
+            --arg versionName "$VERSION_NAME" \
+            --arg tag "$RELEASE_TAG" \
+            --arg apkName "HongguoTV-$VERSION_NAME.apk" \
+            --arg sha256 "$APK_SHA256" \
+            --arg url "$DOWNLOAD_URL" \
+            --arg notes "$RELEASE_NOTES" \
+            --argjson versionCode "$VERSION_CODE" \
+            --argjson size "$APK_SIZE" \
+            '{
+              schema: 1,
+              packageName: "com.x.hongguotv",
+              sourceCommit: $sourceCommit,
+              versionCode: $versionCode,
+              versionName: $versionName,
+              minSdk: 26,
+              tag: $tag,
+              apk: {
+                name: $apkName,
+                size: $size,
+                sha256: $sha256,
+                url: $url
+              },
+              notes: $notes
+            }' > hongguoTV/latest.json
+
+          cat > hongguoTV/README.md <<EOF
+          # 红果TV正式版分发
+
+          当前正式版本：**$VERSION_NAME**
+
+          - 应用安装包：[下载 HongguoTV-$VERSION_NAME.apk]($DOWNLOAD_URL)
+          - 应用内更新清单：[latest.json](https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json)
+          - versionCode：`$VERSION_CODE`
+
+          ## 本次更新说明
+
+          $RELEASE_NOTES
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "hongguoTV/HongguoTV-$VERSION_NAME.apk" hongguoTV/latest.json hongguoTV/README.md
+          git commit -m "发布红果TV正式版 $VERSION_NAME"
+          git push origin HEAD:main
+
+          gh release create "$RELEASE_TAG" "hongguoTV/HongguoTV-$VERSION_NAME.apk" \
+            --repo xycvip/AppDownload \
+            --title "红果TV正式版 $VERSION_NAME" \
+            --notes "$RELEASE_NOTES"
+        env:
+          GH_TOKEN: ${{ secrets.APPDOWNLOAD_TOKEN || secrets.APPDOWNLOAD_UPLOAD_TOKEN }}
+
+      - name: 输出正式发布结果
+        if: success()
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          echo "正式版发布成功"
+          echo "应用版本：$VERSION_NAME"
+          echo "versionCode：$VERSION_CODE"
+          echo "发布标签：$RELEASE_TAG"
+          echo "分发仓库：https://github.com/xycvip/AppDownload"
