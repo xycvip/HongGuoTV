@@ -51,7 +51,7 @@ internal fun MainActivity.backupFolder(): java.io.File {
 
     internal fun MainActivity.showFileBackupDialog(anchor: View) {
         tvTools.choose(
-            "本地备份与恢复",
+            "本机资料备份与恢复",
             listOf("导出备份文件","从备份文件恢复"),
             anchor,
             { choice ->
