@@ -187,9 +187,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 
         var rechainSettings:()->Unit={}
-        // 调试入口仅在本次进程运行期间解锁；应用重启后自然恢复隐藏。
-        var debugRevealTapCount=0
-        var debugRevealLastTapAt=0L
 
         lateinit var startupAutoplayButton:TextView
         lateinit var qualityButton:TextView
@@ -332,18 +329,6 @@ import java.util.concurrent.atomic.AtomicLong
             clockButton.text="显示系统时间  ·  ${if(library.showClock) "开启" else "关闭"}"
             applyClock()
 
-            // 连续快速点击「显示系统时间」5 次，才临时显示隐藏的调试入口。
-            val now=android.os.SystemClock.elapsedRealtime()
-            if(now-debugRevealLastTapAt>2500L) debugRevealTapCount=0
-            debugRevealLastTapAt=now
-            debugRevealTapCount++
-            if(debugRevealTapCount>=5 && debugSettingButton?.visibility!=View.VISIBLE) {
-                debugRevealTapCount=0
-                debugSettingRevealedThisSession=true
-                debugSettingButton?.visibility=View.VISIBLE
-                rechainSettings()
-                Toast.makeText(this,"调试模式入口已显示",Toast.LENGTH_SHORT).show()
-            }
         }
         fileBackup=setting(data,2,"本地备份与恢复") { showFileBackupDialog(fileBackup) }
         backup=setting(data,2,"手机备份与恢复") {
