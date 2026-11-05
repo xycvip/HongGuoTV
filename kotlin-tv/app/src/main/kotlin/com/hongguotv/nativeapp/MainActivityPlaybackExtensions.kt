@@ -80,7 +80,7 @@ import java.util.concurrent.atomic.AtomicLong
                 ) {
                     seamlessHandoffInProgress=false
                     updatePlaybackBufferingIndicator()
-                    debugLog("无缝接续：接管后 3 秒仍未收到可见首帧，恢复缓冲提示")
+                    debugLog("无感连播：接管后 3 秒仍未收到可见首帧，恢复缓冲提示")
                 }
             },3000L)
             standbyByteCounterEnabled?.set(true)
@@ -99,7 +99,7 @@ import java.util.concurrent.atomic.AtomicLong
             standbyReady=false
             standbyFallbackEpisodeId=""
             standbyJob=null
-            debugLog("无缝接续：备用播放器接管第 ${selectedIndex+1} 集；READY等待=${if(standbyReadyAt>0L) standbyPromotionAt-standbyReadyAt else -1L}ms；预渲染首帧=${if(standbyFirstFrameAt>0L) standbyPromotionAt-standbyFirstFrameAt else -1L}ms；PlayerView交接=${standbyAttachedAt-standbyPromotionAt}ms")
+            debugLog("无感连播：备用播放器接管第 ${selectedIndex+1} 集；READY等待=${if(standbyReadyAt>0L) standbyPromotionAt-standbyReadyAt else -1L}ms；预渲染首帧=${if(standbyFirstFrameAt>0L) standbyPromotionAt-standbyFirstFrameAt else -1L}ms；PlayerView交接=${standbyAttachedAt-standbyPromotionAt}ms")
         } else if(seamlessPlaybackEnabled && standbyEpisodeId.isNotEmpty()) {
             clearStandbyPlayer(if(standbyReady && standbyFirstFrameAt==0L) "备用播放器虽已 READY 但未渲染首帧" else "目标剧集未能由备用播放器接管")
         }
