@@ -228,6 +228,7 @@ jobs:
               echo "::error::已存在 Release 的 update.json 校验失败，拒绝覆盖"
               exit 1
             }
+            VERSION_CODE="$(jq -r '.versionCode' "$EXISTING_UPDATE")"
             APK_SIZE="$(jq -r '.apk.size' "$EXISTING_UPDATE")"
             APK_SHA256="$(jq -r '.apk.sha256' "$EXISTING_UPDATE")"
             SOURCE_COMMIT="$(jq -r '.sourceCommit // empty' "$EXISTING_UPDATE")"
@@ -299,7 +300,8 @@ jobs:
           if [ "$RECOVER_EXISTING_RELEASE" = "true" ]; then
             cp "$RUNNER_TEMP/existing-official-release/update.json" hongguoTV/latest.json
             cp "$RUNNER_TEMP/existing-official-release/update.json" "$RUNNER_TEMP/release/update.json"
-            echo "已从现有 Release 附件恢复正式版 latest.json"
+            gh release edit "$RELEASE_TAG" --repo xycvip/AppDownload --latest
+            echo "已从现有 Release 附件恢复正式版 latest.json，并重新确认其为 Latest"
           else
             gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/release/SHA256SUMS" "$RUNNER_TEMP/release/update.json" \
               --repo xycvip/AppDownload \
