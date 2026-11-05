@@ -117,6 +117,7 @@ class MainActivity: Activity() {
     internal var standbyHttp by playbackPipelineState::standbyHttp
     internal var standbyEpisodeId by playbackPipelineState::standbyEpisodeId
     internal var standbyReady by playbackPipelineState::standbyReady
+    internal var seamlessHandoffInProgress by playbackPipelineState::seamlessHandoffInProgress
     internal var standbyFallbackEpisodeId by playbackPipelineState::standbyFallbackEpisodeId
     internal var standbyJob by playbackPipelineState::standbyJob
     internal var standbyOutputView by playbackPipelineState::standbyOutputView
