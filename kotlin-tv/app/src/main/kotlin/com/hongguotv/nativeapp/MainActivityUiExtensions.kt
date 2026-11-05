@@ -44,25 +44,12 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
+    /**
+     * 全应用统一使用横屏方向。手机播放时不再根据设备姿态或视频宽高/旋转元数据切换方向，
+     * 避免视频方向回调触发 Activity 配置变化，干扰双播放器交接和播放生命周期。
+     */
     internal fun MainActivity.applyDeviceOrientationPolicy() {
-        if (isTelevisionDevice || screen != "player") {
-            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            return
-        }
-        requestedOrientation = when (phoneOrientationMode) {
-            1 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-            2 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
-
-    internal fun MainActivity.applyVideoOrientation(videoSize: VideoSize) {
-        if (!isPhoneDevice || screen != "player" || phoneOrientationMode != 0 || videoSize.width <= 0 || videoSize.height <= 0) return
-        val ratio = videoSize.width.toFloat() * videoSize.pixelWidthHeightRatio.coerceAtLeast(0.01f) / videoSize.height
-        val rotatedRatio = if (videoSize.unappliedRotationDegrees % 180 != 0) 1f / ratio else ratio
-        val target = if (rotatedRatio >= 1.05f) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-        if (requestedOrientation != target) requestedOrientation = target
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
     }
 
     internal fun MainActivity.focusStyle(view: View,selected: Boolean=false) {
