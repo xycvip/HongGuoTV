@@ -7,38 +7,35 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.view.View
 
-/** 官方视频风格的半透明中央播放/暂停反馈图标。 */
+/** 手机播放器中央半透明播放/暂停按钮；常驻于控制栏显示期间并可独立点击。 */
 internal class PlaybackTapFeedbackView(context: Context) : View(context) {
     private val density = resources.displayMetrics.density
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var playing = false
 
     init {
-        alpha = 0f
+        visibility = GONE
+        isClickable = true
+        isFocusable = false
+        contentDescription = "播放视频"
     }
 
     fun show(isPlaying: Boolean) {
-        playing = isPlaying
+        setPlaying(isPlaying)
         visibility = VISIBLE
-        animate().cancel()
-        alpha = 0f
-        scaleX = 0.82f
-        scaleY = 0.82f
+        alpha = 1f
         invalidate()
-        animate()
-            .alpha(1f)
-            .scaleX(1f)
-            .scaleY(1f)
-            .setDuration(140L)
-            .withEndAction {
-                animate()
-                    .alpha(0f)
-                    .setStartDelay(520L)
-                    .setDuration(260L)
-                    .withEndAction { visibility = GONE }
-                    .start()
-            }
-            .start()
+    }
+
+    fun setPlaying(isPlaying: Boolean) {
+        playing = isPlaying
+        contentDescription = if(playing) "暂停视频" else "播放视频"
+        invalidate()
+    }
+
+    fun hide() {
+        visibility = GONE
+        alpha = 1f
     }
 
     override fun onDraw(canvas: Canvas) {
