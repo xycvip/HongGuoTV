@@ -93,7 +93,7 @@ import java.util.concurrent.atomic.AtomicLong
             message(body,if(loading) "正在加载推荐…" else when(tab) { 1 -> if(query.isBlank()) "输入名称关键词，或用字母键拼首拼选择联想词" else if(aggregateSearch) "没有找到相关漫剧或短剧，换个关键词试试" else "没有找到相关${library.contentType.label}，换个关键词试试"; 3 -> if(favoriteGroupFilter!=null) "「$favoriteGroupFilter」分组暂无收藏" else "在剧集详情中选择收藏，喜欢的剧就会出现在这里"; 4 -> "播放过的剧集会自动保存在这里"; else -> "本页没有更多内容" })
             wireSearchPanel(null)
             if(focusType) (if(tab==1) searchInput else navForTab())?.requestFocus()
-            else if(pendingRefreshFocus==null) {
+            else if(pendingRefreshFocus==null && !(tab==2 && rankFocusTag!=null)) {
                 if(focusFilter && favoriteFilterButtons.isNotEmpty()) favoriteFilterButtons[favoriteFilterFocus.coerceIn(0,favoriteFilterButtons.size-1)].requestFocus()
                 else if(collectionBack!=null && !focusNav) collectionBack?.requestFocus()
                 else navForTab().requestFocus()
