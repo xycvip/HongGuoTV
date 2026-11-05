@@ -408,9 +408,6 @@ class MainActivity: Activity() {
     /** 控制栏区域的触摸交给原生控件；视频画面区域由播放器手势统一识别。 */
     internal var touchOnHud by playbackUiState::touchOnHud
     internal var progressUserSeeking by playbackUiState::progressUserSeeking
-    internal var lastTapAt by playbackUiState::lastTapAt
-    internal var lastTapX by playbackUiState::lastTapX
-    internal var lastTapY by playbackUiState::lastTapY
     internal var playbackTapFeedbackView: PlaybackTapFeedbackView? = null
     internal var transportPlay by playbackUiState::transportPlay
     internal var sleepButton by playbackUiState::sleepButton
