@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "8e19bc790e806b6c5cb080a73b7b899415f83580",
-  "versionCode": 8,
-  "versionName": "0.0.8",
+  "sourceCommit": "d835f89223c8915880b844273bf7288fe8d30c1f",
+  "versionCode": 9,
+  "versionName": "0.0.9",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.8",
+  "tag": "hongguotv-bate-v0.0.9",
   "apk": {
-    "name": "HongguoTV-0.0.8.apk",
-    "size": 1845067,
-    "sha256": "690442b19819084824765b772458f53cc96bc0539d12c1bf2987008f34f0a57f",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.8/HongguoTV-0.0.8.apk"
+    "name": "HongguoTV-0.0.9.apk",
+    "size": 1845255,
+    "sha256": "7346e54397c678e8e142a6890570b5a71b32c3bbbebbca72a3983e9394f1e05b",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.9/HongguoTV-0.0.9.apk"
   },
-  "notes": "【播放与播放器】\n- 修复备用播放器缓冲阈值配置冲突\n【焦点与遥控器】\n- 补充焦点变化与遥控器按键诊断\n【网络与接口】\n- 完善网络变化诊断日志\n【调试与诊断】\n- 修复复制日志：保留完整运行诊断时间线"
+  "notes": "【播放与播放器】\n- 修复无缝接续清理备用资源误重置交接状态\n- 修正无缝接续超时与首帧稳定窗口竞态\n- 修复无缝接续首帧后缓冲提示闪烁"
 }
