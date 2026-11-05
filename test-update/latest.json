@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "2105409ac17aa8ed3b1b077b851c29d5dd110a1f",
-  "versionCode": 16,
-  "versionName": "0.0.16",
+  "sourceCommit": "d6240f1e22e1444babe62024ecaf7a0e1fb0bc7f",
+  "versionCode": 17,
+  "versionName": "0.0.17",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.16",
+  "tag": "hongguotv-bate-v0.0.17",
   "apk": {
-    "name": "HongguoTV-0.0.16.apk",
-    "size": 1946501,
-    "sha256": "559236e2da9cdd92be4986cb24cbaf883039da1eaccbf1c97f24099f44044514",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.16/HongguoTV-0.0.16.apk"
+    "name": "HongguoTV-0.0.17.apk",
+    "size": 1948061,
+    "sha256": "a7c3c5a8db8c379cf693de0581bf5a3d04bad51d81a2e5019dd698c2bbbe226b",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.17/HongguoTV-0.0.17.apk"
   },
-  "notes": "【调试与诊断】\n- 精简清理日志设置说明\n【界面与交互】\n- 移除搜索导航与首页导航之间的10dp间距\n【其他功能与问题修复】\n- 默认开启无感连播\n- 清理重复的旧版 JPG 启动图标资源\n- 清理重复的旧版 JPG 启动图标资源\n- 清理重复的旧版 JPG 启动图标资源\n- 清理重复的旧版 JPG 启动图标资源\n- 清理重复的旧版 JPG 启动图标资源\n- Add files via upload\n- Delete kotlin-tv/app/src/main/res/drawable-nodpi/tv_banner.webp"
+  "notes": "【播放与播放器】\n- 单击视频区域同时唤起完整播放工具栏\n- 清理播放切换中的旧双击任务引用\n- 退出播放器时释放中央按钮引用\n- 同步中央按钮播放状态\n- 将中央播放暂停提示改为可点击状态按钮\n- 调整手机播放器点击交互\n- 接入手机播放器中央播放状态反馈图标\n- 手机播放器单击切换时显示中央播放状态图标\n- 新增手机播放器中央播放状态反馈图标\n- 移除播放器快进中状态提示\n- 手机播放器增加长按临时倍速手势\n【焦点与遥控器】\n- 确保剧场海报卡片布局后补齐向上焦点\n- 清理剧场筛选头旧焦点连线残留\n- 明确在剧场 ConcatAdapter 组装后统一连接焦点\n- 修复剧场筛选头与海报网格布局完成后的焦点连接\n- 在剧场筛选头与海报网格组装后连通焦点\n- 移除覆盖剧场筛选行焦点映射的错误逻辑\n- 修复剧场筛选区焦点上下导航\n【其他功能与问题修复】\n- 删除不再使用的双击状态\n- 移除废弃双击时间记录\n- 清理旧双击状态字段\n- 清理旧单击延迟任务\n- 控制栏收起时隐藏中央按钮\n- 取消双击并接入中央按钮触控\n- 增加手机触屏长按 3 倍速处理\n- 接入手机长按倍速手势回调"
 }
