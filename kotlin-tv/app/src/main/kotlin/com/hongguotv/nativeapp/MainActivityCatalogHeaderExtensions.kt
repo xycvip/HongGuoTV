@@ -155,7 +155,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             gravity=Gravity.CENTER
             setPadding(dp(7),0,dp(7),0)
             background=TvStyle.navGlass(this@renderCatalogHeader)
-            addView(shortcuts,lp(-2,dp(48)).apply { rightMargin=dp(10) })
+            addView(shortcuts,lp(-2,dp(48)))
             addView(pageNav,lp(-2,dp(48)))
         }
         if(compactHeader) {
