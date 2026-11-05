@@ -513,7 +513,9 @@ class MainActivity: Activity() {
                         Toast.LENGTH_SHORT
                     ).show()
                 }
-            }
+            },
+            startLongPressSpeed = { startPhoneTouchFastForward() },
+            stopLongPressSpeed = { stopFastForward() }
         )
     }
     /**
