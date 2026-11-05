@@ -129,7 +129,7 @@ class MainActivity: Activity() {
     internal var standbyAttachedAt by playbackPipelineState::standbyAttachedAt
     internal var standbyVisibleFirstFrameAt by playbackPipelineState::standbyVisibleFirstFrameAt
     internal val seamlessPlaybackEnabled: Boolean
-        get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE).getBoolean("seamless_playback", false)
+        get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE).getBoolean("seamless_playback", true)
     internal var prefetchJob by playbackPipelineState::prefetchJob
     internal var prefetchScope by playbackPipelineState::prefetchScope
     internal var prefetchedFor by playbackPipelineState::prefetchedFor
