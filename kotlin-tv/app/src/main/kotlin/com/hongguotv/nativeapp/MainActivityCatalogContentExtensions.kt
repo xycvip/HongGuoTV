@@ -311,6 +311,7 @@ internal fun MainActivity.renderCatalogContent(
                 })
                 posterRecycler.isNestedScrollingEnabled=true
                 container.addView(posterRecycler,lp(-1,0).apply { weight=1f })
+                if(tab==7) theaterFilterHost?.let { wireTheaterFilterFocus(it,posterRecycler) }
                 val target=catalogAdapter?.displayed?.indexOfFirst { it.id==catalogFocus } ?: -1
                 if(target>=0) posterRecycler.post { (posterRecycler.layoutManager as? GridLayoutManager)?.scrollToPositionWithOffset(target+1,0) }
             } else {
