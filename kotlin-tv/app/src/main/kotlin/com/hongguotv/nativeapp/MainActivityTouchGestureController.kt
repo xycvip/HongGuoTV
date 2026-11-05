@@ -23,8 +23,16 @@ internal class MainActivityTouchGestureController(
     private val showHud: () -> Unit,
     private val updatePlaybackText: () -> Unit,
     private val seekTo: (Long) -> Unit,
-    private val showPanel: () -> Unit
+    private val showPanel: () -> Unit,
+    private val screenHeightPx: () -> Float,
+    private val beginVerticalGesture: (Boolean) -> Float,
+    private val updateVerticalGesture: (Boolean, Float, Float) -> Int,
+    private val finishVerticalGesture: (Boolean, Int) -> Unit
 ) {
+    private var verticalGesture = false
+    private var verticalLeft = false
+    private var verticalStartValue = 0f
+    private var verticalLastValue = -1
     fun dispatch(event: MotionEvent, dispatchToView: (MotionEvent) -> Boolean): Boolean {
         val action = event.actionMasked
         if(!isPhonePlayer()) {
@@ -90,11 +98,29 @@ internal class MainActivityTouchGestureController(
                 state.touchSeekStart = currentPosition()
                 state.touchSeekTarget = null
                 state.touchSeekGesture = false
+                verticalGesture = false
+                verticalLastValue = -1
             }
             MotionEvent.ACTION_MOVE -> if(state.touchTracking) {
                 val dx = event.x - state.touchStartX
                 val dy = event.y - state.touchStartY
-                if(!state.touchSeekGesture && kotlin.math.abs(dx) > dp(24) &&
+                if(!state.touchSeekGesture && !verticalGesture &&
+                    kotlin.math.abs(dy) > dp(24) &&
+                    kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f
+                ) {
+                    verticalGesture = true
+                    verticalLeft = state.touchStartX < screenWidthPx() / 2f
+                    verticalStartValue = beginVerticalGesture(verticalLeft)
+                    verticalLastValue = (verticalStartValue * 100f).toInt().coerceIn(0, 100)
+                }
+                if(verticalGesture) {
+                    val delta = (-dy / screenHeightPx().coerceAtLeast(1f) * 1.5f)
+                    verticalLastValue = updateVerticalGesture(verticalLeft, verticalStartValue, delta)
+                        .coerceIn(0, 100)
+                    showHud()
+                    return true
+                }
+                if(!verticalGesture && !state.touchSeekGesture && kotlin.math.abs(dx) > dp(24) &&
                     kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f
                 ) state.touchSeekGesture = true
                 if(state.touchSeekGesture) {
@@ -115,6 +141,12 @@ internal class MainActivityTouchGestureController(
             }
             MotionEvent.ACTION_UP -> if(state.touchTracking) {
                 state.touchTracking = false
+                if(verticalGesture) {
+                    verticalGesture = false
+                    finishVerticalGesture(verticalLeft, verticalLastValue.coerceAtLeast(0))
+                    verticalLastValue = -1
+                    return true
+                }
                 if(state.touchSeekGesture) {
                     val target = state.touchSeekTarget ?: state.pendingSeek
                     state.touchSeekGesture = false
@@ -145,6 +177,11 @@ internal class MainActivityTouchGestureController(
                 showHud()
             }
             MotionEvent.ACTION_CANCEL -> {
+                if(verticalGesture) {
+                    verticalGesture = false
+                    finishVerticalGesture(verticalLeft, verticalLastValue.coerceAtLeast(0))
+                    verticalLastValue = -1
+                }
                 state.touchTracking = false
                 state.touchSeekGesture = false
                 state.touchSeekTarget = null
