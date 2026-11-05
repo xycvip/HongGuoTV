@@ -280,7 +280,6 @@ import java.util.concurrent.atomic.AtomicLong
             "播放器A进度：${formatTime(position)} / ${formatTime(duration)}  缓冲至 ${formatTime(buffered)}",
             "播放器B（下一集备用）：$secondState",
             "播放器B详情：${second?.let { "state=${it.playbackState} isPlaying=${it.isPlaying} playWhenReady=${it.playWhenReady} pos=${formatTime(it.currentPosition.coerceAtLeast(0))}" } ?: if(standbyEpisodeId.isNotBlank()) "目标集=$standbyEpisodeId" else "无备用实例"}",
-            "进度：${formatTime(position)} / ${formatTime(duration)}  缓冲至 ${formatTime(buffered)}（+${formatTime((buffered-position).coerceAtLeast(0))}）",
             "清晰度：${video?.info?.quality ?: quality}  画面：$size  FPS：$fps",
             "编码：$codec  解码器：${activeDecoderName.ifBlank { "N/A" }}",
             "音频：$audio  MIME：${video?.info?.mimeType ?: "N/A"}",
