@@ -107,10 +107,10 @@ internal fun MainActivity.wireTheaterFilterFocus(host:LinearLayout,recycler:andr
         rows.forEachIndexed { index,items ->
             val previous=rows.getOrNull(index-1).orEmpty()
             val next=rows.getOrNull(index+1).orEmpty()
-            items.forEach { item ->
-                val x=visibleCenterX(item) ?: return@forEach
-                item.nextFocusLeftId=items.getOrNull(items.indexOf(item)-1)?.id ?: item.id
-                item.nextFocusRightId=items.getOrNull(items.indexOf(item)+1)?.id ?: item.id
+            items.forEachIndexed { itemIndex,item ->
+                val x=visibleCenterX(item) ?: return@forEachIndexed
+                item.nextFocusLeftId=items.getOrNull(itemIndex-1)?.id ?: item.id
+                item.nextFocusRightId=items.getOrNull(itemIndex+1)?.id ?: item.id
                 item.nextFocusUpId=nearest(previous,x)?.id ?: navForTab().id
                 item.nextFocusDownId=nearest(next,x)?.id ?: recycler.id
             }
@@ -128,7 +128,9 @@ internal fun MainActivity.wireTheaterFilterFocus(host:LinearLayout,recycler:andr
         }
         for(index in 0 until recycler.childCount) wirePoster(recycler.getChildAt(index))
         recycler.addOnChildAttachStateChangeListener(object:androidx.recyclerview.widget.RecyclerView.OnChildAttachStateChangeListener {
-            override fun onChildViewAttachedToWindow(view:View) = wirePoster(view)
+            override fun onChildViewAttachedToWindow(view:View) {
+                view.post { if(view.isAttachedToWindow) wirePoster(view) }
+            }
             override fun onChildViewDetachedFromWindow(view:View) = Unit
         })
 
