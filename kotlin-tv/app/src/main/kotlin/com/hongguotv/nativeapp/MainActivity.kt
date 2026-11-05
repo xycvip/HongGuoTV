@@ -524,6 +524,19 @@ class MainActivity: Activity() {
         library.thirdFavoritesProvider = { thirdStore.backupFavorites() }
         library.thirdFavoritesRestore = { thirdStore.restoreFavorites(it) }
         artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
+        // 全局焦点变化统一记录，覆盖电视遥控器导航、设置项、列表和弹窗焦点迁移。
+        root.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus,newFocus ->
+            if(debugEnabled) {
+                fun describeFocus(view:View?):String {
+                    if(view==null) return "无焦点"
+                    val idName=runCatching {
+                        if(view.id==View.NO_ID) "无ID" else resources.getResourceEntryName(view.id)
+                    }.getOrDefault("未知ID")
+                    return "${view.javaClass.simpleName}(id=$idName)"
+                }
+                debugLog("焦点变化：${describeFocus(oldFocus)} -> ${describeFocus(newFocus)}；页面=$screen；导航=$tab")
+            }
+        }
         updater=AppUpdater(this) { foreground && library.isLoaded && screen=="catalog" && !tvTools.showing }
         cloudAccount = AccountController(this) { remote ->
             pendingCloudProgress = remote
@@ -794,6 +807,10 @@ class MainActivity: Activity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if(debugEnabled && event.action==KeyEvent.ACTION_DOWN && event.repeatCount==0) {
+            val keyName=KeyEvent.keyCodeToString(event.keyCode)
+            debugLog("遥控器/键盘按键：$keyName；页面=$screen；当前焦点=${currentFocus?.javaClass?.simpleName ?: "无"}")
+        }
         if(screen=="third_source") {
             if(event.keyCode==KeyEvent.KEYCODE_BACK) {
                 if(event.action==KeyEvent.ACTION_UP) onBackPressed()
