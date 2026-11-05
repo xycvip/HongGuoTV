@@ -24,9 +24,6 @@ internal class PlaybackUiState {
     var touchOnProgressBar = false
     var touchOnHud = false
     var progressUserSeeking = false
-    var lastTapAt = 0L
-    var lastTapX = 0f
-    var lastTapY = 0f
     var transportPlay: TextView? = null
     var sleepButton: TextView? = null
     var speedDialog: AlertDialog? = null
