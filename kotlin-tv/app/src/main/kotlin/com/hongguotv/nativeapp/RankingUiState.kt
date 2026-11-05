@@ -9,6 +9,8 @@ import com.hongguotv.core.RankBoard
 internal class RankingUiState {
     var ranking: ComicRanking? = null
     var rankBoard: RankBoard = RankBoard.REAL
+    /** 记录排行榜上次真正获得焦点的顶部控件，供页面重建后恢复。 */
+    var rankFocusTag: String? = null
     var rankSwitch: View? = null
     var rankRefresh: View? = null
     var rankSubtitle: TextView? = null
