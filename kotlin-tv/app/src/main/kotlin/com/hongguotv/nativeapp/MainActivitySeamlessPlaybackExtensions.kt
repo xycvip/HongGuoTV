@@ -50,7 +50,7 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
     standbyPromotionAt = 0L
     standbyAttachedAt = 0L
     standbyVisibleFirstFrameAt = 0L
-    debugLog("无缝接续：备用播放器已清理，原因=$reason")
+    debugLog("无感连播：备用播放器已清理，原因=$reason")
 }
 
 /** 在后台解析下一集，并用独立的隐藏输出面预先启动解码器。 */
@@ -67,7 +67,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     val manager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
     if (manager.isLowRamDevice || manager.memoryClass <= 128) {
         standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
-        debugLog("无缝接续：设备内存等级较低，回退单播放器预加载")
+        debugLog("无感连播：设备内存等级较低，回退单播放器预加载")
         maybePrefetch(force = true)
         return
     }
@@ -173,7 +173,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                             initializedTimestampMs: Long,
                             initializationDurationMs: Long
                         ) {
-                            debugLog("无缝接续：备用解码器初始化 name=$decoderName init=${initializationDurationMs}ms")
+                            debugLog("无感连播：备用解码器初始化 name=$decoderName init=${initializationDurationMs}ms")
                         }
                     })
                     secondary.addListener(object : Player.Listener {
@@ -181,7 +181,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                             if (standbyPlayer !== secondary || standbyEpisodeId != key) return
                             if (state == Player.STATE_READY) {
                                 if (!secondary.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)) {
-                                    debugLog("无缝接续：备用播放器 READY 但没有已选视频轨道，拒绝接管")
+                                    debugLog("无感连播：备用播放器 READY 但没有已选视频轨道，拒绝接管")
                                     clearStandbyPlayer("备用播放器没有可用视频轨道")
                                     standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
                                     maybePrefetch(force = true)
@@ -190,7 +190,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                                 standbyReady = true
                                 standbyReadyAt = android.os.SystemClock.elapsedRealtime()
                                 standbyFallbackEpisodeId = ""
-                                debugLog("无缝接续：备用播放器 READY，耗时=${standbyReadyAt - standbyPrepareStartedAt}ms，下一集 index=${index + 1}")
+                                debugLog("无感连播：备用播放器 READY，耗时=${standbyReadyAt - standbyPrepareStartedAt}ms，下一集 index=${index + 1}")
                             } else if (state == Player.STATE_IDLE && standbyReady) {
                                 standbyReady = false
                             }
@@ -201,7 +201,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                             if (standbyPlayer === secondary && standbyEpisodeId == key) {
                                 if (standbyFirstFrameAt == 0L) {
                                     standbyFirstFrameAt = now
-                                    debugLog("无缝接续：备用播放器隐藏输出已渲染首帧，距准备开始=${now - standbyPrepareStartedAt}ms，距 READY=${if (standbyReadyAt > 0L) now - standbyReadyAt else -1L}ms")
+                                    debugLog("无感连播：备用播放器隐藏输出已渲染首帧，距准备开始=${now - standbyPrepareStartedAt}ms，距 READY=${if (standbyReadyAt > 0L) now - standbyReadyAt else -1L}ms")
                                 }
                             } else if (player === secondary && standbyPromotionAt > 0L && standbyVisibleFirstFrameAt == 0L) {
                                 standbyVisibleFirstFrameAt = now
@@ -216,16 +216,16 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                                     ) {
                                         seamlessHandoffInProgress = false
                                         updatePlaybackBufferingIndicator()
-                                        debugLog("无缝接续：可见首帧稳定 350ms，恢复普通缓冲提示")
+                                        debugLog("无感连播：可见首帧稳定 350ms，恢复普通缓冲提示")
                                     }
                                 }, 350L)
-                                debugLog("无缝接续：接管后可见首帧，切换到画面=${now - handoffAt}ms，PlayerView绑定=${standbyAttachedAt - handoffAt}ms；缓冲提示延后 350ms 恢复")
+                                debugLog("无感连播：接管后可见首帧，切换到画面=${now - handoffAt}ms，PlayerView绑定=${standbyAttachedAt - handoffAt}ms；缓冲提示延后 350ms 恢复")
                             }
                         }
 
                         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                             if (standbyPlayer !== secondary || standbyEpisodeId != key) return
-                            debugLog("无缝接续：备用播放器准备失败 ${error.errorCodeName} ${error.message}")
+                            debugLog("无感连播：备用播放器准备失败 ${error.errorCodeName} ${error.message}")
                             clearStandbyPlayer("备用播放器准备失败")
                             standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
                             maybePrefetch(force = true)
@@ -236,7 +236,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     updatePlaybackBufferingIndicator()
                     secondary.setMediaSource(videoSource(prepared, id) { counterGate.get() })
                     secondary.prepare()
-                    debugLog("无缝接续：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
+                    debugLog("无感连播：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
                 } catch (problem: Exception) {
                     if (secondaryPlayer != null && standbyPlayer !== secondaryPlayer) {
                         runCatching { secondaryPlayer?.release() }
@@ -244,7 +244,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     if (standbyRemote !== prepared) runCatching { prepared.close() }
                     clearStandbyPlayer("第二播放器初始化异常")
                     standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
-                    debugLog("无缝接续：第二播放器初始化失败，回退单播放器：${problem.message}")
+                    debugLog("无感连播：第二播放器初始化失败，回退单播放器：${problem.message}")
                     maybePrefetch(force = true)
                 }
             }
@@ -265,7 +265,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     standbyReadyAt = 0L
                     standbyFirstFrameAt = 0L
                     standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
-                    debugLog("无缝接续：下一集预备失败，回退单播放器：${problem.message}")
+                    debugLog("无感连播：下一集预备失败，回退单播放器：${problem.message}")
                     maybePrefetch(force = true)
                 }
             }
