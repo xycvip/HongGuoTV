@@ -12,17 +12,11 @@ import com.hongguotv.core.*
         val restoreFocusTag=host.findFocus()?.tag?.toString() ?: theaterFocusTag
         host.removeAllViews()
         val focusRows=mutableListOf<List<View>>()
-        fun trackFocus(view:View) {
-            view.setOnFocusChangeListener { focusedView, hasFocus ->
-                if(hasFocus) focusedView.tag?.toString()?.let { theaterFocusTag=it }
-            }
-        }
         val types=row().apply { id=View.generateViewId(); setPadding(0,dp(6),0,dp(8)) }
         val typeItems=mutableListOf<View>()
         addButton(types,"全部体裁",theaterContentType==null).apply {
             typeItems+=this
             tag="theater-filter:type:all"
-            trackFocus(this)
             setOnClickListener {
                 theaterFocusTag=tag.toString()
                 if(theaterContentType!=null) { theaterContentType=null; theaterSelections.clear(); page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true) }
@@ -32,7 +26,6 @@ import com.hongguotv.core.*
             addButton(types,label,theaterContentType==type).apply {
                 typeItems+=this
                 tag="theater-filter:type:${type.name}"
-                trackFocus(this)
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
                     if(theaterContentType!=type) { theaterContentType=type; theaterSelections.clear(); page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true) }
@@ -43,7 +36,6 @@ import com.hongguotv.core.*
             addButton(types,"清除筛选").apply {
                 typeItems+=this
                 tag="theater-filter:clear"
-                trackFocus(this)
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
                     theaterSelections.clear(); page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true)
@@ -64,7 +56,6 @@ import com.hongguotv.core.*
             addButton(choices,allLabel,selected.isNullOrBlank()).apply {
                 rowItems+=this
                 tag="theater-filter:${group.type}:all"
-                trackFocus(this)
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
                     if(theaterSelections.remove(group.type)!=null) { page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true) }
@@ -74,7 +65,6 @@ import com.hongguotv.core.*
                 addButton(choices,option.label,selected==option.id).apply {
                     rowItems+=this
                     tag="theater-filter:${group.type}:${option.id}"
-                    trackFocus(this)
                     setOnClickListener {
                         theaterFocusTag=tag.toString()
                         if(selected!=option.id) {
