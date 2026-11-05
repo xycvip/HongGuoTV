@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "2b6dd840445829ebd4f2ba2ea65f877ad91fb75d",
-  "versionCode": 10,
-  "versionName": "0.0.10",
+  "sourceCommit": "291092faf675d6ec25ffa28b96fdb39b46389998",
+  "versionCode": 11,
+  "versionName": "0.0.11",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.10",
+  "tag": "hongguotv-bate-v0.0.11",
   "apk": {
-    "name": "HongguoTV-0.0.10.apk",
-    "size": 1845151,
-    "sha256": "fac39588936c2a97389fcf8b1f4936fefe3147a26c7e1019d873462a41211154",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.10/HongguoTV-0.0.10.apk"
+    "name": "HongguoTV-0.0.11.apk",
+    "size": 1845355,
+    "sha256": "c4961ad3f8bf58a8093b6dc03a0542be16e3a2087224ace7ed5424043f87a34d",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.11/HongguoTV-0.0.11.apk"
   },
-  "notes": "【播放与播放器】\n- 播放器增加手机端临时横竖屏切换\n- 移除视频旋转角度诊断读取\n- 移除视频方向角度读取日志\n- 手机播放统一固定横屏，移除视频方向检测\n- 隔离备用预加载与当前播放器缓冲提示\n- 修正双播放器诊断计时显示\n- 增加主播放器暂停原因诊断\n- 修复备用播放器计时串集"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
