@@ -8,13 +8,21 @@ import android.widget.LinearLayout
 import com.hongguotv.core.*
 
     internal fun MainActivity.renderTheaterFilters(host:LinearLayout) {
+        // 重建前优先读取真正持有焦点的选项；仅有点击记录时才使用旧记录。
+        val restoreFocusTag=host.findFocus()?.tag?.toString() ?: theaterFocusTag
         host.removeAllViews()
         val focusRows=mutableListOf<List<View>>()
+        fun trackFocus(view:View) {
+            view.setOnFocusChangeListener { focusedView, hasFocus ->
+                if(hasFocus) focusedView.tag?.toString()?.let { theaterFocusTag=it }
+            }
+        }
         val types=row().apply { id=View.generateViewId(); setPadding(0,dp(6),0,dp(8)) }
         val typeItems=mutableListOf<View>()
         addButton(types,"全部体裁",theaterContentType==null).apply {
             typeItems+=this
             tag="theater-filter:type:all"
+            trackFocus(this)
             setOnClickListener {
                 theaterFocusTag=tag.toString()
                 if(theaterContentType!=null) { theaterContentType=null; theaterSelections.clear(); page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true) }
@@ -24,6 +32,7 @@ import com.hongguotv.core.*
             addButton(types,label,theaterContentType==type).apply {
                 typeItems+=this
                 tag="theater-filter:type:${type.name}"
+                trackFocus(this)
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
                     if(theaterContentType!=type) { theaterContentType=type; theaterSelections.clear(); page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true) }
@@ -34,6 +43,7 @@ import com.hongguotv.core.*
             addButton(types,"清除筛选").apply {
                 typeItems+=this
                 tag="theater-filter:clear"
+                trackFocus(this)
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
                     theaterSelections.clear(); page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true)
@@ -54,6 +64,7 @@ import com.hongguotv.core.*
             addButton(choices,allLabel,selected.isNullOrBlank()).apply {
                 rowItems+=this
                 tag="theater-filter:${group.type}:all"
+                trackFocus(this)
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
                     if(theaterSelections.remove(group.type)!=null) { page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true) }
@@ -63,6 +74,7 @@ import com.hongguotv.core.*
                 addButton(choices,option.label,selected==option.id).apply {
                     rowItems+=this
                     tag="theater-filter:${group.type}:${option.id}"
+                    trackFocus(this)
                     setOnClickListener {
                         theaterFocusTag=tag.toString()
                         if(selected!=option.id) {
@@ -91,21 +103,34 @@ import com.hongguotv.core.*
         }
         host.post {
             if(!host.isAttachedToWindow || screen!="catalog" || tab!=7) return@post
+            fun visibleItems(items:List<View>):List<View> = items.filter { view ->
+                if(!view.isAttachedToWindow || view.width<=0 || view.height<=0) false
+                else {
+                    val visibleRect=android.graphics.Rect()
+                    view.getGlobalVisibleRect(visibleRect) && visibleRect.width()>0 && visibleRect.height()>0
+                }
+            }
             fun centerX(view:View):Float {
-                val location=IntArray(2)
-                view.getLocationOnScreen(location)
-                return location[0]+view.width/2f
+                val rect=android.graphics.Rect()
+                view.getGlobalVisibleRect(rect)
+                return (rect.left+rect.right)/2f
             }
             focusRows.forEachIndexed { rowIndex, items ->
-                val previous=focusRows.getOrNull(rowIndex-1)
-                val next=focusRows.getOrNull(rowIndex+1)
+                val previous=visibleItems(focusRows.getOrNull(rowIndex-1).orEmpty())
+                val next=visibleItems(focusRows.getOrNull(rowIndex+1).orEmpty())
                 items.forEach { item ->
                     val x=centerX(item)
-                    item.nextFocusUpId=previous?.filter { it.isAttachedToWindow }
-                        ?.minByOrNull { kotlin.math.abs(centerX(it)-x) }?.id ?: navForTab().id
-                    item.nextFocusDownId=next?.filter { it.isAttachedToWindow }
-                        ?.minByOrNull { kotlin.math.abs(centerX(it)-x) }?.id ?: catalogRecycler?.id ?: item.id
+                    item.nextFocusUpId=previous.minByOrNull { kotlin.math.abs(centerX(it)-x) }?.id
+                        ?: navForTab().id
+                    item.nextFocusDownId=next.minByOrNull { kotlin.math.abs(centerX(it)-x) }?.id
+                        ?: catalogRecycler?.id ?: item.id
                 }
+            }
+            // 只有当前没有焦点落在筛选项上时才恢复，避免异步布局任务抢走用户刚移动的焦点。
+            val currentFocus=host.findFocus()
+            if(currentFocus==null) {
+                val target=restoreFocusTag?.let { tag -> host.findViewWithTag<View>(tag) }
+                if(target?.isAttachedToWindow==true && target.isFocusable) target.requestFocus()
             }
         }
     }
