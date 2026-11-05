@@ -49,8 +49,29 @@ import java.util.concurrent.atomic.AtomicLong
      * 避免视频方向回调触发 Activity 配置变化，干扰双播放器交接和播放生命周期。
      */
     internal fun MainActivity.applyDeviceOrientationPolicy() {
-        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        requestedOrientation = if (isPhoneDevice && screen == "player") {
+            phonePlaybackOrientation
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
     }
+
+    /** 手机播放器内手动切换固定方向；不读取视频方向，也不写入持久化设置。 */
+    internal fun MainActivity.togglePhonePlaybackOrientation(): Int {
+        if (!isPhoneDevice || screen != "player") return phonePlaybackOrientation
+        phonePlaybackOrientation = if (
+            phonePlaybackOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        ) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+        requestedOrientation = phonePlaybackOrientation
+        return phonePlaybackOrientation
+    }
+
+    internal fun MainActivity.phonePlaybackOrientationLabel(): String =
+        if (phonePlaybackOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) "竖屏" else "横屏"
 
     internal fun MainActivity.focusStyle(view: View,selected: Boolean=false) {
         view.id=View.generateViewId(); view.isFocusable=true; view.isFocusableInTouchMode=true
