@@ -208,9 +208,12 @@ jobs:
           if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
             # 上次可能已成功创建 Release，但在推送 Raw latest.json 时中断。
             # 不覆盖旧 Release，也不直接失败；从已发布附件恢复同一版本的清单。
-            RELEASE_STATE="$(gh release view "$RELEASE_TAG" --repo xycvip/AppDownload --json isDraft,isPrerelease)"
-            echo "$RELEASE_STATE" | jq -e '.isDraft == false and .isPrerelease == false' >/dev/null || {
-              echo "::error::已占用的正式版标签不是普通正式 Release：$RELEASE_TAG"
+            RELEASE_STATE="$(gh release view "$RELEASE_TAG" --repo xycvip/AppDownload --json isDraft,isPrerelease,assets)"
+            echo "$RELEASE_STATE" | jq -e --arg apk "HongguoTV-$VERSION_NAME.apk" '
+              .isPrerelease == false
+              and ([.assets[].name] | index($apk) != null and index("update.json") != null and index("SHA256SUMS") != null)
+            ' >/dev/null || {
+              echo "::error::已占用的正式版标签不是可恢复的正式 Release，或附件不完整：$RELEASE_TAG"
               exit 1
             }
             mkdir -p "$RUNNER_TEMP/existing-official-release"
@@ -224,6 +227,7 @@ jobs:
               and .apk.name == ("HongguoTV-" + $version + ".apk")
               and (.apk.sha256 | test("^[0-9a-fA-F]{64}$"))
               and (.apk.size | type == "number" and . > 0)
+              and (.versionCode | type == "number" and . > 0)
             ' "$EXISTING_UPDATE" >/dev/null || {
               echo "::error::已存在 Release 的 update.json 校验失败，拒绝覆盖"
               exit 1
@@ -301,7 +305,7 @@ jobs:
           if [ "$RECOVER_EXISTING_RELEASE" = "true" ]; then
             cp "$RUNNER_TEMP/existing-official-release/update.json" hongguoTV/latest.json
             cp "$RUNNER_TEMP/existing-official-release/update.json" "$RUNNER_TEMP/release/update.json"
-            gh release edit "$RELEASE_TAG" --repo xycvip/AppDownload --latest
+            gh release edit "$RELEASE_TAG" --repo xycvip/AppDownload --draft=false --latest
             echo "已从现有 Release 附件恢复正式版 latest.json，并重新确认其为 Latest"
           else
             gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/release/SHA256SUMS" "$RUNNER_TEMP/release/update.json" \
