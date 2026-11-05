@@ -44,7 +44,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
 
-    /** 手机视频画面中央的短暂播放/暂停反馈，不拦截触摸事件。 */
+    /** 显示中央可点击的播放/暂停按钮，并同步当前播放状态。 */
     internal fun MainActivity.showPlaybackTapFeedback(playing: Boolean) {
         val feedback=playbackTapFeedbackView ?: return
         feedback.show(playing)
@@ -163,11 +163,15 @@ import java.util.concurrent.atomic.AtomicLong
             danmakuLayer.setColorMode(danmakuColorMode)
             root.addView(danmakuLayer,FrameLayout.LayoutParams(-1,(resources.displayMetrics.heightPixels*.38f).toInt(),Gravity.TOP).apply { topMargin=dp(12) })
             playbackTapFeedbackView=PlaybackTapFeedbackView(this).apply {
-                visibility=View.GONE
-                isClickable=false
-                isFocusable=false
-                importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_YES
                 elevation=dp(12).toFloat()
+                setOnClickListener {
+                    if(screen=="player" && isPhoneDevice && commentPanel==null && episodePanel==null && !playError) {
+                        // 中央按钮是唯一负责切换播放/暂停的画面点击区域。
+                        togglePlayback()
+                        showPlaybackTapFeedback(player?.playWhenReady==true)
+                    }
+                }
             }
             root.addView(playbackTapFeedbackView,FrameLayout.LayoutParams(dp(76),dp(76),Gravity.CENTER))
             // 手机竖屏可用宽度有限，控制栏贴近屏幕两侧；横屏与电视沿用原有留白。
@@ -311,6 +315,7 @@ import java.util.concurrent.atomic.AtomicLong
                         debugLog("播放器播放状态：isPlaying=$playing；playWhenReady=${p.playWhenReady}；位置=${p.currentPosition}ms")
                         if(playing && playbackReady) markStartupRecommendationPlaying()
                         danmakuView?.setPlaybackActive(playing)
+                        playbackTapFeedbackView?.takeIf { it.visibility==View.VISIBLE }?.setPlaying(p.playWhenReady)
                         if(hud.visibility==View.VISIBLE) showHud()
                         syncMediaSession()
                     }
@@ -318,6 +323,7 @@ import java.util.concurrent.atomic.AtomicLong
                 override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                     if(active()) {
                         debugLog("播放器播放意图变化：playWhenReady=$playWhenReady；原因代码=$reason；requestedAutoplay=$requestedAutoplay；pausedForLifecycle=$pausedForLifecycle；页面=$screen")
+                        playbackTapFeedbackView?.takeIf { it.visibility==View.VISIBLE }?.setPlaying(playWhenReady)
                     }
                 }
                 override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
