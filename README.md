@@ -4,6 +4,32 @@
 
 - [当前功能说明与静态审计结果](功能说明.md)
 
+## 版本信息与下载
+
+### 本仓库测试版
+
+当前最新测试版：**0.0.7**（versionCode：7）
+
+- 应用包名：`com.x.hongguotv.bate`
+- [下载测试版 APK：HongguoTV-0.0.7.apk](https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.7/HongguoTV-0.0.7.apk)
+- [查看测试版发布说明与全部附件](https://github.com/xycvip/HongGuoTV/releases/tag/hongguotv-bate-v0.0.7)
+- [测试版更新清单](https://raw.githubusercontent.com/xycvip/HongGuoTV/main/test-update/latest.json)
+
+测试版由本仓库的 GitHub Actions 构建并发布，供新功能验证使用；测试版独立安装包，不会上传到 AppDownload 正式分发仓库。
+
+### 正式版
+
+当前最新正式版：**1.1.15**（versionCode：2026103475）
+
+- 应用包名：`com.x.hongguotv`
+- [下载正式版 APK：HongguoTV-1.1.15.apk](https://github.com/xycvip/AppDownload/releases/download/hongguotv-v1.1.15/HongguoTV-1.1.15.apk)
+- [查看正式版发布说明](https://github.com/xycvip/AppDownload/releases/tag/hongguotv-v1.1.15)
+- [正式版应用内更新清单](https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json)
+
+正式版由本仓库构建后发布至 `xycvip/AppDownload`，作为日常安装和应用内更新使用的稳定版本。
+
+> 测试版与正式版使用不同的应用包名，可并行安装；版本号分别维护，不能将测试版版本号视为正式版版本号。
+
 ## 项目来源
 
 本应用派生于 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV)，并在 [jycao2/hongguoTV](https://github.com/jycao2/hongguoTV) 基础上改动。
