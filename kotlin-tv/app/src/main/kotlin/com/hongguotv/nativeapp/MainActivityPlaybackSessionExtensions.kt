@@ -19,7 +19,7 @@ internal fun MainActivity.closeActiveVideo() {
         video=null
     }
 
-    internal fun MainActivity.releasePlayer() {
+    internal fun MainActivity.releasePlayer(resetOrientation: Boolean = true) {
         commentGeneration++
         commentListScope?.cancel(); commentListScope=null
         commentPanel?.let { if(it.parent===root) root.removeView(it) }
@@ -43,6 +43,10 @@ internal fun MainActivity.closeActiveVideo() {
         stopDanmaku(); danmakuView=null
         closeTransport(playbackHttp); playbackHttp=null
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if(resetOrientation) {
+            phonePlaybackOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
     }
 
 /** 下一集预加载、取消和独立网络传输资源回收。 */
