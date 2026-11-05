@@ -72,7 +72,16 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
         return
     }
 
-    clearStandbyPlayer("准备新的下一集")
+    // 接管成功后，备用资源已经转为当前播放器；此时不能再调用清理函数，
+    // 否则会把当前播放器尚未完成的画面交接状态一并清零，造成缓冲转圈闪现。
+    val hasOldStandbyResources = standbyPlayer != null ||
+        standbyRemote != null ||
+        standbyHttp != null ||
+        standbyJob != null ||
+        standbyOutputView != null ||
+        standbyByteCounterEnabled != null ||
+        standbyEpisodeId.isNotEmpty()
+    if (hasOldStandbyResources) clearStandbyPlayer("准备新的下一集")
     standbyFallbackEpisodeId = ""
     standbyEpisodeId = key
     // 从解析下一集地址开始就视为双播放器准备中，不等 ExoPlayer 创建完成。
