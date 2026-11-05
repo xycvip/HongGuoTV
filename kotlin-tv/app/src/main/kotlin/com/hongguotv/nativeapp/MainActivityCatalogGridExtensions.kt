@@ -170,13 +170,6 @@ import java.util.concurrent.atomic.AtomicLong
             // 剧场与排行榜稍后会把筛选头与海报网格合并进同一个 RecyclerView。
             body.addView(recycler,lp(-1,-2))
         } else body.addView(recycler,lp(-1,0).apply { weight=1f })
-        if(tab==7) {
-            fun connectLastFilterRow(view:View) {
-                if(view.isFocusable && view.nextFocusDownId==view.id) view.nextFocusDownId=recycler.id
-                if(view is ViewGroup) for(index in 0 until view.childCount) connectLastFilterRow(view.getChildAt(index))
-            }
-            theaterFilterHost?.let(::connectLastFilterRow)
-        }
         nav.forEach {
             it.nextFocusDownId=when {
                 tab==2 -> (if(aiCatalog) aiBack ?: aiGenreButton ?: rankRefresh else aiEntry ?: rankSwitch ?: rankRefresh)?.id ?: recycler.id
