@@ -114,9 +114,9 @@ internal class MainActivityTouchGestureController(
                     verticalGesture = true
                     val width = screenWidthPx().coerceAtLeast(1f)
                     val startX = state.touchStartX
-                    verticalEpisode = startX >= width / 3f && startX < width * 2f / 3f
+                    verticalEpisode = startX >= width * 0.2f && startX < width * 0.8f
                     if (!verticalEpisode) {
-                        verticalLeft = startX < width / 3f
+                        verticalLeft = startX < width * 0.2f
                         verticalStartValue = beginVerticalGesture(verticalLeft)
                         verticalLastValue = (verticalStartValue * 100f).toInt().coerceIn(0, 100)
                     }
