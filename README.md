@@ -14,7 +14,7 @@
 - [查看最新测试版发布页面及 APK 附件](https://github.com/xycvip/HongGuoTV/releases/latest)
 - [查看测试版最新版本清单](https://raw.githubusercontent.com/xycvip/HongGuoTV/main/test-update/latest.json)
 
-打开版本清单可查看当前 `versionName`、`versionCode`、APK 文件名及 `apk.url) 下载地址。
+打开版本清单可查看当前 `versionName`、`versionCode`、APK 文件名及 `apk.url` 下载地址。
 
 ### 正式版
 
