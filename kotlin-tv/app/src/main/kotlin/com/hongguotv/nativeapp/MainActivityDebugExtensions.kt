@@ -288,8 +288,8 @@ import java.util.concurrent.atomic.AtomicLong
             "读取：${playbackBytes.get()} bytes  读取速率：${byteRate/1024} KB/s  资源总长：${video?.total ?: 0} bytes",
             "Range缓存：$stats",
             "首帧耗时：${if(debugFirstFrameAt>0) debugFirstFrameAt-debugPlaybackStartedAt else -1}ms  READY耗时：${if(debugPlaybackReadyAt>0) debugPlaybackReadyAt-debugPlaybackStartedAt else -1}ms",
-            "无缝接续：${if(seamlessPlaybackEnabled) "开启" else "关闭"}  B准备耗时：${if(standbyPrepareStartedAt>0L) android.os.SystemClock.elapsedRealtime()-standbyPrepareStartedAt else -1L}ms  B隐藏首帧：${if(standbyFirstFrameAt>0L) standbyFirstFrameAt-standbyPrepareStartedAt else -1L}ms",
-            "切集交接：${if(standbyPromotionAt>0L) "已接管" else "未发生"}  接管后可见首帧：${if(standbyVisibleFirstFrameAt>0L) standbyVisibleFirstFrameAt-standbyPromotionAt else -1L}ms  PlayerView绑定：${if(standbyAttachedAt>0L && standbyPromotionAt>0L) standbyAttachedAt-standbyPromotionAt else -1L}ms",
+            "无缝接续：${if(seamlessPlaybackEnabled) "开启" else "关闭"}  B准备耗时：${if(standbyPrepareStartedAt>0L) (if(standbyReadyAt>0L) standbyReadyAt-standbyPrepareStartedAt else android.os.SystemClock.elapsedRealtime()-standbyPrepareStartedAt) else -1L}ms  B隐藏首帧：${if(standbyFirstFrameAt>0L && standbyPrepareStartedAt>0L) standbyFirstFrameAt-standbyPrepareStartedAt else -1L}ms",
+            "最近一次切集交接：${if(standbyPromotionAt>0L) "已接管" else "未发生"}  接管后可见首帧：${if(standbyVisibleFirstFrameAt>0L) standbyVisibleFirstFrameAt-standbyPromotionAt else -1L}ms  PlayerView绑定：${if(standbyAttachedAt>0L && standbyPromotionAt>0L) standbyAttachedAt-standbyPromotionAt else -1L}ms",
             "播放错误：${if(playError) "是" else "否"}  自动恢复：$autoRecovery  资源重试：${recovery.attempts}/3"
         ).joinToString("\n")
     }
