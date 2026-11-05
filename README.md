@@ -79,6 +79,7 @@ Media3 原生播放基础来自 N3urda/hongguoTV 的 Kotlin 工程；后续播�
 其中：
 - `Signer.kt` 文件注明为 drpys 项目指定提交的 Kotlin 移植，来源为 [woshishiq1/drpys](https://github.com/woshishiq1/drpys/tree/22261adfa31435e3b3ef5a730b8a2a75bcaf1715) 中的 `spider/js/红果果[短].js`。
 - `MediaCrypto.kt` 文件注明为 drpys 相关实现的 Kotlin 适配。具体算法来源和许可证信息应同时参照上游 `kotlin-tv/NOTICE.md` 及 GPL-3.0 许可。
+- 播放接口六头签名机制参考并移植自 [fyworld/hongguoTV](https://github.com/fyworld/hongguoTV)，对应上游提交为 [`add2dd8`](https://github.com/fyworld/hongguoTV/commit/add2dd8f248a17755f3a21c9c6a52bbddbefe5bd)。本项目将其签名实现适配到现有 `Signer.kt`，并在 `PlaybackRepository.kt` 的新版 GET 与旧版 POST 播放请求中接入；设备注册、播放会话及请求调度仍以本项目现有实现为基础，并非整套复制上游工程。上游仓库采用 GPL-3.0，本项目根目录亦提供 GPL-3.0 许可证。
 
 ### 加密媒体处理
 
