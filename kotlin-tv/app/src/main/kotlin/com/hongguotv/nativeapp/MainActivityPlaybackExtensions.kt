@@ -74,7 +74,10 @@ import java.util.concurrent.atomic.AtomicLong
             val handoffStartedAt=standbyPromotionAt
             // 极少数设备可能不回调输出面切换后的首帧；超时恢复提示，避免永久吞掉真实卡顿反馈。
             main.postDelayed({
-                if(seamlessHandoffInProgress && standbyPromotionAt==handoffStartedAt) {
+                if(seamlessHandoffInProgress &&
+                    standbyPromotionAt==handoffStartedAt &&
+                    standbyVisibleFirstFrameAt==0L
+                ) {
                     seamlessHandoffInProgress=false
                     updatePlaybackBufferingIndicator()
                     debugLog("无缝接续：接管后 3 秒仍未收到可见首帧，恢复缓冲提示")
