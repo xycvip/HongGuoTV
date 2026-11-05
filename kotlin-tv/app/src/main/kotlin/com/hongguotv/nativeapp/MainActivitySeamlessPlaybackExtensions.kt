@@ -86,7 +86,10 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     standbyEpisodeId = key
     // 从解析下一集地址开始就视为双播放器准备中，不等 ExoPlayer 创建完成。
     updatePlaybackBufferingIndicator()
+    // 每一轮备用准备使用独立计时基准，不能沿用上一集的 READY/隐藏首帧时间。
     standbyPrepareStartedAt = android.os.SystemClock.elapsedRealtime()
+    standbyReadyAt = 0L
+    standbyFirstFrameAt = 0L
     val counterGate = AtomicBoolean(false)
     standbyByteCounterEnabled = counterGate
     val http = repository.http.newBuilder()
