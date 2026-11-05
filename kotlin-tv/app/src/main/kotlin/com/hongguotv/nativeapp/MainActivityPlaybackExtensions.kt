@@ -67,6 +67,8 @@ import java.util.concurrent.atomic.AtomicLong
             val promoted=standbyPlayer
             playerListener?.let { oldPlayer?.removeListener(it) }
             playerListener=null
+            seamlessHandoffInProgress=true
+            updatePlaybackBufferingIndicator()
             standbyPromotionAt=android.os.SystemClock.elapsedRealtime()
             standbyVisibleFirstFrameAt=0L
             standbyByteCounterEnabled?.set(true)
