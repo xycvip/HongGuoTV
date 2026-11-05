@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "291092faf675d6ec25ffa28b96fdb39b46389998",
-  "versionCode": 11,
-  "versionName": "0.0.11",
+  "sourceCommit": "d4acfa6e26620cc3faf847952ff74e2e9a949320",
+  "versionCode": 12,
+  "versionName": "0.0.12",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.11",
+  "tag": "hongguotv-bate-v0.0.12",
   "apk": {
-    "name": "HongguoTV-0.0.11.apk",
-    "size": 1845355,
-    "sha256": "c4961ad3f8bf58a8093b6dc03a0542be16e3a2087224ace7ed5424043f87a34d",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.11/HongguoTV-0.0.11.apk"
+    "name": "HongguoTV-0.0.12.apk",
+    "size": 1931769,
+    "sha256": "f52d1a5b4c04f6996b0ac08d78ee57b41eeb55fc18ea643d26de1ff83a60f27e",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.12/HongguoTV-0.0.12.apk"
   },
-  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
+  "notes": "【其他功能与问题修复】\n- 修正启动器图标资源引用\n- Add files via upload\n- Delete kotlin-tv/app/src/main/res/drawable-nodpi/tv_banner.webp\n- Add files via upload\n- Delete kotlin-tv/app/src/main/res/drawable-nodpi/ic_launcher_foreground.jpg\n- 提高电视横幅清晰度，使用完整原稿尺寸并保留叶片\n- 替换红果TV原稿图标与电视横幅（保留叶片）\n- 调整红果TV自适应图标安全区，避免手机桌面裁切\n- 移除旧电视横幅以启用新版矢量横幅\n- 新增红果TV电视桌面宽屏矢量横幅\n- 启用红果TV Android 自适应方形图标\n- 绘制红果TV手机自适应图标前景\n- 增加红果TV自适应图标背景色"
 }
