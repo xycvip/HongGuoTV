@@ -84,6 +84,8 @@ class MainActivity: Activity() {
             (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     }
     internal val isPhoneDevice: Boolean get() = !isTelevisionDevice
+    // 仅记录当前播放器会话的手动方向选择，不落盘；退出播放器后恢复横屏。
+    internal var phonePlaybackOrientation: Int = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
     internal val bg get() = TvStyle.background
     internal val surface get() = TvStyle.surface
     internal val accent get() = TvStyle.accent
