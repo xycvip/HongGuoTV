@@ -281,6 +281,50 @@ jobs:
 
           # 保留AppDownload中的全部历史正式版Release，不自动删除旧版本。
 
+      - name: 更新仓库总说明中的正式版版本与下载链接
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          path = "README.md"
+          with open(path, encoding="utf-8") as f:
+              content = f.read()
+          version = os.environ["VERSION_NAME"]
+          code = os.environ["VERSION_CODE"]
+          tag = os.environ["RELEASE_TAG"]
+          apk = "HongguoTV-" + version + ".apk"
+          block = "\n".join([
+              "<!-- OFFICIAL_RELEASE_INFO_START -->",
+              f"- **当前版本：{version}**（versionCode：{code}）",
+              "- 应用包名：\x60com.x.hongguotv\x60",
+              f"- [下载正式版 APK：{apk}](https://github.com/xycvip/AppDownload/releases/download/{tag}/{apk})",
+              f"- [查看正式版 {version} 发布说明](https://github.com/xycvip/AppDownload/releases/tag/{tag})",
+              "<!-- OFFICIAL_RELEASE_INFO_END -->"
+          ])
+          pattern = r"<!-- OFFICIAL_RELEASE_INFO_START -->.*?<!-- OFFICIAL_RELEASE_INFO_END -->"
+          updated, count = re.subn(pattern, lambda _: block, content, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit("README 正式版信息标记缺失或重复，停止提交")
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(updated)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --cached --quiet; then
+            echo "README 正式版信息已经是最新，无需提交"
+            exit 0
+          fi
+          git commit -m "更新正式版 $VERSION_NAME 下载信息"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+
       - name: 输出正式发布结果
         if: success()
         shell: bash
