@@ -42,6 +42,12 @@ internal fun MainActivity.closeActiveVideo() {
         closeActiveVideo(); playerView?.player=null; playerView=null; player?.release(); player=null; playbackReady=false; transportPlay=null; sleepButton=null
         stopDanmaku(); danmakuView=null
         closeTransport(playbackHttp); playbackHttp=null
+        phonePlayerOriginalWindowBrightness?.let { originalBrightness ->
+            val attributes = window.attributes
+            attributes.screenBrightness = originalBrightness
+            window.attributes = attributes
+            phonePlayerOriginalWindowBrightness = null
+        }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if(resetOrientation) {
             phonePlaybackOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
