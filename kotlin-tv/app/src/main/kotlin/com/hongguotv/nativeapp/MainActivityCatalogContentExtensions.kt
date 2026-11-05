@@ -140,7 +140,7 @@ internal fun MainActivity.renderCatalogContent(
             else {
                 message(body,"正在加载…")
                 if(focusType) (if(tab==1) searchInput else navForTab())?.requestFocus()
-                else if(pendingRefreshFocus==null && !(requestTab==2 && rankFocusTag!=null)) navForTab().requestFocus()
+                else if(pendingRefreshFocus==null && !(tab==2 && rankFocusTag!=null)) navForTab().requestFocus()
             }
             val requestTab=tab; val requestPage=page; val requestQuery=query; val requestType=library.contentType
             val requestAggregate=requestTab==1 && aggregateSearch
