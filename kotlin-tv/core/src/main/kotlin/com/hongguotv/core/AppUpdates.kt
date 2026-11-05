@@ -113,6 +113,31 @@ object UpdateFiles {
     }
 }
 
+/**
+ * 从指定发布通道中选择发布时间最新的更新清单。
+ * 不依赖 GitHub API 返回数组的原始顺序。
+ */
+internal fun latestReleaseManifestUrl(
+    releases: org.json.JSONArray,
+    releaseTagPrefix: String
+): String? {
+    val candidates = (0 until releases.length())
+        .mapNotNull { releases.optJSONObject(it) }
+        .filter { !it.optBoolean("draft", false) && it.optString("tag_name").startsWith(releaseTagPrefix) }
+        .sortedByDescending { it.optString("published_at") }
+
+    for (release in candidates) {
+        val assets = release.optJSONArray("assets") ?: continue
+        for (index in 0 until assets.length()) {
+            val asset = assets.optJSONObject(index) ?: continue
+            if (asset.optString("name") == "update.json") {
+                asset.optString("browser_download_url").takeIf { it.isNotBlank() }?.let { return it }
+            }
+        }
+    }
+    return null
+}
+
 class AppUpdateRepository(
     private val expectedPackageName: String = AppUpdate.OFFICIAL_PACKAGE,
     private val releaseRepository: String = AppUpdate.OFFICIAL_REPOSITORY,
@@ -180,21 +205,9 @@ class AppUpdateRepository(
         }
 
         val releases = org.json.JSONArray(releasesJson)
-        var updateJsonUrl: String? = null
-        for (i in 0 until releases.length()) {
-            val release = releases.optJSONObject(i) ?: continue
-            if (release.optBoolean("draft", false)) continue
-            if (!release.optString("tag_name").startsWith(releaseTagPrefix)) continue
-            val assets = release.optJSONArray("assets") ?: continue
-            for (j in 0 until assets.length()) {
-                val asset = assets.optJSONObject(j) ?: continue
-                if (asset.optString("name") == "update.json") {
-                    updateJsonUrl = asset.optString("browser_download_url").takeIf { it.isNotBlank() }
-                    break
-                }
-            }
-            if (updateJsonUrl != null) break
-        }
+        // GitHub Releases API 的数组顺序不保证始终按发布时间排列。
+        // 必须显式按 published_at 从新到旧排序，避免 0.0.9 排在 0.0.10 前面时误判为已是最新。
+        val updateJsonUrl = latestReleaseManifestUrl(releases, releaseTagPrefix)
         val assetUrl = updateJsonUrl ?: throw IOException("未找到红果TV更新清单")
         val manifestUrl = "${assetUrl}?cachebust=${System.currentTimeMillis()}"
         return tryMirrors(manifestUrl, 12) { response, _ ->
