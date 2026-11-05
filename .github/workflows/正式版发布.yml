@@ -207,7 +207,6 @@ jobs:
 - 修复更新检查可能错误选择旧版本更新清单的问题。
 - 优化缓存清理、软件重置及后台资源释放流程。
 
-感谢参与测试并反馈问题的用户。后续将继续完善播放兼容性与使用体验。
 RELEASE_NOTES
           RELEASE_NOTES="$(cat "$RUNNER_TEMP/release-notes-final.txt")"
           echo "本次正式版使用已审定的完整中文更新说明："
