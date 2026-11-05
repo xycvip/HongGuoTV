@@ -188,7 +188,6 @@ internal class MainActivityTouchGestureController(
                 if(longPressSpeedActive) {
                     longPressSpeedActive = false
                     stopLongPressSpeed()
-                    state.lastTapAt = 0L
                     return true
                 }
                 if(verticalGesture) {
