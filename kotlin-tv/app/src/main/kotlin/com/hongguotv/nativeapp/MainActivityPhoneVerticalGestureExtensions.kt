@@ -10,6 +10,9 @@ import kotlin.math.roundToInt
 /** 手机播放器上下滑动：左侧调节当前播放窗口亮度，右侧调节媒体音量。 */
 internal fun MainActivity.beginPhoneVerticalGesture(isLeft: Boolean): Float {
     if (isLeft) {
+        if (phonePlayerOriginalWindowBrightness == null) {
+            phonePlayerOriginalWindowBrightness = window.attributes.screenBrightness
+        }
         val windowValue = window.attributes.screenBrightness
         return if (windowValue >= 0f) windowValue.coerceIn(0.05f, 1f) else {
             val systemValue = runCatching {
