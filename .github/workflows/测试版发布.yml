@@ -103,6 +103,72 @@ jobs:
           echo "本次测试版版本：$VERSION_NAME"
           echo "本次 versionCode：$VERSION_CODE"
 
+      - name: 对比上一个测试版并自动生成更新说明
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 只以最近一次已发布的测试版标签为基线，不拿上一次提交或上一次编辑作比较。
+          PREVIOUS_TAG="$(git tag --list 'hongguotv-bate-v*' --sort=-version:refname | head -n 1)"
+          if [ -z "$PREVIOUS_TAG" ]; then
+            BASE=""
+            echo "未找到历史测试版标签，本次按首次发布处理"
+          else
+            BASE="$(git rev-list -n 1 "$PREVIOUS_TAG")"
+            echo "本次更新基线：$PREVIOUS_TAG ($BASE)"
+          fi
+
+          if [ -n "$BASE" ]; then
+            git diff --quiet "$BASE" HEAD -- kotlin-tv/app/src
+            SOURCE_CHANGED=$?
+            if [ "$SOURCE_CHANGED" -eq 0 ]; then
+              echo "源码没有变化"
+            fi
+            COMMITS="$(git log "$BASE..HEAD" --no-merges --format='%s' -- kotlin-tv/app/src)"
+          else
+            COMMITS="$(git log HEAD --no-merges --format='%s' -- kotlin-tv/app/src)"
+          fi
+
+          # 只读取应用源码范围内的提交说明；发布工作流、版本递增、更新清单和文档变更不写进功能更新。
+          NOTES="$(python3 - "$COMMITS" <<'PY'
+          import sys
+          lines = [x.strip() for x in sys.argv[1].splitlines() if x.strip()]
+          groups = [
+              ("播放与播放器", ("播放", "播放器", "解码", "首帧", "缓冲", "切集", "接续", "渲染", "音频", "视频")),
+              ("焦点与遥控器", ("焦点", "遥控器", "按键", "方向键")),
+              ("网络与接口", ("网络", "接口", "请求", "连接", "超时")),
+              ("调试与诊断", ("日志", "诊断", "调试", "错误信息")),
+              ("片源与数据管理", ("片源", "收藏", "历史", "备份", "恢复", "导入", "导出")),
+              ("界面与交互", ("界面", "页面", "导航", "设置", "主题", "弹窗", "布局", "显示")),
+          ]
+          assigned = set()
+          output = []
+          for title, words in groups:
+              matched = []
+              for line in lines:
+                  if line not in assigned and any(word in line for word in words):
+                      matched.append(line)
+                      assigned.add(line)
+              if matched:
+                  output.append("【" + title + "】")
+                  output.extend("- " + item for item in matched)
+          remaining = [x for x in lines if x not in assigned]
+          if remaining:
+              output.append("【其他功能与问题修复】")
+              output.extend("- " + item for item in remaining)
+          print("\n".join(output) if output else "本次未检测到相对上一个测试版新增的应用源码功能或修复。")
+          PY
+          )"
+
+          DELIMITER="RELEASE_NOTES_$(date +%s)_$RANDOM"
+          {
+            echo "release_notes<<$DELIMITER"
+            printf '%s\n' "$NOTES"
+            echo "$DELIMITER"
+          } >> "$GITHUB_OUTPUT"
+          echo "已根据上一个测试版与当前源码差异自动生成更新说明："
+          printf '%s\n' "$NOTES"
+
       - name: 构建测试版APK
         working-directory: kotlin-tv
         shell: bash
@@ -163,16 +229,7 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-          RELEASE_NOTES: |
-            【双播放器稳定性】
-            - 修正备用播放器的缓冲参数配置，避免因缓冲阈值不满足 Media3 约束而初始化失败，提升双播放器准备下一集的稳定性。
-
-            【全面调试日志】
-            - 复制日志改为保留最近连续的运行日志，不再只筛选播放器关键字；已记录的焦点变化、遥控器/键盘按键、网络、页面、接口、片源、播放器A/B、缓存及异常等事件均可纳入诊断。
-            - 增加焦点迁移和按键事件记录，便于排查电视遥控器操作及焦点丢失问题。
-            - 补充网络可用、断开、网络能力及阻止状态变化记录，并显示网络类型和互联网验证状态。
-            - 即使尚未进入播放页面，复制日志也会附带设备与运行环境信息。
-            - 剪贴板内容控制在约9000字符，超出时优先保留较新的连续日志；原始日志文件不受影响。
+          RELEASE_NOTES: ${{ steps.notes.outputs.release_notes }}
           APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
         run: |
