@@ -297,10 +297,35 @@ jobs:
           TEST_VERSION_NAME=$NEXT_NAME
           TEST_VERSION_CODE=$NEXT_CODE
           EOF
+          # 将刚刚成功发布的测试版版本号和版本专属下载地址同步到仓库总说明。
+          python3 - <<'PY'
+          import os, re
+          path = "README.md"
+          with open(path, encoding="utf-8") as f:
+              content = f.read()
+          version = os.environ["VERSION_NAME"]
+          code = os.environ["VERSION_CODE"]
+          tag = "hongguotv-bate-v" + version
+          apk = "HongguoTV-" + version + ".apk"
+          block = (
+              "<!-- TEST_RELEASE_INFO_START -->\\n"
+              f"- **当前版本：{version}**（versionCode：{code}）\\n"
+              "- 应用包名：\x60com.x.hongguotv.bate\x60\\n"
+              f"- [下载测试版 APK：{apk}](https://github.com/xycvip/HongGuoTV/releases/download/{tag}/{apk})\\n"
+              f"- [查看测试版 {version} 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/{tag})\\n"
+              "<!-- TEST_RELEASE_INFO_END -->"
+          )
+          pattern = r"<!-- TEST_RELEASE_INFO_START -->.*?<!-- TEST_RELEASE_INFO_END -->"
+          updated, count = re.subn(pattern, lambda _: block, content, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit("README 测试版信息标记缺失或重复，停止提交")
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(updated)
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add kotlin-tv/test-version.properties test-update/latest.json
-          git commit -m "发布测试版更新清单并递增版本号至 $NEXT_NAME"
+          git add README.md kotlin-tv/test-version.properties test-update/latest.json
+          git commit -m "更新测试版 $VERSION_NAME 下载信息并递增版本号至 $NEXT_NAME"
 
           # 发布期间 main 可能有文档或代码新提交。先同步远端再重放版本更新提交，
           # 避免 APK 已发布后仅因非快进推送而把整个工作流标记为失败。
