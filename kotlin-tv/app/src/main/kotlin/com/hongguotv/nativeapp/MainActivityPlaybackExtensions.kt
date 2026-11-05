@@ -299,6 +299,16 @@ import java.util.concurrent.atomic.AtomicLong
                         syncMediaSession()
                     }
                 }
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    if(active()) {
+                        debugLog("播放器播放意图变化：playWhenReady=$playWhenReady；原因代码=$reason；requestedAutoplay=$requestedAutoplay；pausedForLifecycle=$pausedForLifecycle；页面=$screen")
+                    }
+                }
+                override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+                    if(active()) {
+                        debugLog("播放器播放抑制状态变化：原因代码=$playbackSuppressionReason；playWhenReady=${p.playWhenReady}；isPlaying=${p.isPlaying}")
+                    }
+                }
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
                     if(active()) {
                         debugLog("视频画面尺寸变化：${videoSize.width}x${videoSize.height}；像素比例=${videoSize.pixelWidthHeightRatio}；旋转=${videoSize.unappliedRotationDegrees}")
