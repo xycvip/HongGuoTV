@@ -495,39 +495,25 @@ import java.util.concurrent.atomic.AtomicLong
                 io.execute {
                 val result=runCatching {
                     val content=target.readText(Charsets.UTF_8)
-                    val lines=content.lineSequence().filter { it.isNotBlank() }.toList()
-                    // 复制内容只保留最新播放器状态和关键事件，完整日志文件不做任何删改。
-                    val latestSnapshot=lines.lastOrNull { it.contains("DEBUG  红果TV") }
-                    val keyEvents=lines.filter { line ->
-                        !line.contains("DEBUG  红果TV") &&
-                            Regex("无缝接续|播放器[AB]|首帧|READY|BUFFERING|切集|接管|解码器|异常|Exception|Caused by|错误|失败|回退|重试")
-                                .containsMatchIn(line)
-                    }.takeLast(35).map { if(it.length>320) it.take(320)+"…（已截短）" else it }
-                    val recentLines=if(latestSnapshot==null && keyEvents.isEmpty()) {
-                        lines.takeLast(15).map { if(it.length>320) it.take(320)+"…（已截短）" else it }
-                    } else emptyList()
-                    val selected=buildList {
-                        add("红果TV 精简调试摘要")
-                        add("日志文件：${target.name}")
-                        add("关键事件（最多35条）：")
-                        if(keyEvents.isEmpty()) add("暂无播放器关键事件")
-                        else addAll(keyEvents)
-                        if(latestSnapshot!=null) {
-                            add("")
-                            add("最新播放器状态：")
-                            add(latestSnapshot.take(2400).let { if(latestSnapshot.length>2400) it+"…（已截短）" else it })
-                        } else {
-                            add("")
-                            add("当前未进入播放页，以下为运行环境诊断：")
-                            add(environmentSnapshot.take(2400))
-                            if(recentLines.isNotEmpty()) {
-                                add("")
-                                add("最近日志（最多15条）：")
-                                addAll(recentLines)
-                            }
-                        }
-                    }.joinToString("\n")
-                    selected.take(9000).let { if(selected.length>9000) it+"\n…（内容已截短）" else it }
+                    // 复制完整日志时间线，不按关键词筛选；焦点、按键、网络、接口、页面、
+                    // 片源、播放器A/B、缓存、异常和重试等已记录事件全部保留。
+                    // 剪贴板有长度上限时，保留最新的连续日志片段，绝不只挑播放器关键字。
+                    val environment=environmentSnapshot
+                    val header=buildString {
+                        append("红果TV 全面诊断日志\\n")
+                        append("日志文件：${target.name}\\n")
+                        append("采集环境：\\n")
+                        append(environment)
+                        append("\\n\\n完整运行日志（最近连续片段）：\\n")
+                    }
+                    val maxLogChars=(9000-header.length-80).coerceAtLeast(1000)
+                    val rawLog=if(content.length>maxLogChars) {
+                        "（前面的较早日志因剪贴板长度限制未复制，完整内容仍保留在日志文件中）\\n"+
+                            content.takeLast(maxLogChars)
+                    } else content
+                    (header+rawLog).take(9000).let {
+                        if(header.length+rawLog.length>9000) it.dropLast(40)+"\\n…（达到剪贴板长度上限）" else it
+                    }
                 }
                 main.post {
                     result.onSuccess { content ->
