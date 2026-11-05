@@ -476,6 +476,7 @@ class MainActivity: Activity() {
         }
     }
     internal val seekRunnable=Runnable { pendingSeek?.let { player?.seekTo(it) }; pendingSeek=null }
+    internal var phonePlayerOriginalWindowBrightness: Float? = null
     private val touchGestureController by lazy {
         MainActivityTouchGestureController(
             state = playbackUiState,
