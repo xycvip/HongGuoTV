@@ -262,17 +262,6 @@ import java.util.concurrent.atomic.AtomicLong
             }
         }
         lateinit var sleepActionButton: TextView
-        // 屏幕方向是手机端专属设置，电视端不显示此选项。
-        if (isPhoneDevice) {
-            lateinit var orientationButton: TextView
-            orientationButton=setting(playback,0,"屏幕方向  ·  ${listOf("跟随视频","固定竖屏","固定横屏")[phoneOrientationMode]}") {
-                val next=(phoneOrientationMode+1)%3
-                getSharedPreferences("playback-device-v1", Context.MODE_PRIVATE).edit().putInt("phone_orientation_mode",next).apply()
-                orientationButton.text="屏幕方向  ·  ${listOf("跟随视频","固定竖屏","固定横屏")[next]}"
-                applyDeviceOrientationPolicy()
-                player?.videoSize?.let(::applyVideoOrientation)
-            }
-        }
         sleepActionButton=setting(playback,0,"定时关闭·${sleepActionLabel()}") {
             if(shouldShowSleepSettingHint()) {
                 Toast.makeText(this@settings,"请在播放视频页面启用定时功能",Toast.LENGTH_LONG).show()
