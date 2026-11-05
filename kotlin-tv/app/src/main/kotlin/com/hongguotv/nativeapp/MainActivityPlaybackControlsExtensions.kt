@@ -16,6 +16,7 @@ internal fun MainActivity.hidePlaybackOverlay() {
         main.removeCallbacks(hideHud)
         val focusWasInControls=runCatching { controls }.isSuccess && controls.findFocus()!=null
         panel=false; controls.visibility=View.GONE; controls.clearFocus(); hud.visibility=View.GONE
+        playbackTapFeedbackView?.hide()
         // PlayerView 本身不可聚焦；将隐藏控制栏后的焦点固定在播放器根容器，
         // 防止 Android 把焦点错误回退到首页或已移除的控件。
         if(focusWasInControls && screen=="player" && runCatching { root }.isSuccess) {
