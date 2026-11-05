@@ -31,6 +31,8 @@ internal class PlaybackPipelineState {
     var standbyHttp: OkHttpClient? = null
     var standbyEpisodeId: String = ""
     var standbyReady: Boolean = false
+    /** 第二播放器接管后，等待新播放器首帧期间继续隐藏缓冲转圈。 */
+    var seamlessHandoffInProgress: Boolean = false
     var standbyFallbackEpisodeId: String = ""
     var standbyJob: Future<*>? = null
     var standbyOutputView: View? = null
