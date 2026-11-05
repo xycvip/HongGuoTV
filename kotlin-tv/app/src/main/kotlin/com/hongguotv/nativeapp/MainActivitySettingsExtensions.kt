@@ -510,8 +510,8 @@ import java.util.concurrent.atomic.AtomicLong
                             add("最新播放器状态：")
                             add(latestSnapshot.take(2400).let { if(latestSnapshot.length>2400) it+"…（已截短）" else it })
                         }
-                    }.joinToString("\\n")
-                    selected.take(9000).let { if(selected.length>9000) it+"\\n…（内容已截短）" else it }
+                    }.joinToString("\n")
+                    selected.take(9000).let { if(selected.length>9000) it+"\n…（内容已截短）" else it }
                 }
                 main.post {
                     result.onSuccess { content ->
