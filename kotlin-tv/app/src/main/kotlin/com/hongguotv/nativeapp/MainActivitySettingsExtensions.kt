@@ -500,19 +500,19 @@ import java.util.concurrent.atomic.AtomicLong
                     // 剪贴板有长度上限时，保留最新的连续日志片段，绝不只挑播放器关键字。
                     val environment=environmentSnapshot
                     val header=buildString {
-                        append("红果TV 全面诊断日志\\n")
-                        append("日志文件：${target.name}\\n")
-                        append("采集环境：\\n")
+                        append("红果TV 全面诊断日志\n")
+                        append("日志文件：${target.name}\n")
+                        append("采集环境：\n")
                         append(environment)
-                        append("\\n\\n完整运行日志（最近连续片段）：\\n")
+                        append("\n\n完整运行日志（最近连续片段）：\n")
                     }
                     val maxLogChars=(9000-header.length-80).coerceAtLeast(1000)
                     val rawLog=if(content.length>maxLogChars) {
-                        "（前面的较早日志因剪贴板长度限制未复制，完整内容仍保留在日志文件中）\\n"+
+                        "（前面的较早日志因剪贴板长度限制未复制，完整内容仍保留在日志文件中）\n"+
                             content.takeLast(maxLogChars)
                     } else content
                     (header+rawLog).take(9000).let {
-                        if(header.length+rawLog.length>9000) it.dropLast(40)+"\\n…（达到剪贴板长度上限）" else it
+                        if(header.length+rawLog.length>9000) it.dropLast(40)+"\n…（达到剪贴板长度上限）" else it
                     }
                 }
                 main.post {
