@@ -411,15 +411,6 @@ class MainActivity: Activity() {
     internal var lastTapAt by playbackUiState::lastTapAt
     internal var lastTapX by playbackUiState::lastTapX
     internal var lastTapY by playbackUiState::lastTapY
-    internal val singleTapPlayback=Runnable {
-        if(screen=="player" && isPhoneDevice && commentPanel==null && episodePanel==null && !playError) {
-            // 单击只切换播放状态，并在画面中央短暂显示半透明图标；不展开整套控制栏。
-            togglePlayback()
-            hidePlaybackOverlay()
-            showPlaybackTapFeedback(player?.playWhenReady==true)
-        }
-    }
-
     internal var playbackTapFeedbackView: PlaybackTapFeedbackView? = null
     internal var transportPlay by playbackUiState::transportPlay
     internal var sleepButton by playbackUiState::sleepButton
@@ -488,11 +479,11 @@ class MainActivity: Activity() {
             dp = { value -> dp(value).toFloat() },
             currentPosition = { currentPosition() },
             seekRunnable = seekRunnable,
-            singleTapPlayback = singleTapPlayback,
+            centerControl = { playbackTapFeedbackView },
+            showCenterControl = { showPlaybackTapFeedback(player?.playWhenReady==true) },
             showHud = { showHud() },
             updatePlaybackText = { updatePlaybackText() },
             seekTo = { position -> seekTo(position) },
-            showPanel = { showPanel() },
             screenHeightPx = { resources.displayMetrics.heightPixels.toFloat() },
             beginVerticalGesture = { isLeft -> beginPhoneVerticalGesture(isLeft) },
             updateVerticalGesture = { isLeft, start, delta -> updatePhoneVerticalGesture(isLeft, start, delta) },
