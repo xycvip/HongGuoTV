@@ -124,6 +124,47 @@ import com.hongguotv.core.*
             }
         }
     }
+/**
+ * 在筛选头与海报网格合并进同一个 RecyclerView 后重新连线。
+ * 必须在 ConcatAdapter 安装完成后执行，此时筛选头和首排海报才有真实屏幕坐标。
+ */
+internal fun MainActivity.wireTheaterFilterFocus(host:LinearLayout,recycler:androidx.recyclerview.widget.RecyclerView) {
+    fun collect(view:View,out:MutableList<View>) {
+        if(view.tag?.toString()?.startsWith("theater-filter:")==true && view.isFocusable) out+=view
+        if(view is ViewGroup) for(index in 0 until view.childCount) collect(view.getChildAt(index),out)
+    }
+    val rows=(0 until host.childCount).map { index ->
+        mutableListOf<View>().also { collect(host.getChildAt(index),it) }
+    }.filter { it.isNotEmpty() }
+    if(rows.isEmpty()) return
+    fun centerX(view:View):Float {
+        val rect=android.graphics.Rect()
+        view.getGlobalVisibleRect(rect)
+        return (rect.left+rect.right)/2f
+    }
+    fun nearest(items:List<View>,x:Float)=items.filter { it.isAttachedToWindow && it.width>0 && it.height>0 }
+        .minByOrNull { kotlin.math.abs(centerX(it)-x) }
+    rows.forEachIndexed { index,items ->
+        val previous=rows.getOrNull(index-1).orEmpty()
+        val next=rows.getOrNull(index+1).orEmpty()
+        items.forEach { item ->
+            item.nextFocusUpId=nearest(previous,centerX(item))?.id ?: navForTab().id
+            item.nextFocusDownId=nearest(next,centerX(item))?.id ?: recycler.id
+        }
+    }
+    // RecyclerView 的 position 0 是整块筛选 Header；首张海报从 position 1 开始。
+    // 为首排每张海报明确指定筛选区最后一行中横向最近的按钮。
+    recycler.post {
+        if(!recycler.isAttachedToWindow || screen!="catalog" || tab!=7) return@post
+        val lastRow=rows.last()
+        val columns=(recycler.layoutManager as? androidx.recyclerview.widget.GridLayoutManager)?.spanCount ?: 1
+        for(position in 1..columns) {
+            val card=recycler.findViewHolderForAdapterPosition(position)?.itemView ?: continue
+            card.nextFocusUpId=nearest(lastRow,centerX(card))?.id ?: navForTab().id
+        }
+    }
+}
+
 internal fun MainActivity.theaterFilterKey(type:ContentType?)=type?.name ?: "ALL"
 internal fun MainActivity.theaterFilterSummary()=theaterSelections.entries.joinToString(" · ") { (key,value) ->
     theaterFiltersByType[theaterFilterKey(theaterContentType)].orEmpty().firstOrNull { it.type==key }?.options?.firstOrNull { it.id==value }?.label ?: value
