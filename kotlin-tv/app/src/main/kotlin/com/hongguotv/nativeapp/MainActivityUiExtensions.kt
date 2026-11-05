@@ -78,9 +78,9 @@ import java.util.concurrent.atomic.AtomicLong
         fun paint(focused: Boolean) { view.background=rounded(if(focused) TvStyle.raised else if(selected) TvStyle.selectedSurface else surface,if(focused) accent else Color.TRANSPARENT) }
         paint(false); view.setOnFocusChangeListener { focusedView,focused ->
             paint(focused)
-            if(focused && focusedView.tag?.toString()?.startsWith("theater-filter:")==true) {
-                theaterFocusTag=focusedView.tag.toString()
-            }
+            val focusTag=focusedView.tag?.toString()
+            if(focused && focusTag?.startsWith("theater-filter:")==true) theaterFocusTag=focusTag
+            if(focused && focusTag?.startsWith("rank:")==true) rankFocusTag=focusTag
         }
     }
 
