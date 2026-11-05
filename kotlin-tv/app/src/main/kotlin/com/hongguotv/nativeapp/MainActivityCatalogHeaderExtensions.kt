@@ -55,7 +55,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             background=rounded(Color.TRANSPARENT)
             // 四叶指示灯放大至 21sp；仍以快捷入口背景框中心定位，不改变点击区域与焦点布局。
             val flowerSize=android.util.TypedValue.applyDimension(
-                android.util.TypedValue.COMPLEX_UNIT_SP,21f,resources.displayMetrics
+                android.util.TypedValue.COMPLEX_UNIT_SP,25f,resources.displayMetrics
             ).toInt().coerceAtLeast(1)
             addView(flower,FrameLayout.LayoutParams(flowerSize,flowerSize,Gravity.CENTER))
             setOnClickListener { showRandomPicks() }
