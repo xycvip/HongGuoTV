@@ -493,7 +493,11 @@ class MainActivity: Activity() {
             showHud = { showHud() },
             updatePlaybackText = { updatePlaybackText() },
             seekTo = { position -> seekTo(position) },
-            showPanel = { showPanel() }
+            showPanel = { showPanel() },
+            screenHeightPx = { resources.displayMetrics.heightPixels.toFloat() },
+            beginVerticalGesture = { isLeft -> beginPhoneVerticalGesture(isLeft) },
+            updateVerticalGesture = { isLeft, start, delta -> updatePhoneVerticalGesture(isLeft, start, delta) },
+            finishVerticalGesture = { isLeft, percent -> finishPhoneVerticalGesture(isLeft, percent) }
         )
     }
     /**
