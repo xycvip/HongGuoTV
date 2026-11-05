@@ -114,7 +114,6 @@ import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.debugLog(message: String) {
         if(!debugEnabled) return
-        val target=debugFile ?: return
         val stamp=java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS",Locale.US).format(java.util.Date())
         val uptime=android.os.SystemClock.elapsedRealtime()
         val thread=Thread.currentThread().name
@@ -126,7 +125,7 @@ import java.util.concurrent.atomic.AtomicLong
         debugLogExecutor.execute {
             runCatching {
                 synchronized(debugLock) {
-                    var file=debugFile ?: target
+                    var file=debugFile ?: return@synchronized
                     if(file.length()>8L*1024*1024) {
                         val stamp=java.text.SimpleDateFormat("yyyyMMdd-HHmmss",Locale.US).format(java.util.Date())
                         file=java.io.File(file.parentFile,"hongguotv-debug-$stamp.log")
