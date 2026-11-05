@@ -71,6 +71,15 @@ import java.util.concurrent.atomic.AtomicLong
             updatePlaybackBufferingIndicator()
             standbyPromotionAt=android.os.SystemClock.elapsedRealtime()
             standbyVisibleFirstFrameAt=0L
+            val handoffStartedAt=standbyPromotionAt
+            // 极少数设备可能不回调输出面切换后的首帧；超时恢复提示，避免永久吞掉真实卡顿反馈。
+            main.postDelayed({
+                if(seamlessHandoffInProgress && standbyPromotionAt==handoffStartedAt) {
+                    seamlessHandoffInProgress=false
+                    updatePlaybackBufferingIndicator()
+                    debugLog("无缝接续：接管后 3 秒仍未收到可见首帧，恢复缓冲提示")
+                }
+            },3000L)
             standbyByteCounterEnabled?.set(true)
             player=promoted
             // 让 PlayerView 在一次 setPlayer 中完成输出面交接，避免先置空造成额外黑屏。
