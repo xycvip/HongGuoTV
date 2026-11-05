@@ -27,10 +27,12 @@ internal class MainActivityTouchGestureController(
     private val screenHeightPx: () -> Float,
     private val beginVerticalGesture: (Boolean) -> Float,
     private val updateVerticalGesture: (Boolean, Float, Float) -> Int,
-    private val finishVerticalGesture: (Boolean, Int) -> Unit
+    private val finishVerticalGesture: (Boolean, Int) -> Unit,
+    private val changeEpisode: (Boolean) -> Unit
 ) {
     private var verticalGesture = false
     private var verticalLeft = false
+    private var verticalEpisode = false
     private var verticalStartValue = 0f
     private var verticalLastValue = -1
     fun dispatch(event: MotionEvent, dispatchToView: (MotionEvent) -> Boolean): Boolean {
@@ -99,6 +101,7 @@ internal class MainActivityTouchGestureController(
                 state.touchSeekTarget = null
                 state.touchSeekGesture = false
                 verticalGesture = false
+                verticalEpisode = false
                 verticalLastValue = -1
             }
             MotionEvent.ACTION_MOVE -> if(state.touchTracking) {
@@ -109,15 +112,22 @@ internal class MainActivityTouchGestureController(
                     kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f
                 ) {
                     verticalGesture = true
-                    verticalLeft = state.touchStartX < screenWidthPx() / 2f
-                    verticalStartValue = beginVerticalGesture(verticalLeft)
-                    verticalLastValue = (verticalStartValue * 100f).toInt().coerceIn(0, 100)
+                    val width = screenWidthPx().coerceAtLeast(1f)
+                    val startX = state.touchStartX
+                    verticalEpisode = startX >= width / 3f && startX < width * 2f / 3f
+                    if (!verticalEpisode) {
+                        verticalLeft = startX < width / 3f
+                        verticalStartValue = beginVerticalGesture(verticalLeft)
+                        verticalLastValue = (verticalStartValue * 100f).toInt().coerceIn(0, 100)
+                    }
                 }
                 if(verticalGesture) {
-                    val delta = (-dy / screenHeightPx().coerceAtLeast(1f) * 1.5f)
-                    verticalLastValue = updateVerticalGesture(verticalLeft, verticalStartValue, delta)
-                        .coerceIn(0, 100)
-                    showHud()
+                    if (!verticalEpisode) {
+                        val delta = (-dy / screenHeightPx().coerceAtLeast(1f) * 1.5f)
+                        verticalLastValue = updateVerticalGesture(verticalLeft, verticalStartValue, delta)
+                            .coerceIn(0, 100)
+                        showHud()
+                    }
                     return true
                 }
                 if(!verticalGesture && !state.touchSeekGesture && kotlin.math.abs(dx) > dp(24) &&
@@ -143,7 +153,13 @@ internal class MainActivityTouchGestureController(
                 state.touchTracking = false
                 if(verticalGesture) {
                     verticalGesture = false
-                    finishVerticalGesture(verticalLeft, verticalLastValue.coerceAtLeast(0))
+                    if (verticalEpisode) {
+                        // dy < 0：上滑下一集；dy > 0：下滑上一集。
+                        changeEpisode(event.y < state.touchStartY)
+                    } else {
+                        finishVerticalGesture(verticalLeft, verticalLastValue.coerceAtLeast(0))
+                    }
+                    verticalEpisode = false
                     verticalLastValue = -1
                     return true
                 }
@@ -177,11 +193,12 @@ internal class MainActivityTouchGestureController(
                 showHud()
             }
             MotionEvent.ACTION_CANCEL -> {
-                if(verticalGesture) {
-                    verticalGesture = false
+                if(verticalGesture && !verticalEpisode) {
                     finishVerticalGesture(verticalLeft, verticalLastValue.coerceAtLeast(0))
-                    verticalLastValue = -1
                 }
+                verticalGesture = false
+                verticalEpisode = false
+                verticalLastValue = -1
                 state.touchTracking = false
                 state.touchSeekGesture = false
                 state.touchSeekTarget = null
