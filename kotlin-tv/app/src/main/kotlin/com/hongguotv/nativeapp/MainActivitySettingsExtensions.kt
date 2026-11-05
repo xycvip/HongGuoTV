@@ -518,8 +518,8 @@ import java.util.concurrent.atomic.AtomicLong
                 main.post {
                     result.onSuccess { content ->
                         val clipboard=getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("HongGuoTV 精简调试摘要",content))
-                        Toast.makeText(this,"精简日志已复制（完整日志文件保留）",Toast.LENGTH_SHORT).show()
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("HongGuoTV 全面诊断日志",content))
+                        Toast.makeText(this,"完整诊断日志已复制（较早内容可能受剪贴板长度限制，原始日志文件完整保留）",Toast.LENGTH_SHORT).show()
                     }.onFailure { Toast.makeText(this,"复制失败：${it.message}",Toast.LENGTH_LONG).show() }
                 }
                 }
