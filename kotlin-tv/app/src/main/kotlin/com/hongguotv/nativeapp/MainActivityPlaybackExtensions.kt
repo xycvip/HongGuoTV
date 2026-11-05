@@ -112,7 +112,7 @@ import java.util.concurrent.atomic.AtomicLong
             closeActiveVideo(); closeTransport(playbackHttp); playbackHttp=null
             main.removeCallbacks(hideHud); main.removeCallbacks(seekRunnable); main.removeCallbacks(singleTapPlayback); pendingSeek=null
         progressUserSeeking=false; lastTapAt=0L
-        } else releasePlayer()
+        } else releasePlayer(resetOrientation = screen != "player")
         artwork.cancelPage(clearMemory=true)
         playbackHttp=claimedHttp; video=prefetched
         var firstReady=true; var firstFrame=true
@@ -121,6 +121,7 @@ import java.util.concurrent.atomic.AtomicLong
         val skipMark=library.skipMark(data.series.id)
         outroSkipSeconds=skipMark?.outroSeconds ?: 0; outroTriggered=false; ffActive=false
         if(autoplay) sleepStopped=false
+        if(screen!="player") phonePlaybackOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         screen="player"; randomLoadingLabel=null; applyDeviceOrientationPolicy(); episodeIndex=selectedIndex; group=episodeIndex/20
         playbackBytes.set(0L); lastSpeedBytes=0L; lastSpeedAt=android.os.SystemClock.elapsedRealtime(); currentSpeedBytesPerSecond=0L
         activeVideoFormat=null; if(!reuse) activeDecoderName=""
