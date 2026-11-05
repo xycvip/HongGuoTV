@@ -43,6 +43,13 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
+
+    /** 手机视频画面中央的短暂播放/暂停反馈，不拦截触摸事件。 */
+    internal fun MainActivity.showPlaybackTapFeedback(playing: Boolean) {
+        val feedback=playbackTapFeedbackView ?: return
+        feedback.show(playing)
+    }
+
     internal fun MainActivity.playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false,forceRebuild: Boolean=false) {
         updater.interrupt()
         val data=detail ?: return
@@ -155,6 +162,14 @@ import java.util.concurrent.atomic.AtomicLong
             danmakuLayer.applyPrefs(library.danmakuOpacity,library.danmakuFont,library.danmakuSpeed,library.danmakuRows)
             danmakuLayer.setColorMode(danmakuColorMode)
             root.addView(danmakuLayer,FrameLayout.LayoutParams(-1,(resources.displayMetrics.heightPixels*.38f).toInt(),Gravity.TOP).apply { topMargin=dp(12) })
+            playbackTapFeedbackView=PlaybackTapFeedbackView(this).apply {
+                visibility=View.GONE
+                isClickable=false
+                isFocusable=false
+                importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                elevation=dp(12).toFloat()
+            }
+            root.addView(playbackTapFeedbackView,FrameLayout.LayoutParams(dp(76),dp(76),Gravity.CENTER))
             // 手机竖屏可用宽度有限，控制栏贴近屏幕两侧；横屏与电视沿用原有留白。
             val phonePortraitHud=isPhoneDevice && heightDp()>widthDp()
             val hudHorizontalInset=if(phonePortraitHud) dp(2) else dp(widthDp()*.05f)
