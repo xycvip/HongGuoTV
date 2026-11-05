@@ -31,6 +31,7 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
         runCatching { player.playWhenReady = false; player.stop(); player.clearMediaItems(); player.release() }
     }
     standbyPlayer = null
+    seamlessHandoffInProgress = false
     updatePlaybackBufferingIndicator()
     standbyOutputView?.let { view ->
         if (view.parent === root) root.removeView(view)
@@ -73,6 +74,8 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     clearStandbyPlayer("准备新的下一集")
     standbyFallbackEpisodeId = ""
     standbyEpisodeId = key
+    // 从解析下一集地址开始就视为双播放器准备中，不等 ExoPlayer 创建完成。
+    updatePlaybackBufferingIndicator()
     standbyPrepareStartedAt = android.os.SystemClock.elapsedRealtime()
     val counterGate = AtomicBoolean(false)
     standbyByteCounterEnabled = counterGate
@@ -108,6 +111,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     if (standbyEpisodeId == key) {
                         standbyEpisodeId = ""
                         standbyReady = false
+                        updatePlaybackBufferingIndicator()
                         standbyPrepareStartedAt = 0L
                         standbyReadyAt = 0L
                         standbyFirstFrameAt = 0L
@@ -229,6 +233,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                 if (standbyEpisodeId == key) {
                     standbyEpisodeId = ""
                     standbyReady = false
+                    updatePlaybackBufferingIndicator()
                     standbyPrepareStartedAt = 0L
                     standbyReadyAt = 0L
                     standbyFirstFrameAt = 0L
