@@ -80,6 +80,16 @@ internal fun MainActivity.renderCatalogContent(
 
         } else if(tab==2) {
             renderRankingCatalogHeader(container,nav,load)
+            // 榜单顶部控件重建后恢复上次实际获得焦点的选项。
+            if(!focusNav && !focusType && pendingRefreshFocus==null) rankFocusTag?.let { focusTag ->
+                root.post {
+                    if(screen=="catalog" && tab==2) {
+                        val current=root.findFocus()
+                        val target=root.findViewWithTag<View>(focusTag)
+                        if((current==null || current===navForTab()) && target?.isAttachedToWindow==true) target.requestFocus()
+                    }
+                }
+            }
         } else if(tab>2 && tab!=7) {
             renderCatalogLibraryHeader(container)
         }
@@ -130,7 +140,7 @@ internal fun MainActivity.renderCatalogContent(
             else {
                 message(body,"正在加载…")
                 if(focusType) (if(tab==1) searchInput else navForTab())?.requestFocus()
-                else if(pendingRefreshFocus==null) navForTab().requestFocus()
+                else if(pendingRefreshFocus==null && !(requestTab==2 && rankFocusTag!=null)) navForTab().requestFocus()
             }
             val requestTab=tab; val requestPage=page; val requestQuery=query; val requestType=library.contentType
             val requestAggregate=requestTab==1 && aggregateSearch
@@ -193,7 +203,9 @@ internal fun MainActivity.renderCatalogContent(
                                     restore.startsWith("focus:") -> root.findViewWithTag<View>(restore.removePrefix("focus:"))
                                     else -> null
                                 }
-                                if(target?.isAttachedToWindow==true) target.requestFocus()
+                                val current=root.findFocus()
+                                // 网络结果返回较晚时，不用过期刷新任务覆盖用户已移动到的控件。
+                                if((current==null || current===navForTab()) && target?.isAttachedToWindow==true) target.requestFocus()
                             }
                         }
                         return@work
