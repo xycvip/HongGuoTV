@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "b265a2dceceb69322342bab054239df699a3732b",
-  "versionCode": 13,
-  "versionName": "0.0.13",
+  "sourceCommit": "54b94c4feadcc374e301dce1bddc180f99a73be4",
+  "versionCode": 14,
+  "versionName": "0.0.14",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.13",
+  "tag": "hongguotv-bate-v0.0.14",
   "apk": {
-    "name": "HongguoTV-0.0.13.apk",
-    "size": 1952733,
-    "sha256": "1a45fabbf309c41df0e966e4e736daa6c94219505e2fe61640b09ae8b3472eeb",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.13/HongguoTV-0.0.13.apk"
+    "name": "HongguoTV-0.0.14.apk",
+    "size": 1954093,
+    "sha256": "1d1ad518a7c3b1d07880bda6d070556ba68c61f9f2ff3e6de1c6290f5d84bcdb",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.14/HongguoTV-0.0.14.apk"
   },
-  "notes": "【其他功能与问题修复】\n- Add files via upload\n- Delete kotlin-tv/app/src/main/res/drawable-nodpi/ic_launcher.webp"
+  "notes": "【播放与播放器】\n- 调整手机播放器上下滑动手势区域为 20/60/20\n- 接入手机播放器上下滑动切集回调\n- 手机播放器中间区域上下滑动切换剧集\n- 退出播放器时恢复进入前的窗口亮度\n- 保存播放器亮度手势前的窗口亮度基准\n- 记录手机播放器手势调节前的窗口亮度\n- 更新手机播放器手势提示文案\n- 接入手机播放器上下滑动亮度音量控制\n- 新增手机播放器亮度与音量上下滑动控制\n- 为手机播放器触控协调器加入上下滑动手势"
 }
