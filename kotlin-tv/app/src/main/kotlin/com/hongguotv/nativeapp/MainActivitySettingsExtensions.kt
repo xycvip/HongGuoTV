@@ -280,17 +280,17 @@ import java.util.concurrent.atomic.AtomicLong
             videoRendererButton.text="渲染方式  ·  ${videoRendererModeLabel(next)}"
             applyVideoRenderer()
             val actual=if(next==0) {
-                if(isTelevisionDevice && seamlessPlaybackEnabled) "电视无缝连播自动使用 TextureView"
+                if(isTelevisionDevice && seamlessPlaybackEnabled) "电视无感连播自动使用 TextureView"
                 else "自动使用 SurfaceView"
             } else "当前已切换为 ${videoRendererModeLabel(next)}"
             Toast.makeText(this@settings,actual,Toast.LENGTH_LONG).show()
         }
         lateinit var seamlessPlaybackButton:TextView
-        seamlessPlaybackButton=setting(playback,0,"无缝连播  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
+        seamlessPlaybackButton=setting(playback,0,"无感连播  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
             val enabled=!seamlessPlaybackEnabled
             getSharedPreferences("playback-settings-v1",Context.MODE_PRIVATE)
                 .edit().putBoolean("seamless_playback",enabled).apply()
-            seamlessPlaybackButton.text="无缝连播  ·  ${if(enabled) "开启" else "关闭"}"
+            seamlessPlaybackButton.text="无感连播  ·  ${if(enabled) "开启" else "关闭"}"
             applyVideoRenderer()
             if(enabled) {
                 standbyFallbackEpisodeId=""
@@ -299,12 +299,12 @@ import java.util.concurrent.atomic.AtomicLong
                 if(screen=="player" && playbackReady && detail!=null && episodeIndex<detail!!.episodes.lastIndex) {
                     prepareStandbyEpisode(episodeIndex+1)
                 }
-                Toast.makeText(this@settings,"无缝连播已开启，将从下一集开始预备",Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@settings,"无感连播已开启，将从下一集开始预备",Toast.LENGTH_SHORT).show()
             } else {
                 standbyFallbackEpisodeId=""
-                clearStandbyPlayer("用户关闭无缝连播")
+                clearStandbyPlayer("用户关闭无感连播")
                 applyVideoRenderer()
-                Toast.makeText(this@settings,"无缝连播已关闭，恢复单播放器预加载",Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@settings,"无感连播已关闭，恢复单播放器预加载",Toast.LENGTH_SHORT).show()
             }
         }
         autoNextButton=setting(playback,0,"自动连播  ·  ${if(library.autoNext) "开启" else "关闭"}") {
