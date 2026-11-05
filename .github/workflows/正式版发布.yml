@@ -315,6 +315,8 @@ jobs:
           apk = data["apk"]["name"]
           url = data["apk"]["url"]
           notes = data.get("notes", "优化使用体验").strip()
+          if notes.startswith("# 红果TV 正式版更新说明"):
+              notes = notes.split("\n", 1)[1].lstrip()
           folder = Path("hongguoTV/README.md")
           content = folder.read_text(encoding="utf-8")
           latest_block = "\n".join([
