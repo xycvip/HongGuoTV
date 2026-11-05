@@ -28,13 +28,24 @@ internal class MainActivityTouchGestureController(
     private val beginVerticalGesture: (Boolean) -> Float,
     private val updateVerticalGesture: (Boolean, Float, Float) -> Int,
     private val finishVerticalGesture: (Boolean, Int) -> Unit,
-    private val changeEpisode: (Boolean) -> Unit
+    private val changeEpisode: (Boolean) -> Unit,
+    private val startLongPressSpeed: () -> Unit,
+    private val stopLongPressSpeed: () -> Unit
 ) {
     private var verticalGesture = false
     private var verticalLeft = false
     private var verticalEpisode = false
     private var verticalStartValue = 0f
     private var verticalLastValue = -1
+    private var longPressSpeedActive = false
+    private val longPressSpeedRunnable = Runnable {
+        if(state.touchTracking && !state.touchOnHud && !state.touchOnProgressBar &&
+            !state.touchSeekGesture && !verticalGesture && !hasBlockingPanel()
+        ) {
+            longPressSpeedActive = true
+            startLongPressSpeed()
+        }
+    }
     fun dispatch(event: MotionEvent, dispatchToView: (MotionEvent) -> Boolean): Boolean {
         val action = event.actionMasked
         if(!isPhonePlayer()) {
@@ -103,10 +114,20 @@ internal class MainActivityTouchGestureController(
                 verticalGesture = false
                 verticalEpisode = false
                 verticalLastValue = -1
+                // 手机视频画面任意一侧长按均临时切换 3 倍速；控制栏/进度条区域不参与。
+                main.removeCallbacks(longPressSpeedRunnable)
+                main.postDelayed(longPressSpeedRunnable, 350L)
             }
             MotionEvent.ACTION_MOVE -> if(state.touchTracking) {
                 val dx = event.x - state.touchStartX
                 val dy = event.y - state.touchStartY
+                if(kotlin.math.abs(dx) > dp(24) || kotlin.math.abs(dy) > dp(24)) {
+                    main.removeCallbacks(longPressSpeedRunnable)
+                    if(longPressSpeedActive) {
+                        longPressSpeedActive = false
+                        stopLongPressSpeed()
+                    }
+                }
                 if(!state.touchSeekGesture && !verticalGesture &&
                     kotlin.math.abs(dy) > dp(24) &&
                     kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f
@@ -150,7 +171,14 @@ internal class MainActivityTouchGestureController(
                 }
             }
             MotionEvent.ACTION_UP -> if(state.touchTracking) {
+                main.removeCallbacks(longPressSpeedRunnable)
                 state.touchTracking = false
+                if(longPressSpeedActive) {
+                    longPressSpeedActive = false
+                    stopLongPressSpeed()
+                    state.lastTapAt = 0L
+                    return true
+                }
                 if(verticalGesture) {
                     verticalGesture = false
                     if (verticalEpisode) {
@@ -193,6 +221,11 @@ internal class MainActivityTouchGestureController(
                 showHud()
             }
             MotionEvent.ACTION_CANCEL -> {
+                main.removeCallbacks(longPressSpeedRunnable)
+                if(longPressSpeedActive) {
+                    longPressSpeedActive = false
+                    stopLongPressSpeed()
+                }
                 if(verticalGesture && !verticalEpisode) {
                     finishVerticalGesture(verticalLeft, verticalLastValue.coerceAtLeast(0))
                 }
@@ -209,6 +242,8 @@ internal class MainActivityTouchGestureController(
     }
 
     private fun clearGesture() {
+        main.removeCallbacks(longPressSpeedRunnable)
+        if(longPressSpeedActive) { longPressSpeedActive = false; stopLongPressSpeed() }
         state.touchTracking = false
         state.touchSeekGesture = false
         state.touchSeekTarget = null
