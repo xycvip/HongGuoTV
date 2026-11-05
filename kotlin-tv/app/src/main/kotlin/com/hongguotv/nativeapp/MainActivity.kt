@@ -498,7 +498,21 @@ class MainActivity: Activity() {
             screenHeightPx = { resources.displayMetrics.heightPixels.toFloat() },
             beginVerticalGesture = { isLeft -> beginPhoneVerticalGesture(isLeft) },
             updateVerticalGesture = { isLeft, start, delta -> updatePhoneVerticalGesture(isLeft, start, delta) },
-            finishVerticalGesture = { isLeft, percent -> finishPhoneVerticalGesture(isLeft, percent) }
+            finishVerticalGesture = { isLeft, percent -> finishPhoneVerticalGesture(isLeft, percent) },
+            changeEpisode = { next ->
+                val episodes = detail?.episodes
+                val target = episodeIndex + if (next) 1 else -1
+                if (episodes != null && target in episodes.indices) {
+                    playEpisode(target)
+                    Toast.makeText(this@MainActivity, "第 ${target + 1} 集", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        if (next) "已经是最后一集" else "已经是第一集",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
         )
     }
     /**
