@@ -126,7 +126,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         .setRenderersFactory(renderers)
                         .setLoadControl(
                             DefaultLoadControl.Builder()
-                                .setBufferDurationsMs(1_000, 8_000, 1_000, 1_500)
+                                .setBufferDurationsMs(2_000, 8_000, 1_000, 1_500)
                                 .setTargetBufferBytes(3 * 1024 * 1024)
                                 .build()
                         )
