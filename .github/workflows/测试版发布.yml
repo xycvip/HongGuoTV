@@ -119,11 +119,6 @@ jobs:
           fi
 
           if [ -n "$BASE" ]; then
-            git diff --quiet "$BASE" HEAD -- kotlin-tv/app/src
-            SOURCE_CHANGED=$?
-            if [ "$SOURCE_CHANGED" -eq 0 ]; then
-              echo "源码没有变化"
-            fi
             COMMITS="$(git log "$BASE..HEAD" --no-merges --format='%s' -- kotlin-tv/app/src)"
           else
             COMMITS="$(git log HEAD --no-merges --format='%s' -- kotlin-tv/app/src)"
