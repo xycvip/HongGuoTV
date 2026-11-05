@@ -76,7 +76,12 @@ import java.util.concurrent.atomic.AtomicLong
     internal fun MainActivity.focusStyle(view: View,selected: Boolean=false) {
         view.id=View.generateViewId(); view.isFocusable=true; view.isFocusableInTouchMode=true
         fun paint(focused: Boolean) { view.background=rounded(if(focused) TvStyle.raised else if(selected) TvStyle.selectedSurface else surface,if(focused) accent else Color.TRANSPARENT) }
-        paint(false); view.setOnFocusChangeListener { _,focused -> paint(focused) }
+        paint(false); view.setOnFocusChangeListener { focusedView,focused ->
+            paint(focused)
+            if(focused && focusedView.tag?.toString()?.startsWith("theater-filter:")==true) {
+                theaterFocusTag=focusedView.tag.toString()
+            }
+        }
     }
 
     internal fun MainActivity.addButton(parent: LinearLayout,label: String,selected: Boolean=false,onClick: ()->Unit = {}): TextView {
