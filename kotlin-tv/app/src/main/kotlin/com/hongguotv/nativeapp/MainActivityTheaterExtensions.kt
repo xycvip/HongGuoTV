@@ -9,7 +9,6 @@ import com.hongguotv.core.*
 
     internal fun MainActivity.renderTheaterFilters(host:LinearLayout) {
         // 重建前优先读取真正持有焦点的选项；仅有点击记录时才使用旧记录。
-        val restoreFocusTag=host.findFocus()?.tag?.toString() ?: theaterFocusTag
         host.removeAllViews()
         val types=row().apply { id=View.generateViewId(); setPadding(0,dp(6),0,dp(8)) }
         addButton(types,"全部体裁",theaterContentType==null).apply {
@@ -21,7 +20,6 @@ import com.hongguotv.core.*
         }
         listOf(ContentType.SHORT to "真人剧",ContentType.COMIC to "漫剧",ContentType.AI to "AI剧").forEach { (type,label) ->
             addButton(types,label,theaterContentType==type).apply {
-                typeItems+=this
                 tag="theater-filter:type:${type.name}"
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
@@ -31,7 +29,6 @@ import com.hongguotv.core.*
         }
         if(theaterSelections.isNotEmpty()) {
             addButton(types,"清除筛选").apply {
-                typeItems+=this
                 tag="theater-filter:clear"
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
