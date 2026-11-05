@@ -311,7 +311,7 @@ import java.util.concurrent.atomic.AtomicLong
                 }
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
                     if(active()) {
-                        debugLog("视频画面尺寸变化：${videoSize.width}x${videoSize.height}；像素比例=${videoSize.pixelWidthHeightRatio}；旋转=${videoSize.unappliedRotationDegrees}")
+                        debugLog("视频画面尺寸变化：${videoSize.width}x${videoSize.height}；像素比例=${videoSize.pixelWidthHeightRatio}")
                         playerView?.resizeMode = activeFrameResizeMode()
                         android.util.Log.i(
                             "HongguoTV",
