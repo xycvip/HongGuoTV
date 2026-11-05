@@ -248,6 +248,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 val boardButton=addButton(boardRow, "${board.label}榜", rankBoard == board) {
                     if (rankBoard != board) {
                         pendingRefreshFocus=focusTag
+                        rankFocusTag=focusTag
                         rankBoard=board
                         aiCatalog=false
                         aiGenre=null
@@ -270,6 +271,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
             }.also { boardFocusItems+=it }
             rankRefresh=addButton(boardRow,"刷新") {
                 pendingRefreshFocus="rank:refresh"
+                rankFocusTag="rank:refresh"
                 page=1
                 catalogFocus=""
                 showCatalog(true)
