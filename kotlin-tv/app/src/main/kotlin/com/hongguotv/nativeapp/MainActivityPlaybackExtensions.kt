@@ -189,7 +189,7 @@ import java.util.concurrent.atomic.AtomicLong
             }
             if(isPhoneDevice && heightDp()>widthDp()) progressBar.setPadding(0,progressBar.paddingTop,0,progressBar.paddingBottom)
             hud.addView(progressBar,lp(-1,if(isPhoneDevice) dp(36) else dp(4)))
-            hud.addView(text(if(isPhoneDevice) "拖动进度条定位    左右滑动快进/快退    双击播放/暂停" else "确认 播放/暂停    ↑ 上一集    ↓ 下一集    左右 快退/快进    菜单 播放菜单    返回 收起 / 退出",13f,muted).apply { setPadding(0,dp(12),0,0) })
+            hud.addView(text(if(isPhoneDevice) "拖动进度条定位    左右滑动快进/快退    左侧上下调亮度 / 右侧上下调音量    双击播放/暂停" else "确认 播放/暂停    ↑ 上一集    ↓ 下一集    左右 快退/快进    菜单 播放菜单    返回 收起 / 退出",13f,muted).apply { setPadding(0,dp(12),0,0) })
             controls=column().apply { setPadding(0,dp(12),0,0); visibility=View.GONE }; hud.addView(controls)
             root.addView(ScrollView(this).apply {
                 isVerticalScrollBarEnabled=false
