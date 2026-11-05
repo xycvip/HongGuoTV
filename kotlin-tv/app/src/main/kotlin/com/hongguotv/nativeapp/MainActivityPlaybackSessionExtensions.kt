@@ -85,7 +85,7 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
             // 临近片尾仍未真正渲染备用首帧，不能只凭 READY 赌切集；主动释放备用资源并启用旧预加载兜底。
             standbyFallbackEpisodeId=currentEpisodeId
             clearStandbyPlayer("临近片尾备用首帧尚未就绪，切换单播放器预加载兜底")
-            debugLog("无缝接续：下一集未完成首帧预备，已启用单播放器兜底")
+            debugLog("无感连播：下一集未完成首帧预备，已启用单播放器兜底")
         }
         if(!PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
         val id=data.episodes[episodeIndex+1]; val quality=library.maxQuality; val key="$id:$quality"
