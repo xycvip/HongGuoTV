@@ -6,7 +6,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.SeekBar
 
-/** 手机播放器画面触控协调器：进度条/HUD 命中测试、横向拖动预览与单/双击手势。 */
+/** 手机播放器画面触控协调器：进度条/HUD 命中测试、中央按钮点击与单击唤起控制栏。 */
 internal class MainActivityTouchGestureController(
     private val state: PlaybackUiState,
     private val main: Handler,
@@ -19,11 +19,11 @@ internal class MainActivityTouchGestureController(
     private val dp: (Int) -> Float,
     private val currentPosition: () -> Long,
     private val seekRunnable: Runnable,
-    private val singleTapPlayback: Runnable,
+    private val centerControl: () -> View?,
+    private val showCenterControl: () -> Unit,
     private val showHud: () -> Unit,
     private val updatePlaybackText: () -> Unit,
     private val seekTo: (Long) -> Unit,
-    private val showPanel: () -> Unit,
     private val screenHeightPx: () -> Float,
     private val beginVerticalGesture: (Boolean) -> Float,
     private val updateVerticalGesture: (Boolean, Float, Float) -> Int,
@@ -38,6 +38,7 @@ internal class MainActivityTouchGestureController(
     private var verticalStartValue = 0f
     private var verticalLastValue = -1
     private var longPressSpeedActive = false
+    private var touchOnCenterControl = false
     private val longPressSpeedRunnable = Runnable {
         if(state.touchTracking && !state.touchOnHud && !state.touchOnProgressBar &&
             !state.touchSeekGesture && !verticalGesture && !hasBlockingPanel()
@@ -51,6 +52,17 @@ internal class MainActivityTouchGestureController(
         if(!isPhonePlayer()) {
             if(action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) clearGesture()
             return dispatchToView(event)
+        }
+
+        if(action == MotionEvent.ACTION_DOWN) {
+            touchOnCenterControl = isInside(centerControl(), event)
+        }
+        if(touchOnCenterControl) {
+            val handled = dispatchToView(event)
+            if(action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                touchOnCenterControl = false
+            }
+            return handled
         }
 
         if(action == MotionEvent.ACTION_DOWN) {
@@ -201,21 +213,9 @@ internal class MainActivityTouchGestureController(
                 if(kotlin.math.abs(event.x - state.touchStartX) <= dp(24) &&
                     kotlin.math.abs(event.y - state.touchStartY) <= dp(24)
                 ) {
-                    val now = android.os.SystemClock.elapsedRealtime()
-                    val doubleTap = now - state.lastTapAt <= 300L &&
-                        kotlin.math.abs(event.x - state.lastTapX) <= dp(48) &&
-                        kotlin.math.abs(event.y - state.lastTapY) <= dp(48)
-                    if(doubleTap) {
-                        main.removeCallbacks(singleTapPlayback)
-                        state.lastTapAt = 0L
-                        showPanel()
-                    } else {
-                        state.lastTapAt = now
-                        state.lastTapX = event.x
-                        state.lastTapY = event.y
-                        main.removeCallbacks(singleTapPlayback)
-                        main.postDelayed(singleTapPlayback, 300L)
-                    }
+                    // 视频其他区域单击只唤起控制栏和中央状态按钮，不改变播放状态。
+                    showHud()
+                    showCenterControl()
                     return true
                 }
                 showHud()
@@ -236,6 +236,7 @@ internal class MainActivityTouchGestureController(
                 state.touchSeekGesture = false
                 state.touchSeekTarget = null
                 state.pendingSeek = null
+                touchOnCenterControl = false
             }
         }
         return dispatchToView(event)
@@ -248,5 +249,14 @@ internal class MainActivityTouchGestureController(
         state.touchSeekGesture = false
         state.touchSeekTarget = null
         state.touchOnProgressBar = false
+        touchOnCenterControl = false
+    }
+
+    private fun isInside(view: View?, event: MotionEvent): Boolean {
+        if(view == null || view.visibility != View.VISIBLE || !view.isShown || view.width <= 0 || view.height <= 0) return false
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        return event.rawX >= location[0] && event.rawX <= location[0] + view.width &&
+            event.rawY >= location[1] && event.rawY <= location[1] + view.height
     }
 }
