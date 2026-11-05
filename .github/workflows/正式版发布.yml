@@ -293,8 +293,8 @@ jobs:
               printf '%s\n' "## 红果TV正式版 $VERSION_NAME"
               printf '\n'
               printf '%s\n' "- 下载：[HongguoTV-$VERSION_NAME.apk]($DOWNLOAD_URL)"
-              printf '%s\n' "- versionCode：`$VERSION_CODE`"
-              printf '%s\n' "- SHA-256：`$APK_SHA256`"
+              echo "- versionCode：$VERSION_CODE"
+              echo "- SHA-256：$APK_SHA256"
               printf '\n'
               printf '%s\n' "### 本次更新"
               cat "$RUNNER_TEMP/release-notes-final.txt"
