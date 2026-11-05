@@ -489,7 +489,10 @@ import java.util.concurrent.atomic.AtomicLong
             }.getOrNull()
             if(target==null || !target.exists()) {
                 Toast.makeText(this,"暂时没有调试日志",Toast.LENGTH_SHORT).show()
-            } else io.execute {
+            } else {
+                // 在主线程先采集环境快照；即使尚未打开播放器，复制日志也有可用诊断内容。
+                val environmentSnapshot=debugEnvironmentSnapshot()
+                io.execute {
                 val result=runCatching {
                     val content=target.readText(Charsets.UTF_8)
                     val lines=content.lineSequence().filter { it.isNotBlank() }.toList()
@@ -500,15 +503,28 @@ import java.util.concurrent.atomic.AtomicLong
                             Regex("无缝接续|播放器[AB]|首帧|READY|BUFFERING|切集|接管|解码器|异常|Exception|Caused by|错误|失败|回退|重试")
                                 .containsMatchIn(line)
                     }.takeLast(35).map { if(it.length>320) it.take(320)+"…（已截短）" else it }
+                    val recentLines=if(latestSnapshot==null && keyEvents.isEmpty()) {
+                        lines.takeLast(15).map { if(it.length>320) it.take(320)+"…（已截短）" else it }
+                    } else emptyList()
                     val selected=buildList {
                         add("红果TV 精简调试摘要")
                         add("日志文件：${target.name}")
                         add("关键事件（最多35条）：")
-                        addAll(keyEvents)
+                        if(keyEvents.isEmpty()) add("暂无播放器关键事件")
+                        else addAll(keyEvents)
                         if(latestSnapshot!=null) {
                             add("")
                             add("最新播放器状态：")
                             add(latestSnapshot.take(2400).let { if(latestSnapshot.length>2400) it+"…（已截短）" else it })
+                        } else {
+                            add("")
+                            add("当前未进入播放页，以下为运行环境诊断：")
+                            add(environmentSnapshot.take(2400))
+                            if(recentLines.isNotEmpty()) {
+                                add("")
+                                add("最近日志（最多15条）：")
+                                addAll(recentLines)
+                            }
                         }
                     }.joinToString("\n")
                     selected.take(9000).let { if(selected.length>9000) it+"\n…（内容已截短）" else it }
@@ -519,6 +535,7 @@ import java.util.concurrent.atomic.AtomicLong
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("HongGuoTV 精简调试摘要",content))
                         Toast.makeText(this,"精简日志已复制（完整日志文件保留）",Toast.LENGTH_SHORT).show()
                     }.onFailure { Toast.makeText(this,"复制失败：${it.message}",Toast.LENGTH_LONG).show() }
+                }
                 }
             }
         }
