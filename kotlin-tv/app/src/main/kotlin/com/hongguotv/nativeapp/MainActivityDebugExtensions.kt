@@ -197,7 +197,7 @@ import java.util.concurrent.atomic.AtomicLong
             val view=text("",if(mobile) 8.5f else 10f,Color.WHITE).apply {
                 typeface=Typeface.MONOSPACE
                 includeFontPadding=false
-                maxLines=22
+                maxLines=24
                 ellipsize=TextUtils.TruncateAt.END
                 setPadding(dp(8),dp(6),dp(8),dp(6))
                 background=GradientDrawable().apply {
@@ -235,6 +235,21 @@ import java.util.concurrent.atomic.AtomicLong
             Player.STATE_ENDED -> "ENDED"
             else -> "UNKNOWN"
         }
+        val second=standbyPlayer
+        val secondState=when {
+            !seamlessPlaybackEnabled -> "功能关闭"
+            second != null -> when(second.playbackState) {
+                Player.STATE_IDLE -> "IDLE（已创建，尚未准备）"
+                Player.STATE_BUFFERING -> "BUFFERING（正在缓冲/预热）"
+                Player.STATE_READY -> if(standbyFirstFrameAt>0L) "READY（隐藏首帧已完成，可接管）" else "READY（等待隐藏首帧）"
+                Player.STATE_ENDED -> "ENDED"
+                else -> "UNKNOWN"
+            }
+            standbyEpisodeId.isNotBlank() -> "资源解析中 / 等待创建播放器"
+            seamlessHandoffInProgress -> "已接管为播放器A，等待可见首帧"
+            standbyPromotionAt>0L -> "本轮已接管，原播放器B已转为A"
+            else -> "空闲（尚未准备下一集）"
+        }
         val url=video?.info?.url.orEmpty()
         val parsedUrl=runCatching { Uri.parse(url) }.getOrNull()
         val host=parsedUrl?.host.orEmpty()
@@ -261,7 +276,10 @@ import java.util.concurrent.atomic.AtomicLong
             "设备：${Build.MANUFACTURER} ${Build.MODEL}  屏幕：${widthDp().toInt()}x${heightDp().toInt()}dp",
             "内容：${data?.series?.title.orEmpty()}  第 ${episodeIndex+1} 集 / ${data?.episodes?.size ?: 0}",
             "ID：${p?.currentMediaItem?.mediaId ?: data?.episodes?.getOrNull(episodeIndex).orEmpty()}",
-            "状态：$state  isPlaying=${p?.isPlaying}  playWhenReady=${p?.playWhenReady}  ready=$playbackReady",
+            "播放器A（当前播放）：$state  isPlaying=${p?.isPlaying}  playWhenReady=${p?.playWhenReady}",
+            "播放器A进度：${formatTime(position)} / ${formatTime(duration)}  缓冲至 ${formatTime(buffered)}",
+            "播放器B（下一集备用）：$secondState",
+            "播放器B详情：${second?.let { "state=${it.playbackState} isPlaying=${it.isPlaying} playWhenReady=${it.playWhenReady} pos=${formatTime(it.currentPosition.coerceAtLeast(0))}" } ?: if(standbyEpisodeId.isNotBlank()) "目标集=$standbyEpisodeId" else "无备用实例"}",
             "进度：${formatTime(position)} / ${formatTime(duration)}  缓冲至 ${formatTime(buffered)}（+${formatTime((buffered-position).coerceAtLeast(0))}）",
             "清晰度：${video?.info?.quality ?: quality}  画面：$size  FPS：$fps",
             "编码：$codec  解码器：${activeDecoderName.ifBlank { "N/A" }}",
@@ -271,7 +289,7 @@ import java.util.concurrent.atomic.AtomicLong
             "读取：${playbackBytes.get()} bytes  读取速率：${byteRate/1024} KB/s  资源总长：${video?.total ?: 0} bytes",
             "Range缓存：$stats",
             "首帧耗时：${if(debugFirstFrameAt>0) debugFirstFrameAt-debugPlaybackStartedAt else -1}ms  READY耗时：${if(debugPlaybackReadyAt>0) debugPlaybackReadyAt-debugPlaybackStartedAt else -1}ms",
-            "无缝接续：${if(seamlessPlaybackEnabled) "开启" else "关闭"}  备用：${if(standbyReady) "READY" else if(standbyEpisodeId.isNotBlank()) "准备中" else "无"}  备用首帧：${if(standbyFirstFrameAt>0L) standbyFirstFrameAt-standbyPrepareStartedAt else -1L}ms",
+            "无缝接续：${if(seamlessPlaybackEnabled) "开启" else "关闭"}  B准备耗时：${if(standbyPrepareStartedAt>0L) android.os.SystemClock.elapsedRealtime()-standbyPrepareStartedAt else -1L}ms  B隐藏首帧：${if(standbyFirstFrameAt>0L) standbyFirstFrameAt-standbyPrepareStartedAt else -1L}ms",
             "切集交接：${if(standbyPromotionAt>0L) "已接管" else "未发生"}  接管后可见首帧：${if(standbyVisibleFirstFrameAt>0L) standbyVisibleFirstFrameAt-standbyPromotionAt else -1L}ms  PlayerView绑定：${if(standbyAttachedAt>0L && standbyPromotionAt>0L) standbyAttachedAt-standbyPromotionAt else -1L}ms",
             "播放错误：${if(playError) "是" else "否"}  自动恢复：$autoRecovery  资源重试：${recovery.attempts}/3"
         ).joinToString("\n")
