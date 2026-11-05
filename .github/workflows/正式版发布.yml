@@ -233,6 +233,7 @@ jobs:
             APK_SHA256="$(jq -r '.apk.sha256' "$EXISTING_UPDATE")"
             SOURCE_COMMIT="$(jq -r '.sourceCommit // empty' "$EXISTING_UPDATE")"
             RELEASE_NOTES="$(jq -r '.notes // "优化使用体验"' "$EXISTING_UPDATE")"
+            printf '%s\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes-final.txt"
             RECOVER_EXISTING_RELEASE=true
             echo "检测到上次已创建的正式版 Release：$RELEASE_TAG"
             echo "本次将恢复 Raw 更新清单，不重复创建 Release 或覆盖 APK"
