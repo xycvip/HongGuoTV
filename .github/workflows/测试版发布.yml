@@ -174,7 +174,6 @@ jobs:
             - 即使尚未进入播放页面，复制日志也会附带设备与运行环境信息。
             - 剪贴板内容控制在约9000字符，超出时优先保留较新的连续日志；原始日志文件不受影响。
           APK_SIZE: ${{ steps.apk.outputs.size }}
-          APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
         run: |
           set -euo pipefail
