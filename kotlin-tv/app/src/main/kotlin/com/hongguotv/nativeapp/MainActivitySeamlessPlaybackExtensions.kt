@@ -32,7 +32,6 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
     }
     standbyPlayer = null
     seamlessHandoffInProgress = false
-    updatePlaybackBufferingIndicator()
     standbyOutputView?.let { view ->
         if (view.parent === root) root.removeView(view)
     }
@@ -43,6 +42,8 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
     standbyHttp = null
     standbyEpisodeId = ""
     standbyReady = false
+    // 先清空所有双播放器状态，再恢复普通缓冲提示；否则旧目标 ID 会让隐藏条件仍成立。
+    updatePlaybackBufferingIndicator()
     standbyPrepareStartedAt = 0L
     standbyReadyAt = 0L
     standbyFirstFrameAt = 0L
