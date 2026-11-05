@@ -51,6 +51,15 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
         addButton(transport,"下集") { if(episodeIndex<(detail?.episodes?.lastIndex ?: 0)) playEpisode(episodeIndex+1) }.apply { val enabled=episodeIndex<(detail?.episodes?.lastIndex ?: 0); isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .4f }
         lateinit var episodes: TextView
         episodes=addButton(transport,"选集") { showEpisodePanel(episodes) }
+        // 方向切换仅手机端显示，按钮文字表示当前方向；切换剧集时保留本次播放会话选择。
+        if(isPhoneDevice) {
+            lateinit var orientationButton: TextView
+            orientationButton=addButton(secondaryTransport,phonePlaybackOrientationLabel()) {
+                togglePhonePlaybackOrientation()
+                orientationButton.text=phonePlaybackOrientationLabel()
+                showHud()
+            }
+        }
         fun speedLabel()=String.format(java.util.Locale.US,"%.2f",library.playbackSpeed.toDouble())
         lateinit var speedButton: TextView
         speedButton=addButton(secondaryTransport,speedLabel()) { showSpeedPicker(speedButton) }
