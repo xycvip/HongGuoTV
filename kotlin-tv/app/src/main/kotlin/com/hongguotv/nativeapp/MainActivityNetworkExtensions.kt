@@ -9,7 +9,7 @@ import android.net.NetworkCapabilities
 /** 系统网络回调适配：将网络变化统一投递到主线程并交给 Activity 当前状态处理。 */
 internal fun MainActivity.createNetworkCallback(): ConnectivityManager.NetworkCallback =
     object : ConnectivityManager.NetworkCallback() {
-        private fun changed() {
+        private fun changed(reason:String) {
             main.post {
                 // A callback already in flight may enqueue work after unregister/cleanup.
                 if (isDestroyed) return@post
@@ -30,13 +30,21 @@ internal fun MainActivity.createNetworkCallback(): ConnectivityManager.NetworkCa
                     apiStatusCheckStarted = false
                     if (library.isLoaded && !isDestroyed && tab == 0) runAutomaticApiChecks()
                 }
-                if(wasUnavailable!=apiNetworkUnavailable) debugLog("网络连通状态变化：${if(online) "已恢复" else "不可用"}；页面=$screen")
+                val active=connectivity.activeNetwork
+                val caps=active?.let { connectivity.getNetworkCapabilities(it) }
+                val type=when {
+                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)==true -> "Wi-Fi"
+                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)==true -> "以太网"
+                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)==true -> "移动网络"
+                    else -> "无网络/未知"
+                }
+                debugLog("网络事件：$reason；类型=$type；已验证互联网=$online；页面=$screen；网络状态变化=${wasUnavailable!=apiNetworkUnavailable}")
                 if (foreground && screen == "player" && playError && autoRecovery) scheduleRecovery()
             }
         }
 
-        override fun onAvailable(network: Network) = changed()
-        override fun onLost(network: Network) = changed()
-        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = changed()
-        override fun onBlockedStatusChanged(network: Network, blocked: Boolean) = changed()
+        override fun onAvailable(network: Network) = changed("网络可用")
+        override fun onLost(network: Network) = changed("网络断开")
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = changed("网络能力变化")
+        override fun onBlockedStatusChanged(network: Network, blocked: Boolean) = changed("网络阻止状态变化：blocked=$blocked")
     }
