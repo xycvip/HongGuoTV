@@ -315,7 +315,7 @@ import java.util.concurrent.atomic.AtomicLong
                         playerView?.resizeMode = activeFrameResizeMode()
                         android.util.Log.i(
                             "HongguoTV",
-                            "Video size ${videoSize.width}x${videoSize.height} pixelRatio=${videoSize.pixelWidthHeightRatio} rotation=${videoSize.unappliedRotationDegrees}"
+                            "Video size ${videoSize.width}x${videoSize.height} pixelRatio=${videoSize.pixelWidthHeightRatio}"
                         )
                         refreshVideoInfoOverlay()
                         if(hud.visibility==View.VISIBLE) updatePlaybackText()
