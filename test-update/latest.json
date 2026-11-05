@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "81ac37b0ac62d5927589088f1002e835cbe85699",
-  "versionCode": 15,
-  "versionName": "0.0.15",
+  "sourceCommit": "2105409ac17aa8ed3b1b077b851c29d5dd110a1f",
+  "versionCode": 16,
+  "versionName": "0.0.16",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.15",
+  "tag": "hongguotv-bate-v0.0.16",
   "apk": {
-    "name": "HongguoTV-0.0.15.apk",
-    "size": 1956257,
-    "sha256": "087c6e200895d2de1583db7839596326f06a9e3e7eb93e7b0f3b01ba89ee3124",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.15/HongguoTV-0.0.15.apk"
+    "name": "HongguoTV-0.0.16.apk",
+    "size": 1946501,
+    "sha256": "559236e2da9cdd92be4986cb24cbaf883039da1eaccbf1c97f24099f44044514",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.16/HongguoTV-0.0.16.apk"
   },
-  "notes": "【焦点与遥控器】\n- 修复排行榜焦点恢复变量声明顺序导致的编译失败\n- 修复排行榜页面焦点跟踪与恢复\n- 保留筛选按钮原有焦点视觉效果\n- 在焦点样式回调中记录剧场筛选焦点\n- 避免剧场页面重建时焦点恢复冲突\n- 修复剧场筛选焦点跟踪与可见区域导航\n【网络与接口】\n- 更新远程文件管理网络地址说明\n- 允许无局域网连接时打开远程文件管理扫码页面\n【调试与诊断】\n- 更新一键清理全部日志的设置说明\n- 调整清理日志为一键清空全部调试日志\n- 增加清理全部调试日志文件功能\n- 统一无感连播调试文案\n【其他功能与问题修复】\n- 同步更新四叶指示灯尺寸注释\n- 调整四叶指示灯尺寸至25sp\n- 远程文件管理支持任意可用IPv4地址\n- 更新远程文件管理入口说明\n- 统一功能名称为无感连播\n- 统一功能名称为无感连播"
+  "notes": "【调试与诊断】\n- 精简清理日志设置说明\n【界面与交互】\n- 移除搜索导航与首页导航之间的10dp间距\n【其他功能与问题修复】\n- 默认开启无感连播\n- 清理重复的旧版 JPG 启动图标资源\n- 清理重复的旧版 JPG 启动图标资源\n- 清理重复的旧版 JPG 启动图标资源\n- 清理重复的旧版 JPG 启动图标资源\n- 清理重复的旧版 JPG 启动图标资源\n- Add files via upload\n- Delete kotlin-tv/app/src/main/res/drawable-nodpi/tv_banner.webp"
 }
