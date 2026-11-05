@@ -193,9 +193,21 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                                 }
                             } else if (player === secondary && standbyPromotionAt > 0L && standbyVisibleFirstFrameAt == 0L) {
                                 standbyVisibleFirstFrameAt = now
-                                seamlessHandoffInProgress = false
-                                updatePlaybackBufferingIndicator()
-                                debugLog("无缝接续：接管后可见首帧，切换到画面=${now - standbyPromotionAt}ms，PlayerView绑定=${standbyAttachedAt - standbyPromotionAt}ms")
+                                val handoffAt = standbyPromotionAt
+                                // 首帧刚出现时，播放器可能紧接着再短暂报告 BUFFERING。
+                                // 留出 350ms 稳定窗口，避免画面已接上却闪一下转圈；持续缓冲仍会恢复提示。
+                                main.postDelayed({
+                                    if (player === secondary &&
+                                        standbyPromotionAt == handoffAt &&
+                                        standbyVisibleFirstFrameAt > 0L &&
+                                        seamlessHandoffInProgress
+                                    ) {
+                                        seamlessHandoffInProgress = false
+                                        updatePlaybackBufferingIndicator()
+                                        debugLog("无缝接续：可见首帧稳定 350ms，恢复普通缓冲提示")
+                                    }
+                                }, 350L)
+                                debugLog("无缝接续：接管后可见首帧，切换到画面=${now - handoffAt}ms，PlayerView绑定=${standbyAttachedAt - handoffAt}ms；缓冲提示延后 350ms 恢复")
                             }
                         }
 
