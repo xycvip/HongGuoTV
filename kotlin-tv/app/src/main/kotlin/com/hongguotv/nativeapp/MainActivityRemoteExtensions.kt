@@ -141,6 +141,17 @@ import java.util.concurrent.atomic.AtomicLong
         p.setPlaybackSpeed(extras.longPressSpeed); showHud(); updatePlaybackText()
     }
 
+    /** 手机触屏长按固定临时 3 倍速，松手由 stopFastForward 恢复原倍速。 */
+    internal fun MainActivity.startPhoneTouchFastForward() {
+        val p=player ?: return
+        if(ffActive || !playbackReady || p.duration<=0) return
+        ffActive=true
+        ffSpeedBefore=p.playbackParameters.speed
+        p.setPlaybackSpeed(3f)
+        showHud()
+        updatePlaybackText()
+    }
+
     internal fun MainActivity.stopFastForward() {
         if(!ffActive) return
         ffActive=false; player?.setPlaybackSpeed(ffSpeedBefore)
