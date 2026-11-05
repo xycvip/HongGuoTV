@@ -194,25 +194,52 @@ class TvTools(private val activity: Activity) {
     fun libraryTransfer(anchor: View?) {
         val connectivity=activity.getSystemService(ConnectivityManager::class.java)
         val network=connectivity.activeNetwork
-        val capabilities=connectivity.getNetworkCapabilities(network)
+        // 不再因未连接 Wi-Fi/以太网而拦截入口；有可用局域网 IPv4 时启动服务，
+        // 没有地址时也照常打开页面，并提示当前无法生成可访问二维码。
         val address=connectivity.getLinkProperties(network)?.linkAddresses
             ?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
-        if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
-            info("远程文件管理","请让电视与访问设备连接同一局域网后重试。",anchor)
-            return
-        }
+
         val content=column()
         content.gravity=Gravity.CENTER_HORIZONTAL
         content.addView(TvDialog.title(activity,"远程文件管理"))
-        content.addView(label("电视与访问设备连接同一局域网后，扫码或输入地址即可管理电视文件。",14f).apply {
+        content.addView(label("打开此页面即可查看扫码入口；电视与访问设备处于可互通的同一局域网时，才能实际浏览和传输文件。",14f).apply {
             gravity=Gravity.CENTER
             setTextColor(TvStyle.muted)
         })
-        val status=label("正在启动文件服务…",14f).apply { gravity=Gravity.CENTER }
+        val status=label(
+            if(address==null) "当前没有可用的局域网 IPv4 地址，暂时无法生成有效二维码。连接网络后关闭并重新打开本页即可。"
+            else "正在启动文件服务…",14f
+        ).apply { gravity=Gravity.CENTER }
         content.addView(status)
         val dialog=AlertDialog.Builder(activity).setView(TvDialog.card(activity,content)).create()
         TvDialog.styleWindow(activity,dialog)
         open(dialog,anchor)
+
+        if(address==null) {
+            val placeholder=LinearLayout(activity).apply {
+                gravity=Gravity.CENTER
+                setPadding(dp(16),dp(16),dp(16),dp(16))
+                background=GradientDrawable().apply {
+                    setColor(Color.WHITE)
+                    cornerRadius=dp(22).toFloat()
+                    setStroke(dp(1),TvStyle.outline)
+                }
+            }
+            placeholder.addView(label("等待网络地址",18f).apply {
+                gravity=Gravity.CENTER
+                setTextColor(Color.DKGRAY)
+            },LinearLayout.LayoutParams(dp(220),dp(220)))
+            content.addView(placeholder,LinearLayout.LayoutParams(-2,-2).apply {
+                topMargin=dp(16); bottomMargin=dp(14)
+            })
+            content.addView(label("目录：/storage/emulated/0/\\n端口：${LibraryTransferServer.DEFAULT_PORT}  ·  仅限当前局域网\\n获取到局域网地址后，二维码会在重新打开本页时生成。",13f).apply {
+                gravity=Gravity.CENTER
+                setTextColor(TvStyle.muted)
+                setPadding(dp(8),dp(14),dp(8),dp(4))
+            })
+            return
+        }
+
         worker.execute {
             try {
                 val folder=android.os.Environment.getExternalStorageDirectory()
@@ -271,7 +298,7 @@ class TvTools(private val activity: Activity) {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
                     })
-                    val details=label("目录：/storage/emulated/0/\n端口：${LibraryTransferServer.DEFAULT_PORT}  ·  仅限当前局域网\n可浏览、上传和下载任意文件；关闭此窗口即停止服务。",13f).apply {
+                    val details=label("目录：/storage/emulated/0/\\n端口：${LibraryTransferServer.DEFAULT_PORT}  ·  仅限当前局域网\\n可浏览、上传和下载任意文件；关闭此窗口即停止服务。",13f).apply {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
                         setPadding(dp(8),dp(14),dp(8),dp(4))
