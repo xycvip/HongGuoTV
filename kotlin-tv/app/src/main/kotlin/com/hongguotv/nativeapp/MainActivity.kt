@@ -413,17 +413,14 @@ class MainActivity: Activity() {
     internal var lastTapY by playbackUiState::lastTapY
     internal val singleTapPlayback=Runnable {
         if(screen=="player" && isPhoneDevice && commentPanel==null && episodePanel==null && !playError) {
-            if(hud.visibility==View.GONE) {
-                // 控制栏隐藏时单击：暂停并展开完整控制栏。
-                requestPlayback(false)
-                showPanel()
-            } else {
-                // 控制栏已显示时单击：暂停状态恢复播放，播放状态保持不变，然后收起控制栏。
-                if(player?.playWhenReady!=true) requestPlayback(true)
-                hidePlaybackOverlay()
-            }
+            // 单击只切换播放状态，并在画面中央短暂显示半透明图标；不展开整套控制栏。
+            togglePlayback()
+            hidePlaybackOverlay()
+            showPlaybackTapFeedback(player?.playWhenReady==true)
         }
     }
+
+    internal var playbackTapFeedbackView: PlaybackTapFeedbackView? = null
     internal var transportPlay by playbackUiState::transportPlay
     internal var sleepButton by playbackUiState::sleepButton
     internal var speedDialog by playbackUiState::speedDialog
