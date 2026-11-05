@@ -515,73 +515,38 @@ import java.util.concurrent.atomic.AtomicLong
             }
         }
         setting(debug,6,"清理日志") {
-            val target=debugFile ?: runCatching {
-                backupFolder().listFiles()?.filter { it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log") }
-                    ?.maxByOrNull { it.lastModified() }
-            }.getOrNull()
-            if(target==null || !target.exists()) {
-                Toast.makeText(this,"没有可清理的日志",Toast.LENGTH_SHORT).show()
-            } else TvDialog.confirm(this,"清理调试日志","清空当前调试日志文件，之后仍可继续记录。") {
-                debugLogExecutor.execute {
-                    val result=runCatching {
-                        synchronized(debugLock) {
-                            target.writeText("",Charsets.UTF_8)
-                            if(debugFile==null) debugFile=target
-                        }
-                    }
-                    main.post {
-                        result.onSuccess { Toast.makeText(this,"日志已清理",Toast.LENGTH_SHORT).show() }
-                            .onFailure { Toast.makeText(this,"清理失败：${it.message}",Toast.LENGTH_LONG).show() }
-                    }
-                }
-            }.show()
-        }
-
-        setting(debug,6,"清理所有日志文件") {
             val folder=backupFolder()
-            val logs=runCatching {
-                folder.listFiles()?.filter {
-                    it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log",true)
-                }.orEmpty()
-            }.getOrDefault(emptyList())
-            if(logs.isEmpty()) {
-                Toast.makeText(this,"没有可清理的日志文件",Toast.LENGTH_SHORT).show()
-            } else TvDialog.confirm(
-                this,
-                "清理所有日志文件",
-                "将删除 HongGuoTV 文件夹内全部调试日志文件（共 ${logs.size} 个），不会删除备份文件及其他数据。此操作不可恢复。"
-            ) {
-                debugLogExecutor.execute {
-                    val result=runCatching {
-                        synchronized(debugLock) {
-                            val currentLogs=folder.listFiles()?.filter {
-                                it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log",true)
-                            }.orEmpty()
-                            val failed=mutableListOf<String>()
-                            currentLogs.forEach { file ->
-                                if(file.exists() && !file.delete()) failed+=file.name
-                            }
-                            if(debugEnabled) {
-                                if(!folder.exists() && !folder.mkdirs()) error("无法创建日志目录")
-                                val stamp=java.text.SimpleDateFormat("yyyyMMdd-HHmmss",Locale.US).format(java.util.Date())
-                                val fresh=java.io.File(folder,"hongguotv-debug-$stamp.log")
-                                fresh.appendText("===== 红果TV 调试日志重新开始 ${java.util.Date()} =====\n",Charsets.UTF_8)
-                                debugFile=fresh
-                            } else {
-                                debugFile=null
-                            }
-                            if(failed.isNotEmpty()) error("以下日志删除失败：${failed.joinToString("、")}")
-                            currentLogs.size
+            debugLogExecutor.execute {
+                val result=runCatching {
+                    synchronized(debugLock) {
+                        val currentLogs=folder.listFiles()?.filter {
+                            it.isFile && it.name.startsWith("hongguotv-debug-") && it.name.endsWith(".log",true)
+                        }.orEmpty()
+                        val failed=mutableListOf<String>()
+                        currentLogs.forEach { file ->
+                            if(file.exists() && !file.delete()) failed+=file.name
                         }
-                    }
-                    main.post {
-                        result.onSuccess { count ->
-                            val suffix=if(debugEnabled) "，调试模式仍开启，已创建新的日志文件" else ""
-                            Toast.makeText(this,"已清理全部日志文件（$count 个）$suffix",Toast.LENGTH_LONG).show()
-                        }.onFailure { Toast.makeText(this,"清理日志失败：${it.message}",Toast.LENGTH_LONG).show() }
+                        if(debugEnabled) {
+                            if(!folder.exists() && !folder.mkdirs()) error("无法创建日志目录")
+                            val stamp=java.text.SimpleDateFormat("yyyyMMdd-HHmmss",Locale.US).format(java.util.Date())
+                            val fresh=java.io.File(folder,"hongguotv-debug-$stamp.log")
+                            fresh.appendText("===== 红果TV 调试日志重新开始 ${java.util.Date()} =====\\n",Charsets.UTF_8)
+                            debugFile=fresh
+                        } else {
+                            debugFile=null
+                        }
+                        if(failed.isNotEmpty()) error("以下日志删除失败：${failed.joinToString("、")}")
+                        currentLogs.size
                     }
                 }
-            }.show()
+                main.post {
+                    result.onSuccess { count ->
+                        val suffix=if(debugEnabled) "，调试模式仍开启，已创建新的日志文件" else ""
+                        val message=if(count==0) "没有历史日志文件" else "已清理全部调试日志（$count 个）"
+                        Toast.makeText(this,message+suffix,Toast.LENGTH_LONG).show()
+                    }.onFailure { Toast.makeText(this,"清理日志失败：${it.message}",Toast.LENGTH_LONG).show() }
+                }
+            }
         }
 
         // 开关优先级最高：开启时跨重启显示；关闭时只读取本进程的临时解锁状态。
