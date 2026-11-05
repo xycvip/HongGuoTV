@@ -490,12 +490,34 @@ import java.util.concurrent.atomic.AtomicLong
             if(target==null || !target.exists()) {
                 Toast.makeText(this,"暂时没有调试日志",Toast.LENGTH_SHORT).show()
             } else io.execute {
-                val result=runCatching { target.readText(Charsets.UTF_8) }
+                val result=runCatching {
+                    val content=target.readText(Charsets.UTF_8)
+                    val lines=content.lineSequence().filter { it.isNotBlank() }.toList()
+                    // 复制内容只保留最新播放器状态和关键事件，完整日志文件不做任何删改。
+                    val latestSnapshot=lines.lastOrNull { it.contains("DEBUG  红果TV") }
+                    val keyEvents=lines.filter { line ->
+                        !line.contains("DEBUG  红果TV") &&
+                            Regex("无缝接续|播放器[AB]|首帧|READY|BUFFERING|切集|接管|解码器|异常|Exception|Caused by|错误|失败|回退|重试")
+                                .containsMatchIn(line)
+                    }.takeLast(35).map { if(it.length>320) it.take(320)+"…（已截短）" else it }
+                    val selected=buildList {
+                        add("红果TV 精简调试摘要")
+                        add("日志文件：${target.name}")
+                        add("关键事件（最多35条）：")
+                        addAll(keyEvents)
+                        if(latestSnapshot!=null) {
+                            add("")
+                            add("最新播放器状态：")
+                            add(latestSnapshot.take(2400).let { if(latestSnapshot.length>2400) it+"…（已截短）" else it })
+                        }
+                    }.joinToString("\\n")
+                    selected.take(9000).let { if(selected.length>9000) it+"\\n…（内容已截短）" else it }
+                }
                 main.post {
                     result.onSuccess { content ->
                         val clipboard=getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("HongGuoTV 调试日志",content))
-                        Toast.makeText(this,"日志已复制",Toast.LENGTH_SHORT).show()
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("HongGuoTV 精简调试摘要",content))
+                        Toast.makeText(this,"精简日志已复制（完整日志文件保留）",Toast.LENGTH_SHORT).show()
                     }.onFailure { Toast.makeText(this,"复制失败：${it.message}",Toast.LENGTH_LONG).show() }
                 }
             }
