@@ -304,6 +304,7 @@ class MainActivity: Activity() {
     internal var catalogFocus by navigationUiState::catalogFocus
     internal var ranking by rankingUiState::ranking
     internal var rankBoard by rankingUiState::rankBoard
+    internal var rankFocusTag by rankingUiState::rankFocusTag
     // 榜单按枚举顺序循环切换，新增榜单只需在 RankBoard 里加一项
     internal var rankSwitch by rankingUiState::rankSwitch
     internal var rankRefresh by rankingUiState::rankRefresh
