@@ -51,20 +51,6 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
         addButton(transport,"下集") { if(episodeIndex<(detail?.episodes?.lastIndex ?: 0)) playEpisode(episodeIndex+1) }.apply { val enabled=episodeIndex<(detail?.episodes?.lastIndex ?: 0); isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .4f }
         lateinit var episodes: TextView
         episodes=addButton(transport,"选集") { showEpisodePanel(episodes) }
-        // 屏幕方向控制只提供给手机端；电视端继续保持原有遥控器控制栏。
-        if(isPhoneDevice) {
-            fun orientationLabel()="方向·"+listOf("跟随视频","固定竖屏","固定横屏")[phoneOrientationMode]
-            lateinit var orientationButton: TextView
-            orientationButton=addButton(secondaryTransport,orientationLabel()) {
-                val next=(phoneOrientationMode+1)%3
-                getSharedPreferences("playback-device-v1", Context.MODE_PRIVATE).edit()
-                    .putInt("phone_orientation_mode",next).apply()
-                applyDeviceOrientationPolicy()
-                if(next==0) player?.videoSize?.let(::applyVideoOrientation)
-                orientationButton.text=orientationLabel()
-                showHud()
-            }
-        }
         fun speedLabel()=String.format(java.util.Locale.US,"%.2f",library.playbackSpeed.toDouble())
         lateinit var speedButton: TextView
         speedButton=addButton(secondaryTransport,speedLabel()) { showSpeedPicker(speedButton) }
