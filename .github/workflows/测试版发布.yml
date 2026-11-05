@@ -308,11 +308,11 @@ jobs:
           tag = "hongguotv-bate-v" + version
           apk = "HongguoTV-" + version + ".apk"
           block = (
-              "<!-- TEST_RELEASE_INFO_START -->\\n"
-              f"- **当前版本：{version}**（versionCode：{code}）\\n"
-              "- 应用包名：\x60com.x.hongguotv.bate\x60\\n"
-              f"- [下载测试版 APK：{apk}](https://github.com/xycvip/HongGuoTV/releases/download/{tag}/{apk})\\n"
-              f"- [查看测试版 {version} 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/{tag})\\n"
+              "<!-- TEST_RELEASE_INFO_START -->\n"
+              f"- **当前版本：{version}**（versionCode：{code}）\n"
+              "- 应用包名：\x60com.x.hongguotv.bate\x60\n"
+              f"- [下载测试版 APK：{apk}](https://github.com/xycvip/HongGuoTV/releases/download/{tag}/{apk})\n"
+              f"- [查看测试版 {version} 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/{tag})\n"
               "<!-- TEST_RELEASE_INFO_END -->"
           )
           pattern = r"<!-- TEST_RELEASE_INFO_START -->.*?<!-- TEST_RELEASE_INFO_END -->"
