@@ -112,30 +112,33 @@ class AppUpdatesTest {
             )
         }
     }
-    @Test fun latestReleaseManifestIgnoresUnorderedGitHubReleaseList() {
-        val releases = org.json.JSONArray()
-            .put(JSONObject()
-                .put("tag_name", "hongguotv-bate-v0.0.9")
-                .put("published_at", "2026-11-05T01:34:52Z")
-                .put("assets", org.json.JSONArray().put(JSONObject()
-                    .put("name", "update.json")
-                    .put("browser_download_url", "https://example.test/0.0.9/update.json"))))
-            .put(JSONObject()
-                .put("tag_name", "hongguotv-bate-v0.0.8")
-                .put("published_at", "2026-11-05T01:07:26Z")
-                .put("assets", org.json.JSONArray().put(JSONObject()
-                    .put("name", "update.json")
-                    .put("browser_download_url", "https://example.test/0.0.8/update.json"))))
-            .put(JSONObject()
-                .put("tag_name", "hongguotv-bate-v0.0.10")
-                .put("published_at", "2026-11-05T02:16:51Z")
-                .put("assets", org.json.JSONArray().put(JSONObject()
-                    .put("name", "update.json")
-                    .put("browser_download_url", "https://example.test/0.0.10/update.json"))))
+    @Test fun latestReleaseManifestUsesGitHubLatestAndIgnoresOtherChannels() {
+        val latest = JSONObject()
+            .put("tag_name", "hongguotv-bate-v0.0.10")
+            .put("draft", false)
+            .put("prerelease", false)
+            .put("assets", org.json.JSONArray().put(JSONObject()
+                .put("name", "update.json")
+                .put("browser_download_url", "https://example.test/0.0.10/update.json")))
         assertEquals(
             "https://example.test/0.0.10/update.json",
-            latestReleaseManifestUrl(releases, AppUpdate.BETA_TAG_PREFIX)
+            latestReleaseManifestUrl(latest, AppUpdate.BETA_TAG_PREFIX)
         )
+        assertNull(latestReleaseManifestUrl(latest, AppUpdate.OFFICIAL_TAG_PREFIX))
+    }
+
+    @Test fun latestReleaseManifestRejectsDraftPrereleaseAndMissingAsset() {
+        val release = JSONObject()
+            .put("tag_name", "hongguotv-bate-v0.0.11")
+            .put("assets", org.json.JSONArray().put(JSONObject()
+                .put("name", "update.json")
+                .put("browser_download_url", "https://example.test/update.json")))
+        assertNull(latestReleaseManifestUrl(JSONObject(release.toString()).put("draft", true), AppUpdate.BETA_TAG_PREFIX))
+        assertNull(latestReleaseManifestUrl(JSONObject(release.toString()).put("prerelease", true), AppUpdate.BETA_TAG_PREFIX))
+        assertNull(latestReleaseManifestUrl(
+            JSONObject().put("tag_name", "hongguotv-bate-v0.0.11").put("assets", org.json.JSONArray()),
+            AppUpdate.BETA_TAG_PREFIX
+        ))
     }
 
 }
