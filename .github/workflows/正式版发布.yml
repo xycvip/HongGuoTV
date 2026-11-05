@@ -211,8 +211,11 @@ jobs:
                   awk '
                     {
                       line=$0
+                      # 正式版说明只保留用户可感知的正式功能变化。
+                      # 测试版专属发布、版本号、更新清单及构建流程属于内部事项，不进入正式版说明。
                       if (line ~ /^(Merge |合并分支|更新说明文档|补充.*说明|修正.*换行|格式整理|代码格式|重命名变量|拆分.*文件|模块化拆分|更新依赖锁文件)/) next
                       if (line ~ /^(docs?:|test:|chore:|style:|refactor:)/) next
+                      if (line ~ /(测试版|测试包|测试构建|测试发布|测试版本号|bate|beta|test-version|test-update|测试版发布|测试版工作流)/) next
                       if (line == "" || seen[line]++) next
                       print "- " line
                     }
