@@ -30,23 +30,32 @@ internal class PlaybackRepository(
     private val playbackLog = java.util.logging.Logger.getLogger("com.hongguotv.core.playback")
 
     private fun tabVideoModelResponse(id: String, identity: PlaybackDeviceSession.Profile, host: String): String? {
-        val query = Signer.encode(identity.values + ("_rticket" to clock().toString()))
-        val extra = listOf(
-            "video_id" to id,
-            "video_id_type" to "0",
-            "device_level" to "1",
-            "need_all_video_definition" to "1",
-            "need_mp4_align" to "0",
-            "use_os_player" to "0",
-            "video_platform" to "1024",
-            "source" to "0",
-            "from_video_id" to ""
-        ).joinToString("&") { (key, value) -> "${Signer.encode(key)}=${Signer.encode(value)}" }
+        val values = identity.values.toMutableMap().apply {
+            put("version_code", "73932")
+            put("manifest_version_code", "73932")
+            put("update_version_code", "73932")
+            put("pv_player", "73932")
+            put("version_name", "7.3.9.32")
+            put("video_id", id)
+            put("video_id_type", "0")
+            put("device_level", "1")
+            put("need_all_video_definition", "1")
+            put("need_mp4_align", "0")
+            put("use_os_player", "0")
+            put("video_platform", "1024")
+            put("source", "0")
+            put("from_video_id", "")
+        }
+        val signed = signer.signPlayback(
+            "https://$host/reading/bookapi/video_tab/multi_video_model/v1/",
+            values, null, PLAYBACK_UA
+        )
         val request = Request.Builder()
-            .url("https://$host/reading/bookapi/video_tab/multi_video_model/v1/?$query&$extra")
-            .header("User-Agent", PLAYBACK_UA)
-            .header("Accept", "application/json; charset=utf-8")
-            .apply { if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie) }
+            .url(signed.url)
+            .apply {
+                signed.headers.forEach { (key, value) -> header(key, value) }
+                if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
+            }
             .get()
             .build()
         val raw = RequestScope.execute(http.newCall(request)) { response ->
@@ -232,12 +241,21 @@ internal class PlaybackRepository(
         return StreamInfo(url,key,quality,mimeType)
     }
     private fun playerRequest(id: String,payload: ByteArray,identity: PlaybackDeviceSession.Profile,host: String): Request {
-        val query=Signer.encode(identity.values+("_rticket" to clock().toString()))
-        return Request.Builder()
-            .url("https://$host/novel/player/multi_video_model/v1/?$query")
-            .header("User-Agent",PLAYBACK_UA)
-            .header("Accept","application/json; charset=utf-8,application/x-protobuf")
-            .apply { if(identity.cookie.isNotBlank()) header("Cookie",identity.cookie) }
+        val values = identity.values.toMutableMap().apply {
+            put("version_code", "73932")
+            put("manifest_version_code", "73932")
+            put("update_version_code", "73932")
+            put("pv_player", "73932")
+            put("version_name", "7.3.9.32")
+        }
+        val signed = signer.signPlayback(
+            "https://$host/novel/player/multi_video_model/v1/",
+            values, payload, PLAYBACK_UA
+        )
+        val builder = Request.Builder().url(signed.url)
+        signed.headers.forEach { (key, value) -> builder.header(key, value) }
+        if (identity.cookie.isNotBlank()) builder.header("Cookie", identity.cookie)
+        return builder
             .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
             .build()
     }
