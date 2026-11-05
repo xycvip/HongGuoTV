@@ -128,6 +128,9 @@ jobs:
           NOTES="$(python3 - "$COMMITS" <<'PY'
           import sys
           lines = [x.strip() for x in sys.argv[1].splitlines() if x.strip()]
+          # 过滤纯格式修正、版本递增及已被后续实现替代的中间提交，避免把开发过程误写成最终功能。
+          ignored = ("换行", "格式", "环境变量", "版本号", "精简调试日志复制内容", "精简日志复制内容", "精简调试摘要")
+          lines = [x for x in lines if not any(word in x for word in ignored)]
           groups = [
               ("播放与播放器", ("播放", "播放器", "解码", "首帧", "缓冲", "切集", "接续", "渲染", "音频", "视频")),
               ("焦点与遥控器", ("焦点", "遥控器", "按键", "方向键")),
