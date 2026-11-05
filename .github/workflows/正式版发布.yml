@@ -204,9 +204,37 @@ jobs:
           git clone --depth 1 "https://x-access-token:$APPDOWNLOAD_TOKEN@github.com/xycvip/AppDownload.git" "$RUNNER_TEMP/AppDownload"
           cd "$RUNNER_TEMP/AppDownload"
 
+          RECOVER_EXISTING_RELEASE=false
           if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "::error::正式版本标签已存在：$RELEASE_TAG，停止发布以防覆盖"
-            exit 1
+            # 上次可能已成功创建 Release，但在推送 Raw latest.json 时中断。
+            # 不覆盖旧 Release，也不直接失败；从已发布附件恢复同一版本的清单。
+            RELEASE_STATE="$(gh release view "$RELEASE_TAG" --repo xycvip/AppDownload --json isDraft,isPrerelease)"
+            echo "$RELEASE_STATE" | jq -e '.isDraft == false and .isPrerelease == false' >/dev/null || {
+              echo "::error::已占用的正式版标签不是普通正式 Release：$RELEASE_TAG"
+              exit 1
+            }
+            mkdir -p "$RUNNER_TEMP/existing-official-release"
+            gh release download "$RELEASE_TAG" --repo xycvip/AppDownload --pattern update.json --dir "$RUNNER_TEMP/existing-official-release"
+            EXISTING_UPDATE="$RUNNER_TEMP/existing-official-release/update.json"
+            jq -e --arg tag "$RELEASE_TAG" --arg version "$VERSION_NAME" '
+              .schema == 1
+              and .packageName == "com.x.hongguotv"
+              and .tag == $tag
+              and .versionName == $version
+              and .apk.name == ("HongguoTV-" + $version + ".apk")
+              and (.apk.sha256 | test("^[0-9a-fA-F]{64}$"))
+              and (.apk.size | type == "number" and . > 0)
+            ' "$EXISTING_UPDATE" >/dev/null || {
+              echo "::error::已存在 Release 的 update.json 校验失败，拒绝覆盖"
+              exit 1
+            }
+            APK_SIZE="$(jq -r '.apk.size' "$EXISTING_UPDATE")"
+            APK_SHA256="$(jq -r '.apk.sha256' "$EXISTING_UPDATE")"
+            SOURCE_COMMIT="$(jq -r '.sourceCommit // empty' "$EXISTING_UPDATE")"
+            RELEASE_NOTES="$(jq -r '.notes // "优化使用体验"' "$EXISTING_UPDATE")"
+            RECOVER_EXISTING_RELEASE=true
+            echo "检测到上次已创建的正式版 Release：$RELEASE_TAG"
+            echo "本次将恢复 Raw 更新清单，不重复创建 Release 或覆盖 APK"
           fi
 
           mkdir -p hongguoTV
@@ -268,10 +296,17 @@ jobs:
           } >> hongguoTV/README.md
 
           # 先创建正式版发布及APK附件，确认下载资源已存在后再更新 latest.json
-          gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/release/SHA256SUMS" "$RUNNER_TEMP/release/update.json" \
-            --repo xycvip/AppDownload \
-            --title "红果TV正式版 $VERSION_NAME" \
-            --notes "$RELEASE_NOTES"
+          if [ "$RECOVER_EXISTING_RELEASE" = "true" ]; then
+            cp "$RUNNER_TEMP/existing-official-release/update.json" hongguoTV/latest.json
+            cp "$RUNNER_TEMP/existing-official-release/update.json" "$RUNNER_TEMP/release/update.json"
+            echo "已从现有 Release 附件恢复正式版 latest.json"
+          else
+            gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/release/SHA256SUMS" "$RUNNER_TEMP/release/update.json" \
+              --repo xycvip/AppDownload \
+              --title "红果TV正式版 $VERSION_NAME" \
+              --notes "$RELEASE_NOTES" \
+              --latest
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
