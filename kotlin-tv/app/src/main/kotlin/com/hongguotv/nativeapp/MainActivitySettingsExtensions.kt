@@ -565,7 +565,7 @@ import java.util.concurrent.atomic.AtomicLong
                                 if(!folder.exists() && !folder.mkdirs()) error("无法创建日志目录")
                                 val stamp=java.text.SimpleDateFormat("yyyyMMdd-HHmmss",Locale.US).format(java.util.Date())
                                 val fresh=java.io.File(folder,"hongguotv-debug-$stamp.log")
-                                fresh.appendText("===== 红果TV 调试日志重新开始 ${java.util.Date()} =====\\n",Charsets.UTF_8)
+                                fresh.appendText("===== 红果TV 调试日志重新开始 ${java.util.Date()} =====\n",Charsets.UTF_8)
                                 debugFile=fresh
                             } else {
                                 debugFile=null
