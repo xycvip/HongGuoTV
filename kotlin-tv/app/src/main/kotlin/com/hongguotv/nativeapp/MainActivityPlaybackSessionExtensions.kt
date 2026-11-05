@@ -31,7 +31,7 @@ internal fun MainActivity.closeActiveVideo() {
         val wasForeground=foreground; foreground=false
         val oldPanel=episodePanel; episodePanel=null; oldPanel?.dismiss(); foreground=wasForeground
         speedDialog?.dismiss(); speedDialog=null
-        main.removeCallbacks(hideHud); main.removeCallbacks(seekRunnable); main.removeCallbacks(singleTapPlayback); pendingSeek=null
+        main.removeCallbacks(hideHud); main.removeCallbacks(seekRunnable); pendingSeek=null
         progressUserSeeking=false; lastTapAt=0L
         playerListener?.let { player?.removeListener(it) }; playerListener=null
         debugTick?.let(main::removeCallbacks); debugTick=null
