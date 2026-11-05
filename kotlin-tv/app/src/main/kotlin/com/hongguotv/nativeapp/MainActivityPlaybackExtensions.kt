@@ -117,8 +117,8 @@ import java.util.concurrent.atomic.AtomicLong
             playerListener?.let { player?.removeListener(it) }; playerListener=null
             if(!promoteStandby) { player?.stop(); player?.clearMediaItems() }
             closeActiveVideo(); closeTransport(playbackHttp); playbackHttp=null
-            main.removeCallbacks(hideHud); main.removeCallbacks(seekRunnable); main.removeCallbacks(singleTapPlayback); pendingSeek=null
-        progressUserSeeking=false; lastTapAt=0L
+            main.removeCallbacks(hideHud); main.removeCallbacks(seekRunnable); pendingSeek=null
+        progressUserSeeking=false
         } else releasePlayer(resetOrientation = screen != "player")
         artwork.cancelPage(clearMemory=true)
         playbackHttp=claimedHttp; video=prefetched
