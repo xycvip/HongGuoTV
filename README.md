@@ -6,25 +6,27 @@
 
 ## 版本信息与下载
 
-版本号和 APK 下载地址不在本文中固定填写，统一以各自的最新版本清单为准。每次发布新版本后，清单由发布工作流更新，README 无需跟着改版本号。
+以下版本号及下载链接由对应发布工作流自动维护。每次成功发布后，工作流会同步更新本栏，始终展示最新已发布版本。
 
 ### 本仓库测试版
 
+<!-- TEST_RELEASE_INFO_START -->
+- **当前版本：0.0.7**（versionCode：7）
 - 应用包名：`com.x.hongguotv.bate`
-- [查看最新测试版发布页面及 APK 附件](https://github.com/xycvip/HongGuoTV/releases/latest)
-- [查看测试版最新版本清单](https://raw.githubusercontent.com/xycvip/HongGuoTV/main/test-update/latest.json)
-
-打开版本清单可查看当前 `versionName`、`versionCode`、APK 文件名及 `apk.url` 下载地址。
+- [下载测试版 APK：HongguoTV-0.0.7.apk](https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.7/HongguoTV-0.0.7.apk)
+- [查看测试版 0.0.7 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/hongguotv-bate-v0.0.7)
+<!-- TEST_RELEASE_INFO_END -->
 
 ### 正式版
 
+<!-- OFFICIAL_RELEASE_INFO_START -->
+- **当前版本：1.1.15**（versionCode：2026103475）
 - 应用包名：`com.x.hongguotv`
-- [查看正式版最新发布页面及 APK 附件](https://github.com/xycvip/AppDownload/releases)
-- [查看正式版最新版本清单](https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json)
+- [下载正式版 APK：HongguoTV-1.1.15.apk](https://github.com/xycvip/AppDownload/releases/download/hongguotv-v1.1.15/HongguoTV-1.1.15.apk)
+- [查看正式版 1.1.15 发布说明](https://github.com/xycvip/AppDownload/releases/tag/hongguotv-v1.1.15)
+<!-- OFFICIAL_RELEASE_INFO_END -->
 
-正式版由本仓库构建后发布至 `xycvip/AppDownload`。打开版本清单可查看当前 `versionName`、`versionCode`、APK 文件名及 `apk.url` 下载地址。
-
-> 测试版与正式版使用不同的应用包名，可并行安装；两者版本号独立维护。README 提供长期有效的清单入口，具体版本及下载链接以清单内容为准。
+> 测试版与正式版使用不同的应用包名，可并行安装；两者版本号独立维护。
 
 ## 项目来源
 
