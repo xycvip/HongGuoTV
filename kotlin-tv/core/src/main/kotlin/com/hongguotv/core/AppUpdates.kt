@@ -114,25 +114,21 @@ object UpdateFiles {
 }
 
 /**
- * 从指定发布通道中选择发布时间最新的更新清单。
- * 不依赖 GitHub API 返回数组的原始顺序。
+ * 从 GitHub /releases/latest 响应中读取当前仓库的更新清单附件。
+ * Latest 由 GitHub 在单个仓库内选定，不依赖 Releases 列表的返回顺序。
  */
 internal fun latestReleaseManifestUrl(
-    releases: org.json.JSONArray,
+    release: org.json.JSONObject,
     releaseTagPrefix: String
 ): String? {
-    val candidates = (0 until releases.length())
-        .mapNotNull { releases.optJSONObject(it) }
-        .filter { !it.optBoolean("draft", false) && it.optString("tag_name").startsWith(releaseTagPrefix) }
-        .sortedByDescending { it.optString("published_at") }
+    if (release.optBoolean("draft", false) || release.optBoolean("prerelease", false)) return null
+    if (!release.optString("tag_name").startsWith(releaseTagPrefix)) return null
 
-    for (release in candidates) {
-        val assets = release.optJSONArray("assets") ?: continue
-        for (index in 0 until assets.length()) {
-            val asset = assets.optJSONObject(index) ?: continue
-            if (asset.optString("name") == "update.json") {
-                asset.optString("browser_download_url").takeIf { it.isNotBlank() }?.let { return it }
-            }
+    val assets = release.optJSONArray("assets") ?: return null
+    for (index in 0 until assets.length()) {
+        val asset = assets.optJSONObject(index) ?: continue
+        if (asset.optString("name") == "update.json") {
+            return asset.optString("browser_download_url").takeIf { it.isNotBlank() }
         }
     }
     return null
@@ -145,7 +141,7 @@ class AppUpdateRepository(
     private val latestManifestUrl: String = AppUpdate.OFFICIAL_LATEST_MANIFEST,
     private val apkFilePrefix: String = "HongguoTV-"
 ) : java.io.Closeable {
-    private val apiReleasesUrl = "https://api.github.com/repos/$releaseRepository/releases?per_page=100"
+    private val apiLatestReleaseUrl = "https://api.github.com/repos/$releaseRepository/releases/latest"
     private fun parseManifest(json: String) =
         AppUpdate.parse(json, expectedPackageName, releaseRepository, releaseTagPrefix, apkFilePrefix)
 
@@ -188,27 +184,26 @@ class AppUpdateRepository(
     private fun hostOf(url: String) = url.removePrefix("https://").substringBefore("/")
 
     /**
-     * Prefer the selected channel Releases API so each installed package can identify its own release
-     * by tag prefix. If the API or its update.json asset is unavailable, fall back
-     * to the stable Raw manifest URL and then its configured proxy mirrors.
+     * 直接读取当前分发仓库的 Latest Release。
+     * 测试版与正式版使用不同仓库，因此各自只会读取自己的 Latest。
+     * API 或附件不可用时，latest() 仍会回退到对应渠道的 Raw latest.json。
      */
     private fun latestFromApi(): AppUpdate {
-        val apiUrl = "${apiReleasesUrl}&cachebust=${System.currentTimeMillis()}"
-        val releasesJson = http.newCall(request(apiUrl).newBuilder()
+        val apiUrl = "${apiLatestReleaseUrl}?cachebust=${System.currentTimeMillis()}"
+        val releaseJson = http.newCall(request(apiUrl).newBuilder()
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .build()).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("GitHub API HTTP${response.code}")
-            val body = response.body ?: throw IOException("GitHub API 响应为空")
-            if (body.contentLength() > 2L * 1024 * 1024) throw IOException("GitHub API 响应过大")
-            body.string().also { if (it.length > 2 * 1024 * 1024) throw IOException("GitHub API 响应过大") }
+            if (!response.isSuccessful) throw IOException("GitHub Latest API HTTP${response.code}")
+            val body = response.body ?: throw IOException("GitHub Latest API 响应为空")
+            if (body.contentLength() > 2L * 1024 * 1024) throw IOException("GitHub Latest API 响应过大")
+            body.string().also { if (it.length > 2 * 1024 * 1024) throw IOException("GitHub Latest API 响应过大") }
         }
 
-        val releases = org.json.JSONArray(releasesJson)
-        // GitHub Releases API 的数组顺序不保证始终按发布时间排列。
-        // 必须显式按 published_at 从新到旧排序，避免 0.0.9 排在 0.0.10 前面时误判为已是最新。
-        val updateJsonUrl = latestReleaseManifestUrl(releases, releaseTagPrefix)
-        val assetUrl = updateJsonUrl ?: throw IOException("未找到红果TV更新清单")
+        val release = org.json.JSONObject(releaseJson)
+        val releaseTag = release.optString("tag_name")
+        val assetUrl = latestReleaseManifestUrl(release, releaseTagPrefix)
+            ?: throw IOException("Latest Release 不属于当前更新通道，或缺少 update.json 附件")
         val manifestUrl = "${assetUrl}?cachebust=${System.currentTimeMillis()}"
         return tryMirrors(manifestUrl, 12) { response, _ ->
             val bytes = response.body?.byteStream()?.use { input ->
@@ -220,8 +215,13 @@ class AppUpdateRepository(
                 }
                 out.toByteArray()
             } ?: throw IOException("更新信息为空")
-            try { parseManifest(bytes.toString(Charsets.UTF_8)) }
-            catch (_: Exception) { throw IOException("Release 更新信息格式不正确") }
+            try {
+                parseManifest(bytes.toString(Charsets.UTF_8)).also { update ->
+                    require(update.tag == releaseTag) { "更新清单标签与 Latest Release 不一致" }
+                }
+            } catch (_: Exception) {
+                throw IOException("Release 更新信息格式不正确或标签不匹配")
+            }
         }
     }
 
