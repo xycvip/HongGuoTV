@@ -477,7 +477,10 @@ class MainActivity: Activity() {
             currentPosition = { currentPosition() },
             seekRunnable = seekRunnable,
             centerControl = { playbackTapFeedbackView },
-            showCenterControl = { showPlaybackTapFeedback(player?.playWhenReady==true) },
+            showCenterControl = {
+                showPanel()
+                showPlaybackTapFeedback(player?.playWhenReady==true)
+            },
             showHud = { showHud() },
             updatePlaybackText = { updatePlaybackText() },
             seekTo = { position -> seekTo(position) },
