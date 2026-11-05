@@ -192,6 +192,8 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                                 }
                             } else if (player === secondary && standbyPromotionAt > 0L && standbyVisibleFirstFrameAt == 0L) {
                                 standbyVisibleFirstFrameAt = now
+                                seamlessHandoffInProgress = false
+                                updatePlaybackBufferingIndicator()
                                 debugLog("无缝接续：接管后可见首帧，切换到画面=${now - standbyPromotionAt}ms，PlayerView绑定=${standbyAttachedAt - standbyPromotionAt}ms")
                             }
                         }
