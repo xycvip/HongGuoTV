@@ -84,8 +84,6 @@ class MainActivity: Activity() {
             (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     }
     internal val isPhoneDevice: Boolean get() = !isTelevisionDevice
-    internal val phoneOrientationMode: Int
-        get() = getSharedPreferences("playback-device-v1", MODE_PRIVATE).getInt("phone_orientation_mode", 0).coerceIn(0, 2)
     internal val bg get() = TvStyle.background
     internal val surface get() = TvStyle.surface
     internal val accent get() = TvStyle.accent
