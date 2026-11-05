@@ -83,10 +83,9 @@ internal fun MainActivity.createPlayerView(): PlayerView {
     }
 
     /** 双播放器已接管预加载职责时，隐藏主画面的缓冲转圈；退出双播放器后恢复原提示。 */
-    /** 双播放器准备期间及接管首帧前隐藏转圈；单播放器回退时恢复正常提示。 */
+    /** 仅在备用播放器已经接管、等待当前画面首帧时隐藏转圈；B后台预加载不得屏蔽A的真实缓冲状态。 */
     internal fun MainActivity.shouldSuppressSeamlessBuffering(): Boolean =
-        seamlessPlaybackEnabled &&
-            (standbyEpisodeId.isNotEmpty() || standbyPlayer != null || seamlessHandoffInProgress)
+        seamlessPlaybackEnabled && seamlessHandoffInProgress
 
     internal fun MainActivity.updatePlaybackBufferingIndicator() {
         val view = playerView ?: return
