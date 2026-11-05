@@ -89,9 +89,14 @@ internal fun MainActivity.renderCatalogContent(
             container.addView(host,lp(-1,-2))
             renderTheaterFilters(host)
             // 重建剧场页面时立即恢复筛选焦点，避免网络结果返回前焦点短暂落到顶部「剧场」导航。
-            theaterFocusTag?.let { focusTag ->
+            // 仅在没有明确导航/体裁焦点指令时恢复上次筛选焦点，避免旧记录覆盖新导航。
+            if(!focusNav && !focusType) theaterFocusTag?.let { focusTag ->
                 root.post {
-                    if(screen=="catalog" && tab==7) root.findViewWithTag<View>(focusTag)?.requestFocus()
+                    if(screen=="catalog" && tab==7) {
+                        val current=root.findFocus()
+                        val target=root.findViewWithTag<View>(focusTag)
+                        if((current==null || current===navForTab()) && target?.isAttachedToWindow==true) target.requestFocus()
+                    }
                 }
             }
         }
@@ -158,8 +163,10 @@ internal fun MainActivity.renderCatalogContent(
                             if(!restoreTag.isNullOrBlank()) {
                                 root.post {
                                     if(screen=="catalog" && tab==7) {
+                                        val current=root.findFocus()
                                         val target=root.findViewWithTag<View>(restoreTag)
-                                        if(target?.isAttachedToWindow==true && !target.hasFocus()) target.requestFocus()
+                                        // 若用户已将焦点移到其他控件，不再用过期恢复任务抢焦点。
+                                        if((current==null || current===navForTab()) && target?.isAttachedToWindow==true && !target.hasFocus()) target.requestFocus()
                                     }
                                 }
                             }
