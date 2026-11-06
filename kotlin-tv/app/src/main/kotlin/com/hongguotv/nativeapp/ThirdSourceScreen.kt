@@ -1501,7 +1501,11 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
         detachPlayerViews()
         // 换集/重建时先停掉进行中的快进预览，并释放可能残存的旧实例，避免音频串音
         scrubState.stop(); main.removeCallbacks(scrubTick); lastBandwidthBps = 0
-        player?.let { stale -> stale.removeListener(playerListener); stale.release() }
+        player?.let { stale ->
+            stale.removeListener(playerListener)
+            FfmpegPlayerRegistry.detach(stale)
+            stale.release()
+        }
         player = null
         val data = detail ?: return
         val group = data.groups.getOrNull(playbackState.group) ?: return
@@ -1732,7 +1736,11 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
         overlayVisible = false
         playerHost?.let { host -> (host.parent as? FrameLayout)?.removeView(host) }
         playerViews.clear()
-        player?.let { instance -> instance.removeListener(playerListener); instance.release() }
+        player?.let { instance ->
+            instance.removeListener(playerListener)
+            FfmpegPlayerRegistry.detach(instance)
+            instance.release()
+        }
         player = null
         keepScreenOn(false)
     }
