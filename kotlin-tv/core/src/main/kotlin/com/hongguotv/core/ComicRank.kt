@@ -8,10 +8,18 @@ import org.jsoup.nodes.Document
 import java.io.IOException
 
 /** Website rank boards share one layout and one serialized payload shape. */
-enum class RankBoard(val path: String, val route: String, val rankKey: String, val label: String) {
-    COMIC("hot-comic-drama","rank_hot-comic-drama/page","comic","漫剧"),
+enum class RankBoard(
+    val path: String,
+    val route: String,
+    val rankKey: String,
+    val label: String,
+    val buttonLabel: String = "${label}榜",
+    val sourceText: String = "来源：红果${label}热播榜"
+) {
+    TOTAL("hot-drama","rank_hot-drama/page","","总","总榜","来源：红果热播榜"),
     REAL("hot-real-drama","rank_hot-real-drama/page","real","短剧"),
-    AI("hot-ai-drama","rank_hot-ai-drama/page","ai","AI剧");
+    AI("hot-ai-drama","rank_hot-ai-drama/page","ai","AI剧"),
+    COMIC("hot-comic-drama","rank_hot-comic-drama/page","comic","漫剧");
 }
 
 /** Read the website's serialized data only; never execute its scripts. */
@@ -60,7 +68,7 @@ internal object ComicRank {
         // Some responses contain rendered cards while the deferred JSON is still unresolved.
         val route=ContentRepository.extractRouter(html).optJSONObject("loaderData")
             ?.optJSONObject(board.route) ?: throw IOException("页面没有${board.label}榜单数据")
-        if(route.str("rankKey")!=board.rankKey || route.optInt("pageNum")!=page) throw IOException("${board.label}分页信息异常")
+        if((board.rankKey.isNotBlank() && route.str("rankKey")!=board.rankKey) || route.optInt("pageNum")!=page) throw IOException("${board.label}分页信息异常")
         val positions=linkedMapOf<String,RankPosition>()
         val cards=document.select("article[aria-labelledby^=rank-title-]")
         val pageSize=cards.size
