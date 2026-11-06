@@ -131,10 +131,10 @@ class AppUpdatesTest {
         val o = json()
         o.getJSONObject("apk").put(
             "url",
-            "https://gitcode.com/xycvip/hongguotv/-/releases/hongguotv-v0.9.0+1/downloads/HongguoTV-0.9.0-build.1.apk"
+            "https://gitcode.com/xycvip/hongguotv/releases/download/hongguotv-v0.9.0+1/HongguoTV-0.9.0-build.1.apk"
         )
         assertEquals(
-            "https://gitcode.com/xycvip/hongguotv/-/releases/hongguotv-v0.9.0+1/downloads/HongguoTV-0.9.0-build.1.apk",
+            "https://gitcode.com/xycvip/hongguotv/releases/download/hongguotv-v0.9.0+1/HongguoTV-0.9.0-build.1.apk",
             AppUpdate.parse(o.toString()).downloadUrl
         )
         o.getJSONObject("apk").put("url", "https://gitcode.com/other/repo/releases/download/hongguotv-v0.9.0+1/HongguoTV-0.9.0-build.1.apk")
