@@ -133,14 +133,16 @@ internal class TheaterRepository(
                 for(host in hosts) {
                     try {
                         val candidate=if(group=="v1") {
-                            val content=theaterRequest(profile,host,v1Endpoint,theaterV1Body(type,selected,cursor,session.shown.toSet(),false))
-                            val contentCode=content.optInt("code",-1)
-                            if(contentCode!=0) throw IOException("v1 内容请求业务码=$contentCode")
-                            if(page==1) {
+                            val panelData=if(page==1) {
                                 val panel=theaterRequest(profile,host,v1Endpoint,theaterV1Body(type,selected,cursor,session.shown.toSet(),true))
                                 val panelCode=panel.optInt("code",-1)
                                 if(panelCode!=0) throw IOException("v1 筛选面板请求业务码=$panelCode")
-                                val panelData=panel.optJSONObject("data") ?: throw IOException("v1 筛选面板缺少 data")
+                                panel.optJSONObject("data") ?: throw IOException("v1 筛选面板缺少 data")
+                            } else null
+                            val content=theaterRequest(profile,host,v1Endpoint,theaterV1Body(type,selected,cursor,session.shown.toSet(),false))
+                            val contentCode=content.optInt("code",-1)
+                            if(contentCode!=0) throw IOException("v1 内容请求业务码=$contentCode")
+                            if(panelData!=null) {
                                 val contentData=content.optJSONObject("data") ?: throw IOException("v1 内容请求缺少 data")
                                 contentData.put("selector_rows",panelData.optJSONArray("selector_rows") ?: throw IOException("v1 未返回 selector_rows"))
                             }
@@ -162,7 +164,7 @@ internal class TheaterRepository(
                         val failure=if(error is IOException) error else IOException("剧场响应解析失败：${error.message}",error)
                         lastError=failure
                         if(failure.message.orEmpty().contains("响应为空")) sawEmpty=true
-                        if(Regex("""HTTP\\s+(401|403)\\b""").containsMatchIn(failure.message.orEmpty())) sawIdentityFailure=true
+                        if(Regex("""HTTP\s+(401|403)\b""").containsMatchIn(failure.message.orEmpty())) sawIdentityFailure=true
                         theaterLog.warning("剧场接口 $group 组域名 $host 失败；轮次=${round+1}；原因=${failure.message}")
                     }
                 }
