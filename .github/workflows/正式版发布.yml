@@ -51,6 +51,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
           APPDOWNLOAD_TOKEN: ${{ secrets.APPDOWNLOAD_TOKEN || secrets.APPDOWNLOAD_UPLOAD_TOKEN }}
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
         run: |
           set -euo pipefail
           missing=()
@@ -59,6 +60,7 @@ jobs:
           [ -n "$KEY_ALIAS" ] || missing+=("HONGGUOTV_KEY_ALIAS")
           [ -n "$KEY_PASSWORD" ] || missing+=("HONGGUOTV_KEY_PASSWORD")
           [ -n "$APPDOWNLOAD_TOKEN" ] || missing+=("APPDOWNLOAD_TOKEN（或 APPDOWNLOAD_UPLOAD_TOKEN）")
+          [ -n "$GITCODE_TOKEN" ] || missing+=("GITCODE_TOKEN")
           if [ "${#missing[@]}" -gt 0 ]; then
             printf '::error::缺少正式发布凭据：%s\n' "$(IFS='、'; echo "${missing[*]}")"
             exit 1
@@ -454,6 +456,117 @@ jobs:
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
+
+      - name: 同步正式版到GitCode发行版
+        shell: bash
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          APK_SHA256: ${{ steps.apk.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          API_BASE="https://api.gitcode.com/api/v5/repos/xycvip/hongguotv"
+          APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
+          UPDATE="$RUNNER_TEMP/release/update.json"
+          LATEST="$RUNNER_TEMP/AppDownload/hongguoTV/latest.json"
+          CHECKSUMS="$RUNNER_TEMP/release/SHA256SUMS"
+          NOTES="$RUNNER_TEMP/release-notes-final.txt"
+
+          for file in "$APK" "$UPDATE" "$LATEST" "$CHECKSUMS" "$NOTES"; do
+            test -s "$file" || { echo "::error::GitCode同步所需文件不存在：$file"; exit 1; }
+          done
+
+          APK_NAME="HongguoTV-$VERSION_NAME.apk"
+          RELEASE_NAME="红果TV正式版 $VERSION_NAME"
+          RELEASE_BODY="$(cat "$NOTES")"
+
+          # 先按标签查询，支持发布中断后的安全续传；仅404时创建新发行版。
+          HTTP_CODE="$(curl --silent --show-error --location \
+            --output "$RUNNER_TEMP/gitcode-release.json" \
+            --write-out '%{http_code}' \
+            --get "$API_BASE/releases/$RELEASE_TAG" \
+            --data-urlencode "access_token=$GITCODE_TOKEN")"
+          if [ "$HTTP_CODE" = "404" ]; then
+            jq -n \
+              --arg tag "$RELEASE_TAG" \
+              --arg name "$RELEASE_NAME" \
+              --arg body "$RELEASE_BODY" \
+              '{tag_name:$tag,name:$name,body:$body,release_status:"latest"}' \
+              > "$RUNNER_TEMP/gitcode-create-release.json"
+            curl --fail --silent --show-error --location \
+              --request POST "$API_BASE/releases?access_token=$GITCODE_TOKEN" \
+              --header 'Content-Type: application/json' \
+              --data-binary @"$RUNNER_TEMP/gitcode-create-release.json" \
+              --output "$RUNNER_TEMP/gitcode-release.json"
+            echo "已在GitCode创建正式版发行版：$RELEASE_TAG"
+          elif [ "$HTTP_CODE" = "200" ]; then
+            jq -e --arg tag "$RELEASE_TAG" '.tag_name == $tag' "$RUNNER_TEMP/gitcode-release.json" >/dev/null
+            echo "GitCode发行版已存在，检查并补齐缺失附件：$RELEASE_TAG"
+          else
+            echo "::error::查询GitCode发行版失败，HTTP状态码：$HTTP_CODE"
+            cat "$RUNNER_TEMP/gitcode-release.json"
+            exit 1
+          fi
+
+          # GitCode使用预签名对象存储地址上传附件；严格使用接口返回的请求头。
+          upload_asset() {
+            local file="$1"
+            local name="$2"
+            if jq -e --arg name "$name" '(.assets // []) | any(.name == $name)' \
+              "$RUNNER_TEMP/gitcode-release.json" >/dev/null; then
+              echo "附件已存在，跳过重复上传：$name"
+              return 0
+            fi
+
+            curl --fail --silent --show-error --location --get \
+              "$API_BASE/releases/$RELEASE_TAG/upload_url" \
+              --data-urlencode "access_token=$GITCODE_TOKEN" \
+              --data-urlencode "file_name=$name" \
+              --output "$RUNNER_TEMP/gitcode-upload-url.json"
+
+            local upload_url
+            upload_url="$(jq -er '.url | select(type == "string" and length > 0)' "$RUNNER_TEMP/gitcode-upload-url.json")"
+            mapfile -t upload_headers < <(jq -r '.headers | to_entries[] | "\(.key): \(.value)"' "$RUNNER_TEMP/gitcode-upload-url.json")
+            [ "${#upload_headers[@]}" -gt 0 ] || { echo "::error::GitCode未返回附件上传请求头：$name"; exit 1; }
+
+            curl --fail --silent --show-error --location \
+              --request PUT \
+              --upload-file "$file" \
+              "${upload_headers[@]/#/--header=}" \
+              "$upload_url" \
+              --output /dev/null
+            echo "GitCode附件上传完成：$name"
+
+            # 重新读取发行版资产列表，确保后续附件判断使用服务端最新状态。
+            curl --fail --silent --show-error --location --get \
+              "$API_BASE/releases/$RELEASE_TAG" \
+              --data-urlencode "access_token=$GITCODE_TOKEN" \
+              --output "$RUNNER_TEMP/gitcode-release.json"
+          }
+
+          upload_asset "$APK" "$APK_NAME"
+          upload_asset "$LATEST" "latest.json"
+          upload_asset "$UPDATE" "update.json"
+          upload_asset "$CHECKSUMS" "SHA256SUMS"
+
+          # 最终校验：必须存在原始.apk附件，不能把APK压缩或改名成ZIP。
+          curl --fail --silent --show-error --location --get \
+            "$API_BASE/releases/$RELEASE_TAG" \
+            --data-urlencode "access_token=$GITCODE_TOKEN" \
+            --output "$RUNNER_TEMP/gitcode-release-final.json"
+          jq -e --arg apk "$APK_NAME" --argjson size "$(stat -c '%s' "$APK")" \
+            '.assets | any(.name == $apk and ((.size // $size) == $size or (.size == null)))' \
+            "$RUNNER_TEMP/gitcode-release-final.json" >/dev/null || {
+              echo "::error::GitCode发行版未找到正确的APK附件：$APK_NAME"
+              cat "$RUNNER_TEMP/gitcode-release-final.json"
+              exit 1
+            }
+          APK_URL="$(jq -r --arg apk "$APK_NAME" '.assets[] | select(.name == $apk) | .browser_download_url' "$RUNNER_TEMP/gitcode-release-final.json" | head -n 1)"
+          [ -n "$APK_URL" ] || { echo "::error::GitCode未返回APK下载地址"; exit 1; }
+          echo "GitCode正式版同步成功"
+          echo "GitCode发行版：https://gitcode.com/xycvip/hongguotv/-/releases/$RELEASE_TAG"
+          echo "APK直链：$APK_URL"
 
       - name: 发布到源码仓库 GitHub Release
         shell: bash
