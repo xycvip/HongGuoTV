@@ -1,5 +1,5 @@
-// Upstream: anilbeesetti/nextlib v1.11.1-0.17.0
-// License: GPL-3.0; see kotlin-tv/third_party/nextlib/LICENSE
+# Upstream: anilbeesetti/nextlib v1.11.1-0.17.0
+# License: GPL-3.0; see kotlin-tv/third_party/nextlib/LICENSE
 # For more information about using CMake with Android Studio, read the
 # documentation: https://d.android.com/studio/projects/add-native-code.html
 
