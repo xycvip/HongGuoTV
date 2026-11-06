@@ -354,11 +354,15 @@ class AppUpdateRepository(
         // 只有版本号、文件名和 SHA256 完全一致时才允许切换，避免把不同构建的 APK 混装。
         if (hostOf(base) == "gitcode.com" && mirrorIndex == null) {
             try {
-                val fallbackManifest = "${latestManifestUrl}?cachebust=${System.currentTimeMillis()}"
-                val fallback = tryMirrors(fallbackManifest, 12) { response, _ ->
-                    val text = response.body?.string() ?: throw IOException("AppDownload备用清单为空")
-                    if (text.length > 65536) throw IOException("AppDownload备用清单过大")
-                    parseManifest(text)
+                val fallback = try {
+                    latestFromApi()
+                } catch (githubApiError: Exception) {
+                    val fallbackManifest = "${latestManifestUrl}?cachebust=${System.currentTimeMillis()}"
+                    tryMirrors(fallbackManifest, 12) { response, _ ->
+                        val text = response.body?.string() ?: throw IOException("AppDownload备用清单为空")
+                        if (text.length > 65536) throw IOException("AppDownload备用清单过大")
+                        parseManifest(text)
+                    }
                 }
                 if (fallback.versionCode != update.versionCode ||
                     fallback.fileName != update.fileName ||
