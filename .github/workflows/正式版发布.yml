@@ -467,6 +467,7 @@ jobs:
         run: |
           set -euo pipefail
           API_BASE="https://api.gitcode.com/api/v5/repos/xycvip/hongguotv"
+          ACCESS_TOKEN_QUERY="$(python3 -c 'import os,urllib.parse; print(urllib.parse.urlencode({"access_token":os.environ["GITCODE_TOKEN"]}))')"
           APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
           UPDATE="$RUNNER_TEMP/release/update.json"
           LATEST="$RUNNER_TEMP/AppDownload/hongguoTV/latest.json"
@@ -494,9 +495,8 @@ jobs:
               --arg body "$RELEASE_BODY" \
               '{tag_name:$tag,name:$name,body:$body,release_status:"latest"}' \
               > "$RUNNER_TEMP/gitcode-create-release.json"
-            curl --fail --silent --show-error --location --get \
-              --request POST "$API_BASE/releases" \
-              --data-urlencode "access_token=$GITCODE_TOKEN" \
+            curl --fail --silent --show-error --location \
+              --request POST "$API_BASE/releases?$ACCESS_TOKEN_QUERY" \
               --header 'Content-Type: application/json' \
               --data-binary @"$RUNNER_TEMP/gitcode-create-release.json" \
               --output "$RUNNER_TEMP/gitcode-release.json"
