@@ -36,7 +36,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
 }
 
     internal fun MainActivity.switchTab(next: Int) {
-        val targetTab=if(next==9) 3 else next
+        val targetTab=if(next==9) 4 else next
         debugLog("页面导航：主导航页签 $tab -> $targetTab")
         leaveCollection()
         tabState[tab]=CatalogState(page,catalog,hasMore,ranking,rankBoard,genre,aiCatalog,aiGenre); tabFocus[tab]=catalogFocus
