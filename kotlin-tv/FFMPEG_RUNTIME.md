@@ -19,61 +19,43 @@
 3. `FfmpegRuntimeInstaller` 支持按当前应用进程 ABI 选择运行库、HTTPS 下载、SHA-256 校验、ELF 架构检查、只读处理、暂存目录安装。
 4. `FfmpegRuntimeLoader` 在后台加载已安装的运行库；没有运行库时保留原有 MediaCodec 播放路径。
 5. `FfmpegPlayerRegistry` 为每个 ExoPlayer 单独创建和管理 DecoderManager，避免主播放器与备用播放器共用同一个管理器。
-6. 主播放器和无感连播备用播放器已经接入 NextRenderersFactory。
-7. 第三方片源播放器也已接入同一渲染器策略，并在播放器释放时解绑 DecoderManager。
-8. FFmpeg 原生构建工作流会编译四种 ABI，生成 AAR、按 ABI 拆分的 ZIP 和 SHA256SUMS；软解实验工作流负责编译 APK。
+6. 主播放器、无感连播备用播放器和第三方片源播放器均已接入 NextRenderersFactory，并在释放时解绑各自的 DecoderManager。
+7. 设置页已增加 FFmpeg 运行库安装入口和视频解码策略选择；支持自动、仅硬件、系统软件、FFmpeg 软件解码。运行库下载后会校验并在后台加载。
+8. 应用启动时会恢复用户选择的解码策略，并在后台尝试加载已安装的运行库。
+9. FFmpeg 原生构建工作流会编译四种 ABI，生成 AAR、按 ABI 拆分的 ZIP、SHA256SUMS 和通用 ABI 清单模板；软解实验工作流负责编译 APK。
 
 ## 运行库清单格式
 
-清单需要为每种 ABI 分别提供一个 JSON，字段格式如下：
+App 设置页只需要填写一个通用清单 HTTPS 地址。安装器会自动识别当前应用进程 ABI，再从 `abis` 节点选择对应库列表：
 
 ```json
 {
   "version": "0.1.0",
-  "abi": "arm64-v8a",
-  "libraries": [
-    {
-      "file": "libavutil.so",
-      "url": "https://example.invalid/runtime/arm64-v8a/libavutil.so",
-      "sha256": "替换为64位十六进制SHA256",
-      "loadOrder": 1
+  "abis": {
+    "arm64-v8a": {
+      "libraries": [
+        {
+          "file": "libavutil.so",
+          "url": "https://你的服务器/ffmpeg-runtime/arm64-v8a/libavutil.so",
+          "sha256": "64位十六进制SHA256",
+          "loadOrder": 1
+        }
+      ]
     },
-    {
-      "file": "libswresample.so",
-      "url": "https://example.invalid/runtime/arm64-v8a/libswresample.so",
-      "sha256": "替换为64位十六进制SHA256",
-      "loadOrder": 2
-    },
-    {
-      "file": "libswscale.so",
-      "url": "https://example.invalid/runtime/arm64-v8a/libswscale.so",
-      "sha256": "替换为64位十六进制SHA256",
-      "loadOrder": 3
-    },
-    {
-      "file": "libavcodec.so",
-      "url": "https://example.invalid/runtime/arm64-v8a/libavcodec.so",
-      "sha256": "替换为64位十六进制SHA256",
-      "loadOrder": 4
-    },
-    {
-      "file": "libmedia3ext.so",
-      "url": "https://example.invalid/runtime/arm64-v8a/libmedia3ext.so",
-      "sha256": "替换为64位十六进制SHA256",
-      "loadOrder": 5
-    }
-  ]
+    "armeabi-v7a": { "libraries": [] },
+    "x86": { "libraries": [] },
+    "x86_64": { "libraries": [] }
+  }
 }
 ```
 
-以上地址仅用于说明 JSON 结构，不是实际可下载地址。最终文件列表、依赖关系和加载顺序必须以构建产物的 ELF `DT_NEEDED` 检查为准。
+示例仅展示通用清单结构。每个 ABI 的 `libraries` 必须包含构建工作流生成的五个必需库：`libavutil.so`、`libswresample.so`、`libswscale.so`、`libavcodec.so`、`libmedia3ext.so`。工作流生成的 `manifest-template.json` 已填入每个文件的 SHA-256，但下载 URL 是托管地址占位符；上传文件后必须替换成真实 HTTPS 地址，不能直接拿模板安装。
 
 ## 当前尚未完成
 
 - 尚未确认四种 ABI 的原生构建工作流全部成功。
-- 尚未将真实运行库 ZIP 和 ABI 清单发布到稳定下载地址。
-- 尚未完成 App 内面向用户的运行库下载入口和安装进度提示。
-- 尚未完成设置页的视频解码模式选择和运行库未安装时的引导。
+- 尚未将真实运行库 ZIP 和通用 ABI 清单发布到稳定下载地址；需要先确定托管位置并替换模板 URL。
+- 尚未验证运行库清单与真实原生库包在四种 ABI 上完全匹配。
 - 尚未完成 Android 设备实测，不能宣称 H.264 / HEVC 已经成功软解。
 - 尚未完成性能、内存、温度、长时间播放和无感连播稳定性验证。
 
