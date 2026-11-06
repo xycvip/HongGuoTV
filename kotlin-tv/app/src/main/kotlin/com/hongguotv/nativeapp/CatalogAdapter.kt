@@ -90,9 +90,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             card.contentDescription="$rankLabel，${item.title}，${rankPosition?.heat?.ifBlank { "热度暂无" } ?: "热度暂无"}"
         } else holder.rank.visibility=View.GONE
         holder.title.text=item.title
-        val genreTags=item.tags.split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3)
-        holder.tags.text=genreTags.joinToString("  ·  ")
-        holder.tags.visibility=if(genreTags.isEmpty()) View.INVISIBLE else View.VISIBLE
+        setGenreTagChips(holder.tags,item.tags,resources.displayMetrics.density)
         val progress=if(tab==4 || collection=="resume") library.progress(item.id) else null
         val aggregateType=if(tab==1 && aggregateSearch) when {
             item.badge.startsWith("短剧") -> ContentType.SHORT
