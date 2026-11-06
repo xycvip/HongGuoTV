@@ -147,8 +147,16 @@ import java.util.concurrent.atomic.AtomicLong
         if(ffActive || !playbackReady || p.duration<=0) return
         ffActive=true
         ffSpeedBefore=p.playbackParameters.speed
+        // 触屏长按 3 倍速是纯手势反馈，不唤起控制栏，也不重置控制栏显示状态。
         p.setPlaybackSpeed(3f)
-        showHud()
+        updatePlaybackText()
+    }
+
+    /** 手机长按松手只恢复原倍速，不唤起播放工具栏；电视遥控快进仍使用 stopFastForward。 */
+    internal fun MainActivity.stopPhoneTouchFastForward() {
+        if(!ffActive) return
+        ffActive=false
+        player?.setPlaybackSpeed(ffSpeedBefore)
         updatePlaybackText()
     }
 
