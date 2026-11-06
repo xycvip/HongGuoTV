@@ -108,7 +108,7 @@ internal class TheaterRepository(
                     val failure=if(error is IOException) error else IOException("剧场响应解析失败：${error.message}",error)
                     lastError=failure
                     if(failure.message.orEmpty().contains("响应为空")) sawEmpty=true
-                    if(Regex("""HTTP\\s+(401|403)\\b""").containsMatchIn(failure.message.orEmpty())) sawIdentityFailure=true
+                    if(Regex("""HTTP\s+(401|403)\b""").containsMatchIn(failure.message.orEmpty())) sawIdentityFailure=true
                     theaterLog.warning("剧场接口域名 $host 失败；轮次=${round+1}；原因=${failure.message}")
                 }
             }
