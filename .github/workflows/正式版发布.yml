@@ -51,7 +51,6 @@ jobs:
           KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
           APPDOWNLOAD_TOKEN: ${{ secrets.APPDOWNLOAD_TOKEN || secrets.APPDOWNLOAD_UPLOAD_TOKEN }}
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
           set -euo pipefail
           missing=()
@@ -60,7 +59,6 @@ jobs:
           [ -n "$KEY_ALIAS" ] || missing+=("HONGGUOTV_KEY_ALIAS")
           [ -n "$KEY_PASSWORD" ] || missing+=("HONGGUOTV_KEY_PASSWORD")
           [ -n "$APPDOWNLOAD_TOKEN" ] || missing+=("APPDOWNLOAD_TOKEN（或 APPDOWNLOAD_UPLOAD_TOKEN）")
-          [ -n "$GITEE_TOKEN" ] || missing+=("GITEE_TOKEN（Gitee发行版同步）")
           if [ "${#missing[@]}" -gt 0 ]; then
             printf '::error::缺少正式发布凭据：%s\n' "$(IFS='、'; echo "${missing[*]}")"
             exit 1
@@ -486,98 +484,6 @@ jobs:
               --latest
             echo "源码仓库 GitHub Release 创建成功：$RELEASE_TAG"
           fi
-
-      - name: 同步正式版到Gitee发行版
-        shell: bash
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_OWNER: xieyaocheng
-          GITEE_REPO: hongguotv
-          VERSION_NAME: ${{ steps.version.outputs.version_name }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          set -euo pipefail
-          API="https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_REPO}"
-          APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
-          UPDATE="$RUNNER_TEMP/release/update.json"
-          CHECKSUMS="$RUNNER_TEMP/release/SHA256SUMS"
-          NOTES="$RUNNER_TEMP/release-notes-final.txt"
-
-          # 三端使用同一份正式版文件；上传前逐项确认文件完整。
-          test -s "$APK"
-          test -s "$UPDATE"
-          test -s "$CHECKSUMS"
-          test -s "$NOTES"
-
-          RELEASE_NAME="红果TV正式版 $VERSION_NAME"
-          RELEASE_BODY="$(cat "$NOTES")"
-          RESPONSE="$RUNNER_TEMP/gitee-release-query.json"
-          HTTP_CODE="$(curl -sS -o "$RESPONSE" -w '%{http_code}' --get \
-            --data-urlencode "access_token=$GITEE_TOKEN" \
-            "$API/releases/tags/$RELEASE_TAG")"
-
-          if [ "$HTTP_CODE" = "200" ]; then
-            RELEASE_ID="$(jq -r '.id // empty' "$RESPONSE")"
-            echo "Gitee已存在发行版，复用 Release ID：$RELEASE_ID"
-          elif [ "$HTTP_CODE" = "404" ]; then
-            CREATED="$(curl -fsS -X POST "$API/releases" \
-              --data-urlencode "access_token=$GITEE_TOKEN" \
-              --data-urlencode "tag_name=$RELEASE_TAG" \
-              --data-urlencode "name=$RELEASE_NAME" \
-              --data-urlencode "body=$RELEASE_BODY" \
-              --data-urlencode "target_commitish=main" \
-              --data-urlencode "prerelease=false")"
-            RELEASE_ID="$(jq -r '.id // empty' <<< "$CREATED")"
-            echo "已在Gitee创建发行版，Release ID：$RELEASE_ID"
-          else
-            cat "$RESPONSE"
-            echo "::error::查询Gitee发行版失败，HTTP $HTTP_CODE"
-            exit 1
-          fi
-
-          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
-            echo "::error::无法取得Gitee Release ID"
-            exit 1
-          fi
-
-          # 已存在的发行版同步更新标题和说明，避免Gitee页面仍显示旧内容。
-          curl -fsS -X PATCH "$API/releases/$RELEASE_ID" \
-            --data-urlencode "access_token=$GITEE_TOKEN" \
-            --data-urlencode "name=$RELEASE_NAME" \
-            --data-urlencode "body=$RELEASE_BODY" >/dev/null
-
-          ASSETS="$RUNNER_TEMP/gitee-assets.json"
-          curl -fsS --get \
-            --data-urlencode "access_token=$GITEE_TOKEN" \
-            --data-urlencode "per_page=100" \
-            "$API/releases/$RELEASE_ID/attach_files" > "$ASSETS"
-
-          for FILE in "$APK" "$UPDATE" "$CHECKSUMS"; do
-            FILENAME="$(basename "$FILE")"
-            OLD_IDS="$(jq -r --arg filename "$FILENAME" '.[]? | select(.name == $filename) | .id' "$ASSETS")"
-            while IFS= read -r OLD_ID; do
-              [ -n "$OLD_ID" ] || continue
-              curl -fsS -X DELETE --get \
-                --data-urlencode "access_token=$GITEE_TOKEN" \
-                "$API/releases/$RELEASE_ID/attach_files/$OLD_ID" >/dev/null
-              echo "已清理Gitee旧附件：$FILENAME"
-            done <<< "$OLD_IDS"
-
-            UPLOADED="$(curl -fsS -X POST \
-              -F "access_token=$GITEE_TOKEN" \
-              -F "file=@$FILE" \
-              "$API/releases/$RELEASE_ID/attach_files")"
-            DOWNLOAD_URL="$(jq -r '.browser_download_url // empty' <<< "$UPLOADED")"
-            if [ -z "$DOWNLOAD_URL" ]; then
-              echo "$UPLOADED"
-              echo "::error::Gitee附件上传后未返回下载地址：$FILENAME"
-              exit 1
-            fi
-            echo "Gitee上传成功：$FILENAME"
-            echo "$DOWNLOAD_URL"
-          done
-
-          echo "Gitee正式版同步完成：https://gitee.com/$GITEE_OWNER/$GITEE_REPO/releases"
 
       - name: 输出正式发布结果
         if: success()
