@@ -521,6 +521,10 @@ class MainActivity: Activity() {
     override fun onCreate(state: Bundle?) {
         TvStyle.apply(getSharedPreferences("native-library-v1", Context.MODE_PRIVATE).getString("theme", null))
         super.onCreate(state)
+        // 手机播放器方向选择跨 App 重启保存；仅允许明确的竖屏/横屏值，异常值回退横屏。
+        phonePlaybackOrientation=getSharedPreferences("playback-settings-v1", MODE_PRIVATE)
+            .getInt("phone_playback_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+            .let { if(it==android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) it else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
         // 调试入口的显示状态仅保存在进程内；调试模式本身仍由持久化开关控制。
         applyDeviceOrientationPolicy()
         applyImmersiveFullscreen()
