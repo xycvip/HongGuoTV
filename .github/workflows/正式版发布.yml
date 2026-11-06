@@ -494,8 +494,9 @@ jobs:
               --arg body "$RELEASE_BODY" \
               '{tag_name:$tag,name:$name,body:$body,release_status:"latest"}' \
               > "$RUNNER_TEMP/gitcode-create-release.json"
-            curl --fail --silent --show-error --location \
-              --request POST "$API_BASE/releases?access_token=$GITCODE_TOKEN" \
+            curl --fail --silent --show-error --location --get \
+              --request POST "$API_BASE/releases" \
+              --data-urlencode "access_token=$GITCODE_TOKEN" \
               --header 'Content-Type: application/json' \
               --data-binary @"$RUNNER_TEMP/gitcode-create-release.json" \
               --output "$RUNNER_TEMP/gitcode-release.json"
@@ -610,4 +611,5 @@ jobs:
           echo "应用版本：$VERSION_NAME"
           echo "versionCode：$VERSION_CODE"
           echo "发布标签：$RELEASE_TAG"
-          echo "分发仓库：https://github.com/xycvip/AppDownload"
+          echo "AppDownload分发仓库：https://github.com/xycvip/AppDownload"
+          echo "GitCode正式版发行版：https://gitcode.com/xycvip/hongguotv/-/releases/$RELEASE_TAG"
