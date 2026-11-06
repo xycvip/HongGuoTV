@@ -28,7 +28,7 @@ class HomeScreen(
     data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
     data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null)
     data class Position(val focus: String,val shelf: String?,val column: Int,val row: Int,val vertical: Int,val horizontal: Map<String,Int>)
-    private data class Card(val key: String,val view: LinearLayout,val image: ImageView?,val title: TextView,val label: TextView,val progress: ProgressBar?,var entry: Entry?,var pending: Boolean=false)
+    private data class Card(val key: String,val view: LinearLayout,val image: ImageView?,val title: TextView,val tags: TextView,val label: TextView,val progress: ProgressBar?,var entry: Entry?,var pending: Boolean=false)
     private data class Row(val key: String,val block: LinearLayout,val horizontal: HorizontalScrollView,val cards: List<Card>)
     private val accent=TvStyle.accent
     private fun dp(n: Int)=(n*resources.displayMetrics.density).toInt()
@@ -118,7 +118,7 @@ class HomeScreen(
     fun updateEntry(shelfKey: String,entry: Entry): Boolean {
         val card=cards["$shelfKey:${entry.series.id}"] ?: return false
         if(card.entry?.series?.cover!=entry.series.cover) { card.image?.setImageDrawable(null) }
-        card.entry=entry; card.title.text=entry.series.title; card.label.text=entry.label
+        card.entry=entry; card.title.text=entry.series.title; card.tags.text=entry.series.tags.split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3).joinToString("  ·  "); card.tags.visibility=if(card.tags.text.isNullOrBlank()) View.INVISIBLE else View.VISIBLE; card.label.text=entry.label
         card.progress?.apply { progress=entry.progress ?: 0; visibility=if(entry.progress==null) INVISIBLE else VISIBLE }
         card.view.contentDescription="${shelves.firstOrNull { it.key==shelfKey }?.title.orEmpty()}，${entry.series.title}，${entry.label}"
         shelves=shelves.map { shelf -> if(shelf.key==shelfKey) shelf.copy(entries=shelf.entries.map { if(it.series.id==entry.series.id) entry else it }) else shelf }
@@ -216,10 +216,11 @@ class HomeScreen(
                     view.addView(moreTile,LayoutParams(-1,if(shelf.key=="random") dp(96) else posterHeight))
                 }
                 val title=label(entry?.series?.title ?: "查看全部",14f).apply { minLines=2; maxLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) }
+                val tags=label(entry?.series?.tags.orEmpty().split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3).joinToString("  ·  "),10.5f,TvStyle.muted).apply { minLines=1; maxLines=1; minHeight=dp(17); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0); visibility=if(text.isNullOrBlank()) INVISIBLE else VISIBLE }
                 val badge=label(entry?.label ?: shelf.title,12f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(2),0,0) }
                 val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }
-                if(shelf.key!="random") { view.addView(title); view.addView(badge); view.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(4) }) }
-                val card=Card(key,view,image,title,badge,progress,entry)
+                if(shelf.key!="random") { view.addView(title); view.addView(tags); view.addView(badge); view.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(4) }) }
+                val card=Card(key,view,image,title,tags,badge,progress,entry)
                 view.contentDescription=entry?.let { "${shelf.title}，${it.series.title}，${it.label}" } ?: "查看全部${shelf.title}"
                 view.setOnClickListener { lastFocus=key; remember(key); card.entry?.let { open(it.series,it.resume) } ?: moreAction?.invoke() }
                 if(entry!=null) {
