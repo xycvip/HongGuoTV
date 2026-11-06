@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "cafc5802eaddee03cdb6fff15cc0adb16f5ecf67",
-  "versionCode": 28,
-  "versionName": "0.0.28",
+  "sourceCommit": "9c5d2dc6a48d1778db5e0eb7f2122fc3f13f6664",
+  "versionCode": 32,
+  "versionName": "0.0.32",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.28",
+  "tag": "hongguotv-bate-v0.0.32",
   "apk": {
-    "name": "HongguoTV-0.0.28.apk",
-    "size": 1956021,
-    "sha256": "5171b18a54ae482e2117f71e30de144617de5cda083bf536a1e469a411fa38b7",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.28/HongguoTV-0.0.28.apk"
+    "name": "HongguoTV-0.0.32.apk",
+    "size": 1956645,
+    "sha256": "342ef6227af7b28ef552db8399b989aa4df26837972e588128acedb833c26d6e",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.32/HongguoTV-0.0.32.apk"
   },
-  "notes": "【焦点与遥控器】\n- fix: 明确排行榜首排海报向上焦点\n【其他功能与问题修复】\n- fix: 统一排行榜分页来源名称\n- fix: 统一排行榜来源名称\n- feat: 增加总榜入口并调整榜单顺序\n- feat: 默认打开红果综合总榜"
+  "notes": "【其他功能与问题修复】\n- ui: 首页题材标签文字改为亮橘色"
 }
