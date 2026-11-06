@@ -23,6 +23,19 @@ internal object FfmpegPlayerRegistry {
 
     private val managers = WeakHashMap<ExoPlayer, DecoderManager>()
 
+    @Volatile
+    private var requestedVideoMode: DecoderMode = DecoderMode.AUTO
+
+    val videoMode: DecoderMode get() = requestedVideoMode
+
+    @Synchronized
+    fun setVideoMode(mode: DecoderMode) {
+        requestedVideoMode = mode
+        managers.values.toList().forEach { manager ->
+            manager.selectVideoDecoder(mode)
+        }
+    }
+
     fun create(context: Context): Setup {
         // Do not touch NextLib renderers before the downloaded runtime is activated.
         // This lets users download/activate FFmpeg later in the same app process,
@@ -34,7 +47,7 @@ internal object FfmpegPlayerRegistry {
             )
         }
         val manager = DecoderManager(
-            initialVideoMode = DecoderMode.AUTO,
+            initialVideoMode = requestedVideoMode,
             initialAudioMode = DecoderMode.AUTO
         )
         val factory = NextRenderersFactory(context.applicationContext)
