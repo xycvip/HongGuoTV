@@ -504,7 +504,7 @@ class MainActivity: Activity() {
                 }
             },
             startLongPressSpeed = { startPhoneTouchFastForward() },
-            stopLongPressSpeed = { stopFastForward() }
+            stopLongPressSpeed = { stopPhoneTouchFastForward() }
         )
     }
     /**
