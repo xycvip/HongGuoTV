@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.view.View
+import android.util.TypedValue
 import com.hongguotv.core.Danmaku
 import com.hongguotv.core.DanmakuEmoji
 import com.hongguotv.core.DanmakuLoader
@@ -34,7 +35,11 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     private var pxPerMs = 0f
     private var tracks = 1
     private var trackHeight = 0f
-    private val baseTextSize = textSizeSp * resources.displayMetrics.scaledDensity
+    private val baseTextSize = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_SP,
+        textSizeSp,
+        resources.displayMetrics
+    )
     private val baseCrossMs = crossMs
     private var currentCrossMs = crossMs
     private var maxTracks = Int.MAX_VALUE
