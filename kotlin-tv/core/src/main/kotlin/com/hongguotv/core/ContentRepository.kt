@@ -49,7 +49,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
     }
     fun comicRanking(page: Int = 1)=ranking(RankBoard.COMIC,page)
     fun realRanking(page: Int = 1)=ranking(RankBoard.REAL,page)
-    private val theaterRepository by lazy { TheaterRepository(http,playbackSession,signer) { url,signed -> text(url,signed) } }
+    private val theaterRepository by lazy { TheaterRepository(http,playbackSession) { url,signed -> text(url,signed) } }
     open fun theater(page:Int=1,type:ContentType?=null,selected:Map<String,String> = emptyMap()):TheaterCatalogPage =
         theaterRepository.theater(page,type,selected)
     /** Website genre picker remains separate from the App theater filter API. */
