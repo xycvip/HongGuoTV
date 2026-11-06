@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ffmpeg-native-build-\${{ github.ref }}
+  group: ffmpeg-native-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -80,9 +80,9 @@ jobs:
       - name: 生成正式清单和独立下载文件
         working-directory: kotlin-tv
         env:
-          RUNTIME_VERSION: "0.1.0-\${{ github.run_number }}"
+          RUNTIME_VERSION: "0.1.0-${{ github.run_number }}"
           RUNTIME_RELEASE_TAG: "ffmpeg-runtime-latest"
-          GITHUB_REPOSITORY: \${{ github.repository }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           mkdir -p runtime-dist/release-assets
           python3 - <<'PY'
