@@ -275,9 +275,9 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
             // 排行榜页直接从榜单筛选栏开始，不再显示重复的「热播榜」标题及其占位空间。
             val boardRow=row().apply { setPadding(0,0,0,dp(8)) }
             val boardFocusItems=mutableListOf<View>()
-            listOf(RankBoard.REAL, RankBoard.COMIC, RankBoard.AI).forEachIndexed { index, board ->
+            listOf(RankBoard.TOTAL, RankBoard.REAL, RankBoard.AI, RankBoard.COMIC).forEachIndexed { index, board ->
                 val focusTag = "rank:board:${board.name}"
-                val boardButton=addButton(boardRow, "${board.label}榜", rankBoard == board) {
+                val boardButton=addButton(boardRow, board.buttonLabel, rankBoard == board) {
                     if (rankBoard != board) {
                         pendingRefreshFocus=focusTag
                         rankFocusTag=focusTag
@@ -316,7 +316,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 view.nextFocusRightId=boardFocusItems.getOrNull(index+1)?.id ?: view.id
             }
             container.addView(boardRow)
-            val defaultSource="来源：红果${rankBoard.label}热播榜"
+            val defaultSource=rankBoard.sourceText
             rankSubtitle=text(if(loading) "正在读取最新榜单…" else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,13f,muted).apply { setPadding(0,0,0,dp(8)) }
             container.addView(rankSubtitle)
             nav.forEach { it.nextFocusDownId=boardRow.getChildAt(0)?.id ?: View.NO_ID }
