@@ -67,10 +67,12 @@ internal class Signer(private val clock: () -> Long = System::currentTimeMillis,
         val pad = intArrayOf(0xfa,0x45,0x61,0xd7).map { ((it or (it shl 8)) shr shift).toByte() }.toByteArray()
         val data = query + body + le32(ts) + pad + hex("00000000000001a0")
         val di = (data.indices step 4).map { data.i32(it) }.toMutableList()
-        val di0 = di[0]
+        var di0 = di[0]
         for (i in 0 until 112) {
             val x = di[i + 1]; val y = di[i + 14]
             di.add(di0 + di[i + 9] + (rol(x,14) xor rol(x,25) xor (x ushr 3)) + (rol(y,13) xor rol(y,15) xor (y ushr 10)))
+            // Match the reference schedule: each round advances the rolling base word.
+            di0 = x
         }
         val initial = intArrayOf(0x7aba4fc8,0x67166507,0x6403fa00,0x340f512f,984304912,3005047866L.toInt(),2874125293L.toInt(),2152413264L.toInt()).map { ror(it, countV2) }
         val chosen = arrayOf(intArrayOf(101,5,7,6,3,2,1,0,5,4,3),intArrayOf(96,0,6,7,5,3,2,1,5,4,4),intArrayOf(96,7,6,2,1,4,0,5,4,3,5),intArrayOf(99,3,6,2,4,5,1,0,0,7,6),intArrayOf(96,0,5,6,7,3,1,2,5,4,4),intArrayOf(100,2,0,3,5,4,6,7,2,1,5))[ivV0]
