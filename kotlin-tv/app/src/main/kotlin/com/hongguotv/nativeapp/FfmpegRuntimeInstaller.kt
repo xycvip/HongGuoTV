@@ -205,9 +205,18 @@ internal class FfmpegRuntimeInstaller(context: Context) {
     }
 
     private fun parseManifest(raw: String): RuntimeManifest {
-        val json = JSONObject(raw)
-        val abi = Abi.entries.firstOrNull { it.folder == json.getString("abi") }
-            ?: error("清单包含不支持的 ABI")
+        val root = JSONObject(raw)
+        val deviceAbi = Abi.current() ?: error("当前处理器架构暂不支持 FFmpeg 软件解码")
+        // A universal index manifest can hold one library list per ABI. The older
+        // single-ABI format remains accepted for compatibility with test manifests.
+        val json = if (root.has("abis")) {
+            root.getJSONObject("abis").optJSONObject(deviceAbi.folder)
+                ?: error("运行库清单没有当前设备架构：" + deviceAbi.folder)
+        } else root
+        val abi = if (json.has("abi")) {
+            Abi.entries.firstOrNull { it.folder == json.getString("abi") }
+                ?: error("清单包含不支持的 ABI")
+        } else deviceAbi
         val items = json.getJSONArray("libraries")
         val libraries = (0 until items.length()).map { index ->
             val item = items.getJSONObject(index)
@@ -218,7 +227,9 @@ internal class FfmpegRuntimeInstaller(context: Context) {
                 loadOrder = item.optInt("loadOrder", index)
             )
         }
-        return RuntimeManifest(json.getString("version"), abi, libraries)
+        val version = json.optString("version", root.optString("version", ""))
+        require(version.isNotBlank()) { "运行库清单缺少版本号" }
+        return RuntimeManifest(version, abi, libraries)
     }
 
     private fun validateElf(file: File, abi: Abi, name: String) {
