@@ -233,15 +233,30 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         val later = TvDialog.capsuleButton(activity, if (aboutMode) "关闭" else "稍后") { }
         val action = TvDialog.capsuleButton(activity,"检查更新") { }
         actionButton = action
-        val proxy = TvDialog.capsuleButton(activity, "换源下载") { }
-        proxy.id = View.generateViewId()
-        proxy.isFocusable = true
-        proxy.isFocusableInTouchMode = true
-        proxyButton = proxy
-        if (!aboutMode) {
-            statusContent.addView(proxy, LinearLayout.LayoutParams(-1, -2).apply {
-                topMargin = (8 * dp).toInt()
+        val sourceRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+        }
+        val address1 = TvDialog.capsuleButton(activity, "下载地址1") { }
+        val address2 = TvDialog.capsuleButton(activity, "下载地址2") { }
+        val address3 = TvDialog.capsuleButton(activity, "下载地址3") { }
+        listOf(address1, address2, address3).forEach { button ->
+            button.id = View.generateViewId()
+            button.isFocusable = true
+            button.isFocusableInTouchMode = true
+            sourceRow.addView(button, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                if (button !== address1) leftMargin = (6 * dp).toInt()
             })
+        }
+        sourceButtons = listOf(address1, address2, address3)
+        if (!aboutMode) {
+            statusContent.addView(TextView(activity).apply {
+                text = "下载线路"
+                textSize = 13f
+                setTextColor(TvStyle.muted)
+                setPadding(0, (8 * dp).toInt(), 0, (4 * dp).toInt())
+            }, LinearLayout.LayoutParams(-1, -2))
+            statusContent.addView(sourceRow, LinearLayout.LayoutParams(-1, -2))
         }
         buttons.addView(later, LinearLayout.LayoutParams(-2,-2).apply { rightMargin=(12*dp).toInt() })
         buttons.addView(action, LinearLayout.LayoutParams(-2,-2))
