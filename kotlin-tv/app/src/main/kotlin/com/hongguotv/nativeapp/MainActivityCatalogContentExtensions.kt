@@ -190,7 +190,7 @@ internal fun MainActivity.renderCatalogContent(
                     // 手机输入的精确剧名搜索零结果时自动恢复联想，帮助用户纠正剧名
                     if(requestTab==1 && result.items.isEmpty()) { phoneSearched=false; scheduleSuggest() }
                     val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
-                    if(requestTab==2) rankSubtitle?.text=if(requestAi) "来源：红果AI剧分类" else ranking?.updatedText?.ifBlank { "来源：红果${rankBoard.label}热播榜" } ?: "来源：红果${rankBoard.label}热播榜"
+                    if(requestTab==2) rankSubtitle?.text=if(requestAi) "来源：红果AI剧分类" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
                     if(requestTab==2 || requestTab==7) {
                         // 首屏数据到达后重建一次页面，让筛选头与海报网格在同一 RecyclerView 中组装。
                         val restore=pendingRefreshFocus
