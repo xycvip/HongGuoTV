@@ -15,6 +15,7 @@ internal class TheaterRepository(
     private data class TheaterCursor(val offset:Int,val sessionId:String)
     private data class TheaterSession(var filters:List<TheaterFilterGroup>,val cursors:MutableMap<Int,TheaterCursor>,val shown:LinkedHashSet<String>)
     private val theaterSessions=linkedMapOf<String,TheaterSession>()
+    private val theaterLog=java.util.logging.Logger.getLogger("com.hongguotv.core.theater")
     private fun theaterKey(type:ContentType?,selected:Map<String,String>) =
         (type?.name ?: "ALL")+"|"+selected.toSortedMap().entries.joinToString("|") { "${it.key}=${it.value}" }
     private fun theaterScene(type:ContentType?)=when(type) {
@@ -28,9 +29,8 @@ internal class TheaterRepository(
         ContentType.AI -> "ai_series"
         else -> ""
     }
-    private fun theaterValues():MutableMap<String,String> {
+    private fun theaterValues(profile:PlaybackDeviceSession.Profile):MutableMap<String,String> {
         // Unlike web SSR, the App catalog endpoint requires a server-registered anonymous device.
-        val profile=playbackSession.profile(http)
         val values=profile.values.toMutableMap()
         for(k in listOf("version_code","manifest_version_code","update_version_code","pv_player")) values[k]="73532"
         values["version_name"]="7.3.5.32"
@@ -51,9 +51,6 @@ internal class TheaterRepository(
             } else theaterSessions[key] ?: throw IOException("剧场分页已失效，请重新加载")
         }
         val cursor=synchronized(theaterSessions) { session.cursors[page] } ?: throw IOException("剧场分页游标缺失，请重新加载")
-        val values=theaterValues()
-        val profile=playbackSession.profile(http)
-        val requestSigner=Signer(values)
         val select=JSONObject().apply {
             put("genre",JSONArray().apply { theaterGenre(type).takeIf { it.isNotBlank() }?.let { put(it) } })
             put("sort",JSONArray().apply { selected["sort"]?.let { put(it) } })
@@ -73,21 +70,58 @@ internal class TheaterRepository(
             put("client_req_type",3)
         }.toString().toByteArray(Charsets.UTF_8)
         val endpoint="/reading/distribution/category/landpage/v/"
+        val hosts=listOf(
+            "api5-normal-sinfonlinea.fqnovel.com",
+            "api5-normal-sinfonlinec.fqnovel.com",
+            "api5-normal-sinfonlineb.fqnovel.com",
+            "api5-normal-lf.fqnovel.com",
+            "api5-normal-lq.fqnovel.com",
+            "api5-normal-hl.fqnovel.com",
+        )
+        var profile=playbackSession.profile(http)
         var payload:JSONObject?=null
-        var lastError:Throwable?=null
-        for(host in listOf(
-            "https://api5-normal-sinfonlinea.fqnovel.com",
-            "https://api5-normal-sinfonlinec.fqnovel.com",
-            "https://api5-normal-sinfonlineb.fqnovel.com",
-            "https://api5-normal-lf.fqnovel.com",
-            "https://api5-normal-lq.fqnovel.com",
-            "https://api5-normal-hl.fqnovel.com",
-        )) {
-            val signedBase=requestSigner.sign(host+endpoint,values,body)
-            val signed=if(profile.cookie.isBlank()) signedBase else signedBase.copy(headers=signedBase.headers + ("Cookie" to profile.cookie))
-            val candidate=runCatching { JSONObject(requestText(signed.url,signed)) }.getOrElse { lastError=it; null } ?: continue
-            if(candidate.optInt("code",-1)==0) { payload=candidate; break }
-            lastError=IOException("红果剧场接口暂不可用（code ${candidate.optInt("code",-1)}）")
+        var lastError:IOException?=null
+        var sawEmpty=false
+        var sawIdentityFailure=false
+        // Try all official hosts first. If they consistently return an empty body or reject the
+        // registered identity, refresh that anonymous identity exactly once and repeat the host set.
+        for(round in 0..1) {
+            val values=theaterValues(profile)
+            val requestSigner=Signer(values)
+            for(host in hosts) {
+                val signedBase=requestSigner.sign("https://$host$endpoint",values,body)
+                val signed=if(profile.cookie.isBlank()) signedBase else signedBase.copy(headers=signedBase.headers + ("Cookie" to profile.cookie))
+                try {
+                    val raw=requestText(signed.url,signed)
+                    val candidate=JSONObject(raw)
+                    val code=candidate.optInt("code",-1)
+                    if(code==0) {
+                        theaterLog.info("剧场接口命中域名 $host；轮次=${round+1}；响应字符数=${raw.length}；code=0")
+                        payload=candidate
+                        break
+                    }
+                    lastError=IOException("剧场接口 HTTP 200，响应字符数=${raw.length}，code=$code")
+                    theaterLog.warning("剧场接口域名 $host 返回业务错误：${lastError.message}")
+                } catch(error:java.io.InterruptedIOException) {
+                    throw error
+                } catch(error:Exception) {
+                    val failure=if(error is IOException) error else IOException("剧场响应解析失败：${error.message}",error)
+                    lastError=failure
+                    if(failure.message.orEmpty().contains("响应为空")) sawEmpty=true
+                    if(Regex("""HTTP\\s+(401|403)\\b""").containsMatchIn(failure.message.orEmpty())) sawIdentityFailure=true
+                    theaterLog.warning("剧场接口域名 $host 失败；轮次=${round+1}；原因=${failure.message}")
+                }
+            }
+            if(payload!=null) break
+            if(round==0 && (sawEmpty || sawIdentityFailure)) {
+                theaterLog.info("剧场接口六个域名均未成功，检测到空响应/身份拒绝，重新注册匿名设备身份后重试一次")
+                profile=try {
+                    playbackSession.renew(http)
+                } catch(error:IOException) {
+                    error.addSuppressed(lastError ?: IOException("剧场接口首轮请求失败"))
+                    throw IOException("剧场接口设备身份刷新失败",error)
+                }
+            } else break
         }
         val response=payload ?: throw IOException("红果剧场接口暂不可用",lastError)
         val data=response.optJSONObject("data") ?: throw IOException("红果剧场返回缺少 data")
