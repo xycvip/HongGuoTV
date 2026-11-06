@@ -48,7 +48,7 @@ internal object FfmpegRuntimeLoader {
             }
             FfmpegLibrary.setRuntimeLibraryDirectory(directory)
             check(FfmpegLibrary.isAvailable()) { "FFmpeg JNI 库加载失败" }
-            val version = FfmpegLibrary.version ?: "unknown"
+            val version = FfmpegLibrary.getVersion() ?: "unknown"
             Result.Ready(version)
         }.getOrElse {
             Result.Unavailable(it.message ?: "FFmpeg 原生库加载失败", it)
