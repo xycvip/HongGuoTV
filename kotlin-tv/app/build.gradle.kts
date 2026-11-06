@@ -45,6 +45,11 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
+    // NextLib decoder sources are vendored in this branch; keep only Java/Kotlin
+    // compile dependencies here. FFmpeg .so files are deliberately not packaged.
+    implementation("androidx.annotation:annotation:1.11.0")
+    implementation("com.google.errorprone:error_prone_annotations:2.51.0")
+    compileOnly("org.checkerframework:checker-qual:4.3.1")
     // 本地单测：CMS 解析跑在 JVM，需要真实 org.json 实现（Android 平台 stub 未 mock）
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
