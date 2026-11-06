@@ -75,7 +75,14 @@ internal class TheaterRepository(
         val endpoint="/reading/distribution/category/landpage/v/"
         var payload:JSONObject?=null
         var lastError:Throwable?=null
-        for(host in listOf("https://api5-normal-sinfonlineb.fqnovel.com","https://api5-normal-sinfonlinea.fqnovel.com")) {
+        for(host in listOf(
+            "https://api5-normal-sinfonlinea.fqnovel.com",
+            "https://api5-normal-sinfonlinec.fqnovel.com",
+            "https://api5-normal-sinfonlineb.fqnovel.com",
+            "https://api5-normal-lf.fqnovel.com",
+            "https://api5-normal-lq.fqnovel.com",
+            "https://api5-normal-hl.fqnovel.com",
+        )) {
             val signedBase=requestSigner.sign(host+endpoint,values,body)
             val signed=if(profile.cookie.isBlank()) signedBase else signedBase.copy(headers=signedBase.headers + ("Cookie" to profile.cookie))
             val candidate=runCatching { JSONObject(requestText(signed.url,signed)) }.getOrElse { lastError=it; null } ?: continue
