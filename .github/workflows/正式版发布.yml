@@ -211,80 +211,80 @@ jobs:
               else
                 if git -C "$GITHUB_WORKSPACE" log --no-merges --format='%s' "$PREVIOUS_COMMIT..$SOURCE_COMMIT" > "$RUNNER_TEMP/release-commit-subjects.txt"; then
                   python3 - "$RUNNER_TEMP/release-commit-subjects.txt" "$RUNNER_TEMP/release-notes.txt" <<'PY'
-                  import re
-                  import sys
-                  from collections import OrderedDict
+          import re
+          import sys
+          from collections import OrderedDict
 
-                  source, target = sys.argv[1:3]
-                  groups = OrderedDict()
-                  seen = set()
+          source, target = sys.argv[1:3]
+          groups = OrderedDict()
+          seen = set()
 
-                  # 只把面向用户的变化写进发布说明；发布、同步和维护记录一律过滤。
-                  internal = re.compile(
-                      r"(更新正式版.*下载信息|更新.*下载信息|版本号|latest\.json|README|"
-                      r"工作流|workflow|同步.*仓库|发布.*(测试|正式)版|测试版|测试包|"
-                      r"测试构建|测试发布|测试版本|bate|beta|test-version|test-update|"
-                      r"合并分支|Merge pull request|更新依赖锁文件|格式整理|代码格式|"
-                      r"重命名变量|拆分.*文件|模块化拆分|补充.*说明文档)",
-                      re.I,
-                  )
+          # 只把面向用户的变化写进发布说明；发布、同步和维护记录一律过滤。
+          internal = re.compile(
+              r"(更新正式版.*下载信息|更新.*下载信息|版本号|latest\.json|README|"
+              r"工作流|workflow|同步.*仓库|发布.*(测试|正式)版|测试版|测试包|"
+              r"测试构建|测试发布|测试版本|bate|beta|test-version|test-update|"
+              r"合并分支|Merge pull request|更新依赖锁文件|格式整理|代码格式|"
+              r"重命名变量|拆分.*文件|模块化拆分|补充.*说明文档)",
+              re.I,
+          )
 
-                  def clean(subject):
-                      subject = subject.strip()
-                      subject = re.sub(r"^(feat|feature|fix|bugfix|ui|perf|refactor|docs?|test|chore|style)(\([^)]*\))?\s*[:：]\s*", "", subject, flags=re.I)
-                      subject = re.sub(r"^(新增功能|功能新增|修复问题|界面调整|性能优化)\s*[:：]\s*", "", subject)
-                      subject = subject.strip(" -：:，,。")
-                      if not subject:
-                          return ""
-                      subject = subject[0].upper() + subject[1:]
-                      if subject[-1] not in "。！？":
-                          subject += "。"
-                      return subject
+          def clean(subject):
+              subject = subject.strip()
+              subject = re.sub(r"^(feat|feature|fix|bugfix|ui|perf|refactor|docs?|test|chore|style)(\([^)]*\))?\s*[:：]\s*", "", subject, flags=re.I)
+              subject = re.sub(r"^(新增功能|功能新增|修复问题|界面调整|性能优化)\s*[:：]\s*", "", subject)
+              subject = subject.strip(" -：:，,。")
+              if not subject:
+                  return ""
+              subject = subject[0].upper() + subject[1:]
+              if subject[-1] not in "。！？":
+                  subject += "。"
+              return subject
 
-                  def category(raw, subject):
-                      s = (raw + " " + subject).lower()
-                      if re.search(r"下载|更新源|镜像|代理|安装包|下载地址|回退|备用线路", s):
-                          return "下载体验优化"
-                      if re.search(r"排行榜|榜单|综合榜|热播榜", s):
-                          return "排行榜优化"
-                      if re.search(r"焦点|遥控|导航|按键|点击|交互", s):
-                          return "操作体验优化"
-                      if re.search(r"播放|播放器|解码|缓冲|卡顿|清晰度|音频|视频", s):
-                          return "播放体验优化"
-                      if re.search(r"修复|异常|错误|失败|崩溃|兼容", s):
-                          return "问题修复"
-                      if re.match(r"^(feat|feature)", raw, re.I):
-                          return "功能升级"
-                      if re.match(r"^(ui|perf)", raw, re.I):
-                          return "界面与体验优化"
-                      return "体验优化"
+          def category(raw, subject):
+              s = (raw + " " + subject).lower()
+              if re.search(r"下载|更新源|镜像|代理|安装包|下载地址|回退|备用线路", s):
+                  return "下载体验优化"
+              if re.search(r"排行榜|榜单|综合榜|热播榜", s):
+                  return "排行榜优化"
+              if re.search(r"焦点|遥控|导航|按键|点击|交互", s):
+                  return "操作体验优化"
+              if re.search(r"播放|播放器|解码|缓冲|卡顿|清晰度|音频|视频", s):
+                  return "播放体验优化"
+              if re.search(r"修复|异常|错误|失败|崩溃|兼容", s):
+                  return "问题修复"
+              if re.match(r"^(feat|feature)", raw, re.I):
+                  return "功能升级"
+              if re.match(r"^(ui|perf)", raw, re.I):
+                  return "界面与体验优化"
+              return "体验优化"
 
-                  with open(source, encoding="utf-8") as f:
-                      for raw in f:
-                          raw = raw.strip()
-                          if not raw or raw in seen or internal.search(raw):
-                              continue
-                          seen.add(raw)
-                          subject = clean(raw)
-                          if not subject:
-                              continue
-                          group = category(raw, subject)
-                          groups.setdefault(group, [])
-                          if subject not in groups[group]:
-                              groups[group].append(subject)
+          with open(source, encoding="utf-8") as f:
+              for raw in f:
+                  raw = raw.strip()
+                  if not raw or raw in seen or internal.search(raw):
+                      continue
+                  seen.add(raw)
+                  subject = clean(raw)
+                  if not subject:
+                      continue
+                  group = category(raw, subject)
+                  groups.setdefault(group, [])
+                  if subject not in groups[group]:
+                      groups[group].append(subject)
 
-                  # 按主题归纳，同类修改合并成一条，避免把提交记录原样堆给用户。
-                  output = []
-                  for group, items in groups.items():
-                      if len(items) == 1:
-                          detail = items[0]
-                      else:
-                          detail = "；".join(x.rstrip("。！？") for x in items) + "。"
-                      output.append(f"- **{group}**：{detail}")
+          # 按主题归纳，同类修改合并成一条，避免把提交记录原样堆给用户。
+          output = []
+          for group, items in groups.items():
+              if len(items) == 1:
+                  detail = items[0]
+              else:
+                  detail = "；".join(x.rstrip("。！？") for x in items) + "。"
+              output.append(f"- **{group}**：{detail}")
 
-                  with open(target, "w", encoding="utf-8") as f:
-                      f.write("\n".join(output) + ("\n" if output else ""))
-                  PY
+          with open(target, "w", encoding="utf-8") as f:
+              f.write("\n".join(output) + ("\n" if output else ""))
+          PY
                   if [ -s "$RUNNER_TEMP/release-notes.txt" ]; then
                     RELEASE_NOTES="$(cat "$RUNNER_TEMP/release-notes.txt")"
                   fi
