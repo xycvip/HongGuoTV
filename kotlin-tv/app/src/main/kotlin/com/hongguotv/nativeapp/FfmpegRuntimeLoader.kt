@@ -12,7 +12,7 @@ import java.io.File
  * Native loading is process-global and cannot be safely repeated with another
  * directory; install a new runtime and restart the app before activating it.
  */
-@androidx.media3.common.util.UnstableApi
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 internal object FfmpegRuntimeLoader {
     sealed class Result {
         data class Ready(val version: String) : Result()
