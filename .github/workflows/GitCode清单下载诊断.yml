@@ -1,0 +1,77 @@
+name: GitCode 清单下载诊断
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: 对比不同 User-Agent 的附件下载结果
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 测试 GitCode update.json
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          URL='https://gitcode.com/xycvip/hongguotv/releases/download/hongguotv-v1.1.33/update.json'
+          mkdir -p probe-results
+
+          probe() {
+            local label="$1"
+            local ua="$2"
+            local body="probe-results/${label}.body"
+            local headers="probe-results/${label}.headers"
+            local metrics="probe-results/${label}.metrics"
+
+            echo
+            echo "========== ${label} =========="
+            echo "User-Agent: ${ua}"
+
+            curl --silent --show-error --location \
+              --max-redirs 10 --connect-timeout 15 --max-time 60 \
+              --user-agent "${ua}" \
+              --header 'Cache-Control: no-cache, no-store, max-age=0' \
+              --header 'Pragma: no-cache' \
+              --dump-header "${headers}" \
+              --output "${body}" \
+              --write-out $'HTTP 状态码: %{http_code}\n最终地址: %{url_effective}\n重定向次数: %{num_redirects}\n内容类型: %{content_type}\n下载字节数: %{size_download}\n远端 IP: %{remote_ip}\n' \
+              "${URL}?workflow_probe=$(date +%s%N)" | tee "${metrics}"
+            local result=$?
+
+            echo "--- 响应头（隐藏 Cookie 等敏感字段）---"
+            grep -iE '^(HTTP/|location:|content-type:|content-length:|server:)' "${headers}" || true
+
+            if [ -f "${body}" ]; then
+              echo "--- SHA-256 ---"
+              sha256sum "${body}"
+              echo "--- 响应体前 500 字节 ---"
+              head -c 500 "${body}" || true
+              echo
+              if jq -e . "${body}" >/dev/null 2>&1; then
+                echo "JSON 解析：成功"
+              else
+                echo "JSON 解析：失败（响应可能是错误页或非 JSON 内容）"
+              fi
+            fi
+
+            echo "curl 退出码: ${result}"
+            return 0
+          }
+
+          probe 'app-user-agent' 'HongguoTV-Updater'
+          probe 'android-chrome-user-agent' 'Mozilla/5.0 (Linux; Android 16; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+
+          echo
+          echo '诊断完成。请比较两组 HTTP 状态码、最终地址、重定向次数、内容类型和 JSON 解析结果。'
+      - name: 上传诊断结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitcode-manifest-probe
+          path: probe-results/
+          if-no-files-found: warn
+          retention-days: 7
