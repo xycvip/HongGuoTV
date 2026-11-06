@@ -39,10 +39,14 @@ internal class FfmpegRuntimeInstaller(context: Context) {
 
         companion object {
             fun current(): Abi? {
-                // Preserve Android's preferred ABI order. A 64-bit device commonly
-                // advertises both arm64-v8a and armeabi-v7a; enum order must not
-                // accidentally force the 32-bit runtime onto that device.
-                return Build.SUPPORTED_ABIS.firstNotNullOfOrNull { name ->
+                // Match the ABI of this app process, not merely the device CPU.
+                // A 64-bit device may also advertise 32-bit ABIs.
+                val processAbis = if (android.os.Process.is64Bit()) {
+                    Build.SUPPORTED_64_BIT_ABIS
+                } else {
+                    Build.SUPPORTED_32_BIT_ABIS
+                }
+                return processAbis.firstNotNullOfOrNull { name ->
                     entries.firstOrNull { it.folder == name }
                 }
             }
@@ -142,6 +146,8 @@ internal class FfmpegRuntimeInstaller(context: Context) {
                     "SHA256 校验失败：" + artifact.fileName
                 }
                 validateElf(temp, abi, artifact.fileName)
+                // Android 14+ requires dynamically loaded code to be read-only.
+                check(temp.setReadOnly()) { "无法将原生库设为只读：" + artifact.fileName }
                 check(temp.renameTo(destination)) { "无法保存原生库：" + artifact.fileName }
             }
 
