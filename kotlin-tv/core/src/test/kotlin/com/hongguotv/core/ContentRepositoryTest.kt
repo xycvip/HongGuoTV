@@ -12,6 +12,51 @@ import org.junit.Test
 import java.io.IOException
 
 class ContentRepositoryTest {
+    @Test fun theaterRetriesAllHostsOnceAfterEmptyResponsesAndRenewsAnonymousIdentity() {
+        val hosts=mutableListOf<String>()
+        var registrations=0
+        val session=PlaybackDeviceSession {
+            registrations++
+            DeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
+        }
+        val repo=ContentRepository(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                val request=chain.request()
+                hosts+=request.url.host
+                val body=if(hosts.size<=6) "" else """{"code":0,"data":{"selector_rows":[{"type":"category_dim_theme","row_name":"题材","items":[{"selector_item_id":"all","show_name":"全部"}]}],"video_data":[],"has_more":false,"session_id":""}}"""
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body(body.toResponseBody()).build()
+            }.build(),
+            System::currentTimeMillis,
+            session
+        )
+        val result=repo.theater()
+        assertTrue(result.catalog.items.isEmpty())
+        assertEquals(2,registrations)
+        assertEquals(12,hosts.size)
+        assertEquals(hosts.take(6),hosts.drop(6))
+    }
+
+    @Test fun theaterDoesNotReregisterIdentityForOrdinaryNetworkFailures() {
+        var registrations=0
+        var requests=0
+        val session=PlaybackDeviceSession {
+            registrations++
+            DeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
+        }
+        val repo=ContentRepository(
+            OkHttpClient.Builder().addInterceptor {
+                requests++
+                throw IOException("connection reset")
+            }.build(),
+            System::currentTimeMillis,
+            session
+        )
+        assertThrows(IOException::class.java) { repo.theater() }
+        assertEquals(1,registrations)
+        assertEquals(6,requests)
+    }
+
     private fun streamRepository(vararg variants: Triple<Int,String,String>) = repository { request ->
         if(request.url.host=="example.com") {
             val rows=JSONObject()
