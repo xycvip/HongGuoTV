@@ -67,12 +67,55 @@ jobs:
         run: |
           mkdir -p runtime-dist/aar
           unzip -q ffmpeg-runtime/build/outputs/aar/ffmpeg-runtime-release.aar -d runtime-dist/aar
+          required_libs="libavutil.so libswresample.so libswscale.so libavcodec.so libmedia3ext.so"
           for abi in x86 x86_64 armeabi-v7a arm64-v8a; do
             mkdir -p "runtime-dist/$abi"
-            cp runtime-dist/aar/jni/"$abi"/*.so "runtime-dist/$abi/"
-            (cd "runtime-dist/$abi" && sha256sum *.so > SHA256SUMS)
+            for lib in $required_libs; do
+              cp "runtime-dist/aar/jni/$abi/$lib" "runtime-dist/$abi/$lib"
+            done
+            (cd "runtime-dist/$abi" && sha256sum $required_libs > SHA256SUMS)
             (cd runtime-dist && zip -qr "HongGuoTV-FFmpeg-$abi.zip" "$abi")
           done
+
+      - name: 生成通用 ABI 清单模板
+        working-directory: kotlin-tv
+        env:
+          RUNTIME_VERSION: "0.1.0-${{ github.run_number }}"
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          abis = ["armeabi-v7a", "arm64-v8a", "x86", "x86_64"]
+          libraries = [
+              ("libavutil.so", 1),
+              ("libswresample.so", 2),
+              ("libswscale.so", 3),
+              ("libavcodec.so", 4),
+              ("libmedia3ext.so", 5),
+          ]
+          manifest = {"version": os.environ["RUNTIME_VERSION"], "abis": {}}
+          for abi in abis:
+              entries = []
+              for filename, order in libraries:
+                  path = Path("runtime-dist") / abi / filename
+                  if not path.is_file():
+                      raise SystemExit(f"缺少原生库：{path}")
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  entries.append({
+                      "file": filename,
+                      "url": f"https://YOUR_HTTPS_HOST/ffmpeg-runtime/{abi}/{filename}",
+                      "sha256": digest,
+                      "loadOrder": order,
+                  })
+              manifest["abis"][abi] = {"libraries": entries}
+          Path("runtime-dist/manifest-template.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\\n",
+              encoding="utf-8",
+          )
+          PY
 
       - name: 上传原生运行库和 ABI 压缩包
         uses: actions/upload-artifact@v6
@@ -82,5 +125,6 @@ jobs:
             kotlin-tv/ffmpeg-runtime/build/outputs/aar/ffmpeg-runtime-release.aar
             kotlin-tv/runtime-dist/HongGuoTV-FFmpeg-*.zip
             kotlin-tv/runtime-dist/*/SHA256SUMS
+            kotlin-tv/runtime-dist/manifest-template.json
           if-no-files-found: error
           retention-days: 14
