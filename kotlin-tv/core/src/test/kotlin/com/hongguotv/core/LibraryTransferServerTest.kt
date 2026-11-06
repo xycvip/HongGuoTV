@@ -12,7 +12,8 @@ class LibraryTransferServerTest {
         val uri=URI(server.url)
         return Socket("127.0.0.1",uri.port).use{socket->
             socket.soTimeout=5000
-            val path=if(uri.path=="/") target.ifBlank{"/"} else uri.path+target
+            val normalizedTarget=when { target.isBlank() -> "/"; target.startsWith("?") -> "/$target"; else -> target }
+            val path=if(uri.path=="/") normalizedTarget else uri.path+normalizedTarget
             val head="$method $path HTTP/1.1\r\nHost: ${uri.authority}\r\n$headers"+(if(method=="POST")"Content-Type: application/octet-stream\r\nContent-Length: ${body.size}\r\n\r\n" else "\r\n")
             socket.getOutputStream().apply{write(head.toByteArray());write(body);flush()}
             socket.getInputStream().readBytes()
