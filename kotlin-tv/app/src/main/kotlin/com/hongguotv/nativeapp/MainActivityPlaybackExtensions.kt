@@ -97,6 +97,7 @@ import java.util.concurrent.atomic.AtomicLong
             standbyAttachedAt=android.os.SystemClock.elapsedRealtime()
             standbyOutputView?.let { output -> if(output.parent===root) root.removeView(output) }
             standbyOutputView=null
+            FfmpegPlayerRegistry.detach(oldPlayer)
             oldPlayer?.release()
             standbyPlayer=null
             updatePlaybackBufferingIndicator()
