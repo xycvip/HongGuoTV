@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "44b882253513349dbcac6ffd7e4d6faa8dc3c15a",
-  "versionCode": 21,
-  "versionName": "0.0.21",
+  "sourceCommit": "3204bfa8f1f2e532a5fb9d424d3e25afefeb7db2",
+  "versionCode": 22,
+  "versionName": "0.0.22",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.21",
+  "tag": "hongguotv-bate-v0.0.22",
   "apk": {
-    "name": "HongguoTV-0.0.21.apk",
-    "size": 1952705,
-    "sha256": "120f6cf5f9d670c9027b5decc45eb357b2bc3be67b8b36f5907c9687b54e757f",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.21/HongguoTV-0.0.21.apk"
+    "name": "HongguoTV-0.0.22.apk",
+    "size": 1952697,
+    "sha256": "7ea43803578e70192c584decf91cf859dc3c9edc3a8f154dda1590c5dda85420",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.22/HongguoTV-0.0.22.apk"
   },
-  "notes": "【焦点与遥控器】\n- 切换追剧分区后恢复对应入口焦点\n- 完善追剧入口的遥控器焦点连接\n【片源与数据管理】\n- 将收藏和最近观看归入追剧导航\n- 新增追剧导航并合并收藏与最近观看入口\n【其他功能与问题修复】\n- 修复弹幕 SP 字体缩放弃用警告\n- 修复 APK 安装 Intent 弃用警告"
+  "notes": "【播放与播放器】\n- 更新播放器方向重启行为说明\n- 取消手机播放器方向持久化写入\n- 调整手机播放器方向为进程内记忆并在重启后恢复横屏\n- 更新播放器方向持久化逻辑说明\n- 同步手机播放器方向偏好的字段说明\n- 退出播放器时保留已保存的手机方向偏好\n- 持久化手机播放器方向选择\n- 恢复手机播放器上次选择的屏幕方向\n【界面与交互】\n- 将追剧导航默认入口切换为最近观看\n- 调整追剧页入口顺序并默认显示最近观看"
 }
