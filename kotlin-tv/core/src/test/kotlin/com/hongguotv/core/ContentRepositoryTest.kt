@@ -550,6 +550,39 @@ class ContentRepositoryTest {
         assertEquals(listOf("222","333"),seasons.map { it.id })
     }
 
+    private fun currentTotalRank(payload: JSONObject) = script("mergeLoaderData",JSONArray()
+        .put("rank_hot-drama/page").put(JSONArray().put(JSONObject().put("key","content")
+            .put("routerDataFnName","p").put("routerDataFnArgs",JSONArray().put(payload.toString())))))
+
+    @Test fun totalRankingUsesTheOfficialHongguoHotDramaRoute() {
+        val payload=rankPayload(1,4)
+        payload.getJSONArray("rankList").getJSONObject(0).put("rank",1).put("heatText","8339万热度")
+        val repo=repository { request ->
+            assertEquals("/rank/hot-drama",request.url.encodedPath)
+            assertEquals("1",request.url.queryParameter("page"))
+            """<script>_ROUTER_DATA={"loaderData":{"rank_hot-drama/page":{"pageNum":1,"updatedText":"今日已更新"}}};</script>"""+currentTotalRank(payload)
+        }
+        val result=repo.ranking(RankBoard.TOTAL,1)
+        assertEquals("测试漫剧",result.items.single().title)
+        assertEquals(RankPosition(1,"8339万热度"),result.ranking!!.positions["123"])
+        assertEquals(4,result.ranking!!.totalPages)
+        assertEquals("今日已更新",result.ranking!!.updatedText)
+        assertTrue(result.hasMore)
+    }
+
+    @Test fun totalRankingRenderedFallbackDoesNotRequireAnUnverifiedRankKey() {
+        val repo=repository {
+            """<script>_ROUTER_DATA={"loaderData":{"rank_hot-drama/page":{"pageNum":1,"updatedText":"今日已更新"}}};</script>
+                <article aria-labelledby="rank-title-789"><span class="pc-badge-number-example">1</span>
+                <h2 id="rank-title-789">综合榜剧集</h2><p class="pc-metrics-example">8339万热度</p></article>
+                <nav aria-label="榜单分页"><span aria-current="page">1</span><a href="/rank/hot-drama?page=4">4</a></nav>"""
+        }
+        val result=repo.ranking(RankBoard.TOTAL,1)
+        assertEquals("综合榜剧集",result.items.single().title)
+        assertEquals(RankPosition(1,"8339万热度"),result.ranking!!.positions["789"])
+        assertEquals(4,result.ranking!!.totalPages)
+    }
+
     private fun currentRealRank(payload: JSONObject) = script("mergeLoaderData",JSONArray()
         .put("rank_hot-real-drama/page").put(JSONArray().put(JSONObject().put("key","content")
             .put("routerDataFnName","p").put("routerDataFnArgs",JSONArray().put(payload.toString())))))
