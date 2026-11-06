@@ -31,7 +31,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
             val input=body.byteStream(); val out=java.io.ByteArrayOutputStream(); val buffer=ByteArray(8192)
             while(out.size()<=16*1024*1024) { val n=input.read(buffer); if(n<0) break; out.write(buffer,0,n) }; val bytes=out.toByteArray()
             if(bytes.size > 16*1024*1024) throw IOException("内容响应过大")
-            if(bytes.isEmpty()) throw IOException("接口响应为空，请稍后重试")
+            if(bytes.isEmpty()) throw IOException("接口响应为空（HTTP ${response.code}，响应字节数=0），请稍后重试")
             String(bytes,Charsets.UTF_8)
         }
     }
