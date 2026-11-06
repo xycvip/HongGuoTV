@@ -58,7 +58,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     private var manualProxyIndex = -1
     private var pendingSource: Int? = null
     private var pendingProxyIndex: Int? = null
-    private var speedView: TextView? = null
+    private var downloadSpeedText = ""
     private var status = "当前版本 ${BuildConfig.VERSION_NAME}"
     private var retryAfter = 0L
     private var promptedThisSession = false
@@ -116,13 +116,17 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     private fun updateStatus(text: String) {
         status = text
         val parts = text.split("\n", limit = 2)
-        statusView?.apply {
-            this.text = parts.firstOrNull().orEmpty()
-            visibility = View.VISIBLE
-        }
+        renderStatusLine()
         statusDetailsView?.apply {
             this.text = parts.getOrNull(1).orEmpty()
             visibility = if (text.contains("\n")) View.VISIBLE else View.GONE
+        }
+    }
+    private fun renderStatusLine() {
+        val firstLine = status.substringBefore("\\n")
+        statusView?.apply {
+            text = if (downloadInProgress && downloadSpeedText.isNotBlank()) "$firstLine  $downloadSpeedText" else firstLine
+            visibility = View.VISIBLE
         }
     }
     private fun renderActions() {
@@ -159,12 +163,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             }
             if (aboutMode && status == "当前版本 ${BuildConfig.VERSION_NAME}") visibility = View.GONE
         }
-        speedView = TextView(activity).apply {
-            text = "下载速度  0 Kb/s"
-            textSize = 14f
-            setTextColor(TvStyle.muted)
-            visibility = if (aboutMode) View.GONE else View.VISIBLE
-        }
+        downloadSpeedText = ""
         statusDetailsView = TextView(activity).apply {
             text = status.substringAfter("\n", "")
             textSize = 15f
@@ -194,7 +193,6 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
                         "应用不提供、不存储、不传播视频内容；播放内容由用户选择的来源提供，相关内容版权归原平台及权利人所有。"
                 ))
             } else {
-                addView(speedView, LinearLayout.LayoutParams(-1, -2))
                 addView(statusView, LinearLayout.LayoutParams(-1, -2).apply {
                     bottomMargin = (10 * dp).toInt()
                 })
@@ -223,24 +221,22 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
                 if (!enabled && busy) { interrupt(); updateStatus("自动更新已关闭，可手动检查"); renderActions() }
             }
         } else null
-        autoCheckBox?.let { statusContent.addView(it, LinearLayout.LayoutParams(-1, -2)) }
-        if (!aboutMode) statusContent.addView(TextView(activity).apply {
+        val footerOptions = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        autoCheckBox?.let { footerOptions.addView(it, LinearLayout.LayoutParams(-1, -2)) }
+        if (!aboutMode) footerOptions.addView(TextView(activity).apply {
             text = if (updatePending) "发现新版本，点击即可更新" else "只在应用前台浏览时检查，播放中不打扰。下载后需确认系统安装，收藏与观看记录保留。"
             textSize = 13f; setTextColor(TvStyle.muted)
-            setPadding(0, (8*dp).toInt(), 0, (8*dp).toInt())
-        })
+            setPadding(0, (3*dp).toInt(), 0, (8*dp).toInt())
+        }, LinearLayout.LayoutParams(-1, -2))
         val buttons = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.END
-            setPadding(0, (14*dp).toInt(), 0, 0)
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, (8*dp).toInt(), 0, (8*dp).toInt())
         }
         val later = TvDialog.capsuleButton(activity, if (aboutMode) "关闭" else "稍后") { }
         val action = TvDialog.capsuleButton(activity,"检查更新") { }
         actionButton = action
-        val sourceRow = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER
-        }
+        val sourceRow = buttons
         val address1 = TvDialog.capsuleButton(activity, "下载地址1") { }
         val address2 = TvDialog.capsuleButton(activity, "下载地址2") { }
         val address3 = TvDialog.capsuleButton(activity, "下载地址3") { }
@@ -248,29 +244,36 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             button.id = View.generateViewId()
             button.isFocusable = true
             button.isFocusableInTouchMode = true
+            button.textSize = 12f
+            button.minWidth = 0
+            button.minimumWidth = 0
+            button.setPadding((2 * dp).toInt(), button.paddingTop, (2 * dp).toInt(), button.paddingBottom)
             sourceRow.addView(button, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                if (button !== address1) leftMargin = (6 * dp).toInt()
+                if (button !== address1) leftMargin = (3 * dp).toInt()
             })
         }
         sourceButtons = listOf(address1, address2, address3)
+        later.textSize = 12f
+        action.textSize = 12f
+        later.minWidth = 0; later.minimumWidth = 0
+        action.minWidth = 0; action.minimumWidth = 0
+        later.setPadding((3 * dp).toInt(), later.paddingTop, (3 * dp).toInt(), later.paddingBottom)
+        action.setPadding((3 * dp).toInt(), action.paddingTop, (3 * dp).toInt(), action.paddingBottom)
         if (!aboutMode) {
-            statusContent.addView(TextView(activity).apply {
-                text = "1：GitCode    2：GitHub    3：GitHub 代理轮换"
-                textSize = 13f
-                setTextColor(TvStyle.muted)
-                setPadding(0, (8 * dp).toInt(), 0, (4 * dp).toInt())
-            }, LinearLayout.LayoutParams(-1, -2))
-            statusContent.addView(sourceRow, LinearLayout.LayoutParams(-1, -2))
+            buttons.addView(address1, LinearLayout.LayoutParams(0, -2, 1f))
+            buttons.addView(address2, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = (3 * dp).toInt() })
+            buttons.addView(address3, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = (3 * dp).toInt() })
         }
-        buttons.addView(later, LinearLayout.LayoutParams(-2,-2).apply { rightMargin=(12*dp).toInt() })
-        buttons.addView(action, LinearLayout.LayoutParams(-2,-2))
-        body.addView(buttons)
+        buttons.addView(later, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = (3 * dp).toInt() })
+        buttons.addView(action, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = (3 * dp).toInt() })
+        body.addView(footerOptions, LinearLayout.LayoutParams(-1, -2))
+        body.addView(buttons, LinearLayout.LayoutParams(-1, -2))
         val next = AlertDialog.Builder(activity).setView(TvDialog.card(activity,body)).create()
         val isCompactScreen = activity.resources.configuration.smallestScreenWidthDp < 600
         TvDialog.styleWindow(activity, next, widthFraction = if (isCompactScreen) 0.90f else 0.55f)
         dialog = next
         next.setOnDismissListener {
-            if (dialog === next) { dialog = null; statusView = null; statusDetailsView = null; speedView = null; actionButton = null; sourceButtons = emptyList(); aboutDialogShowing = false }
+            if (dialog === next) { dialog = null; statusView = null; statusDetailsView = null; actionButton = null; sourceButtons = emptyList(); aboutDialogShowing = false }
             if (from?.isAttachedToWindow == true) from.requestFocus()
         }
         next.show()
@@ -377,7 +380,8 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             else -> "自动线路"
         }
         downloadInProgress = true
-        speedView?.text = "下载速度  0 Kb/s"
+        downloadSpeedText = "0 Kb/s"
+        renderStatusLine()
         renderActions()
         updateStatus("正在通过 $sourceName 下载 ${update.versionName}…")
         val ticket = generation + 1
@@ -390,13 +394,15 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
                     val speedText = if (bitsPerSecond >= 1_000_000.0)
                         "%.2f Mb/s".format(bitsPerSecond / 1_000_000.0)
                     else "%.0f Kb/s".format(bitsPerSecond / 1_000.0)
-                    speedView?.text = "下载速度  $speedText"
+                    downloadSpeedText = speedText
+                    renderStatusLine()
                 }
             } })
             validateApk(update)
         }) {
             downloadInProgress = false
-            speedView?.text = "下载速度  0 Kb/s"
+            downloadSpeedText = ""
+            renderStatusLine()
             ready = true
             updateStatus("${update.versionName} 已下载并校验\n${update.notes}\n\n确认后由系统覆盖安装，保留本机记录。")
             if (idle() && dialog == null && !promptedThisSession) show(activity.currentFocus)
