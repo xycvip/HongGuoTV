@@ -107,7 +107,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             background=null
         }
         val pageNavItems=mutableListOf<View>()
-        listOf(0 to "首页",7 to "剧场",2 to "排行榜",9 to "追剧",5 to "设置",6 to "红果账户").forEach { (tabId,label) ->
+        listOf(0 to "谢沛东你好帅",7 to "剧场",2 to "排行榜",9 to "追剧",5 to "设置",6 to "红果账户").forEach { (tabId,label) ->
             val active=when(tabId) { 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
             val item=addButton(pageNav,label,active) { switchTab(tabId) }
             item.textSize=if(compactHeader) 13.5f else 14f
