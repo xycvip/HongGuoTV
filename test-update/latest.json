@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "a981098f5af739e8624abe67b92e180d058a6b09",
-  "versionCode": 19,
-  "versionName": "0.0.19",
+  "sourceCommit": "71ce95cec4cd3668bc2a16e4516714a5e14786b2",
+  "versionCode": 20,
+  "versionName": "0.0.20",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.19",
+  "tag": "hongguotv-bate-v0.0.20",
   "apk": {
-    "name": "HongguoTV-0.0.19.apk",
-    "size": 1950085,
-    "sha256": "c3cbb3feb2a8e1c8d58943afbfd0b0e4f0febf72197a028fa68cf2f6d677e5cc",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.19/HongguoTV-0.0.19.apk"
+    "name": "HongguoTV-0.0.20.apk",
+    "size": 1951025,
+    "sha256": "d1f260824ce244e2799f04003201d97206b6021d5652adbe4fbea3071772e0c0",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.20/HongguoTV-0.0.20.apk"
   },
-  "notes": "【播放与播放器】\n- 手机播放方向选择保持至应用退出\n- 手机长按三倍速不唤起播放工具栏\n- fix: 接入手机播放工具栏点击收起回调\n- fix: 手机端点击视频空白处收起播放工具栏\n【其他功能与问题修复】\n- 手机长按三倍速松手不弹出控制栏"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
