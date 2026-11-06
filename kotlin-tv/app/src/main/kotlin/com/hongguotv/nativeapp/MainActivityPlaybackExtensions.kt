@@ -229,12 +229,14 @@ import java.util.concurrent.atomic.AtomicLong
         val attachPrepared: (RemoteVideo) -> Unit = { remote ->
             video=remote; quality=remote.info.quality
             val p=player ?: run {
-                val renderers=androidx.media3.exoplayer.DefaultRenderersFactory(this).setEnableDecoderFallback(true)
+                val ffmpegSetup=FfmpegPlayerRegistry.create(this)
+                val renderers=ffmpegSetup.renderersFactory
                 val preloadBuilder=DefaultPreloadManager.Builder(this) { _: Int ->
                     DefaultPreloadManager.PreloadStatus.specifiedRangeLoaded(3000)
                 }.setRenderersFactory(renderers).setLoadControl(buildPlaybackLoadControl())
                 preloadManager=preloadBuilder.build()
                 preloadBuilder.buildExoPlayer().also {
+                    FfmpegPlayerRegistry.attach(it,ffmpegSetup)
                     player=it; playerView?.player=it
                     it.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true)
                     it.setHandleAudioBecomingNoisy(true)
