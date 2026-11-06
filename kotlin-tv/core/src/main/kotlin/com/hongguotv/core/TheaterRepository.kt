@@ -10,7 +10,6 @@ import java.io.IOException
 internal class TheaterRepository(
     private val http: OkHttpClient,
     private val playbackSession: PlaybackDeviceSession,
-    private val signer: Signer,
     private val requestText: (String, Signer.Request?) -> String
 ) {
     private data class TheaterCursor(val offset:Int,val sessionId:String)
@@ -32,7 +31,7 @@ internal class TheaterRepository(
     private fun theaterValues():MutableMap<String,String> {
         // Unlike web SSR, the App catalog endpoint requires a server-registered anonymous device.
         val profile=playbackSession.profile(http)
-        val values=VendorConstants.device.toMutableMap().apply { putAll(profile.values) }
+        val values=profile.values.toMutableMap()
         for(k in listOf("version_code","manifest_version_code","update_version_code","pv_player")) values[k]="73532"
         values["version_name"]="7.3.5.32"
         return values
@@ -53,6 +52,8 @@ internal class TheaterRepository(
         }
         val cursor=synchronized(theaterSessions) { session.cursors[page] } ?: throw IOException("剧场分页游标缺失，请重新加载")
         val values=theaterValues()
+        val profile=playbackSession.profile(http)
+        val requestSigner=Signer(values)
         val select=JSONObject().apply {
             put("genre",JSONArray().apply { theaterGenre(type).takeIf { it.isNotBlank() }?.let { put(it) } })
             put("sort",JSONArray().apply { selected["sort"]?.let { put(it) } })
@@ -75,7 +76,8 @@ internal class TheaterRepository(
         var payload:JSONObject?=null
         var lastError:Throwable?=null
         for(host in listOf("https://api5-normal-sinfonlineb.fqnovel.com","https://api5-normal-sinfonlinea.fqnovel.com")) {
-            val signed=signer.sign(host+endpoint,values,body)
+            val signedBase=requestSigner.sign(host+endpoint,values,body)
+            val signed=if(profile.cookie.isBlank()) signedBase else signedBase.copy(headers=signedBase.headers + ("Cookie" to profile.cookie))
             val candidate=runCatching { JSONObject(requestText(signed.url,signed)) }.getOrElse { lastError=it; null } ?: continue
             if(candidate.optInt("code",-1)==0) { payload=candidate; break }
             lastError=IOException("红果剧场接口暂不可用（code ${candidate.optInt("code",-1)}）")
