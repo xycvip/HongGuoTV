@@ -128,7 +128,7 @@ import java.util.concurrent.atomic.AtomicLong
         val skipMark=library.skipMark(data.series.id)
         outroSkipSeconds=skipMark?.outroSeconds ?: 0; outroTriggered=false; ffActive=false
         if(autoplay) sleepStopped=false
-        // 手机方向选择保留在当前应用进程内：离开播放器、重新进入或切换剧集都不重置；进程重启后由字段默认值恢复横屏。
+        // 手机方向选择持久化到本机：离开播放器仅临时恢复主界面横屏，重新进入播放器继续使用上次选择。
         screen="player"; randomLoadingLabel=null; applyDeviceOrientationPolicy(); episodeIndex=selectedIndex; group=episodeIndex/20
         playbackBytes.set(0L); lastSpeedBytes=0L; lastSpeedAt=android.os.SystemClock.elapsedRealtime(); currentSpeedBytesPerSecond=0L
         activeVideoFormat=null; if(!reuse) activeDecoderName=""
