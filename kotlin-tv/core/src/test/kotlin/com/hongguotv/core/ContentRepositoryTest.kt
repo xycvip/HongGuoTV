@@ -13,7 +13,7 @@ import java.io.IOException
 
 class ContentRepositoryTest {
     @Test fun theaterRetriesAllHostsOnceAfterEmptyResponsesAndRenewsAnonymousIdentity() {
-        val hosts=mutableListOf<String>()
+        val calls=mutableListOf<Pair<String,String>>()
         var registrations=0
         val session=PlaybackDeviceSession {
             registrations++
@@ -22,8 +22,15 @@ class ContentRepositoryTest {
         val repo=ContentRepository(
             OkHttpClient.Builder().addInterceptor { chain ->
                 val request=chain.request()
-                hosts+=request.url.host
-                val body=if(hosts.size<=6) "" else """{"code":0,"data":{"selector_rows":[{"type":"category_dim_theme","row_name":"题材","items":[{"selector_item_id":"all","show_name":"全部"}]}],"video_data":[],"has_more":false,"session_id":""}}"""
+                val buffer=okio.Buffer()
+                request.body?.writeTo(buffer)
+                val reqType=JSONObject(buffer.readUtf8()).optString("req_type")
+                calls+=request.url.encodedPath to reqType
+                val body=if(calls.size<=12) "" else when(reqType) {
+                    "only_panel" -> """{"code":0,"data":{"selector_rows":[{"type":"category_dim_theme","row_name":"题材","items":[{"selector_item_id":"all","show_name":"全部"}]}]}}"""
+                    "only_content" -> """{"code":0,"data":{"video_data":[],"has_more":false,"session_id":""}}"""
+                    else -> ""
+                }
                 Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                     .body(body.toResponseBody()).build()
             }.build(),
@@ -33,8 +40,13 @@ class ContentRepositoryTest {
         val result=repo.theater()
         assertTrue(result.catalog.items.isEmpty())
         assertEquals(2,registrations)
-        assertEquals(12,hosts.size)
-        assertEquals(hosts.take(6),hosts.drop(6))
+        assertEquals(14,calls.size)
+        assertEquals(List(6) { "/reading/distribution/category/landpage/v1/" to "only_panel" },calls.take(6))
+        assertEquals(List(6) { "/reading/distribution/category/landpage/v/" to "default" },calls.drop(6).take(6))
+        assertEquals(listOf(
+            "/reading/distribution/category/landpage/v1/" to "only_panel",
+            "/reading/distribution/category/landpage/v1/" to "only_content"
+        ),calls.takeLast(2))
     }
 
     @Test fun theaterDoesNotReregisterIdentityForOrdinaryNetworkFailures() {
@@ -54,7 +66,7 @@ class ContentRepositoryTest {
         )
         assertThrows(IOException::class.java) { repo.theater() }
         assertEquals(1,registrations)
-        assertEquals(6,requests)
+        assertEquals(12,requests)
     }
 
     private fun streamRepository(vararg variants: Triple<Int,String,String>) = repository { request ->
