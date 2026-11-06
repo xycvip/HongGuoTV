@@ -115,7 +115,11 @@ internal class ThirdSourcePlayerSessionFactory(
         center.addView(error)
         host.addView(center, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
 
-        val player = ExoPlayer.Builder(activity).build()
+        val ffmpegSetup = FfmpegPlayerRegistry.create(activity)
+        val player = ExoPlayer.Builder(activity)
+            .setRenderersFactory(ffmpegSetup.renderersFactory)
+            .build()
+        FfmpegPlayerRegistry.attach(player, ffmpegSetup)
         player.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
