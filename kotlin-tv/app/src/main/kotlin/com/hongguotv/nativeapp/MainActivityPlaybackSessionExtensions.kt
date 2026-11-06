@@ -52,7 +52,7 @@ internal fun MainActivity.closeActiveVideo() {
         }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if(resetOrientation) {
-            phonePlaybackOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            // 离开播放器时界面仍恢复横屏，但不清除用户保存的下次播放方向。
             requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
     }
