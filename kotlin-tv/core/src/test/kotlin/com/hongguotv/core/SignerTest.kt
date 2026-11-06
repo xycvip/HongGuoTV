@@ -19,16 +19,10 @@ class SignerTest {
             var seed=17L
             val signer=Signer({ts.toLong()*1000}) { seed=(seed*1664525+1013904223) and 0xffffffffL; seed/4294967296.0 }
             assertEquals("branch $i",0,signer.branch(query,body,ts))
-            val actualHash=signer.hashF13(sm3(query.toByteArray()),body?.let{digest("MD5",it)}?:ByteArray(16),ts).hex()
-            if(actualHash!=row.getString("hash")) println("hash mismatch row=$i ts=$ts expected=${row.getString("hash")} actual=$actualHash branch=${signer.branch(query,body,ts)}")
-            assertEquals("hash $i",row.getString("hash"),actualHash)
+            assertEquals("hash $i",row.getString("hash"),signer.hashF13(sm3(query.toByteArray()),body?.let{digest("MD5",it)}?:ByteArray(16),ts).hex())
             assertEquals("gorgon $i",row.getString("gorgon"),signer.gorgon(query,body,ts,42131))
             assertEquals("helios $i",row.getString("helios"),signer.helios(ts))
-            val actualMedusa=signer.medusa(url,body,ts)
-            if(actualMedusa!=row.getString("medusa")) {
-                println("medusa mismatch row=$i expectedPrefix=${row.getString("medusa").take(48)} actualPrefix=${actualMedusa.take(48)} expectedLength=${row.getString("medusa").length} actualLength=${actualMedusa.length}")
-            }
-            assertEquals("medusa $i",row.getString("medusa"),actualMedusa)
+            assertEquals("medusa $i",row.getString("medusa"),signer.medusa(url,body,ts))
         }
     }
 }
