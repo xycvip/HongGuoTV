@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "3204bfa8f1f2e532a5fb9d424d3e25afefeb7db2",
-  "versionCode": 22,
-  "versionName": "0.0.22",
+  "sourceCommit": "69dae08f70164c72260bf77f89092efe7841a0cb",
+  "versionCode": 23,
+  "versionName": "0.0.23",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.22",
+  "tag": "hongguotv-bate-v0.0.23",
   "apk": {
-    "name": "HongguoTV-0.0.22.apk",
-    "size": 1952697,
-    "sha256": "7ea43803578e70192c584decf91cf859dc3c9edc3a8f154dda1590c5dda85420",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.22/HongguoTV-0.0.22.apk"
+    "name": "HongguoTV-0.0.23.apk",
+    "size": 1955721,
+    "sha256": "496f2101d4e2ceb492647ce117bb947aaa0a46bf2dd663f0c66e136ae7ad85f9",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.23/HongguoTV-0.0.23.apk"
   },
-  "notes": "【播放与播放器】\n- 更新播放器方向重启行为说明\n- 取消手机播放器方向持久化写入\n- 调整手机播放器方向为进程内记忆并在重启后恢复横屏\n- 更新播放器方向持久化逻辑说明\n- 同步手机播放器方向偏好的字段说明\n- 退出播放器时保留已保存的手机方向偏好\n- 持久化手机播放器方向选择\n- 恢复手机播放器上次选择的屏幕方向\n【界面与交互】\n- 将追剧导航默认入口切换为最近观看\n- 调整追剧页入口顺序并默认显示最近观看"
+  "notes": "【界面与交互】\n- fix: 切换更新弹窗时保持关于页按钮状态\n- fix: 关于软件弹窗固定检查更新按钮\n- feat: 下载显示实时速度并支持指定线路\n- feat: 更新弹窗增加三个下载地址按钮\n- feat: 更新弹窗显示实时下载速度\n【其他功能与问题修复】\n- fix: 无新版时清除暂存的下载线路选择\n- fix: 标注三条下载线路并修正速度单位\n- fix: 保留手动下载线路选择并将速度置顶\n- feat: 接入三个下载地址的选择操作"
 }
