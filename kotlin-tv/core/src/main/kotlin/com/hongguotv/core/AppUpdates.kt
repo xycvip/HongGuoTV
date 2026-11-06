@@ -350,6 +350,48 @@ class AppUpdateRepository(
                 response?.close()
             }
         }
+        // GitCode 附件下载失败时，使用 AppDownload Raw 清单作为最后备用；
+        // 只有版本号、文件名和 SHA256 完全一致时才允许切换，避免把不同构建的 APK 混装。
+        if (hostOf(base) == "gitcode.com" && mirrorIndex == null) {
+            try {
+                val fallbackManifest = "${latestManifestUrl}?cachebust=${System.currentTimeMillis()}"
+                val fallback = tryMirrors(fallbackManifest, 12) { response, _ ->
+                    val text = response.body?.string() ?: throw IOException("AppDownload备用清单为空")
+                    if (text.length > 65536) throw IOException("AppDownload备用清单过大")
+                    parseManifest(text)
+                }
+                if (fallback.versionCode != update.versionCode ||
+                    fallback.fileName != update.fileName ||
+                    fallback.sha256 != update.sha256 ||
+                    fallback.size != update.size) {
+                    throw IOException("GitCode与AppDownload备用版本信息不一致，拒绝切换不同安装包")
+                }
+                val fallbackBase = "${fallback.downloadUrl}?cachebust=${System.currentTimeMillis()}"
+                val fallbackErrors = ArrayList<String>()
+                for (wrap in AppUpdate.MIRRORS) {
+                    val url = wrap(fallbackBase)
+                    var response: okhttp3.Response? = null
+                    try {
+                        response = http.newCall(request(url)).execute()
+                        if (!response.isSuccessful) { fallbackErrors += "HTTP${response.code}@${hostOf(url)}"; continue }
+                        val body = response.body ?: run { fallbackErrors += "空响应@${hostOf(url)}"; continue }
+                        if (body.contentLength() >= 0 && body.contentLength() != update.size) {
+                            fallbackErrors += "长度不匹配@${hostOf(url)}"; continue
+                        }
+                        body.byteStream().use { UpdateFiles.receive(it, file, update, progress) }
+                        return
+                    } catch (e: IOException) {
+                        fallbackErrors += "${e.message?.take(50) ?: "?"}@${hostOf(url)}"
+                        file.delete()
+                    } finally {
+                        response?.close()
+                    }
+                }
+                throw IOException("GitCode与AppDownload备用下载均失败：${fallbackErrors.joinToString("; ")}")
+            } catch (fallbackError: Exception) {
+                errors += "AppDownload备用：${fallbackError.message ?: "不可用"}"
+            }
+        }
         throw IOException("安装包下载失败：${errors.joinToString("; ")}")
     }
 
