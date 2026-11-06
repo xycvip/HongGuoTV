@@ -10,15 +10,17 @@ import android.text.style.ReplacementSpan
 import android.view.Gravity
 import android.view.View
 import android.widget.TextView
+import kotlin.math.ceil
+import kotlin.math.floor
 
-/** Compact orange-red outline chips, fitted to the actual card width without truncation. */
+/** Poster-width genre chips: theme accent outline/text, complete borders and adaptive spacing. */
 internal fun setGenreTagChips(view: TextView, rawTags: String, density: Float) {
     val tags = rawTags
         .split(Regex("\\s*[·|，,、]\\s*"))
         .map { it.trim() }
         .filter { it.isNotBlank() }
         .distinct()
-        .take(3)
+        .take(4)
 
     if (tags.isEmpty()) {
         view.text = ""
@@ -30,48 +32,65 @@ internal fun setGenreTagChips(view: TextView, rawTags: String, density: Float) {
     view.minLines = 1
     view.ellipsize = null
     view.gravity = Gravity.CENTER
-    view.setTextColor(android.graphics.Color.rgb(220, 83, 43))
-    view.setPadding((2f * density).toInt(), 0, (2f * density).toInt(), 0)
+    view.setTextColor(TvStyle.accent)
+    // 标签区域与海报内容区域同宽；不要在 TextView 内额外缩进。
+    view.setPadding(0, 0, 0, 0)
 
     fun renderForWidth() {
         if (view.width <= 0) return
         val available = (view.width - view.paddingLeft - view.paddingRight).toFloat()
-        val gap = 3f * density
         val horizontalPadding = 2f * density
-        val stroke = 0.8f * density
+        val stroke = 1f * density
         val maxSize = 10.5f
         val minSize = 8f
+        val paint = view.paint
 
-        fun requiredWidth(count: Int, size: Float): Float {
-            val paint = view.paint
-            paint.textSize = size * density
-            return tags.take(count).sumOf { tag ->
-                (paint.measureText(tag) + horizontalPadding * 2f + stroke).toDouble()
-            }.toFloat() + gap * (count - 1).coerceAtLeast(0)
+        // 先尽可能保留4项，再依次尝试3项、2项；每项文字完整显示。
+        var chosenCount = 0
+        var chosenSize = maxSize
+        var chosenGap = 0f
+        for (count in minOf(4, tags.size) downTo 1) {
+            var size = maxSize
+            var widths = FloatArray(count)
+            fun measure(): Float {
+                paint.textSize = size * density
+                widths = FloatArray(count) { index ->
+                    paint.measureText(tags[index]) + horizontalPadding * 2f + stroke
+                }
+                return widths.sum()
+            }
+            var total = measure()
+            while (total > available && size > minSize) {
+                size = (size - 0.25f).coerceAtLeast(minSize)
+                total = measure()
+            }
+            if (total <= available) {
+                chosenCount = count
+                chosenSize = size
+                chosenGap = if (count > 1) ((available - total) / (count - 1)).coerceAtLeast(0f) else 0f
+                break
+            }
         }
 
-        var count = minOf(3, tags.size)
-        var textSize = maxSize
-        while (count > 0 && requiredWidth(count, minSize) > available) count--
-        if (count == 0) {
+        if (chosenCount == 0) {
             view.text = ""
             view.visibility = View.INVISIBLE
             return
         }
-        while (textSize > minSize && requiredWidth(count, textSize) > available) {
-            textSize -= 0.25f
-        }
-        // 优先完整显示三项；若宽度不足则退到两项，不截断标签文字。
-        if (count == 3 && requiredWidth(3, textSize) > available) count = 2
 
-        view.textSize = textSize
+        view.textSize = chosenSize
+        view.gravity = if (chosenCount == 1) Gravity.CENTER else Gravity.START
         val builder = SpannableStringBuilder()
-        tags.take(count).forEachIndexed { index, tag ->
-            if (index > 0) builder.append(" ")
+        tags.take(chosenCount).forEachIndexed { index, tag ->
             val start = builder.length
             builder.append(tag)
             builder.setSpan(
-                GenreTagChipSpan(density, horizontalPadding, stroke),
+                GenreTagChipSpan(
+                    density = density,
+                    horizontalPadding = horizontalPadding,
+                    strokeWidth = stroke,
+                    trailingGap = if (index < chosenCount - 1) chosenGap else 0f
+                ),
                 start,
                 builder.length,
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
@@ -88,12 +107,13 @@ internal fun setGenreTagChips(view: TextView, rawTags: String, density: Float) {
 private class GenreTagChipSpan(
     density: Float,
     private val horizontalPadding: Float,
-    private val strokeWidth: Float
+    private val strokeWidth: Float,
+    private val trailingGap: Float
 ) : ReplacementSpan() {
     private val radius = 2.5f * density
-    private val verticalInset = 0.5f * density
-    private val borderColor = android.graphics.Color.rgb(235, 105, 61)
-    private val textColor = android.graphics.Color.rgb(220, 83, 43)
+    private val verticalInset = 1f * density
+    private val borderColor = TvStyle.accent
+    private val textColor = TvStyle.accent
 
     override fun getSize(
         paint: Paint,
@@ -101,7 +121,18 @@ private class GenreTagChipSpan(
         start: Int,
         end: Int,
         fm: Paint.FontMetricsInt?
-    ): Int = (paint.measureText(text, start, end) + horizontalPadding * 2f + strokeWidth).toInt()
+    ): Int {
+        val width = paint.measureText(text, start, end) + horizontalPadding * 2f + strokeWidth + trailingGap
+        if (fm != null) {
+            val metrics = paint.fontMetrics
+            val verticalExtra = verticalInset + strokeWidth / 2f
+            fm.top = minOf(fm.top, floor(metrics.ascent - verticalExtra).toInt())
+            fm.ascent = minOf(fm.ascent, floor(metrics.ascent - verticalExtra).toInt())
+            fm.descent = maxOf(fm.descent, ceil(metrics.descent + verticalExtra).toInt())
+            fm.bottom = maxOf(fm.bottom, ceil(metrics.descent + verticalExtra).toInt())
+        }
+        return ceil(width).toInt()
+    }
 
     override fun draw(
         canvas: Canvas,
@@ -124,13 +155,15 @@ private class GenreTagChipSpan(
         val left = x + strokeWidth / 2f
         val right = left + textWidth + horizontalPadding * 2f
         val metrics = paint.fontMetrics
+        val verticalExtra = verticalInset + strokeWidth / 2f
         val rect = RectF(
             left,
-            y + metrics.ascent - verticalInset,
+            y + metrics.ascent - verticalExtra,
             right,
-            y + metrics.descent + verticalInset
+            y + metrics.descent + verticalExtra
         )
 
+        // 只绘制描边，不填充底色；四边完整闭合。
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = strokeWidth
         paint.color = borderColor
