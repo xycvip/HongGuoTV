@@ -301,15 +301,16 @@ import java.util.concurrent.atomic.AtomicLong
                 return
             }
             val prefs=getSharedPreferences("ffmpeg-settings-v1",Context.MODE_PRIVATE)
+            val defaultManifestUrl="https://github.com/xycvip/HongGuoTV/releases/download/ffmpeg-runtime-latest/manifest.json"
             val address=EditText(this@settings).apply {
                 setSingleLine(true)
                 inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
-                hint="https://服务器地址/manifest.json"
-                setText(prefs.getString("manifest_url","") ?: "")
+                hint=defaultManifestUrl
+                setText(prefs.getString("manifest_url",null)?.takeIf { it.isNotBlank() } ?: defaultManifestUrl)
             }
             android.app.AlertDialog.Builder(this@settings)
                 .setTitle("下载 FFmpeg 运行库")
-                .setMessage("当前应用进程架构：${abi.folder}\n请输入通用 ABI 清单的 HTTPS 地址。安装前会逐个校验 SHA-256 和 ELF 架构。")
+                .setMessage("当前应用进程架构：${abi.folder}\n已预填官方独立运行库清单地址，也可替换为自己的 HTTPS 清单。只下载当前架构所需文件，并逐个校验 SHA-256 和 ELF 架构。")
                 .setView(address)
                 .setNegativeButton("取消",null)
                 .setPositiveButton("下载并安装") { _,_ ->
