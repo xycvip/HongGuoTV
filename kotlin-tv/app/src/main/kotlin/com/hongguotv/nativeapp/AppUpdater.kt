@@ -349,6 +349,8 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
                 apk = File(activity.cacheDir, "updates/HongguoTV-${available!!.versionName}-${available!!.versionCode}.apk")
             }
             if (available == null) {
+                pendingSource = null
+                pendingProxyIndex = null
                 updateStatus(if (update.versionCode > BuildConfig.VERSION_CODE && update.minSdk > Build.VERSION.SDK_INT) "新版需要 Android API ${update.minSdk}，当前电视继续使用本版" else "已是最新版本 ${BuildConfig.VERSION_NAME}")
                 worker.execute { apk.delete() }
             } else {
