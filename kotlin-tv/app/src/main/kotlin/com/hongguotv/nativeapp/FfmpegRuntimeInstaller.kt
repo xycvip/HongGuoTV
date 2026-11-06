@@ -39,8 +39,12 @@ internal class FfmpegRuntimeInstaller(context: Context) {
 
         companion object {
             fun current(): Abi? {
-                val supported = Build.SUPPORTED_ABIS.toSet()
-                return entries.firstOrNull { supported.contains(it.folder) }
+                // Preserve Android's preferred ABI order. A 64-bit device commonly
+                // advertises both arm64-v8a and armeabi-v7a; enum order must not
+                // accidentally force the 32-bit runtime onto that device.
+                return Build.SUPPORTED_ABIS.firstNotNullOfOrNull { name ->
+                    entries.firstOrNull { it.folder == name }
+                }
             }
         }
     }
