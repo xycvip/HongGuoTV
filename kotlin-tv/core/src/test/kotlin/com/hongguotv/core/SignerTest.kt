@@ -22,7 +22,11 @@ class SignerTest {
             assertEquals("hash $i",row.getString("hash"),signer.hashF13(sm3(query.toByteArray()),body?.let{digest("MD5",it)}?:ByteArray(16),ts).hex())
             assertEquals("gorgon $i",row.getString("gorgon"),signer.gorgon(query,body,ts,42131))
             assertEquals("helios $i",row.getString("helios"),signer.helios(ts))
-            assertEquals("medusa $i",row.getString("medusa"),signer.medusa(url,body,ts))
+            val actualMedusa=signer.medusa(url,body,ts)
+            if(actualMedusa!=row.getString("medusa")) {
+                println("medusa mismatch row=$i expectedPrefix=${row.getString("medusa").take(48)} actualPrefix=${actualMedusa.take(48)} expectedLength=${row.getString("medusa").length} actualLength=${actualMedusa.length}")
+            }
+            assertEquals("medusa $i",row.getString("medusa"),actualMedusa)
         }
     }
 }
