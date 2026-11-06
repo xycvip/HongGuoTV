@@ -22,6 +22,11 @@ internal object FfmpegRuntimeLoader {
     @Volatile
     private var activationAttempted = false
 
+    @Volatile
+    private var readyVersion: String? = null
+
+    val isReady: Boolean get() = readyVersion != null
+
     @Synchronized
     fun activate(directory: File): Result {
         check(!Looper.getMainLooper().isCurrentThread) {
@@ -49,6 +54,7 @@ internal object FfmpegRuntimeLoader {
             FfmpegLibrary.setRuntimeLibraryDirectory(directory)
             check(FfmpegLibrary.isAvailable()) { "FFmpeg JNI 库加载失败" }
             val version = FfmpegLibrary.getVersion() ?: "unknown"
+            readyVersion = version
             Result.Ready(version)
         }.getOrElse {
             Result.Unavailable(it.message ?: "FFmpeg 原生库加载失败", it)
