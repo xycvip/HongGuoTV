@@ -471,6 +471,8 @@ jobs:
           APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
           UPDATE="$RUNNER_TEMP/release/update.json"
           LATEST="$RUNNER_TEMP/AppDownload/hongguoTV/latest.json"
+          GITCODE_UPDATE="$RUNNER_TEMP/gitcode-update.json"
+          GITCODE_LATEST="$RUNNER_TEMP/gitcode-latest.json"
           CHECKSUMS="$RUNNER_TEMP/release/SHA256SUMS"
           NOTES="$RUNNER_TEMP/release-notes-final.txt"
 
@@ -547,8 +549,15 @@ jobs:
           }
 
           upload_asset "$APK" "$APK_NAME"
-          upload_asset "$LATEST" "latest.json"
-          upload_asset "$UPDATE" "update.json"
+
+          # GitCode版更新清单中的APK地址指向GitCode附件本身，不沿用AppDownload的GitHub地址。
+          APK_URL="$(jq -r --arg apk "$APK_NAME" '.assets[] | select(.name == $apk) | .browser_download_url' "$RUNNER_TEMP/gitcode-release.json" | head -n 1)"
+          [ -n "$APK_URL" ] || { echo "::error::GitCode未返回APK下载地址"; exit 1; }
+          jq --arg url "$APK_URL" '.apk.url = $url' "$LATEST" > "$GITCODE_LATEST"
+          jq --arg url "$APK_URL" '.apk.url = $url' "$UPDATE" > "$GITCODE_UPDATE"
+
+          upload_asset "$GITCODE_LATEST" "latest.json"
+          upload_asset "$GITCODE_UPDATE" "update.json"
           upload_asset "$CHECKSUMS" "SHA256SUMS"
 
           # 最终校验：必须存在原始.apk附件，不能把APK压缩或改名成ZIP。
