@@ -20,6 +20,7 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
         const val OFFICIAL_REPOSITORY = "xycvip/AppDownload"
         const val OFFICIAL_TAG_PREFIX = "hongguotv-v"
         const val OFFICIAL_LATEST_MANIFEST = "https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json"
+        const val OFFICIAL_GITCODE_API = "https://api.gitcode.com/api/v5/repos/xycvip/hongguotv/releases/latest"
         const val BETA_PACKAGE = "com.x.hongguotv.bate"
         const val BETA_REPOSITORY = "xycvip/HongGuoTV"
         const val BETA_TAG_PREFIX = "hongguotv-bate-v"
@@ -48,6 +49,7 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             "release-assets.githubusercontent.com",
             "objects.githubusercontent.com",
             "gh-proxy.com", "ghfast.top", "gh-proxy.net",
+            "api.gitcode.com", "gitcode.com", "raw.gitcode.com",
         )
         fun parse(
             json: String,
@@ -69,8 +71,10 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             require(update.versionCode in 1..Int.MAX_VALUE.toLong() && update.minSdk in 26..100)
             require(update.versionName.matches(Regex("[0-9][0-9A-Za-z.+-]{0,63}")))
             require(update.tag.matches(Regex(Regex.escape(releaseTagPrefix) + "[0-9][0-9A-Za-z.+-]{0,80}")))
-            val expectedDownloadPrefix = "https://github.com/$releaseRepository/releases/download/${update.tag}/"
-            require(update.downloadUrl == expectedDownloadPrefix + update.fileName)
+            val expectedGitHubUrl = "https://github.com/$releaseRepository/releases/download/${update.tag}/${update.fileName}"
+            val expectedGitCodeUrl = "https://gitcode.com/xycvip/hongguotv/releases/download/${update.tag}/${update.fileName}"
+            require(update.downloadUrl == expectedGitHubUrl ||
+                (expectedPackageName == OFFICIAL_PACKAGE && update.downloadUrl == expectedGitCodeUrl))
             require(update.fileName.matches(Regex(Regex.escape(apkFilePrefix) + "[0-9][0-9A-Za-z.+-]{0,80}\\.apk")))
             require(update.size in 1..MAX_APK_BYTES && update.sha256.matches(Regex("[0-9a-f]{64}")))
             return update
@@ -134,6 +138,25 @@ internal fun latestReleaseManifestUrl(
     return null
 }
 
+/** GitCode 的 Latest Release API 使用 release_status 标记最新正式发行版。 */
+internal fun gitCodeLatestReleaseManifestUrl(
+    release: JSONObject,
+    releaseTagPrefix: String
+): String? {
+    if (release.optBoolean("prerelease", false)) return null
+    if (release.optString("release_status") != "latest") return null
+    val tag = release.optString("tag_name")
+    if (!tag.startsWith(releaseTagPrefix)) return null
+    val assets = release.optJSONArray("assets") ?: return null
+    for (index in 0 until assets.length()) {
+        val asset = assets.optJSONObject(index) ?: continue
+        if (asset.optString("type") != "attach" || asset.optString("name") != "update.json") continue
+        val expected = "https://gitcode.com/xycvip/hongguotv/releases/download/$tag/update.json"
+        return asset.optString("browser_download_url").takeIf { it == expected }
+    }
+    return null
+}
+
 class AppUpdateRepository(
     private val expectedPackageName: String = AppUpdate.OFFICIAL_PACKAGE,
     private val releaseRepository: String = AppUpdate.OFFICIAL_REPOSITORY,
@@ -142,6 +165,7 @@ class AppUpdateRepository(
     private val apkFilePrefix: String = "HongguoTV-"
 ) : java.io.Closeable {
     private val apiLatestReleaseUrl = "https://api.github.com/repos/$releaseRepository/releases/latest"
+    private val isOfficialChannel = expectedPackageName == AppUpdate.OFFICIAL_PACKAGE
     private fun parseManifest(json: String) =
         AppUpdate.parse(json, expectedPackageName, releaseRepository, releaseTagPrefix, apkFilePrefix)
 
@@ -188,6 +212,43 @@ class AppUpdateRepository(
      * 测试版与正式版使用不同仓库，因此各自只会读取自己的 Latest。
      * API 或附件不可用时，latest() 仍会回退到对应渠道的 Raw latest.json。
      */
+    /**
+     * 正式版第一优先源：GitCode Latest Release API。
+     * 只读取 /releases/latest，不扫描发行版列表；通过 update.json 获取版本与校验信息。
+     */
+    private fun latestFromGitCodeApi(): AppUpdate {
+        val apiUrl = "${AppUpdate.OFFICIAL_GITCODE_API}?cachebust=${System.currentTimeMillis()}"
+        val releaseJson = http.newCall(request(apiUrl).newBuilder()
+            .header("Accept", "application/json")
+            .build()).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("GitCode Latest API HTTP${response.code}")
+            val body = response.body ?: throw IOException("GitCode Latest API 响应为空")
+            if (body.contentLength() > 2L * 1024 * 1024) throw IOException("GitCode Latest API 响应过大")
+            body.string().also { if (it.length > 2 * 1024 * 1024) throw IOException("GitCode Latest API 响应过大") }
+        }
+        val release = JSONObject(releaseJson)
+        val releaseTag = release.optString("tag_name")
+        val manifestUrl = gitCodeLatestReleaseManifestUrl(release, releaseTagPrefix)
+            ?: throw IOException("GitCode Latest Release 不属于正式版通道、状态不是 latest，或缺少 update.json 附件")
+        val manifestRequestUrl = "${manifestUrl}?cachebust=${System.currentTimeMillis()}"
+        val manifestJson = http.newCall(request(manifestRequestUrl)).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("GitCode 更新清单 HTTP${response.code}")
+            val body = response.body ?: throw IOException("GitCode 更新清单为空")
+            if (body.contentLength() > 65536) throw IOException("GitCode 更新清单过大")
+            body.string().also { if (it.length > 65536) throw IOException("GitCode 更新清单过大") }
+        }
+        return try {
+            parseManifest(manifestJson).also { update ->
+                require(update.tag == releaseTag) { "GitCode 更新清单标签与 Latest Release 不一致" }
+                require(update.downloadUrl.startsWith("https://gitcode.com/xycvip/hongguotv/releases/download/")) {
+                    "GitCode 更新清单中的 APK 地址不是 GitCode 正式版附件"
+                }
+            }
+        } catch (_: Exception) {
+            throw IOException("GitCode Release 更新信息格式不正确或标签、下载地址不匹配")
+        }
+    }
+
     private fun latestFromApi(): AppUpdate {
         val apiUrl = "${apiLatestReleaseUrl}?cachebust=${System.currentTimeMillis()}"
         val releaseJson = http.newCall(request(apiUrl).newBuilder()
@@ -225,11 +286,19 @@ class AppUpdateRepository(
         }
     }
 
-    /** Read the Release API first; preserve the existing Raw URL as a full fallback. */
+    /** 正式版：GitCode Latest API 优先，AppDownload GitHub Release API / Raw 备用。测试版保持原有 GitHub 策略。 */
     fun latest(): AppUpdate {
+        var primaryError: Exception? = null
+        if (isOfficialChannel) {
+            try {
+                return latestFromGitCodeApi()
+            } catch (e: Exception) {
+                primaryError = e
+            }
+        }
         try {
             return latestFromApi()
-        } catch (apiError: Exception) {
+        } catch (githubApiError: Exception) {
             val base = "${latestManifestUrl}?cachebust=${System.currentTimeMillis()}"
             try {
                 return tryMirrors(base, 12) { response, _ ->
@@ -246,7 +315,8 @@ class AppUpdateRepository(
                     catch (_: Exception) { throw IOException("Raw 更新信息格式不正确") }
                 }
             } catch (rawError: Exception) {
-                throw IOException("更新检查失败（API 与 Raw/代理均不可用）：${apiError.message ?: "API异常"}；${rawError.message ?: "Raw异常"}", rawError)
+                val primary = primaryError?.message?.let { "GitCode：$it；" } ?: ""
+                throw IOException("更新检查失败（主源及 GitHub 备用源均不可用）：${primary}${githubApiError.message ?: "GitHub API异常"}；${rawError.message ?: "Raw异常"}", rawError)
             }
         }
     }
@@ -256,9 +326,12 @@ class AppUpdateRepository(
         // Release assets are immutable, but intermediaries can cache redirects; make each request unique.
         val base = "${update.downloadUrl}?cachebust=${System.currentTimeMillis()}"
         val errors = ArrayList<String>()
-        val mirrors = if (mirrorIndex == null) AppUpdate.MIRRORS else listOf(
-            AppUpdate.MIRRORS.getOrNull(mirrorIndex) ?: throw IOException("代理线路编号无效")
-        )
+        val isGitCodeDownload = hostOf(base) in setOf("gitcode.com", "raw.gitcode.com")
+        val mirrors = when {
+            isGitCodeDownload -> listOf<(String) -> String>({ it })
+            mirrorIndex == null -> AppUpdate.MIRRORS
+            else -> listOf(AppUpdate.MIRRORS.getOrNull(mirrorIndex) ?: throw IOException("代理线路编号无效"))
+        }
         for (wrap in mirrors) {
             val url = wrap(base)
             var response: okhttp3.Response? = null
