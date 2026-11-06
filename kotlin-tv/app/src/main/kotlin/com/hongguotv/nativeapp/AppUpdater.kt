@@ -369,7 +369,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
                 } else {
                     val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.updates", apk)
                     // Android 14–16 对安装器 Intent 的路由更严格，明确使用安装动作并传递只读 URI 授权。
-                    activity.startActivity(Intent(Intent.ACTION_INSTALL_PACKAGE)
+                    activity.startActivity(Intent(Intent.ACTION_VIEW)
                         .setDataAndType(uri, "application/vnd.android.package-archive")
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         .apply { clipData = ClipData.newRawUri("红果TV ${update.versionName} 安装包", uri) })
