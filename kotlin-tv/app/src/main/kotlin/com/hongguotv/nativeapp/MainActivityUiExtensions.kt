@@ -56,7 +56,7 @@ import java.util.concurrent.atomic.AtomicLong
         }
     }
 
-    /** 手机播放器内手动切换固定方向；选择写入本机设置，供下次启动恢复。 */
+    /** 手机播放器内手动切换固定方向；选择仅在当前 App 进程内保留。 */
     internal fun MainActivity.togglePhonePlaybackOrientation(): Int {
         if (!isPhoneDevice || screen != "player") return phonePlaybackOrientation
         phonePlaybackOrientation = if (
@@ -67,9 +67,6 @@ import java.util.concurrent.atomic.AtomicLong
             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
         requestedOrientation = phonePlaybackOrientation
-        getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit()
-            .putInt("phone_playback_orientation", phonePlaybackOrientation)
-            .apply()
         return phonePlaybackOrientation
     }
 
