@@ -414,6 +414,8 @@ jobs:
           # 保留AppDownload中的全部历史正式版Release，不自动删除旧版本。
 
       - name: 更新仓库总说明中的正式版版本与下载链接
+        # README属于辅助说明；即使并发提交导致更新失败，也不能阻断GitCode正式版同步。
+        continue-on-error: true
         shell: bash
         env:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
@@ -453,9 +455,25 @@ jobs:
             exit 0
           fi
           git commit -m "更新正式版 $VERSION_NAME 下载信息"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
+
+          # 测试版工作流也会更新 main；正式版与测试版并发时，push可能发生竞态。
+          # 每次推送前重新同步 main，遇到非快进拒绝则自动重试，避免偶发发布中断。
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "::error::README更新遇到无法自动合并的冲突，请检查 main 分支"
+              exit 1
+            fi
+            if git push origin HEAD:main; then
+              echo "源码仓库正式版下载信息已更新"
+              exit 0
+            fi
+            echo "::warning::README推送发生并发冲突，第 $attempt/5 次重试"
+            sleep 2
+          done
+          echo "::error::README推送连续5次失败；正式版分发与GitCode同步仍继续执行"
+          exit 1
 
       - name: 同步正式版到GitCode发行版
         shell: bash
