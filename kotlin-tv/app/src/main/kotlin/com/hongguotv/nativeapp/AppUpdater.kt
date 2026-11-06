@@ -271,22 +271,21 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         }
         next.show()
         later.setOnClickListener { next.dismiss() }
-        proxy.setOnClickListener {
-            if (aboutMode || !active || !idle()) return@setOnClickListener
-            // 下载太慢时允许立即取消当前请求，并从下一条线路重新开始。
-            if (busy && downloadInProgress) interrupt()
-            else if (busy) return@setOnClickListener
-            manualMirrorIndex = (manualMirrorIndex + 1) % AppUpdate.MIRRORS.size
-            val mirrorName = AppUpdate.MIRROR_NAMES[manualMirrorIndex]
-            if (available != null) {
-                download(manualMirrorIndex)
-            } else {
-                check(true, manualMirrorIndex)
-                updateStatus("正在通过 $mirrorName 检查最新版…")
+        fun chooseAddress(source: Int, button: android.widget.Button) {
+            if (aboutMode || !active || !idle()) return
+            if (busy && downloadInProgress) interrupt() else if (busy) return
+            if (available == null) {
+                check(true)
+                button.post { if (next.isShowing && button.isEnabled) button.requestFocus() }
+                return
             }
-            // 保持换源按钮为当前焦点；异步状态刷新不应把遥控器焦点带回页面或清空。
-            proxy.post { if (next.isShowing && proxy.isEnabled) proxy.requestFocus() }
+            if (source == 3) manualProxyIndex = (manualProxyIndex + 1) % AppUpdate.MIRRORS.drop(1).size
+            download(source, if (source == 3) manualProxyIndex else null)
+            button.post { if (next.isShowing && button.isEnabled) button.requestFocus() }
         }
+        address1.setOnClickListener { chooseAddress(1, address1) }
+        address2.setOnClickListener { chooseAddress(2, address2) }
+        address3.setOnClickListener { chooseAddress(3, address3) }
         action.setOnClickListener {
             if (aboutMode) {
                 // 关于页只保留更新入口；点击后进入独立的更新弹窗，再执行真正的版本检查。
@@ -303,13 +302,18 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         }
         renderActions()
         // 为电视遥控器建立明确的纵向焦点链，避免系统按控件几何位置跳过复选框或换源按钮。
-        action.nextFocusUpId = proxy.id
-        proxy.nextFocusDownId = action.id
+        action.nextFocusUpId = address3.id
+        address3.nextFocusDownId = action.id
+        address2.nextFocusDownId = action.id
+        address1.nextFocusRightId = address2.id
+        address2.nextFocusLeftId = address1.id
+        address2.nextFocusRightId = address3.id
+        address3.nextFocusLeftId = address2.id
         if (autoCheckBox != null) {
-            autoCheckBox.nextFocusDownId = proxy.id
-            proxy.nextFocusUpId = autoCheckBox.id
+            autoCheckBox.nextFocusDownId = address1.id
+            address1.nextFocusUpId = autoCheckBox.id
         } else {
-            proxy.nextFocusUpId = action.id
+            address1.nextFocusUpId = action.id
         }
         action.post { if (dialog === next) action.requestFocus() }
     }
