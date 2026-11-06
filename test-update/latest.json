@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "69dae08f70164c72260bf77f89092efe7841a0cb",
-  "versionCode": 23,
-  "versionName": "0.0.23",
+  "sourceCommit": "5fd4f9cf89d6229fadc0d6df7f16fc959a8f8a62",
+  "versionCode": 24,
+  "versionName": "0.0.24",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.23",
+  "tag": "hongguotv-bate-v0.0.24",
   "apk": {
-    "name": "HongguoTV-0.0.23.apk",
-    "size": 1955721,
-    "sha256": "496f2101d4e2ceb492647ce117bb947aaa0a46bf2dd663f0c66e136ae7ad85f9",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.23/HongguoTV-0.0.23.apk"
+    "name": "HongguoTV-0.0.24.apk",
+    "size": 1955689,
+    "sha256": "02e42c98c6297264e716af05893be926b6eb41259d713fb8fc78dd4176c82034",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.24/HongguoTV-0.0.24.apk"
   },
-  "notes": "【界面与交互】\n- fix: 切换更新弹窗时保持关于页按钮状态\n- fix: 关于软件弹窗固定检查更新按钮\n- feat: 下载显示实时速度并支持指定线路\n- feat: 更新弹窗增加三个下载地址按钮\n- feat: 更新弹窗显示实时下载速度\n【其他功能与问题修复】\n- fix: 无新版时清除暂存的下载线路选择\n- fix: 标注三条下载线路并修正速度单位\n- fix: 保留手动下载线路选择并将速度置顶\n- feat: 接入三个下载地址的选择操作"
+  "notes": "【界面与交互】\n- ui: 调整版本更新弹窗布局与下载速度显示\n【其他功能与问题修复】\n- fix: 避免无感连播接管时重复定位导致短暂停顿"
 }
