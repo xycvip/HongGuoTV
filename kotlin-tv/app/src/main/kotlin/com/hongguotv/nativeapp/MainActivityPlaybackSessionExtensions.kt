@@ -41,7 +41,7 @@ internal fun MainActivity.closeActiveVideo() {
         videoInfoView?.let { root.removeView(it) }; videoInfoView=null
         networkSpeedView?.let { root.removeView(it) }; networkSpeedView=null
         activeVideoFormat=null; activeDecoderName=""
-        closeActiveVideo(); playerView?.player=null; playerView=null; player?.release(); player=null; playbackReady=false; transportPlay=null; sleepButton=null
+        closeActiveVideo(); playerView?.player=null; playerView=null; FfmpegPlayerRegistry.detach(player); player?.release(); player=null; playbackReady=false; transportPlay=null; sleepButton=null
         stopDanmaku(); danmakuView=null
         closeTransport(playbackHttp); playbackHttp=null
         phonePlayerOriginalWindowBrightness?.let { originalBrightness ->
