@@ -211,18 +211,18 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
                 setPadding(0,dp(8),0,dp(4))
             }
             val sectionButtons=listOf(
-                addButton(sectionRow,"收藏",tab==3) { if(tab!=3) switchTab(3) },
-                addButton(sectionRow,"最近观看",tab==4) { if(tab!=4) switchTab(4) }
+                addButton(sectionRow,"最近观看",tab==4) { if(tab!=4) switchTab(4) },
+                addButton(sectionRow,"收藏",tab==3) { if(tab!=3) switchTab(3) }
             )
             navForTab().nextFocusDownId=sectionButtons.first().id
             sectionButtons.forEachIndexed { index,button ->
-                button.tag=if(index==0) "watch:favorite" else "watch:recent"
+                button.tag=if(index==0) "watch:recent" else "watch:favorite"
                 button.minHeight=dp(38)
                 button.setPadding(dp(18),dp(7),dp(18),dp(7))
                 button.isFocusable=true
                 button.isClickable=true
                 fun paintSection(focused:Boolean) {
-                    val active=(index==0 && tab==3) || (index==1 && tab==4)
+                    val active=(index==0 && tab==4) || (index==1 && tab==3)
                     button.setTextColor(if(focused) bg else if(active) accent else muted)
                     button.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
                     button.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
