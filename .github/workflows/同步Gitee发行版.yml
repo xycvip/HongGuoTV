@@ -1,0 +1,143 @@
+name: 同步正式版到 Gitee
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitee-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: 同步正式版发行说明和附件
+    if: ${{ github.event.release.prerelease == false && github.event.release.draft == false }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+      GITEE_OWNER: xieyaocheng
+      GITEE_REPO: hongguotv
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+
+    steps:
+      - name: 检查配置
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GITEE_TOKEN}" ]]; then
+            echo "::error::缺少源码仓库 GitHub Actions Secret：GITEE_TOKEN"
+            exit 1
+          fi
+          case "${RELEASE_TAG}" in
+            hongguotv-v*) ;;
+            *)
+              echo "::error::只允许同步红果TV正式版 Tag，当前值：${RELEASE_TAG}"
+              exit 1
+              ;;
+          esac
+
+      - name: 获取 GitHub 正式版信息和全部附件
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          release_json="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json name,body,isPrerelease)"
+          if [[ "$(jq -r '.isPrerelease' <<< "${release_json}")" == "true" ]]; then
+            echo "::error::检测到预发行版，拒绝同步。"
+            exit 1
+          fi
+
+          release_name="$(jq -r '.name // empty' <<< "${release_json}")"
+          if [[ -z "${release_name}" ]]; then
+            release_name="红果TV正式版 ${RELEASE_TAG}"
+          fi
+          echo "name=${release_name}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "body<<GITEE_RELEASE_BODY"
+            jq -r '.body // ""' <<< "${release_json}"
+            echo "GITEE_RELEASE_BODY"
+          } >> "${GITHUB_OUTPUT}"
+
+          gh release download "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --dir dist
+          if ! find dist -maxdepth 1 -type f -iname '*.apk' -print -quit | grep -q .; then
+            echo "::error::GitHub Release 中没有找到 APK，停止同步。"
+            exit 1
+          fi
+          echo "本次待同步附件："
+          find dist -maxdepth 1 -type f -printf '%f (%s bytes)\n' | sort
+
+      - name: 创建或复用 Gitee 发行版并同步附件
+        env:
+          RELEASE_NAME: ${{ steps.release.outputs.name }}
+          RELEASE_BODY: ${{ steps.release.outputs.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_REPO}"
+          release_json="$(mktemp)"
+          http_code="$(curl -sS -o "${release_json}" -w '%{http_code}' --get \
+            --data-urlencode "access_token=${GITEE_TOKEN}" \
+            "${api}/releases/tags/${RELEASE_TAG}")"
+
+          if [[ "${http_code}" == "200" ]]; then
+            release_id="$(jq -r '.id // empty' "${release_json}")"
+            echo "Gitee 已存在发行版，复用 Release ID：${release_id}"
+          elif [[ "${http_code}" == "404" ]]; then
+            created="$(curl -fsS -X POST "${api}/releases" \
+              --data-urlencode "access_token=${GITEE_TOKEN}" \
+              --data-urlencode "tag_name=${RELEASE_TAG}" \
+              --data-urlencode "name=${RELEASE_NAME}" \
+              --data-urlencode "body=${RELEASE_BODY}" \
+              --data-urlencode "target_commitish=main" \
+              --data-urlencode "prerelease=false")"
+            release_id="$(jq -r '.id // empty' <<< "${created}")"
+            echo "已在 Gitee 创建发行版，Release ID：${release_id}"
+          else
+            cat "${release_json}"
+            echo "::error::查询 Gitee 发行版失败，HTTP ${http_code}"
+            exit 1
+          fi
+
+          if [[ -z "${release_id}" || "${release_id}" == "null" ]]; then
+            echo "::error::无法取得 Gitee Release ID。"
+            exit 1
+          fi
+
+          assets_json="$(mktemp)"
+          curl -fsS --get \
+            --data-urlencode "access_token=${GITEE_TOKEN}" \
+            --data-urlencode "per_page=100" \
+            "${api}/releases/${release_id}/attach_files" > "${assets_json}"
+
+          for file in dist/*; do
+            [[ -f "${file}" ]] || continue
+            filename="$(basename "${file}")"
+            old_ids="$(jq -r --arg filename "${filename}" '.[]? | select(.name == $filename) | .id' "${assets_json}")"
+            while IFS= read -r old_id; do
+              [[ -n "${old_id}" ]] || continue
+              curl -fsS -X DELETE --get \
+                --data-urlencode "access_token=${GITEE_TOKEN}" \
+                "${api}/releases/${release_id}/attach_files/${old_id}" >/dev/null
+              echo "已清理旧附件：${filename}"
+            done <<< "${old_ids}"
+
+            uploaded="$(curl -fsS -X POST \
+              -F "access_token=${GITEE_TOKEN}" \
+              -F "file=@${file}" \
+              "${api}/releases/${release_id}/attach_files")"
+            download_url="$(jq -r '.browser_download_url // empty' <<< "${uploaded}")"
+            if [[ -z "${download_url}" ]]; then
+              echo "${uploaded}"
+              echo "::error::附件上传后未返回下载地址：${filename}"
+              exit 1
+            fi
+            echo "上传成功：${filename}"
+            echo "${download_url}"
+          done
+
+          echo "Gitee 发行版同步完成：https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases"
