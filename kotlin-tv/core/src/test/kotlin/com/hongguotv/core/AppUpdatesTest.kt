@@ -141,9 +141,9 @@ class AppUpdatesTest {
         assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString()) }
     }
 
-    @Test fun gitCodeLatestManifestRequiresLatestOfficialAttachAsset() {
-        val tag = "hongguotv-v1.1.27"
-        val url = "https://gitcode.com/xycvip/hongguotv/-/releases/$tag/downloads/update.json"
+    @Test fun gitCodeLatestManifestUsesApiBrowserDownloadUrl() {
+        val tag = "hongguotv-v1.1.31"
+        val url = "https://gitcode.com/xycvip/hongguotv/releases/download/$tag/update.json"
         val release = JSONObject()
             .put("tag_name", tag)
             .put("prerelease", false)
