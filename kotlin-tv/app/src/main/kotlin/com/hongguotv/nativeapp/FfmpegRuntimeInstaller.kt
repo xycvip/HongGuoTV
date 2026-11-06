@@ -81,6 +81,24 @@ internal class FfmpegRuntimeInstaller(context: Context) {
         }
     }
 
+    /** Download, verify, and activate the runtime on the worker thread. */
+    fun installAndActivateAsync(manifestUrl: String, callback: (Result) -> Unit) {
+        worker.execute {
+            val result = runCatching {
+                val installed = install(manifestUrl)
+                when (val loaded = FfmpegRuntimeLoader.activate(installed.directory)) {
+                    is FfmpegRuntimeLoader.Result.Ready -> installed
+                    is FfmpegRuntimeLoader.Result.Unavailable ->
+                        error("运行库已下载，但当前进程加载失败：${loaded.reason}；请重启应用后重试")
+                }
+            }.fold(
+                onSuccess = { it },
+                onFailure = { Result.Failed(it.message ?: "FFmpeg 运行库安装或加载失败", it) }
+            )
+            android.os.Handler(appContext.mainLooper).post { callback(result) }
+        }
+    }
+
     /**
      * Manifest example:
      * {
