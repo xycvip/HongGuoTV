@@ -139,7 +139,7 @@ private class GenreTagChipSpan(
         paint.style = Paint.Style.FILL
         paint.color = textColor
         val chipText = text.subSequence(start, end).toString()
-        canvas.drawText(chipText, 0, chipText.length, left + horizontalPadding, y, paint)
+        canvas.drawText(chipText, left + horizontalPadding, y.toFloat(), paint)
 
         paint.color = oldColor
         paint.style = oldStyle
