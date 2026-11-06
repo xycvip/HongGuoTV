@@ -354,25 +354,37 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         }
         return true
     }
-    private fun download(mirrorIndex: Int? = null) {
+    private fun download(source: Int? = null, proxyIndex: Int? = null) {
         val update = available ?: return
         if (busy || !active || !idle()) return
-        val mirrorName = mirrorIndex?.let { AppUpdate.MIRROR_NAMES.getOrNull(it) }
+        val sourceName = when (source) {
+            1 -> "GitCode"
+            2 -> "GitHub"
+            3 -> "GitHub 代理"
+            else -> "自动线路"
+        }
         downloadInProgress = true
+        speedView?.text = "下载速度  0 Kb/s"
         renderActions()
-        updateStatus(if (mirrorName == null) "正在下载 ${update.versionName}…" else "正在通过 $mirrorName 下载 ${update.versionName}…")
+        updateStatus("正在通过 $sourceName 下载 ${update.versionName}…")
         val ticket = generation + 1
         work({
             repository.download(update, apk, { percent -> main.post {
-                if (generation == ticket && active) updateStatus(
-                    if (mirrorName == null) "正在下载 ${update.versionName} · $percent%"
-                    else "正在通过 $mirrorName 下载 ${update.versionName} · $percent%"
-                )
-            } }, mirrorIndex)
+                if (generation == ticket && active) updateStatus("正在通过 $sourceName 下载 ${update.versionName} · $percent%")
+            } }, proxyIndex, source, { bytesPerSecond -> main.post {
+                if (generation == ticket && active) {
+                    val speedText = if (bytesPerSecond >= 1024L * 1024L)
+                        "%.2f Mb/s".format(bytesPerSecond / 1024.0 / 1024.0)
+                    else "%.0f Kb/s".format(bytesPerSecond / 1024.0)
+                    speedView?.text = "下载速度  $speedText"
+                }
+            } })
             validateApk(update)
         }) {
             downloadInProgress = false
-            ready = true; updateStatus("${update.versionName} 已下载并校验\n${update.notes}\n\n确认后由系统覆盖安装，保留本机记录。")
+            speedView?.text = "下载速度  0 Kb/s"
+            ready = true
+            updateStatus("${update.versionName} 已下载并校验\n${update.notes}\n\n确认后由系统覆盖安装，保留本机记录。")
             if (idle() && dialog == null && !promptedThisSession) show(activity.currentFocus)
         }
     }
