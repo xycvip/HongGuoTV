@@ -199,7 +199,9 @@ class AppUpdateRepository(
         .callTimeout(6, TimeUnit.MINUTES).addNetworkInterceptor { chain ->
             val url = chain.request().url
             // Follow GitHub CDN redirects + CN-friendly mirror proxies; never cleartext or arbitrary hosts.
-            if (url.scheme != "https" || url.host !in AppUpdate.ALLOWED_HOSTS)
+            val host = url.host
+            val isGitCodeHost = host == "gitcode.com" || host.endsWith(".gitcode.com")
+            if (url.scheme != "https" || (!isGitCodeHost && host !in AppUpdate.ALLOWED_HOSTS))
                 throw IOException("更新下载地址不受支持")
             chain.proceed(chain.request())
         }.build()
@@ -256,10 +258,8 @@ class AppUpdateRepository(
         val releaseTag = release.optString("tag_name")
         val manifestUrl = gitCodeLatestReleaseManifestUrl(release, releaseTagPrefix)
             ?: throw IOException("GitCode Latest Release 不属于正式版通道、状态不是 latest，或缺少 update.json 附件")
-        val manifestRequestUrl = manifestUrl +
-            (if (manifestUrl.contains("?")) "&" else "?") +
-            "cachebust=${System.currentTimeMillis()}"
-        val manifestJson = http.newCall(request(manifestRequestUrl)).execute().use { response ->
+        // GitCode Release 附件地址必须保持原样；额外追加 query 参数可能导致 404。
+        val manifestJson = http.newCall(request(manifestUrl)).execute().use { response ->
             if (!response.isSuccessful) throw IOException("GitCode 更新清单 HTTP${response.code}")
             val body = response.body ?: throw IOException("GitCode 更新清单为空")
             if (body.contentLength() > 65536) throw IOException("GitCode 更新清单过大")
@@ -416,10 +416,12 @@ class AppUpdateRepository(
             }
             else -> update
         }
-        // Release assets are immutable, but intermediaries can cache redirects; make each request unique.
-        val base = "${selectedUpdate.downloadUrl}?cachebust=${System.currentTimeMillis()}"
+        // GitCode Release 附件不追加随机参数；GitHub 线路保留原有 cachebust 策略。
+        val selectedHost = hostOf(selectedUpdate.downloadUrl)
+        val isGitCodeDownload = selectedHost == "gitcode.com" || selectedHost.endsWith(".gitcode.com")
+        val base = if (isGitCodeDownload) selectedUpdate.downloadUrl
+                   else "${selectedUpdate.downloadUrl}?cachebust=${System.currentTimeMillis()}"
         val errors = ArrayList<String>()
-        val isGitCodeDownload = hostOf(base) in setOf("gitcode.com", "raw.gitcode.com")
         val mirrors = when (sourceIndex) {
             1 -> listOf<(String) -> String>({ it })
             2 -> listOf<(String) -> String>({ it })
