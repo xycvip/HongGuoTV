@@ -27,6 +27,24 @@ internal object FfmpegRuntimeLoader {
 
     val isReady: Boolean get() = readyVersion != null
 
+    /** Load the newest installed runtime for this app process ABI, if one exists. */
+    fun activateInstalled(context: android.content.Context): Result {
+        check(!Looper.getMainLooper().isCurrentThread) {
+            "FFmpeg 原生库加载必须在后台线程执行"
+        }
+        val abi = FfmpegRuntimeInstaller.Abi.current()
+            ?: return Result.Unavailable("当前应用进程 ABI 暂不支持")
+        val root = File(context.noBackupFilesDir, "ffmpeg-runtime")
+        val candidate = root.listFiles()
+            ?.asSequence()
+            ?.filter { it.isDirectory && !it.name.startsWith(".") }
+            ?.map { File(it, abi.folder) }
+            ?.filter { it.isDirectory }
+            ?.maxByOrNull { it.parentFile?.lastModified() ?: 0L }
+            ?: return Result.Unavailable("尚未下载 FFmpeg 软件解码运行库")
+        return activate(candidate)
+    }
+
     @Synchronized
     fun activate(directory: File): Result {
         check(!Looper.getMainLooper().isCurrentThread) {
