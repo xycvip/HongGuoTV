@@ -107,13 +107,14 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             background=null
         }
         val pageNavItems=mutableListOf<View>()
-        listOf(0 to "首页",7 to "剧场",2 to "排行榜",3 to "收藏",4 to "最近观看",5 to "设置",6 to "红果账户").forEach { (tabId,label) ->
-            val item=addButton(pageNav,label,tabId==tab || (tabId==6 && screen=="account")) { switchTab(tabId) }
+        listOf(0 to "首页",7 to "剧场",2 to "排行榜",9 to "追剧",5 to "设置",6 to "红果账户").forEach { (tabId,label) ->
+            val active=when(tabId) { 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
+            val item=addButton(pageNav,label,active) { switchTab(tabId) }
             item.textSize=if(compactHeader) 13.5f else 14f
             item.minHeight=dp(40)
             item.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
             fun paint(focused:Boolean) {
-                val active=tabId==tab || (tabId==6 && screen=="account")
+                val active=when(tabId) { 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
                 item.setTextColor(if(focused) bg else if(active) accent else muted)
                 item.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
                 item.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
@@ -126,6 +127,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             item.setOnFocusChangeListener { _,focused -> paint(focused); if(focused) revealCatalogNavForFocus() }
             nav+=item
             navByTab[tabId]=item
+            if(tabId==9) { navByTab[3]=item; navByTab[4]=item }
             pageNavItems+=item
         }
         // 片源入口紧跟「红果账户」；headerContent/pageNav 均按实际子项宽度测量，整体自动居中。
@@ -203,7 +205,35 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
 
 internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
 
-            val heading=row().apply { setPadding(0,dp(14),0,dp(6)) }
+            // 追剧页内部切换入口：收藏与最近观看共用同一内容页面，不创建独立页面栈。
+            val sectionRow=row().apply {
+                gravity=Gravity.CENTER_VERTICAL
+                setPadding(0,dp(8),0,dp(4))
+            }
+            val sectionButtons=listOf(
+                addButton(sectionRow,"收藏",tab==3) { if(tab!=3) switchTab(3) },
+                addButton(sectionRow,"最近观看",tab==4) { if(tab!=4) switchTab(4) }
+            )
+            sectionButtons.forEachIndexed { index,button ->
+                button.minHeight=dp(38)
+                button.setPadding(dp(18),dp(7),dp(18),dp(7))
+                button.isFocusable=true
+                button.isClickable=true
+                fun paintSection(focused:Boolean) {
+                    val active=(index==0 && tab==3) || (index==1 && tab==4)
+                    button.setTextColor(if(focused) bg else if(active) accent else muted)
+                    button.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
+                    button.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
+                    button.elevation=if(focused) dp(4).toFloat() else 0f
+                }
+                paintSection(false)
+                button.setOnFocusChangeListener { _,focused -> paintSection(focused) }
+                button.nextFocusUpId=navForTab().id
+                button.nextFocusLeftId=sectionButtons.getOrNull(index-1)?.id ?: button.id
+                button.nextFocusRightId=sectionButtons.getOrNull(index+1)?.id ?: button.id
+            }
+            container.addView(sectionRow)
+            val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
             heading.addView(text(if(tab==3) "我的收藏" else "接着上次看",25f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
             if(tab==3) {
                 favoriteCheck=addButton(heading,"检查更新") {
