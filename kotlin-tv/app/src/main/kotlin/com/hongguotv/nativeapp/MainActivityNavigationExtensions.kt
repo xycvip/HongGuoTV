@@ -58,6 +58,14 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
         }
         // 切回搜索页时焦点落输入框，避免页面重建后焦点丢失
         if(targetTab==1) searchInput?.requestFocus()
+        if(targetTab==3 || targetTab==4) {
+            val focusTag=if(targetTab==3) "watch:favorite" else "watch:recent"
+            root.post {
+                if(screen=="catalog" && tab==targetTab) {
+                    root.findViewWithTag<View>(focusTag)?.takeIf { it.isAttachedToWindow }?.requestFocus()
+                }
+            }
+        }
     }
 
     internal fun MainActivity.switchContentType(type: ContentType) {
