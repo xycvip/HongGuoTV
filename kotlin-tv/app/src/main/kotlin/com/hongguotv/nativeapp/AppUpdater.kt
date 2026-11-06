@@ -54,7 +54,9 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     private var anchor: View? = null
     private var actionButton: android.widget.Button? = null
     private var sourceButtons: List<android.widget.Button> = emptyList()
-    private var manualProxyIndex = 0
+    private var manualProxyIndex = -1
+    private var pendingSource: Int? = null
+    private var pendingProxyIndex: Int? = null
     private var speedView: TextView? = null
     private var status = "当前版本 ${BuildConfig.VERSION_NAME}"
     private var retryAfter = 0L
@@ -190,11 +192,11 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
                         "应用不提供、不存储、不传播视频内容；播放内容由用户选择的来源提供，相关内容版权归原平台及权利人所有。"
                 ))
             } else {
+                addView(speedView, LinearLayout.LayoutParams(-1, -2))
                 addView(statusView, LinearLayout.LayoutParams(-1, -2).apply {
                     bottomMargin = (10 * dp).toInt()
                 })
                 addView(statusDetailsView, LinearLayout.LayoutParams(-1, -2))
-                addView(speedView, LinearLayout.LayoutParams(-1, -2))
             }
         }
         val statusScroll = ScrollView(activity).apply {
@@ -274,12 +276,14 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         fun chooseAddress(source: Int, button: android.widget.Button) {
             if (aboutMode || !active || !idle()) return
             if (busy && downloadInProgress) interrupt() else if (busy) return
+            if (source == 3) manualProxyIndex = (manualProxyIndex + 1) % AppUpdate.MIRRORS.drop(1).size
             if (available == null) {
+                pendingSource = source
+                pendingProxyIndex = if (source == 3) manualProxyIndex else null
                 check(true)
                 button.post { if (next.isShowing && button.isEnabled) button.requestFocus() }
                 return
             }
-            if (source == 3) manualProxyIndex = (manualProxyIndex + 1) % AppUpdate.MIRRORS.drop(1).size
             download(source, if (source == 3) manualProxyIndex else null)
             button.post { if (next.isShowing && button.isEnabled) button.requestFocus() }
         }
@@ -348,7 +352,12 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             } else {
                 updateStatus("发现 ${update.versionName} · ${"%.1f".format(update.size/1048576.0)} MB\n${update.notes}")
                 if (manual || auto) {
-                    if (mirrorIndex == null) download() else download(mirrorIndex)
+                    val chosenSource = pendingSource
+                    val chosenProxy = pendingProxyIndex
+                    pendingSource = null
+                    pendingProxyIndex = null
+                    if (chosenSource != null) download(chosenSource, chosenProxy)
+                    else if (mirrorIndex == null) download() else download(2, mirrorIndex)
                 }
             }
         }
