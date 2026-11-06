@@ -139,14 +139,20 @@ jobs:
             exit 1
           fi
           unzip -t "$FILE" >/dev/null
-          unzip -l "$FILE" | grep -q 'AndroidManifest.xml'
+          python3 - "$FILE" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as apk:
+              names = set(apk.namelist())
+              if "AndroidManifest.xml" not in names:
+                  raise SystemExit("失败：下载文件不是有效 Android APK（缺少 AndroidManifest.xml）")
+          PY
           echo "APK 下载与完整性校验全部通过。"
           {
             echo "## GitCode APK 下载验证通过"
             echo ""
-            echo "- Release：` ${{ steps.release.outputs.tag }} `"
-            echo "- 文件：` ${{ steps.manifest.outputs.apk_name }} `"
-            echo "- 下载地址：` ${{ steps.manifest.outputs.apk_url }} `"
+            echo "- Release：`${{ steps.release.outputs.tag }}`"
+            echo "- 文件：`${{ steps.manifest.outputs.apk_name }}`"
+            echo "- 下载地址：`${{ steps.manifest.outputs.apk_url }}`"
             echo "- 文件大小：$ACTUAL_SIZE 字节"
             echo "- SHA256：`$ACTUAL_SHA`"
             echo "- ZIP/APK 结构：通过"
