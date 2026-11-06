@@ -72,9 +72,13 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             require(update.versionName.matches(Regex("[0-9][0-9A-Za-z.+-]{0,63}")))
             require(update.tag.matches(Regex(Regex.escape(releaseTagPrefix) + "[0-9][0-9A-Za-z.+-]{0,80}")))
             val expectedGitHubUrl = "https://github.com/$releaseRepository/releases/download/${update.tag}/${update.fileName}"
-            val expectedGitCodeUrl = "https://gitcode.com/xycvip/hongguotv/-/releases/${update.tag}/downloads/${update.fileName}"
+            val expectedGitCodeUrls = setOf(
+                "https://gitcode.com/xycvip/hongguotv/releases/download/${update.tag}/${update.fileName}",
+                // 兼容历史清单曾使用的旧附件路径。
+                "https://gitcode.com/xycvip/hongguotv/-/releases/${update.tag}/downloads/${update.fileName}"
+            )
             require(update.downloadUrl == expectedGitHubUrl ||
-                (expectedPackageName == OFFICIAL_PACKAGE && update.downloadUrl == expectedGitCodeUrl))
+                (expectedPackageName == OFFICIAL_PACKAGE && update.downloadUrl in expectedGitCodeUrls))
             require(update.fileName.matches(Regex(Regex.escape(apkFilePrefix) + "[0-9][0-9A-Za-z.+-]{0,80}\\.apk")))
             require(update.size in 1..MAX_APK_BYTES && update.sha256.matches(Regex("[0-9a-f]{64}")))
             return update
@@ -168,8 +172,13 @@ internal fun gitCodeLatestReleaseManifestUrl(
     for (index in 0 until assets.length()) {
         val asset = assets.optJSONObject(index) ?: continue
         if (asset.optString("type") != "attach" || asset.optString("name") != "update.json") continue
-        val expected = "https://gitcode.com/xycvip/hongguotv/-/releases/$tag/downloads/update.json"
-        return asset.optString("browser_download_url").takeIf { it == expected }
+        val assetUrl = asset.optString("browser_download_url")
+        val expectedUrls = setOf(
+            "https://gitcode.com/xycvip/hongguotv/releases/download/$tag/update.json",
+            // 兼容旧版 GitCode Release 附件路径。
+            "https://gitcode.com/xycvip/hongguotv/-/releases/$tag/downloads/update.json"
+        )
+        return assetUrl.takeIf { it in expectedUrls }
     }
     return null
 }
@@ -247,7 +256,9 @@ class AppUpdateRepository(
         val releaseTag = release.optString("tag_name")
         val manifestUrl = gitCodeLatestReleaseManifestUrl(release, releaseTagPrefix)
             ?: throw IOException("GitCode Latest Release 不属于正式版通道、状态不是 latest，或缺少 update.json 附件")
-        val manifestRequestUrl = "${manifestUrl}?cachebust=${System.currentTimeMillis()}"
+        val manifestRequestUrl = manifestUrl +
+            (if (manifestUrl.contains("?")) "&" else "?") +
+            "cachebust=${System.currentTimeMillis()}"
         val manifestJson = http.newCall(request(manifestRequestUrl)).execute().use { response ->
             if (!response.isSuccessful) throw IOException("GitCode 更新清单 HTTP${response.code}")
             val body = response.body ?: throw IOException("GitCode 更新清单为空")
@@ -257,8 +268,12 @@ class AppUpdateRepository(
         return try {
             parseManifest(manifestJson).also { update ->
                 require(update.tag == releaseTag) { "GitCode 更新清单标签与 Latest Release 不一致" }
-                require(update.downloadUrl.startsWith("https://gitcode.com/xycvip/hongguotv/releases/download/")) {
-                    "GitCode 更新清单中的 APK 地址不是 GitCode 正式版附件"
+                val expectedGitCodeUrls = setOf(
+                    "https://gitcode.com/xycvip/hongguotv/releases/download/$releaseTag/${update.fileName}",
+                    "https://gitcode.com/xycvip/hongguotv/-/releases/$releaseTag/downloads/${update.fileName}"
+                )
+                require(update.downloadUrl in expectedGitCodeUrls) {
+                    "GitCode 更新清单中的 APK 地址不是当前 Release 的正式版附件"
                 }
             }
         } catch (_: Exception) {
