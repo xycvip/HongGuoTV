@@ -39,6 +39,8 @@ jobs:
 
       - name: 配置 Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: 安装 NDK、CMake 和构建工具
         run: |
