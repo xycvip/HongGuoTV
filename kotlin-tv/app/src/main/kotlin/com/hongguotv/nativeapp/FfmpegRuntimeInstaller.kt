@@ -102,6 +102,9 @@ internal class FfmpegRuntimeInstaller(context: Context) {
             response.body?.string() ?: error("运行库清单为空")
         }
         val manifest = parseManifest(manifestBody)
+        require(manifest.version.matches(Regex("[A-Za-z0-9._-]{1,64}"))) {
+            "运行库版本号格式错误"
+        }
         require(manifest.abi == abi) {
             "运行库架构不匹配：设备 " + abi.folder + "，清单 " + manifest.abi.folder
         }
@@ -142,8 +145,18 @@ internal class FfmpegRuntimeInstaller(context: Context) {
                 check(temp.renameTo(destination)) { "无法保存原生库：" + artifact.fileName }
             }
 
-            targetDir.deleteRecursively()
-            check(stagingDir.renameTo(targetDir)) { "无法安装 FFmpeg 运行库" }
+            // Keep the previous runtime intact until the new directory is ready.
+            val backupDir = File(runtimeRoot, ".backup-" + manifest.version + "-" + abi.folder)
+            backupDir.deleteRecursively()
+            val hadPrevious = targetDir.exists()
+            if (hadPrevious) {
+                check(targetDir.renameTo(backupDir)) { "无法备份现有 FFmpeg 运行库" }
+            }
+            if (!stagingDir.renameTo(targetDir)) {
+                if (hadPrevious) backupDir.renameTo(targetDir)
+                error("无法安装 FFmpeg 运行库")
+            }
+            backupDir.deleteRecursively()
             return Result.Installed(targetDir, manifest.version, abi)
         } catch (error: Throwable) {
             stagingDir.deleteRecursively()
