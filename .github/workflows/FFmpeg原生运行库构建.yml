@@ -1,0 +1,67 @@
+name: FFmpeg原生运行库构建
+
+on:
+  push:
+    branches:
+      - feature/ffmpeg-soft-decode
+    paths:
+      - "kotlin-tv/ffmpeg/**"
+      - "kotlin-tv/ffmpeg-runtime/**"
+      - "kotlin-tv/app/src/main/cpp/**"
+      - "kotlin-tv/build.gradle.kts"
+      - "kotlin-tv/settings.gradle.kts"
+      - ".github/workflows/FFmpeg原生运行库构建.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ffmpeg-native-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: 构建四种 Android ABI 原生库
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v7
+
+      - name: 配置 Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: kotlin-tv/**/*.gradle*
+
+      - name: 配置 Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 安装 NDK、CMake 和构建工具
+        run: |
+          sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
+          sudo apt-get update
+          sudo apt-get install -y nasm pkg-config meson ninja-build
+
+      - name: 编译 FFmpeg 依赖及四种 ABI
+        working-directory: kotlin-tv
+        env:
+          ANDROID_ABIS: "x86 x86_64 armeabi-v7a arm64-v8a"
+          ANDROID_NDK_VERSION: "25.2.9519653"
+          ANDROID_CMAKE_VERSION: "3.22.1"
+        run: bash ffmpeg/setup.sh
+
+      - name: 编译 JNI 桥接库并打包 AAR
+        working-directory: kotlin-tv
+        run: ./gradlew --no-daemon :ffmpeg-runtime:assembleRelease
+
+      - name: 上传原生库 AAR
+        uses: actions/upload-artifact@v6
+        with:
+          name: HongGuoTV-FFmpeg-Native-AAR
+          path: kotlin-tv/ffmpeg-runtime/build/outputs/aar/ffmpeg-runtime-release.aar
+          if-no-files-found: error
+          retention-days: 14
