@@ -90,21 +90,38 @@ object UpdateFiles {
         file.inputStream().use { input -> val buf = ByteArray(32768); while (true) { val n = input.read(buf); if (n < 0) break; digest.update(buf, 0, n) } }
         return digest.digest().joinToString("") { "%02x".format(it) } == update.sha256
     }
-    fun receive(input: InputStream, destination: File, update: AppUpdate, progress: (Int) -> Unit = {}) {
+    fun receive(
+        input: InputStream,
+        destination: File,
+        update: AppUpdate,
+        progress: (Int) -> Unit = {},
+        speed: (Long) -> Unit = {}
+    ) {
         val partial = File(destination.parentFile, destination.name + ".part")
         destination.parentFile?.mkdirs()
         try {
             partial.outputStream().use { output ->
                 val buffer = ByteArray(32768); var total = 0L; var last = -1
+                var speedBytes = 0L; var speedStarted = System.nanoTime()
                 while (true) {
                     if (Thread.currentThread().isInterrupted) throw IOException("下载已取消")
                     val n = input.read(buffer); if (n < 0) break
                     total += n
                     if (total > update.size) throw IOException("安装包长度异常")
                     output.write(buffer, 0, n)
+                    speedBytes += n
+                    val now = System.nanoTime()
+                    val elapsed = now - speedStarted
+                    if (elapsed >= 500_000_000L) {
+                        speed(speedBytes * 1_000_000_000L / elapsed)
+                        speedBytes = 0L; speedStarted = now
+                    }
                     val percent = (total * 100 / update.size).toInt()
                     if (percent != last) { last = percent; progress(percent) }
                 }
+                val elapsed = System.nanoTime() - speedStarted
+                if (speedBytes > 0 && elapsed > 0) speed(speedBytes * 1_000_000_000L / elapsed)
+                speed(0L)
                 output.fd.sync()
             }
             if (!verify(partial, update)) throw IOException("安装包校验未通过，请重新下载")
@@ -321,16 +338,49 @@ class AppUpdateRepository(
         }
     }
 
-    fun download(update: AppUpdate, file: File, progress: (Int) -> Unit, mirrorIndex: Int? = null) {
-        if (UpdateFiles.verify(file, update)) return
+    fun download(
+        update: AppUpdate,
+        file: File,
+        progress: (Int) -> Unit,
+        mirrorIndex: Int? = null,
+        sourceIndex: Int? = null,
+        speed: (Long) -> Unit = {}
+    ) {
+        if (UpdateFiles.verify(file, update)) { speed(0L); return }
+        // 手动地址选择：1=GitCode，2=GitHub 原始线路，3=GitHub 代理轮换。
+        // 测试版不暴露这些选项，sourceIndex 为空时保持原有自动策略。
+        val selectedUpdate = when (sourceIndex) {
+            1 -> {
+                if (hostOf(update.downloadUrl) != "gitcode.com") throw IOException("当前版本没有有效的 GitCode 下载地址")
+                update
+            }
+            2, 3 -> {
+                val github = latestFromApi()
+                if (github.versionCode != update.versionCode || github.fileName != update.fileName ||
+                    github.sha256 != update.sha256 || github.size != update.size) {
+                    throw IOException("GitHub 与当前更新版本信息不一致，拒绝下载不同安装包")
+                }
+                github
+            }
+            else -> update
+        }
         // Release assets are immutable, but intermediaries can cache redirects; make each request unique.
-        val base = "${update.downloadUrl}?cachebust=${System.currentTimeMillis()}"
+        val base = "${selectedUpdate.downloadUrl}?cachebust=${System.currentTimeMillis()}"
         val errors = ArrayList<String>()
         val isGitCodeDownload = hostOf(base) in setOf("gitcode.com", "raw.gitcode.com")
-        val mirrors = when {
-            isGitCodeDownload -> listOf<(String) -> String>({ it })
-            mirrorIndex == null -> AppUpdate.MIRRORS
-            else -> listOf(AppUpdate.MIRRORS.getOrNull(mirrorIndex) ?: throw IOException("代理线路编号无效"))
+        val mirrors = when (sourceIndex) {
+            1 -> listOf<(String) -> String>({ it })
+            2 -> listOf<(String) -> String>({ it })
+            3 -> {
+                val proxies = AppUpdate.MIRRORS.drop(1)
+                val index = (mirrorIndex ?: 0).mod(proxies.size)
+                listOf(proxies[index])
+            }
+            else -> when {
+                isGitCodeDownload -> listOf<(String) -> String>({ it })
+                mirrorIndex == null -> AppUpdate.MIRRORS
+                else -> listOf(AppUpdate.MIRRORS.getOrNull(mirrorIndex) ?: throw IOException("代理线路编号无效"))
+            }
         }
         for (wrap in mirrors) {
             val url = wrap(base)
@@ -341,7 +391,7 @@ class AppUpdateRepository(
                 val body = response.body
                 if (body == null) { errors += "空响应@${hostOf(url)}"; continue }
                 if (body.contentLength() >= 0 && body.contentLength() != update.size) { errors += "长度不匹配@${hostOf(url)}"; continue }
-                body.byteStream().use { UpdateFiles.receive(it, file, update, progress) }
+                body.byteStream().use { UpdateFiles.receive(it, file, selectedUpdate, progress, speed) }
                 return
             } catch (e: IOException) {
                 errors += "${e.message?.take(50) ?: "?"}@${hostOf(url)}"
@@ -352,7 +402,7 @@ class AppUpdateRepository(
         }
         // GitCode 附件下载失败时，使用 AppDownload Raw 清单作为最后备用；
         // 只有版本号、文件名和 SHA256 完全一致时才允许切换，避免把不同构建的 APK 混装。
-        if (hostOf(base) == "gitcode.com") {
+        if (sourceIndex == null && hostOf(base) == "gitcode.com") {
             try {
                 val fallback = try {
                     latestFromApi()
@@ -364,10 +414,10 @@ class AppUpdateRepository(
                         parseManifest(text)
                     }
                 }
-                if (fallback.versionCode != update.versionCode ||
-                    fallback.fileName != update.fileName ||
-                    fallback.sha256 != update.sha256 ||
-                    fallback.size != update.size) {
+                if (fallback.versionCode != selectedUpdate.versionCode ||
+                    fallback.fileName != selectedUpdate.fileName ||
+                    fallback.sha256 != selectedUpdate.sha256 ||
+                    fallback.size != selectedUpdate.size) {
                     throw IOException("GitCode与AppDownload备用版本信息不一致，拒绝切换不同安装包")
                 }
                 val fallbackBase = "${fallback.downloadUrl}?cachebust=${System.currentTimeMillis()}"
@@ -386,7 +436,7 @@ class AppUpdateRepository(
                         if (body.contentLength() >= 0 && body.contentLength() != update.size) {
                             fallbackErrors += "长度不匹配@${hostOf(url)}"; continue
                         }
-                        body.byteStream().use { UpdateFiles.receive(it, file, update, progress) }
+                        body.byteStream().use { UpdateFiles.receive(it, file, selectedUpdate, progress, speed) }
                         return
                     } catch (e: IOException) {
                         fallbackErrors += "${e.message?.take(50) ?: "?"}@${hostOf(url)}"
