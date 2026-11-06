@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "71ce95cec4cd3668bc2a16e4516714a5e14786b2",
-  "versionCode": 20,
-  "versionName": "0.0.20",
+  "sourceCommit": "44b882253513349dbcac6ffd7e4d6faa8dc3c15a",
+  "versionCode": 21,
+  "versionName": "0.0.21",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.20",
+  "tag": "hongguotv-bate-v0.0.21",
   "apk": {
-    "name": "HongguoTV-0.0.20.apk",
-    "size": 1951025,
-    "sha256": "d1f260824ce244e2799f04003201d97206b6021d5652adbe4fbea3071772e0c0",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.20/HongguoTV-0.0.20.apk"
+    "name": "HongguoTV-0.0.21.apk",
+    "size": 1952705,
+    "sha256": "120f6cf5f9d670c9027b5decc45eb357b2bc3be67b8b36f5907c9687b54e757f",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.21/HongguoTV-0.0.21.apk"
   },
-  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
+  "notes": "【焦点与遥控器】\n- 切换追剧分区后恢复对应入口焦点\n- 完善追剧入口的遥控器焦点连接\n【片源与数据管理】\n- 将收藏和最近观看归入追剧导航\n- 新增追剧导航并合并收藏与最近观看入口\n【其他功能与问题修复】\n- 修复弹幕 SP 字体缩放弃用警告\n- 修复 APK 安装 Intent 弃用警告"
 }
