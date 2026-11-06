@@ -26,7 +26,7 @@
 
 ## 运行库清单格式
 
-App 设置页只需要填写一个通用清单 HTTPS 地址。安装器会自动识别当前应用进程 ABI，再从 `abis` 节点选择对应库列表：
+App 设置页已预填固定清单地址 `https://github.com/xycvip/HongGuoTV/releases/download/ffmpeg-runtime-latest/manifest.json`。安装器自动识别当前应用进程 ABI，再从 `abis` 节点选择对应库列表：
 
 ```json
 {
@@ -49,7 +49,7 @@ App 设置页只需要填写一个通用清单 HTTPS 地址。安装器会自动
 }
 ```
 
-示例仅展示通用清单结构。每个 ABI 的 `libraries` 必须包含构建工作流生成的五个必需库：`libavutil.so`、`libswresample.so`、`libswscale.so`、`libavcodec.so`、`libmedia3ext.so`。工作流生成的 `manifest-template.json` 已填入每个文件的 SHA-256，但下载 URL 是托管地址占位符；上传文件后必须替换成真实 HTTPS 地址，不能直接拿模板安装。
+每个 ABI 的 `libraries` 必须包含构建工作流生成的五个必需库：`libavutil.so`、`libswresample.so`、`libswscale.so`、`libavcodec.so`、`libmedia3ext.so`。原生构建工作流会把五个库分别作为 Release 资产上传，并生成带真实下载 URL 和 SHA-256 的 `manifest.json`。固定 Release 标签为 `ffmpeg-runtime-latest`，每次成功构建会覆盖该标签下的运行库资产；该 Release 是独立预发布资源，不会改变 APK 正式版/测试版发布通道。
 
 ## 当前尚未完成
 
