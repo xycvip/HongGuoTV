@@ -24,8 +24,8 @@ class DanmakuRepository(
     private val clock: () -> Long = System::currentTimeMillis,
     private val sleep: (Long) -> Unit = { Thread.sleep(it) },
     private val random: () -> Double = Math::random,
+    private val playbackSession: PlaybackDeviceSession = PlaybackDeviceSession.shared,
 ) {
-    private val signer = Signer()
     // Negative means "no request yet": the first call must not sleep. Starting at 0 or
     // Long.MIN_VALUE breaks that — the former throttles a non-existent previous request,
     // the latter overflows the subtraction and sleeps effectively forever.
@@ -100,25 +100,41 @@ class DanmakuRepository(
 
     private fun post(vid: String, body: ByteArray): String {
         throttle()
-        VendorConstants.regenerate()
-        val signed = signer.sign("https://api5-normal-sinfonlinea.fqnovel.com/novel/commentapi/comment/list/$vid/v1/", VendorConstants.device, body)
-        val request = Request.Builder().url(signed.url)
-            .header("User-Agent", VendorConstants.VIDEO_UA)
-            .header("comment-source", "601")
-            .header("server-channel", "1000")
-            .apply { signed.headers.forEach { (key, value) -> header(key, value) } }
-            .post((signed.body ?: body).toRequestBody("application/json; charset=utf-8".toMediaType()))
-            .build()
-        return RequestScope.execute(http.newCall(request)) { response ->
-            if (!response.isSuccessful) throw IOException("弹幕请求失败（HTTP ${response.code}）")
-            // The gateway silently drops intercepted requests with an HTTP 200 empty body;
-            // an empty reply must surface as "no comments", never as a parse crash.
-            val payload = response.body ?: return@execute ""
-            if (payload.contentLength() > MAX_BYTES) throw IOException("弹幕响应过大")
-            val bytes = payload.bytes()
-            if (bytes.size > MAX_BYTES) throw IOException("弹幕响应过大")
-            String(bytes, Charsets.UTF_8)
+        // Device identity must be registered once and remain stable. Regenerating IDs here
+        // creates an identity the platform has never registered and can yield HTTP 200 + empty body.
+        val profile = playbackSession.profile(http)
+        val requestSigner = Signer(profile.values)
+        val endpoint = "/novel/commentapi/comment/list/$vid/v1/"
+        var lastError: IOException? = null
+        var sawEmptyReply = false
+        for (host in DANMAKU_HOSTS) {
+            try {
+                val signed = requestSigner.sign(host + endpoint, profile.values, body)
+                val request = Request.Builder().url(signed.url)
+                    .header("comment-source", "601")
+                    .header("server-channel", "1000")
+                    .apply {
+                        signed.headers.forEach { (key, value) -> header(key, value) }
+                        if (profile.cookie.isNotBlank()) header("Cookie", profile.cookie)
+                    }
+                    .post((signed.body ?: body).toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .build()
+                val text = RequestScope.execute(http.newCall(request)) { response ->
+                    if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+                    val payload = response.body ?: return@execute ""
+                    if (payload.contentLength() > MAX_BYTES) throw IOException("弹幕响应过大")
+                    val bytes = payload.bytes()
+                    if (bytes.size > MAX_BYTES) throw IOException("弹幕响应过大")
+                    String(bytes, Charsets.UTF_8)
+                }
+                if (text.isNotBlank()) return text
+                sawEmptyReply = true
+            } catch (error: IOException) {
+                lastError = error
+            }
         }
+        if (sawEmptyReply) return ""
+        throw IOException("弹幕请求失败，已尝试备用线路", lastError)
     }
 
     /** Reads optional per-comment text color without assuming the field exists on every API version. */
@@ -186,6 +202,14 @@ class DanmakuRepository(
     }
 
     companion object {
+        private val DANMAKU_HOSTS = listOf(
+            "https://api5-normal-sinfonlinea.fqnovel.com",
+            "https://api5-normal-sinfonlinec.fqnovel.com",
+            "https://api5-normal-sinfonlineb.fqnovel.com",
+            "https://api5-normal-lf.fqnovel.com",
+            "https://api5-normal-lq.fqnovel.com",
+            "https://api5-normal-hl.fqnovel.com",
+        )
         const val WINDOW_MS = 30_000L
         private const val MAX_PAGES_PER_WINDOW = 3
         private const val MAX_COOLDOWN_RETRIES = 2
