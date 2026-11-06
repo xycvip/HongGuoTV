@@ -214,7 +214,9 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
                 addButton(sectionRow,"收藏",tab==3) { if(tab!=3) switchTab(3) },
                 addButton(sectionRow,"最近观看",tab==4) { if(tab!=4) switchTab(4) }
             )
+            navForTab().nextFocusDownId=sectionButtons.first().id
             sectionButtons.forEachIndexed { index,button ->
+                button.tag=if(index==0) "watch:favorite" else "watch:recent"
                 button.minHeight=dp(38)
                 button.setPadding(dp(18),dp(7),dp(18),dp(7))
                 button.isFocusable=true
