@@ -363,7 +363,14 @@ import java.util.concurrent.atomic.AtomicLong
             val introSkip=if(position<=0 && (skipMark?.introSeconds ?: 0)>0) skipMark!!.introSeconds*1000L else position.coerceAtLeast(0)
             if(promoteStandby && p.currentMediaItem?.mediaId==requestedId) {
                 p.volume=1f
-                p.seekTo(introSkip)
+                // 备用播放器已在第 0 毫秒预解码并渲染过首帧；无片头跳过时不要再 seekTo(0)。
+                // 对 READY 状态的 ExoPlayer 执行一次多余 seek 可能触发解码器 flush / 重新缓冲，
+                // 表现为接管后约 1 秒画面短暂停顿。只有确实需要跳过片头或位置异常时才定位。
+                if (introSkip > 0L) {
+                    p.seekTo(introSkip)
+                } else if (p.currentPosition > 250L) {
+                    p.seekTo(0L)
+                }
                 p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
                 if(p.playbackState==Player.STATE_READY) listener.onPlaybackStateChanged(p.playbackState)
             } else {
