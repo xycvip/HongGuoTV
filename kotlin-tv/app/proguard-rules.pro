@@ -10,3 +10,8 @@
 -keep class androidx.media3.decoder.VideoDecoderOutputBuffer {
     *;
 }
+
+# JNI symbol names contain these Java class names.
+-keep class io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary { *; }
+-keep class io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegAudioDecoder { *; }
+-keep class io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoDecoder { *; }
