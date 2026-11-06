@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "7fbea02d624acc7817b1873ed8be34094b0e8826",
-  "versionCode": 27,
-  "versionName": "0.0.27",
+  "sourceCommit": "cafc5802eaddee03cdb6fff15cc0adb16f5ecf67",
+  "versionCode": 28,
+  "versionName": "0.0.28",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.27",
+  "tag": "hongguotv-bate-v0.0.28",
   "apk": {
-    "name": "HongguoTV-0.0.27.apk",
-    "size": 1955765,
-    "sha256": "56d3f7c5a77e0b14304c3802a5115dff6c57eb36c501596a97d173461e297689",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.27/HongguoTV-0.0.27.apk"
+    "name": "HongguoTV-0.0.28.apk",
+    "size": 1956021,
+    "sha256": "5171b18a54ae482e2117f71e30de144617de5cda083bf536a1e469a411fa38b7",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.28/HongguoTV-0.0.28.apk"
   },
-  "notes": "【播放与播放器】\n- fix: 增强B播放器接管后的初始缓冲\n【片源与数据管理】\n- revert: 恢复导航栏首页名称"
+  "notes": "【焦点与遥控器】\n- fix: 明确排行榜首排海报向上焦点\n【其他功能与问题修复】\n- fix: 统一排行榜分页来源名称\n- fix: 统一排行榜来源名称\n- feat: 增加总榜入口并调整榜单顺序\n- feat: 默认打开红果综合总榜"
 }
