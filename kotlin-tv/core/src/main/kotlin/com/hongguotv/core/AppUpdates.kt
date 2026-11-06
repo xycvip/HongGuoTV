@@ -368,10 +368,34 @@ class AppUpdateRepository(
                 gitCodeUpdate
             }
             2, 3 -> {
-                val github = latestFromApi()
-                if (github.versionCode != update.versionCode || github.fileName != update.fileName ||
-                    github.sha256 != update.sha256 || github.size != update.size) {
-                    throw IOException("GitHub 与当前更新版本信息不一致，拒绝下载不同安装包")
+                // GitHub API 不可用时，继续使用 AppDownload Raw latest.json 获取 GitHub 附件地址。
+                // 这与正式版更新检查的 API -> Raw 备用策略保持一致。
+                val github = try {
+                    latestFromApi()
+                } catch (apiError: Exception) {
+                    try {
+                        val rawUrl = "${latestManifestUrl}?cachebust=${System.currentTimeMillis()}"
+                        tryMirrors(rawUrl, 12) { response, _ ->
+                            val text = response.body?.string() ?: throw IOException("AppDownload Raw 更新清单为空")
+                            if (text.length > 65536) throw IOException("AppDownload Raw 更新清单过大")
+                            try { parseManifest(text) }
+                            catch (_: Exception) { throw IOException("AppDownload Raw 更新清单格式不正确") }
+                        }
+                    } catch (rawError: Exception) {
+                        throw IOException(
+                            "GitHub 下载地址获取失败：API：${apiError.message ?: "不可用"}；Raw：${rawError.message ?: "不可用"}",
+                            rawError
+                        )
+                    }
+                }
+                if (github.versionCode != update.versionCode ||
+                    github.versionName != update.versionName ||
+                    github.fileName != update.fileName ||
+                    github.sha256 != update.sha256 ||
+                    github.size != update.size ||
+                    github.minSdk != update.minSdk ||
+                    hostOf(github.downloadUrl) != "github.com") {
+                    throw IOException("GitHub 与当前待更新版本信息不一致，或清单未提供 GitHub 原始附件地址，拒绝下载")
                 }
                 github
             }
