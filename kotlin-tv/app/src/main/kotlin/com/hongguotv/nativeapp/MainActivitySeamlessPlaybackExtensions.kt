@@ -28,6 +28,7 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
     standbyByteCounterEnabled?.set(false)
     standbyByteCounterEnabled = null
     standbyPlayer?.let { player ->
+        FfmpegPlayerRegistry.detach(player)
         runCatching { player.playWhenReady = false; player.stop(); player.clearMediaItems(); player.release() }
     }
     standbyPlayer = null
@@ -133,7 +134,8 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                 }
                 var secondaryPlayer: ExoPlayer? = null
                 try {
-                    val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
+                    val ffmpegSetup = FfmpegPlayerRegistry.create(this)
+                    val renderers = ffmpegSetup.renderersFactory
                     val secondary = ExoPlayer.Builder(this)
                         .setRenderersFactory(renderers)
                         .setLoadControl(
@@ -149,6 +151,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         )
                         .build()
                     secondaryPlayer = secondary
+                    FfmpegPlayerRegistry.attach(secondary, ffmpegSetup)
                     secondary.setAudioAttributes(
                         AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
                             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true
@@ -244,6 +247,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     debugLog("无感连播：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
                 } catch (problem: Exception) {
                     if (secondaryPlayer != null && standbyPlayer !== secondaryPlayer) {
+                        FfmpegPlayerRegistry.detach(secondaryPlayer)
                         runCatching { secondaryPlayer?.release() }
                     }
                     if (standbyRemote !== prepared) runCatching { prepared.close() }
