@@ -53,9 +53,9 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     private var statusDetailsView: TextView? = null
     private var anchor: View? = null
     private var actionButton: android.widget.Button? = null
-    private var proxyButton: android.widget.Button? = null
-    /** First manual retry starts with the first proxy; subsequent presses rotate through all routes. */
-    private var manualMirrorIndex = 0
+    private var sourceButtons: List<android.widget.Button> = emptyList()
+    private var manualProxyIndex = 0
+    private var speedView: TextView? = null
     private var status = "当前版本 ${BuildConfig.VERSION_NAME}"
     private var retryAfter = 0L
     private var promptedThisSession = false
@@ -128,14 +128,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             // Keep D-pad focus stable while the request runs; action methods reject duplicates.
             isEnabled = true
         }
-        proxyButton?.apply {
-            text = "换源下载"
-            // 未发现新版时也允许切换线路重新检查；下载过程中允许主动换源。
-            // 检查进行中保留按钮可聚焦状态，点击回调负责拦截重复请求。
-            // 不因检查请求期间 busy=true 而禁用当前焦点控件；点击回调会拦截重复请求。
-            // Android TV 部分 ROM 在禁用当前焦点按钮时会直接清空焦点。
-            isEnabled = active && idle()
-        }
+        sourceButtons.forEach { button -> button.isEnabled = active && idle() }
     }
     fun show(from: View?, aboutMode: Boolean = false) {
         if (!active) return
@@ -161,6 +154,12 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
                 setStroke((1 * dp).toInt(), TvStyle.outline)
             }
             if (aboutMode && status == "当前版本 ${BuildConfig.VERSION_NAME}") visibility = View.GONE
+        }
+        speedView = TextView(activity).apply {
+            text = "下载速度  0 Kb/s"
+            textSize = 14f
+            setTextColor(TvStyle.muted)
+            visibility = if (aboutMode) View.GONE else View.VISIBLE
         }
         statusDetailsView = TextView(activity).apply {
             text = status.substringAfter("\n", "")
@@ -195,6 +194,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
                     bottomMargin = (10 * dp).toInt()
                 })
                 addView(statusDetailsView, LinearLayout.LayoutParams(-1, -2))
+                addView(speedView, LinearLayout.LayoutParams(-1, -2))
             }
         }
         val statusScroll = ScrollView(activity).apply {
@@ -251,7 +251,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         TvDialog.styleWindow(activity, next, widthFraction = if (isCompactScreen) 0.90f else 0.55f)
         dialog = next
         next.setOnDismissListener {
-            if (dialog === next) { dialog = null; statusView = null; statusDetailsView = null; actionButton = null; proxyButton = null }
+            if (dialog === next) { dialog = null; statusView = null; statusDetailsView = null; speedView = null; actionButton = null; sourceButtons = emptyList() }
             if (from?.isAttachedToWindow == true) from.requestFocus()
         }
         next.show()
