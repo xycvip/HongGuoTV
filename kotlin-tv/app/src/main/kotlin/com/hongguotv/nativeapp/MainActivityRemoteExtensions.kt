@@ -181,7 +181,7 @@ import java.util.concurrent.atomic.AtomicLong
                 // 2. 焦点仍在标签内容区时，先关闭该标签内的子页面/筛选。
                 // 3. 回到当前标签的导航项；再次返回才回首页。
                 // 不再把搜索/剧场/账户写成特殊分支，避免焦点在其他标签时被强行拉回搜索。
-                if(nav.any { it.hasFocus() }) {
+                if(nav.any { it.hasFocus() } || searchNavShortcut?.hasFocus()==true) {
                     if(tab!=0) {
                         switchTab(0)
                         navByTab[0]?.requestFocus()
