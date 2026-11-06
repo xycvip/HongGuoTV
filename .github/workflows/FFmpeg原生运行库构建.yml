@@ -14,10 +14,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: ffmpeg-native-build-${{ github.ref }}
+  group: ffmpeg-native-build-\${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -77,15 +77,19 @@ jobs:
             (cd runtime-dist && zip -qr "HongGuoTV-FFmpeg-$abi.zip" "$abi")
           done
 
-      - name: 生成通用 ABI 清单模板
+      - name: 生成正式清单和独立下载文件
         working-directory: kotlin-tv
         env:
-          RUNTIME_VERSION: "0.1.0-${{ github.run_number }}"
+          RUNTIME_VERSION: "0.1.0-\${{ github.run_number }}"
+          RUNTIME_RELEASE_TAG: "ffmpeg-runtime-latest"
+          GITHUB_REPOSITORY: \${{ github.repository }}
         run: |
+          mkdir -p runtime-dist/release-assets
           python3 - <<'PY'
           import hashlib
           import json
           import os
+          import shutil
           from pathlib import Path
 
           abis = ["armeabi-v7a", "arm64-v8a", "x86", "x86_64"]
@@ -96,35 +100,65 @@ jobs:
               ("libavcodec.so", 4),
               ("libmedia3ext.so", 5),
           ]
-          manifest = {"version": os.environ["RUNTIME_VERSION"], "abis": {}}
+          version = os.environ["RUNTIME_VERSION"]
+          tag = os.environ["RUNTIME_RELEASE_TAG"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          base = f"https://github.com/{repo}/releases/download/{tag}"
+          manifest = {"version": version, "abis": {}}
+          assets = Path("runtime-dist/release-assets")
           for abi in abis:
               entries = []
               for filename, order in libraries:
-                  path = Path("runtime-dist") / abi / filename
-                  if not path.is_file():
-                      raise SystemExit(f"缺少原生库：{path}")
-                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  source = Path("runtime-dist") / abi / filename
+                  if not source.is_file():
+                      raise SystemExit(f"缺少原生库：{source}")
+                  asset_name = f"{abi}-{filename}"
+                  shutil.copy2(source, assets / asset_name)
                   entries.append({
                       "file": filename,
-                      "url": f"https://YOUR_HTTPS_HOST/ffmpeg-runtime/{abi}/{filename}",
-                      "sha256": digest,
+                      "url": f"{base}/{asset_name}",
+                      "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
                       "loadOrder": order,
                   })
               manifest["abis"][abi] = {"libraries": entries}
-          Path("runtime-dist/manifest-template.json").write_text(
+          (assets / "manifest.json").write_text(
               json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
               encoding="utf-8",
           )
+          (assets / "README.txt").write_text(
+              "HongGuoTV FFmpeg 独立运行库\n"
+              f"版本：{version}\n"
+              "安装清单：manifest.json\n"
+              "App 会自动识别当前进程 ABI，只下载对应架构的五个原生库。\n"
+              "每个文件均由 App 校验 SHA-256 和 ELF 架构。\n",
+              encoding="utf-8",
+          )
           PY
+          cp runtime-dist/HongGuoTV-FFmpeg-*.zip runtime-dist/release-assets/
 
-      - name: 上传原生运行库和 ABI 压缩包
+      - name: 上传 Actions 备份产物
         uses: actions/upload-artifact@v6
         with:
           name: HongGuoTV-FFmpeg-Native-Runtimes
           path: |
             kotlin-tv/ffmpeg-runtime/build/outputs/aar/ffmpeg-runtime-release.aar
-            kotlin-tv/runtime-dist/HongGuoTV-FFmpeg-*.zip
+            kotlin-tv/runtime-dist/release-assets/*
             kotlin-tv/runtime-dist/*/SHA256SUMS
-            kotlin-tv/runtime-dist/manifest-template.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: 发布独立 FFmpeg 运行库（稳定下载地址）
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ffmpeg-runtime-latest
+          name: HongGuoTV FFmpeg 独立运行库
+          body: |
+            此 Release 仅用于播放器 FFmpeg 扩展运行库，不包含 APK，不参与正式版/测试版应用发布。
+            App 使用固定清单地址自动识别 ABI，并只下载当前进程所需的原生库。
+            每次成功构建会覆盖本 Release 的运行库文件，SHA-256 以 manifest.json 为准。
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            kotlin-tv/runtime-dist/release-assets/*
