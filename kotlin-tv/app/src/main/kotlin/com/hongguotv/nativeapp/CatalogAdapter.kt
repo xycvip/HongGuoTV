@@ -47,15 +47,17 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         artwork.addView(rank,FrameLayout.LayoutParams(-2,-2,Gravity.TOP or Gravity.START))
         val fixedSearchCard=tab==1
         val title=text("",14f).apply { setLines(2); ellipsize=TextUtils.TruncateAt.END; includeFontPadding=false; gravity=Gravity.TOP or Gravity.START; setPadding(dp(3),dp(7),dp(3),0) }
+        val tags=text("",10.5f).apply { maxLines=1; minLines=1; minHeight=dp(18); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0); setTextColor(muted) }
         val badge=text("",12f).apply { maxLines=1; minLines=1; minHeight=dp(if(fixedSearchCard) 22 else 19); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,0,0) }
         card.addView(artwork,lp(-1,-2))
         card.addView(title,lp(-1,-2))
+        card.addView(tags,lp(-1,dp(18)))
         // 搜索网格同一行会按最高卡片统一行高；用弹性空白吸收多出的高度，
         // 让每张卡片的标签始终落在卡片底部，而不是跟在标题后悬空。
         if(fixedSearchCard) card.addView(View(host),lp(-1,0).apply { weight=1f })
         card.addView(badge,lp(-1,if(fixedSearchCard) dp(22) else -2))
         card.layoutParams=RecyclerView.LayoutParams(-1,-2).apply { rightMargin=dp(14); bottomMargin=dp(10) }
-        return CardHolder(card,artwork,image,rank,title,badge)
+        return CardHolder(card,artwork,image,rank,title,tags,badge)
     
     }
 }
@@ -88,6 +90,9 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             card.contentDescription="$rankLabel，${item.title}，${rankPosition?.heat?.ifBlank { "热度暂无" } ?: "热度暂无"}"
         } else holder.rank.visibility=View.GONE
         holder.title.text=item.title
+        val genreTags=item.tags.split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3)
+        holder.tags.text=genreTags.joinToString("  ·  ")
+        holder.tags.visibility=if(genreTags.isEmpty()) View.INVISIBLE else View.VISIBLE
         val progress=if(tab==4 || collection=="resume") library.progress(item.id) else null
         val aggregateType=if(tab==1 && aggregateSearch) when {
             item.badge.startsWith("短剧") -> ContentType.SHORT
@@ -166,6 +171,7 @@ internal class CardHolder(
     val image: ImageView,
     val rank: TextView,
     val title: TextView,
+    val tags: TextView,
     val badge: TextView
 ) : RecyclerView.ViewHolder(card) {
     var boundId=""
