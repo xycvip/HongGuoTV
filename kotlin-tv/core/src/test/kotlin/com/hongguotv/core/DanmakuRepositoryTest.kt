@@ -200,18 +200,19 @@ class DanmakuLoaderTest {
     @Test fun failuresBackOffAndEventuallyGiveUpSilently() {
         val (loader, requested) = loader(600_000) { throw IOException("offline") }
         loader.loadUpTo(0)
-        assertEquals(1, requested.size)
+        // Each failed repository call tries the six configured gateways before failing.
+        assertEquals(6, requested.size)
         loader.loadUpTo(0)
-        assertEquals(1, requested.size)
+        assertEquals(6, requested.size)
         now += 31_000
         loader.loadUpTo(0)
-        assertEquals(2, requested.size)
+        assertEquals(12, requested.size)
         now += 31_000
         loader.loadUpTo(0)
-        assertEquals(3, requested.size)
+        assertEquals(18, requested.size)
         now += 31_000
         loader.loadUpTo(0)
-        assertEquals(3, requested.size)
+        assertEquals(18, requested.size)
     }
 
     @Test fun betweenFiltersByOffsetRange() {
