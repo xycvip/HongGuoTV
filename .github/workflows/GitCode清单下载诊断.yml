@@ -39,7 +39,7 @@ jobs:
               --dump-header "${headers}" \
               --output "${body}" \
               --write-out $'HTTP 状态码: %{http_code}\n最终地址: %{url_effective}\n重定向次数: %{num_redirects}\n内容类型: %{content_type}\n下载字节数: %{size_download}\n远端 IP: %{remote_ip}\n' \
-              "${URL}?workflow_probe=$(date +%s%N)" | tee "${metrics}"
+              "${URL}" | tee "${metrics}"
             local result=$?
 
             echo "--- 响应头（隐藏 Cookie 等敏感字段）---"
