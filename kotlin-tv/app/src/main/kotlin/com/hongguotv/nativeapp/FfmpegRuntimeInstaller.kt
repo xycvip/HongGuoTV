@@ -131,6 +131,17 @@ internal class FfmpegRuntimeInstaller(context: Context) {
             "运行库架构不匹配：设备 " + abi.folder + "，清单 " + manifest.abi.folder
         }
         require(manifest.libraries.isNotEmpty()) { "运行库清单没有库文件" }
+        val requiredLibraries = setOf(
+            "libavutil.so", "libswresample.so", "libswscale.so",
+            "libavcodec.so", "libmedia3ext.so"
+        )
+        val suppliedLibraries = manifest.libraries.map { it.fileName }
+        require(suppliedLibraries.size == suppliedLibraries.toSet().size) {
+            "运行库清单包含重复文件"
+        }
+        require(suppliedLibraries.toSet().containsAll(requiredLibraries)) {
+            "运行库不完整，缺少：" + (requiredLibraries - suppliedLibraries.toSet()).joinToString()
+        }
 
         val targetDir = File(runtimeRoot, manifest.version + "/" + abi.folder)
         val stagingDir = File(runtimeRoot, ".staging-" + manifest.version + "-" + abi.folder)
@@ -169,6 +180,11 @@ internal class FfmpegRuntimeInstaller(context: Context) {
                 check(temp.renameTo(destination)) { "无法保存原生库：" + artifact.fileName }
             }
 
+            // The version parent does not exist on a first install.
+            val versionParent = targetDir.parentFile
+            check(versionParent != null && (versionParent.mkdirs() || versionParent.isDirectory)) {
+                "无法创建 FFmpeg 版本目录"
+            }
             // Keep the previous runtime intact until the new directory is ready.
             val backupDir = File(runtimeRoot, ".backup-" + manifest.version + "-" + abi.folder)
             backupDir.deleteRecursively()
