@@ -6,6 +6,8 @@ on:
       - feature/ffmpeg-soft-decode
     paths:
       - "kotlin-tv/app/**"
+      - "kotlin-tv/ffmpeg-runtime/**"
+      - "kotlin-tv/ffmpeg/**"
       - "kotlin-tv/core/**"
       - "kotlin-tv/gradle/**"
       - "kotlin-tv/gradlew"
