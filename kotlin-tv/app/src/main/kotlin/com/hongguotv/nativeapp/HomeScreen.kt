@@ -118,7 +118,7 @@ class HomeScreen(
     fun updateEntry(shelfKey: String,entry: Entry): Boolean {
         val card=cards["$shelfKey:${entry.series.id}"] ?: return false
         if(card.entry?.series?.cover!=entry.series.cover) { card.image?.setImageDrawable(null) }
-        card.entry=entry; card.title.text=entry.series.title; card.tags.text=entry.series.tags.split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3).joinToString("  ·  "); card.tags.visibility=if(card.tags.text.isNullOrBlank()) View.INVISIBLE else View.VISIBLE; card.label.text=entry.label
+        card.entry=entry; card.title.text=entry.series.title; setGenreTagChips(card.tags,entry.series.tags,resources.displayMetrics.density); card.label.text=entry.label
         card.progress?.apply { progress=entry.progress ?: 0; visibility=if(entry.progress==null) INVISIBLE else VISIBLE }
         card.view.contentDescription="${shelves.firstOrNull { it.key==shelfKey }?.title.orEmpty()}，${entry.series.title}，${entry.label}"
         shelves=shelves.map { shelf -> if(shelf.key==shelfKey) shelf.copy(entries=shelf.entries.map { if(it.series.id==entry.series.id) entry else it }) else shelf }
@@ -216,7 +216,8 @@ class HomeScreen(
                     view.addView(moreTile,LayoutParams(-1,if(shelf.key=="random") dp(96) else posterHeight))
                 }
                 val title=label(entry?.series?.title ?: "查看全部",14f).apply { minLines=2; maxLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) }
-                val tags=label(entry?.series?.tags.orEmpty().split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3).joinToString("  ·  "),10.5f,TvStyle.muted).apply { minLines=1; maxLines=1; minHeight=dp(17); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0); visibility=if(text.isNullOrBlank()) INVISIBLE else VISIBLE }
+                val tags=label("",10.5f,TvStyle.muted).apply { minLines=1; maxLines=1; minHeight=dp(19); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0) }
+                setGenreTagChips(tags,entry?.series?.tags.orEmpty(),resources.displayMetrics.density)
                 val badge=label(entry?.label ?: shelf.title,12f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(2),0,0) }
                 val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }
                 if(shelf.key!="random") { view.addView(title); view.addView(tags); view.addView(badge); view.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(4) }) }
