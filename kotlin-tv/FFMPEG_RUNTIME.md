@@ -20,6 +20,7 @@
 - 支持 H.264、HEVC、VP8、VP9、AV1 视频解码，以及多种音频解码。
 - 上游构建脚本覆盖 armeabi-v7a、arm64-v8a、x86、x86_64。
 - 上游常规 Maven AAR 会携带原生库，不满足基础 APK 轻量化和运行时下载目标。
+- 已将 v1.11.1-0.17.0 的 Media3 FFmpeg 解码器 Java/Kotlin 源码引入 app 源集，并保留上游 GPL-3.0 LICENSE；未引入上游 AAR，也未将原生库打进 APK。
 
 ## 已实现
 
