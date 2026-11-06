@@ -351,8 +351,21 @@ class AppUpdateRepository(
         // 测试版不暴露这些选项，sourceIndex 为空时保持原有自动策略。
         val selectedUpdate = when (sourceIndex) {
             1 -> {
-                if (hostOf(update.downloadUrl) != "gitcode.com") throw IOException("当前版本没有有效的 GitCode 下载地址")
-                update
+                // 当前更新信息可能来自 GitHub/Raw 回退源，不能直接把它的 URL 当成 GitCode 地址。
+                // 用户明确选择 GitCode 时，重新读取 GitCode 最新正式版清单，并核对是否为同一构建。
+                val gitCodeUpdate = try {
+                    latestFromGitCodeApi()
+                } catch (e: Exception) {
+                    throw IOException("GitCode 下载地址获取失败：${e.message ?: "接口不可用"}", e)
+                }
+                if (gitCodeUpdate.versionCode != update.versionCode ||
+                    gitCodeUpdate.versionName != update.versionName ||
+                    gitCodeUpdate.fileName != update.fileName ||
+                    gitCodeUpdate.sha256 != update.sha256 ||
+                    gitCodeUpdate.size != update.size) {
+                    throw IOException("GitCode 与当前待更新版本信息不一致，请重新检查更新")
+                }
+                gitCodeUpdate
             }
             2, 3 -> {
                 val github = latestFromApi()
