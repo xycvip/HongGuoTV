@@ -53,6 +53,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     private var statusDetailsView: TextView? = null
     private var anchor: View? = null
     private var actionButton: android.widget.Button? = null
+    private var aboutDialogShowing = false
     private var sourceButtons: List<android.widget.Button> = emptyList()
     private var manualProxyIndex = -1
     private var pendingSource: Int? = null
@@ -126,7 +127,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     }
     private fun renderActions() {
         actionButton?.apply {
-            text = when { busy -> "处理中…"; ready -> "立即安装"; available != null -> "下载新版"; else -> "检查更新" }
+            text = if (aboutDialogShowing) "检查更新" else when { busy -> "处理中…"; ready -> "立即安装"; available != null -> "下载新版"; else -> "检查更新" }
             // Keep D-pad focus stable while the request runs; action methods reject duplicates.
             isEnabled = true
         }
@@ -135,6 +136,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     fun show(from: View?, aboutMode: Boolean = false) {
         if (!active) return
         anchor = from
+        aboutDialogShowing = aboutMode
         dialog?.dismiss()
         // One nag per process lifetime: the user may close it, but the next app restart re-prompts.
         val updatePending = available != null
@@ -268,7 +270,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         TvDialog.styleWindow(activity, next, widthFraction = if (isCompactScreen) 0.90f else 0.55f)
         dialog = next
         next.setOnDismissListener {
-            if (dialog === next) { dialog = null; statusView = null; statusDetailsView = null; speedView = null; actionButton = null; sourceButtons = emptyList() }
+            if (dialog === next) { dialog = null; statusView = null; statusDetailsView = null; speedView = null; actionButton = null; sourceButtons = emptyList(); aboutDialogShowing = false }
             if (from?.isAttachedToWindow == true) from.requestFocus()
         }
         next.show()
