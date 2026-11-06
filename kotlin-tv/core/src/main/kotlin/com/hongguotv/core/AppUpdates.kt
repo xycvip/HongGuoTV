@@ -72,7 +72,7 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             require(update.versionName.matches(Regex("[0-9][0-9A-Za-z.+-]{0,63}")))
             require(update.tag.matches(Regex(Regex.escape(releaseTagPrefix) + "[0-9][0-9A-Za-z.+-]{0,80}")))
             val expectedGitHubUrl = "https://github.com/$releaseRepository/releases/download/${update.tag}/${update.fileName}"
-            val expectedGitCodeUrl = "https://gitcode.com/xycvip/hongguotv/releases/download/${update.tag}/${update.fileName}"
+            val expectedGitCodeUrl = "https://gitcode.com/xycvip/hongguotv/-/releases/${update.tag}/downloads/${update.fileName}"
             require(update.downloadUrl == expectedGitHubUrl ||
                 (expectedPackageName == OFFICIAL_PACKAGE && update.downloadUrl == expectedGitCodeUrl))
             require(update.fileName.matches(Regex(Regex.escape(apkFilePrefix) + "[0-9][0-9A-Za-z.+-]{0,80}\\.apk")))
@@ -168,7 +168,7 @@ internal fun gitCodeLatestReleaseManifestUrl(
     for (index in 0 until assets.length()) {
         val asset = assets.optJSONObject(index) ?: continue
         if (asset.optString("type") != "attach" || asset.optString("name") != "update.json") continue
-        val expected = "https://gitcode.com/xycvip/hongguotv/releases/download/$tag/update.json"
+        val expected = "https://gitcode.com/xycvip/hongguotv/-/releases/$tag/downloads/update.json"
         return asset.optString("browser_download_url").takeIf { it == expected }
     }
     return null
@@ -234,7 +234,7 @@ class AppUpdateRepository(
      * 只读取 /releases/latest，不扫描发行版列表；通过 update.json 获取版本与校验信息。
      */
     private fun latestFromGitCodeApi(): AppUpdate {
-        val apiUrl = "${AppUpdate.OFFICIAL_GITCODE_API}?cachebust=${System.currentTimeMillis()}"
+        val apiUrl = "${AppUpdate.OFFICIAL_GITCODE_API}?type=latest&cachebust=${System.currentTimeMillis()}"
         val releaseJson = http.newCall(request(apiUrl).newBuilder()
             .header("Accept", "application/json")
             .build()).execute().use { response ->
