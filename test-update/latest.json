@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "39caa8e2d733b1b64a14a32ab178467ce8a02903",
-  "versionCode": 29,
-  "versionName": "0.0.29",
+  "sourceCommit": "f7a00f1573ac17b017f6263fb87f39ad5868d6ac",
+  "versionCode": 30,
+  "versionName": "0.0.30",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.29",
+  "tag": "hongguotv-bate-v0.0.30",
   "apk": {
-    "name": "HongguoTV-0.0.29.apk",
-    "size": 1956621,
-    "sha256": "729120d728442e3fadb3f68e2a0cdc701df34a07f78fb5cbff529ba4cb3bc679",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.29/HongguoTV-0.0.29.apk"
+    "name": "HongguoTV-0.0.30.apk",
+    "size": 1957201,
+    "sha256": "e83a11886797081b351d6ecda952fde789746863af2a067437adfeec2dbb7cc6",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.30/HongguoTV-0.0.30.apk"
   },
-  "notes": "【界面与交互】\n- 首页海报标题下显示作品题材\n- 海报标题下显示作品题材"
+  "notes": "【界面与交互】\n- ui: 紧凑标签框自适应宽度并居中显示\n【其他功能与问题修复】\n- fix: 修正题材标签绘制基线参数类型\n- fix: 修复题材标签 Canvas 文本绘制编译错误\n- ui: 首页海报题材改为橘红色独立标签框\n- ui: 目录海报题材改为橘红色独立标签框\n- ui: 将海报题材标签改为橘红色独立小框"
 }
