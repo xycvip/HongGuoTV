@@ -136,8 +136,8 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     fun show(from: View?, aboutMode: Boolean = false) {
         if (!active) return
         anchor = from
-        aboutDialogShowing = aboutMode
         dialog?.dismiss()
+        aboutDialogShowing = aboutMode
         // One nag per process lifetime: the user may close it, but the next app restart re-prompts.
         val updatePending = available != null
         if (updatePending) promptedThisSession = true
