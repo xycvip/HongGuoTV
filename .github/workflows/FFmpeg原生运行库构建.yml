@@ -60,10 +60,25 @@ jobs:
         working-directory: kotlin-tv
         run: ./gradlew --no-daemon :ffmpeg-runtime:assembleRelease
 
-      - name: 上传原生库 AAR
+      - name: 按 ABI 拆分运行库并生成校验值
+        working-directory: kotlin-tv
+        run: |
+          mkdir -p runtime-dist/aar
+          unzip -q ffmpeg-runtime/build/outputs/aar/ffmpeg-runtime-release.aar -d runtime-dist/aar
+          for abi in x86 x86_64 armeabi-v7a arm64-v8a; do
+            mkdir -p "runtime-dist/$abi"
+            cp runtime-dist/aar/jni/"$abi"/*.so "runtime-dist/$abi/"
+            (cd "runtime-dist/$abi" && sha256sum *.so > SHA256SUMS)
+            (cd runtime-dist && zip -qr "HongGuoTV-FFmpeg-$abi.zip" "$abi")
+          done
+
+      - name: 上传原生运行库和 ABI 压缩包
         uses: actions/upload-artifact@v6
         with:
-          name: HongGuoTV-FFmpeg-Native-AAR
-          path: kotlin-tv/ffmpeg-runtime/build/outputs/aar/ffmpeg-runtime-release.aar
+          name: HongGuoTV-FFmpeg-Native-Runtimes
+          path: |
+            kotlin-tv/ffmpeg-runtime/build/outputs/aar/ffmpeg-runtime-release.aar
+            kotlin-tv/runtime-dist/HongGuoTV-FFmpeg-*.zip
+            kotlin-tv/runtime-dist/*/SHA256SUMS
           if-no-files-found: error
           retention-days: 14
