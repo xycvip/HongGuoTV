@@ -14,7 +14,7 @@ internal fun MainActivity.nextRankBoard()=RankBoard.entries[(rankBoard.ordinal+1
 internal fun MainActivity.inlineHomeFilters()=tab==0 && resources.configuration.fontScale<=1.2f && widthDp()>=900
 
 // 直接按 tab ID 获取导航项；调整顶部展示顺序时无需同步维护数字索引映射。
-internal fun MainActivity.navForTab():View=if(tab==1) searchNavShortcut ?: root else navByTab[tab] ?: root
+internal fun MainActivity.navForTab():View=if(tab==1) searchNavShortcut ?: root else navByTab[if(tab==3 || tab==4) 3 else tab] ?: root
 
 /** 顶部导航栏固定显示，不再跟随内容滚动执行高度动画或透明度动画。 */
 // 保留滚动回调接口兼容现有页面，但不再因滚动改变顶部导航栏状态。
@@ -36,27 +36,28 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
 }
 
     internal fun MainActivity.switchTab(next: Int) {
-        debugLog("页面导航：主导航页签 $tab -> $next")
+        val targetTab=if(next==9) 3 else next
+        debugLog("页面导航：主导航页签 $tab -> $targetTab")
         leaveCollection()
         tabState[tab]=CatalogState(page,catalog,hasMore,ranking,rankBoard,genre,aiCatalog,aiGenre); tabFocus[tab]=catalogFocus
         // 从其他模块切回搜索页时重置为全新搜索状态，不保留上次的搜索词与结果
-        if(next==1) {
+        if(targetTab==1) {
             query=""; aggregateSearch=true; phoneSearched=false; lastSuggestWords=emptyList<String>(); lastSuggestKey=""; suggestFocusIndex=-1; keyboardLastLabel=null
             searchHotLoaded=false; searchHotLoading=false
             tabState.remove(1); tabFocus.remove(1)
         }
-        tab=next; val saved=tabState[next]; page=saved?.page ?: 1; catalog=saved?.items ?: emptyList(); hasMore=saved?.hasMore ?: false; ranking=saved?.ranking; catalogFocus=tabFocus[next].orEmpty()
+        tab=targetTab; val saved=tabState[targetTab]; page=saved?.page ?: 1; catalog=saved?.items ?: emptyList(); hasMore=saved?.hasMore ?: false; ranking=saved?.ranking; catalogFocus=tabFocus[targetTab].orEmpty()
         rankBoard=saved?.board ?: rankBoard; genre=saved?.genre ?: genre
         aiCatalog=false; aiGenre=null
-        if(next==0) {
+        if(targetTab==0) {
             // 点击首页后刷新内容，但重建页面时焦点固定恢复到“首页”导航项。
             refreshAllHome(focusNav=true)
             if(!apiStatusCheckStarted) main.post { runAutomaticApiChecks() }
         } else {
-            showCatalog(load=(next==7 || (next<=2 && catalog.isEmpty() && (next!=1 || query.isNotBlank()))))
+            showCatalog(load=(targetTab==7 || (targetTab<=2 && catalog.isEmpty() && (targetTab!=1 || query.isNotBlank()))))
         }
         // 切回搜索页时焦点落输入框，避免页面重建后焦点丢失
-        if(next==1) searchInput?.requestFocus()
+        if(targetTab==1) searchInput?.requestFocus()
     }
 
     internal fun MainActivity.switchContentType(type: ContentType) {
