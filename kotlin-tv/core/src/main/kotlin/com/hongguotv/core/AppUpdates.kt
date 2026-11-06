@@ -352,7 +352,7 @@ class AppUpdateRepository(
         }
         // GitCode 附件下载失败时，使用 AppDownload Raw 清单作为最后备用；
         // 只有版本号、文件名和 SHA256 完全一致时才允许切换，避免把不同构建的 APK 混装。
-        if (hostOf(base) == "gitcode.com" && mirrorIndex == null) {
+        if (hostOf(base) == "gitcode.com") {
             try {
                 val fallback = try {
                     latestFromApi()
@@ -372,7 +372,10 @@ class AppUpdateRepository(
                 }
                 val fallbackBase = "${fallback.downloadUrl}?cachebust=${System.currentTimeMillis()}"
                 val fallbackErrors = ArrayList<String>()
-                for (wrap in AppUpdate.MIRRORS) {
+                val fallbackMirrors = if (mirrorIndex == null) AppUpdate.MIRRORS else listOf(
+                    AppUpdate.MIRRORS.getOrNull(mirrorIndex) ?: throw IOException("备用代理线路编号无效")
+                )
+                for (wrap in fallbackMirrors) {
                     val url = wrap(fallbackBase)
                     var response: okhttp3.Response? = null
                     try {
