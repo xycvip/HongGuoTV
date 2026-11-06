@@ -49,7 +49,7 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             "release-assets.githubusercontent.com",
             "objects.githubusercontent.com",
             "gh-proxy.com", "ghfast.top", "gh-proxy.net",
-            "api.gitcode.com", "gitcode.com", "raw.gitcode.com",
+            "api.gitcode.com", "gitcode.com", "raw.gitcode.com", "file-cdn.gitcode.com",
         )
         fun parse(
             json: String,
