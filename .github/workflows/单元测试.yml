@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "kotlin-tv/core/**"
+      - "kotlin-tv/app/**"
       - "kotlin-tv/gradle/**"
       - "kotlin-tv/gradlew"
       - "kotlin-tv/gradle.properties"
@@ -48,4 +49,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
       - name: 运行核心模块单元测试
         working-directory: kotlin-tv
-        run: ./gradlew --no-daemon :core:test
+        run: |
+          ./gradlew --no-daemon :core:test
+          ./gradlew --no-daemon :app:compileDebugKotlin
