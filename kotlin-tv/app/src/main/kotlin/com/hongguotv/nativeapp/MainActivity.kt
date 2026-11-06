@@ -521,6 +521,15 @@ class MainActivity: Activity() {
     override fun onCreate(state: Bundle?) {
         TvStyle.apply(getSharedPreferences("native-library-v1", Context.MODE_PRIVATE).getString("theme", null))
         super.onCreate(state)
+        // 已下载 FFmpeg 运行库时，在后台提前加载；未下载则保持原有 MediaCodec 播放路径。
+        io.execute {
+            when (val result = FfmpegRuntimeLoader.activateInstalled(this)) {
+                is FfmpegRuntimeLoader.Result.Ready ->
+                    android.util.Log.i("HongguoTV", "FFmpeg 软件解码运行库已加载：${result.version}")
+                is FfmpegRuntimeLoader.Result.Unavailable ->
+                    android.util.Log.i("HongguoTV", "FFmpeg 软件解码未启用：${result.reason}")
+            }
+        }
         // 方向选择仅在当前 App 进程内保留；进程重启后字段默认横屏。
         // 调试入口的显示状态仅保存在进程内；调试模式本身仍由持久化开关控制。
         applyDeviceOrientationPolicy()
