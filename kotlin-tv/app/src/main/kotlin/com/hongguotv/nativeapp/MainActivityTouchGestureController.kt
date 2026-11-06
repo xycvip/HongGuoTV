@@ -22,6 +22,7 @@ internal class MainActivityTouchGestureController(
     private val centerControl: () -> View?,
     private val showCenterControl: () -> Unit,
     private val showHud: () -> Unit,
+    private val hideHud: () -> Unit,
     private val updatePlaybackText: () -> Unit,
     private val seekTo: (Long) -> Unit,
     private val screenHeightPx: () -> Float,
@@ -39,6 +40,7 @@ internal class MainActivityTouchGestureController(
     private var verticalLastValue = -1
     private var longPressSpeedActive = false
     private var touchOnCenterControl = false
+    private var touchStartedWithHudVisible = false
     private val longPressSpeedRunnable = Runnable {
         if(state.touchTracking && !state.touchOnHud && !state.touchOnProgressBar &&
             !state.touchSeekGesture && !verticalGesture && !hasBlockingPanel()
@@ -56,6 +58,7 @@ internal class MainActivityTouchGestureController(
 
         if(action == MotionEvent.ACTION_DOWN) {
             touchOnCenterControl = isInside(centerControl(), event)
+            touchStartedWithHudVisible = hud()?.let { it.visibility == View.VISIBLE && it.isShown } == true
         }
         if(touchOnCenterControl) {
             val handled = dispatchToView(event)
@@ -212,9 +215,14 @@ internal class MainActivityTouchGestureController(
                 if(kotlin.math.abs(event.x - state.touchStartX) <= dp(24) &&
                     kotlin.math.abs(event.y - state.touchStartY) <= dp(24)
                 ) {
-                    // 视频其他区域单击只唤起控制栏和中央状态按钮，不改变播放状态。
-                    showHud()
-                    showCenterControl()
+                    // 控制栏已显示时，点击视频空白区域将其收起；隐藏时单击才唤起。
+                    if(touchStartedWithHudVisible) {
+                        hideHud()
+                    } else {
+                        showHud()
+                        showCenterControl()
+                    }
+                    touchStartedWithHudVisible = false
                     return true
                 }
                 showHud()
@@ -249,6 +257,7 @@ internal class MainActivityTouchGestureController(
         state.touchSeekTarget = null
         state.touchOnProgressBar = false
         touchOnCenterControl = false
+        touchStartedWithHudVisible = false
     }
 
     private fun isInside(view: View?, event: MotionEvent): Boolean {
