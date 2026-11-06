@@ -40,6 +40,7 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.preload.DefaultPreloadManager
 import androidx.media3.ui.PlayerView
 import com.hongguotv.core.*
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
@@ -525,8 +526,8 @@ class MainActivity: Activity() {
         val savedDecoderMode = getSharedPreferences("ffmpeg-settings-v1", Context.MODE_PRIVATE)
             .getString("video_decoder_mode", "AUTO") ?: "AUTO"
         val initialDecoderMode = runCatching {
-            io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode.valueOf(savedDecoderMode)
-        }.getOrDefault(io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode.AUTO)
+            DecoderMode.valueOf(savedDecoderMode)
+        }.getOrDefault(DecoderMode.AUTO)
         FfmpegPlayerRegistry.setVideoMode(initialDecoderMode)
         // 已下载 FFmpeg 运行库时，在后台提前加载；未下载则保持原有 MediaCodec 播放路径。
         io.execute {
