@@ -3,6 +3,7 @@ package com.hongguotv.nativeapp
 
 import android.content.Context
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
@@ -16,13 +17,22 @@ import java.util.WeakHashMap
 @UnstableApi
 internal object FfmpegPlayerRegistry {
     data class Setup(
-        val renderersFactory: NextRenderersFactory,
-        internal val decoderManager: DecoderManager
+        val renderersFactory: DefaultRenderersFactory,
+        internal val decoderManager: DecoderManager?
     )
 
     private val managers = WeakHashMap<ExoPlayer, DecoderManager>()
 
     fun create(context: Context): Setup {
+        // Do not touch NextLib renderers before the downloaded runtime is activated.
+        // This lets users download/activate FFmpeg later in the same app process,
+        // provided no FFmpeg renderer has attempted a native load yet.
+        if (!FfmpegRuntimeLoader.isReady) {
+            return Setup(
+                DefaultRenderersFactory(context).setEnableDecoderFallback(true),
+                null
+            )
+        }
         val manager = DecoderManager(
             initialVideoMode = DecoderMode.AUTO,
             initialAudioMode = DecoderMode.AUTO
@@ -34,8 +44,9 @@ internal object FfmpegPlayerRegistry {
 
     @Synchronized
     fun attach(player: ExoPlayer, setup: Setup) {
-        setup.decoderManager.attach(player)
-        managers[player] = setup.decoderManager
+        val manager = setup.decoderManager ?: return
+        manager.attach(player)
+        managers[player] = manager
     }
 
     @Synchronized
