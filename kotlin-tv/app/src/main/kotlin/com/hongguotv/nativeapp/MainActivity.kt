@@ -482,6 +482,7 @@ class MainActivity: Activity() {
                 showPlaybackTapFeedback(player?.playWhenReady==true)
             },
             showHud = { showHud() },
+            hideHud = { hidePlaybackOverlay() },
             updatePlaybackText = { updatePlaybackText() },
             seekTo = { position -> seekTo(position) },
             screenHeightPx = { resources.displayMetrics.heightPixels.toFloat() },
