@@ -521,6 +521,13 @@ class MainActivity: Activity() {
     override fun onCreate(state: Bundle?) {
         TvStyle.apply(getSharedPreferences("native-library-v1", Context.MODE_PRIVATE).getString("theme", null))
         super.onCreate(state)
+        // 在创建任何播放器之前恢复用户选择的解码策略。
+        val savedDecoderMode = getSharedPreferences("ffmpeg-settings-v1", Context.MODE_PRIVATE)
+            .getString("video_decoder_mode", "AUTO") ?: "AUTO"
+        val initialDecoderMode = runCatching {
+            io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode.valueOf(savedDecoderMode)
+        }.getOrDefault(io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode.AUTO)
+        FfmpegPlayerRegistry.setVideoMode(initialDecoderMode)
         // 已下载 FFmpeg 运行库时，在后台提前加载；未下载则保持原有 MediaCodec 播放路径。
         io.execute {
             when (val result = FfmpegRuntimeLoader.activateInstalled(this)) {
