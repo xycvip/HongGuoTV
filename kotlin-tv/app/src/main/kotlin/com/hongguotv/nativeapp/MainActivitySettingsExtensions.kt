@@ -38,6 +38,7 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.preload.DefaultPreloadManager
 import androidx.media3.ui.PlayerView
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 import com.hongguotv.core.*
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -217,6 +218,8 @@ import java.util.concurrent.atomic.AtomicLong
         lateinit var defaultSpeed:TextView
         lateinit var frame:TextView
         lateinit var videoRendererButton:TextView
+        lateinit var videoDecoderButton:TextView
+        lateinit var ffmpegRuntimeButton:TextView
         lateinit var autoNextButton:TextView
         lateinit var autoSeasonButton:TextView
         lateinit var danmakuButton:TextView
@@ -284,6 +287,80 @@ import java.util.concurrent.atomic.AtomicLong
                 else "自动使用 SurfaceView"
             } else "当前已切换为 ${videoRendererModeLabel(next)}"
             Toast.makeText(this@settings,actual,Toast.LENGTH_LONG).show()
+        }
+        fun decoderModeLabel(mode:DecoderMode):String = when(mode) {
+            DecoderMode.AUTO -> "自动（优先硬件）"
+            DecoderMode.HARDWARE -> "仅硬件解码"
+            DecoderMode.SOFTWARE -> "系统软件解码"
+            DecoderMode.FFMPEG -> "FFmpeg软件解码"
+        }
+        fun openFfmpegRuntimeInstaller() {
+            val abi=FfmpegRuntimeInstaller.Abi.current()
+            if(abi==null) {
+                Toast.makeText(this@settings,"当前应用进程架构暂不支持 FFmpeg 运行库",Toast.LENGTH_LONG).show()
+                return
+            }
+            val prefs=getSharedPreferences("ffmpeg-settings-v1",Context.MODE_PRIVATE)
+            val address=EditText(this@settings).apply {
+                setSingleLine(true)
+                inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+                hint="https://服务器地址/manifest.json"
+                setText(prefs.getString("manifest_url","") ?: "")
+            }
+            android.app.AlertDialog.Builder(this@settings)
+                .setTitle("下载 FFmpeg 运行库")
+                .setMessage("当前应用进程架构：${abi.folder}\n请输入通用 ABI 清单的 HTTPS 地址。安装前会逐个校验 SHA-256 和 ELF 架构。")
+                .setView(address)
+                .setNegativeButton("取消",null)
+                .setPositiveButton("下载并安装") { _,_ ->
+                    val url=address.text.toString().trim()
+                    if(!url.startsWith("https://",true)) {
+                        Toast.makeText(this@settings,"清单地址必须使用 HTTPS",Toast.LENGTH_LONG).show()
+                    } else {
+                        prefs.edit().putString("manifest_url",url).apply()
+                        val progress=android.app.ProgressDialog(this@settings).apply {
+                            setMessage("正在下载并校验 FFmpeg 运行库…")
+                            setCancelable(false)
+                            show()
+                        }
+                        ffmpegRuntimeButton.isEnabled=false
+                        FfmpegRuntimeInstaller(this@settings).installAndActivateAsync(url) { result ->
+                            progress.dismiss()
+                            ffmpegRuntimeButton.isEnabled=true
+                            when(result) {
+                                is FfmpegRuntimeInstaller.Result.Installed -> {
+                                    ffmpegRuntimeButton.text="FFmpeg运行库  ·  已安装（${result.abi.folder}）"
+                                    Toast.makeText(this@settings,"FFmpeg 运行库安装并加载成功，后续新建的播放器即可使用",Toast.LENGTH_LONG).show()
+                                }
+                                is FfmpegRuntimeInstaller.Result.Failed -> {
+                                    ffmpegRuntimeButton.text="FFmpeg运行库  ·  未安装"
+                                    Toast.makeText(this@settings,"FFmpeg 安装失败：${result.reason}",Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }
+                }
+                .show()
+        }
+        ffmpegRuntimeButton=setting(playback,0,if(FfmpegRuntimeLoader.isReady) "FFmpeg运行库  ·  已安装" else "FFmpeg运行库  ·  未安装（点击安装）") {
+            openFfmpegRuntimeInstaller()
+        }
+        videoDecoderButton=setting(playback,0,"视频解码  ·  ${decoderModeLabel(FfmpegPlayerRegistry.videoMode)}") {
+            if(!FfmpegRuntimeLoader.isReady) {
+                Toast.makeText(this@settings,"请先安装 FFmpeg 运行库，再选择解码策略",Toast.LENGTH_LONG).show()
+                openFfmpegRuntimeInstaller()
+            } else {
+                val modes=listOf(DecoderMode.AUTO,DecoderMode.HARDWARE,DecoderMode.SOFTWARE,DecoderMode.FFMPEG)
+                val labels=modes.map(::decoderModeLabel)
+                TvDialog.choose(this@settings,"视频解码策略",labels,{ index ->
+                    val selected=modes.getOrNull(index) ?: DecoderMode.AUTO
+                    getSharedPreferences("ffmpeg-settings-v1",Context.MODE_PRIVATE).edit()
+                        .putString("video_decoder_mode",selected.name).apply()
+                    FfmpegPlayerRegistry.setVideoMode(selected)
+                    videoDecoderButton.text="视频解码  ·  ${decoderModeLabel(selected)}"
+                    Toast.makeText(this@settings,"已切换为${decoderModeLabel(selected)}",Toast.LENGTH_LONG).show()
+                }).show()
+            }
         }
         lateinit var seamlessPlaybackButton:TextView
         seamlessPlaybackButton=setting(playback,0,"无感连播  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
