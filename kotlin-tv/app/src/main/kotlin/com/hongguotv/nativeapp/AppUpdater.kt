@@ -123,7 +123,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         }
     }
     private fun renderStatusLine() {
-        val firstLine = status.substringBefore("\\n")
+        val firstLine = status.substringBefore("\n")
         statusView?.apply {
             text = if (downloadInProgress && downloadSpeedText.isNotBlank()) "$firstLine  $downloadSpeedText" else firstLine
             visibility = View.VISIBLE
@@ -236,7 +236,6 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         val later = TvDialog.capsuleButton(activity, if (aboutMode) "关闭" else "稍后") { }
         val action = TvDialog.capsuleButton(activity,"检查更新") { }
         actionButton = action
-        val sourceRow = buttons
         val address1 = TvDialog.capsuleButton(activity, "下载地址1") { }
         val address2 = TvDialog.capsuleButton(activity, "下载地址2") { }
         val address3 = TvDialog.capsuleButton(activity, "下载地址3") { }
@@ -248,9 +247,6 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             button.minWidth = 0
             button.minimumWidth = 0
             button.setPadding((2 * dp).toInt(), button.paddingTop, (2 * dp).toInt(), button.paddingBottom)
-            sourceRow.addView(button, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                if (button !== address1) leftMargin = (3 * dp).toInt()
-            })
         }
         sourceButtons = listOf(address1, address2, address3)
         later.textSize = 12f
@@ -310,19 +306,21 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             }
         }
         renderActions()
-        // 为电视遥控器建立明确的纵向焦点链，避免系统按控件几何位置跳过复选框或换源按钮。
-        action.nextFocusUpId = address3.id
-        address3.nextFocusDownId = action.id
-        address2.nextFocusDownId = action.id
-        address1.nextFocusRightId = address2.id
-        address2.nextFocusLeftId = address1.id
-        address2.nextFocusRightId = address3.id
-        address3.nextFocusLeftId = address2.id
-        if (autoCheckBox != null) {
-            autoCheckBox.nextFocusDownId = address1.id
-            address1.nextFocusUpId = autoCheckBox.id
-        } else {
-            address1.nextFocusUpId = action.id
+        // 为电视遥控器建立明确的焦点链；关于页没有下载地址按钮，不能引用未加入窗口的控件。
+        if (!aboutMode) {
+            action.nextFocusUpId = address3.id
+            address3.nextFocusDownId = action.id
+            address2.nextFocusDownId = action.id
+            address1.nextFocusRightId = address2.id
+            address2.nextFocusLeftId = address1.id
+            address2.nextFocusRightId = address3.id
+            address3.nextFocusLeftId = address2.id
+            if (autoCheckBox != null) {
+                autoCheckBox.nextFocusDownId = address1.id
+                address1.nextFocusUpId = autoCheckBox.id
+            } else {
+                address1.nextFocusUpId = action.id
+            }
         }
         action.post { if (dialog === next) action.requestFocus() }
     }
