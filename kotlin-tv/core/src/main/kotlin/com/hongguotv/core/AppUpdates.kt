@@ -374,7 +374,8 @@ class AppUpdateRepository(
                     try {
                         response = http.newCall(request(url)).execute()
                         if (!response.isSuccessful) { fallbackErrors += "HTTP${response.code}@${hostOf(url)}"; continue }
-                        val body = response.body ?: run { fallbackErrors += "空响应@${hostOf(url)}"; continue }
+                        val body = response.body
+                        if (body == null) { fallbackErrors += "空响应@${hostOf(url)}"; continue }
                         if (body.contentLength() >= 0 && body.contentLength() != update.size) {
                             fallbackErrors += "长度不匹配@${hostOf(url)}"; continue
                         }
