@@ -47,7 +47,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         artwork.addView(rank,FrameLayout.LayoutParams(-2,-2,Gravity.TOP or Gravity.START))
         val fixedSearchCard=tab==1
         val title=text("",14f).apply { setLines(2); ellipsize=TextUtils.TruncateAt.END; includeFontPadding=false; gravity=Gravity.TOP or Gravity.START; setPadding(dp(3),dp(7),dp(3),0) }
-        val tags=text("",10.5f).apply { maxLines=1; minLines=1; minHeight=dp(18); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0); setTextColor(muted) }
+        val tags=text("",10.5f).apply { maxLines=1; minLines=1; minHeight=dp(18); ellipsize=null; setPadding(0,0,0,0); setTextColor(TvStyle.accent) }
         val badge=text("",12f).apply { maxLines=1; minLines=1; minHeight=dp(if(fixedSearchCard) 22 else 19); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,0,0) }
         card.addView(artwork,lp(-1,-2))
         card.addView(title,lp(-1,-2))
