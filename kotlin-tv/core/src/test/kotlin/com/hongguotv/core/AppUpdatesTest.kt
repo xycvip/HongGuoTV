@@ -131,10 +131,10 @@ class AppUpdatesTest {
         val o = json()
         o.getJSONObject("apk").put(
             "url",
-            "https://gitcode.com/xycvip/hongguotv/releases/download/hongguotv-v0.9.0+1/HongguoTV-0.9.0-build.1.apk"
+            "https://gitcode.com/xycvip/hongguotv/-/releases/hongguotv-v0.9.0+1/downloads/HongguoTV-0.9.0-build.1.apk"
         )
         assertEquals(
-            "https://gitcode.com/xycvip/hongguotv/releases/download/hongguotv-v0.9.0+1/HongguoTV-0.9.0-build.1.apk",
+            "https://gitcode.com/xycvip/hongguotv/-/releases/hongguotv-v0.9.0+1/downloads/HongguoTV-0.9.0-build.1.apk",
             AppUpdate.parse(o.toString()).downloadUrl
         )
         o.getJSONObject("apk").put("url", "https://gitcode.com/other/repo/releases/download/hongguotv-v0.9.0+1/HongguoTV-0.9.0-build.1.apk")
@@ -143,14 +143,14 @@ class AppUpdatesTest {
 
     @Test fun gitCodeLatestManifestRequiresLatestOfficialAttachAsset() {
         val tag = "hongguotv-v1.1.27"
-        val url = "https://gitcode.com/xycvip/hongguotv/releases/download/$tag/update.json"
+        val url = "https://gitcode.com/xycvip/hongguotv/-/releases/$tag/downloads/update.json"
         val release = JSONObject()
             .put("tag_name", tag)
             .put("prerelease", false)
             .put("release_status", "latest")
             .put("assets", org.json.JSONArray()
                 .put(JSONObject().put("name", "HongguoTV-1.1.27.apk").put("type", "attach")
-                    .put("browser_download_url", "https://gitcode.com/xycvip/hongguotv/releases/download/$tag/HongguoTV-1.1.27.apk"))
+                    .put("browser_download_url", "https://gitcode.com/xycvip/hongguotv/-/releases/$tag/downloads/HongguoTV-1.1.27.apk"))
                 .put(JSONObject().put("name", "update.json").put("type", "attach").put("browser_download_url", url)))
         assertEquals(url, gitCodeLatestReleaseManifestUrl(release, AppUpdate.OFFICIAL_TAG_PREFIX))
         assertNull(gitCodeLatestReleaseManifestUrl(release, AppUpdate.BETA_TAG_PREFIX))
