@@ -138,8 +138,13 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         .setRenderersFactory(renderers)
                         .setLoadControl(
                             DefaultLoadControl.Builder()
-                                .setBufferDurationsMs(2_000, 8_000, 1_000, 1_500)
-                                .setTargetBufferBytes(3 * 1024 * 1024)
+                                // B 接管后前几秒偶发卡顿：预加载阶段不能只满足首帧，
+                                // 还要尽量攒够连续播放所需的数据，避免刚接管就追网络。
+                                .setBufferDurationsMs(6_000, 18_000, 1_500, 3_500)
+                                .setTargetBufferBytes(8 * 1024 * 1024)
+                                // 双播放器设备已通过内存门槛；优先满足缓冲时长，
+                                // 避免 1080P 等高码率视频因小内存阈值提前停止加载。
+                                .setPrioritizeTimeOverSizeThresholds(true)
                                 .build()
                         )
                         .build()
