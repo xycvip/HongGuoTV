@@ -16,7 +16,7 @@ enum class RankBoard(
     val buttonLabel: String = "${label}榜",
     val sourceText: String = "来源：红果${label}热播榜"
 ) {
-    TOTAL("hot-drama","rank_hot-drama/page","","总","总榜","来源：红果热播榜"),
+    TOTAL("hot-drama","rank_hot-drama/page","","综合","综合榜","来源：红果热播榜"),
     REAL("hot-real-drama","rank_hot-real-drama/page","real","短剧"),
     AI("hot-ai-drama","rank_hot-ai-drama/page","ai","AI剧"),
     COMIC("hot-comic-drama","rank_hot-comic-drama/page","comic","漫剧");
