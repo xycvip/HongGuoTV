@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "c8e20594c50ae9c17794c6ebac7af1229e9313c9",
-  "versionCode": 26,
-  "versionName": "0.0.26",
+  "sourceCommit": "7fbea02d624acc7817b1873ed8be34094b0e8826",
+  "versionCode": 27,
+  "versionName": "0.0.27",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.26",
+  "tag": "hongguotv-bate-v0.0.27",
   "apk": {
-    "name": "HongguoTV-0.0.26.apk",
-    "size": 1955697,
-    "sha256": "4a007c9f4edea4e35fb2b31a5205bcc5daa4be24e20730f3989a3baf2a106820",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.26/HongguoTV-0.0.26.apk"
+    "name": "HongguoTV-0.0.27.apk",
+    "size": 1955765,
+    "sha256": "56d3f7c5a77e0b14304c3802a5115dff6c57eb36c501596a97d173461e297689",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.27/HongguoTV-0.0.27.apk"
   },
-  "notes": "【界面与交互】\n- ui: 修改导航栏首页文案"
+  "notes": "【播放与播放器】\n- fix: 增强B播放器接管后的初始缓冲\n【片源与数据管理】\n- revert: 恢复导航栏首页名称"
 }
