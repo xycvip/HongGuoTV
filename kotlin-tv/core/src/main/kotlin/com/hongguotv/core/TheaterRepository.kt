@@ -36,6 +36,41 @@ internal class TheaterRepository(
         values["version_name"]="7.3.5.32"
         return values
     }
+    private fun theaterRequest(profile:PlaybackDeviceSession.Profile,host:String,endpoint:String,body:ByteArray):JSONObject {
+        val values=theaterValues(profile)
+        val signer=Signer(values)
+        val signedBase=signer.sign("https://$host$endpoint",values,body)
+        val signed=if(profile.cookie.isBlank()) signedBase else signedBase.copy(headers=signedBase.headers + ("Cookie" to profile.cookie))
+        return JSONObject(requestText(signed.url,signed))
+    }
+    private fun theaterV1Body(type:ContentType?,selected:Map<String,String>,cursor:TheaterCursor,shown:Set<String>,panel:Boolean):ByteArray {
+        val scene=theaterScene(type)
+        if(panel) return JSONObject().apply {
+            put("req_scene",scene)
+            put("need_selector_panel",false)
+            put("req_type","only_panel")
+        }.toString().toByteArray(Charsets.UTF_8)
+        val select=JSONObject().apply {
+            put("category_dim_epoch",JSONArray().apply { selected["category_dim_epoch"]?.let { put(it) } })
+            put("online_time",JSONArray().apply { selected["online_time"]?.let { put(it) } })
+            put("gender",JSONArray().apply { selected["gender"]?.let { put(it) } })
+            put("category_dim_role",JSONArray().apply { selected["category_dim_role"]?.let { put(it) } })
+            put("genre",JSONArray().apply { theaterGenre(type).takeIf { it.isNotBlank() }?.let { put(it) } })
+            put("creation_status",JSONArray().apply { selected["creation_status"]?.let { put(it) } })
+            put("sort",JSONArray().apply { selected["sort"]?.let { put(it) } })
+            put("category_dim_theme",JSONArray().apply { selected["category_dim_theme"]?.let { put(it) } })
+        }
+        return JSONObject().apply {
+            put("filter_ids",shown.joinToString(","))
+            put("req_scene",scene)
+            put("offset",cursor.offset)
+            put("limit",18)
+            put("need_selector_panel",false)
+            put("select_items",select)
+            put("session_id",cursor.sessionId)
+            put("req_type","only_content")
+        }.toString().toByteArray(Charsets.UTF_8)
+    }
     /** Official App discovery/filter API. The website's SSR selectorList is deliberately not used here. */
     fun theater(page:Int=1,type:ContentType?=null,selected:Map<String,String> = emptyMap()):TheaterCatalogPage {
         require(page in 1..100)
@@ -58,18 +93,26 @@ internal class TheaterRepository(
                 put(field,JSONArray().apply { selected[field]?.let { put(it) } })
             }
         }
-        val body=JSONObject().apply {
+        val legacyBody=JSONObject().apply {
             put("filter_ids",synchronized(theaterSessions) { session.shown.joinToString(",") })
             put("req_scene",theaterScene(type))
             put("offset",cursor.offset)
             put("need_selector_panel",page==1)
             put("limit",15)
-            put("select_items",select)
+            val legacySelect=JSONObject().apply {
+                put("genre",JSONArray().apply { theaterGenre(type).takeIf { it.isNotBlank() }?.let { put(it) } })
+                put("sort",JSONArray().apply { selected["sort"]?.let { put(it) } })
+                for(field in listOf("category_dim_theme","category_dim_role","category_dim_epoch","gender","online_time","creation_status")) {
+                    put(field,JSONArray().apply { selected[field]?.let { put(it) } })
+                }
+            }
+            put("select_items",legacySelect)
             put("session_id",cursor.sessionId)
             put("req_type",if(page==1) "default" else "only_content")
             put("client_req_type",3)
         }.toString().toByteArray(Charsets.UTF_8)
-        val endpoint="/reading/distribution/category/landpage/v/"
+        val v1Endpoint="/reading/distribution/category/landpage/v1/"
+        val legacyEndpoint="/reading/distribution/category/landpage/v/"
         val hosts=listOf(
             "api5-normal-sinfonlinea.fqnovel.com",
             "api5-normal-sinfonlinec.fqnovel.com",
@@ -83,38 +126,51 @@ internal class TheaterRepository(
         var lastError:IOException?=null
         var sawEmpty=false
         var sawIdentityFailure=false
-        // Try all official hosts first. If they consistently return an empty body or reject the
-        // registered identity, refresh that anonymous identity exactly once and repeat the host set.
+        // Group 1: current v1 protocol (panel + content on the first page).
+        // Group 2: legacy v protocol, retained as a compatibility fallback.
         for(round in 0..1) {
-            val values=theaterValues(profile)
-            val requestSigner=Signer(values)
-            for(host in hosts) {
-                val signedBase=requestSigner.sign("https://$host$endpoint",values,body)
-                val signed=if(profile.cookie.isBlank()) signedBase else signedBase.copy(headers=signedBase.headers + ("Cookie" to profile.cookie))
-                try {
-                    val raw=requestText(signed.url,signed)
-                    val candidate=JSONObject(raw)
-                    val code=candidate.optInt("code",-1)
-                    if(code==0) {
-                        theaterLog.info("剧场接口命中域名 $host；轮次=${round+1}；响应字符数=${raw.length}；code=0")
-                        payload=candidate
-                        break
+            for(group in listOf("v1","v")) {
+                for(host in hosts) {
+                    try {
+                        val candidate=if(group=="v1") {
+                            val content=theaterRequest(profile,host,v1Endpoint,theaterV1Body(type,selected,cursor,session.shown.toSet(),false))
+                            val contentCode=content.optInt("code",-1)
+                            if(contentCode!=0) throw IOException("v1 内容请求业务码=$contentCode")
+                            if(page==1) {
+                                val panel=theaterRequest(profile,host,v1Endpoint,theaterV1Body(type,selected,cursor,session.shown.toSet(),true))
+                                val panelCode=panel.optInt("code",-1)
+                                if(panelCode!=0) throw IOException("v1 筛选面板请求业务码=$panelCode")
+                                val panelData=panel.optJSONObject("data") ?: throw IOException("v1 筛选面板缺少 data")
+                                val contentData=content.optJSONObject("data") ?: throw IOException("v1 内容请求缺少 data")
+                                contentData.put("selector_rows",panelData.optJSONArray("selector_rows") ?: throw IOException("v1 未返回 selector_rows"))
+                            }
+                            content
+                        } else {
+                            theaterRequest(profile,host,legacyEndpoint,legacyBody)
+                        }
+                        val code=candidate.optInt("code",-1)
+                        if(code==0) {
+                            theaterLog.info("剧场接口命中 $group 组域名 $host；轮次=${round+1}；code=0")
+                            payload=candidate
+                            break
+                        }
+                        lastError=IOException("$group 组 HTTP 200，code=$code")
+                        theaterLog.warning("剧场接口 $group 组域名 $host 返回业务错误：${lastError.message}")
+                    } catch(error:java.io.InterruptedIOException) {
+                        throw error
+                    } catch(error:Exception) {
+                        val failure=if(error is IOException) error else IOException("剧场响应解析失败：${error.message}",error)
+                        lastError=failure
+                        if(failure.message.orEmpty().contains("响应为空")) sawEmpty=true
+                        if(Regex("""HTTP\\s+(401|403)\\b""").containsMatchIn(failure.message.orEmpty())) sawIdentityFailure=true
+                        theaterLog.warning("剧场接口 $group 组域名 $host 失败；轮次=${round+1}；原因=${failure.message}")
                     }
-                    lastError=IOException("剧场接口 HTTP 200，响应字符数=${raw.length}，code=$code")
-                    theaterLog.warning("剧场接口域名 $host 返回业务错误：${lastError.message}")
-                } catch(error:java.io.InterruptedIOException) {
-                    throw error
-                } catch(error:Exception) {
-                    val failure=if(error is IOException) error else IOException("剧场响应解析失败：${error.message}",error)
-                    lastError=failure
-                    if(failure.message.orEmpty().contains("响应为空")) sawEmpty=true
-                    if(Regex("""HTTP\s+(401|403)\b""").containsMatchIn(failure.message.orEmpty())) sawIdentityFailure=true
-                    theaterLog.warning("剧场接口域名 $host 失败；轮次=${round+1}；原因=${failure.message}")
                 }
+                if(payload!=null) break
             }
             if(payload!=null) break
             if(round==0 && (sawEmpty || sawIdentityFailure)) {
-                theaterLog.info("剧场接口六个域名均未成功，检测到空响应/身份拒绝，重新注册匿名设备身份后重试一次")
+                theaterLog.info("剧场接口两组域名均未成功，检测到空响应/身份拒绝，重新注册匿名设备身份后重试一次")
                 profile=try {
                     playbackSession.renew(http)
                 } catch(error:IOException) {
