@@ -23,11 +23,13 @@ public final class FfmpegLibrary {
 
   // Set before the first isAvailable()/renderer initialization when using a downloaded runtime.
   private static volatile java.io.File runtimeLibraryDirectory;
+  private static volatile boolean loadAttempted;
 
   private static final LibraryLoader LOADER =
       new LibraryLoader("media3ext") {
         @Override
         protected void loadLibrary(String name) {
+          loadAttempted = true;
           java.io.File directory = runtimeLibraryDirectory;
           if (directory == null) {
             System.loadLibrary(name);
@@ -73,7 +75,7 @@ public final class FfmpegLibrary {
    * Pass null to use the normal APK jniLibs lookup.
    */
   public static void setRuntimeLibraryDirectory(@Nullable java.io.File directory) {
-    if (version != null || LOADER.isAvailable()) {
+    if (loadAttempted || version != null) {
       throw new IllegalStateException("FFmpeg libraries have already been initialized");
     }
     runtimeLibraryDirectory = directory;
