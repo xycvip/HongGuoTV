@@ -206,6 +206,12 @@ import java.util.concurrent.atomic.AtomicLong
                 if(tab==2) {
                     val firstPoster=recycler.findViewHolderForAdapterPosition(1)?.itemView
                     if(firstPoster?.isFocusable==true && firstPoster.isAttachedToWindow) {
+                        val selectedBoard=root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch
+                        val firstRowLastPosition=minOf(cols,displayed.size)
+                        // 顶部每张海报按上键都明确回到当前选中的榜单，避免焦点误跳到题材/刷新或导航栏。
+                        for(position in 1..firstRowLastPosition) {
+                            recycler.findViewHolderForAdapterPosition(position)?.itemView?.nextFocusUpId=selectedBoard?.id ?: View.NO_ID
+                        }
                         (listOfNotNull(rankSwitch,rankRefresh,genreButton,aiEntry,aiBack,aiGenreButton,genreClear) +
                             RankBoard.entries.mapNotNull { root.findViewWithTag<View>("rank:board:${it.name}") })
                             .forEach { it.nextFocusDownId=firstPoster.id }
