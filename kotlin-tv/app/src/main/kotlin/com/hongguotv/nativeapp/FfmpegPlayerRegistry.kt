@@ -14,7 +14,7 @@ import java.util.WeakHashMap
  * Owns one DecoderManager per ExoPlayer. Main and seamless standby players must
  * never share a manager because each manager is attached to exactly one player.
  */
-@UnstableApi
+@androidx.annotation.OptIn(UnstableApi::class)
 internal object FfmpegPlayerRegistry {
     data class Setup(
         val renderersFactory: DefaultRenderersFactory,
