@@ -237,7 +237,7 @@ import java.util.concurrent.atomic.AtomicLong
             page=requestPage
             hasMore=result.hasMore
             result.ranking?.let { r -> ranking=ComicRanking((ranking?.positions.orEmpty())+r.positions,r.totalPages,r.updatedText.ifBlank { ranking?.updatedText.orEmpty() }) }
-            if(requestTab==2 && !requestAi) rankSubtitle?.text=ranking?.updatedText?.ifBlank { "来源：红果${rankBoard.label}热播榜" } ?: "来源：红果${rankBoard.label}热播榜"
+            if(requestTab==2 && !requestAi) rankSubtitle?.text=ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
             val known=catalog.mapTo(HashSet()) { it.id }
             val fresh=result.items.filter { it.id !in known }
             catalog=catalog+result.items
