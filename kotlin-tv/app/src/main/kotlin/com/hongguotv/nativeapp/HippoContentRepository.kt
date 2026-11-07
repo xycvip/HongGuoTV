@@ -23,6 +23,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
     private val seriesCache = ConcurrentHashMap<String, Series>()
     private val lockedEpisodeIds = ConcurrentHashMap.newKeySet<String>()
     private val theatreCursors = ConcurrentHashMap<String, JSONObject>()
+    private val theatreGroupIds = ConcurrentHashMap<String, String>()
     private val rankingCursors = ConcurrentHashMap<String, String>()
 
     override fun home(page: Int, type: ContentType, genre: Genre?): CatalogPage {
@@ -40,17 +41,20 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
 
     override fun theater(page: Int, type: ContentType?, selected: Map<String, String>): TheaterCatalogPage {
         api.ensureInitialized()
-        val key = (type?.name ?: "ALL") + ":" + selected["channelGroupId"].orEmpty() + ":" + selected["channelId"].orEmpty()
+        val typeKey = type?.name ?: "ALL"
+        val requestedGroupId = selected["channelGroupId"]?.takeIf { it.isNotBlank() }
+            ?: theatreGroupIds[typeKey]?.takeIf { page > 1 }
+        val key = typeKey + ":" + requestedGroupId.orEmpty() + ":" + selected["channelId"].orEmpty()
         val previous = theatreCursors[key]
         val params = JSONObject()
-        selected["channelGroupId"]?.takeIf { it.isNotBlank() }?.let { params.put("channelGroupId", it) }
+        requestedGroupId?.let { params.put("channelGroupId", it) }
         selected["channelId"]?.takeIf { it.isNotBlank() }?.let { params.put("channelId", it.toIntOrNull() ?: it) }
         if (page > 1 && previous != null) {
             listOf("pageFlag", "fromColumnId", "fromItemId", "lastColumnStyle").forEach { field ->
                 if (previous.has(field) && !previous.isNull(field)) params.put(field, previous.opt(field))
             }
         }
-        val data = try { api.request("1125", params) } catch (first: Exception) {
+        var data = try { api.request("1125", params) } catch (first: Exception) {
             params.put("recSwitch", true).put("playListFlag", true)
             try { api.request("1121", params) } catch (second: Exception) {
                 second.addSuppressed(first); throw second
@@ -84,6 +88,21 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             else -> throw IOException("河马剧场未返回「${type?.label ?: "指定类型"}」分类，已阻止错误展示其他类型内容")
         }
         val selectedGroupId = selectedGroup?.let { value(it, "channelGroupId", "id") }.orEmpty()
+        if (selectedGroupId.isNotBlank()) {
+            theatreGroupIds[typeKey] = selectedGroupId
+            // 首次请求先读取分类元数据；若服务端默认勾选的不是目标类型，
+            // 必须带上真实 channelGroupId 再请求一次，不能只在本地选中分组却继续展示默认漫剧数据。
+            if (requestedGroupId != selectedGroupId) {
+                params.put("channelGroupId", selectedGroupId)
+                data = try { api.request("1125", params) } catch (first: Exception) {
+                    params.put("recSwitch", true).put("playListFlag", true)
+                    try { api.request("1121", params) } catch (second: Exception) {
+                        second.addSuppressed(first); throw second
+                    }
+                }
+            }
+        }
+        val resolvedKey = typeKey + ":" + selectedGroupId + ":" + selected["channelId"].orEmpty()
         val groupOptions = (if (type == null) groups else emptyList()).mapNotNull { group ->
             val id = value(group, "channelGroupId", "id")
             val label = value(group, "channelGroupName", "title")
@@ -103,7 +122,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             if (channelOptions.isNotEmpty()) add(TheaterFilterGroup("channelId", selectedGroup?.let { value(it, "channelGroupName", "title") } ?: "频道", channelOptions))
         }
         val columns = findList(data, "columnData")
-        theatreCursors[key] = JSONObject().also { cursor ->
+        theatreCursors[resolvedKey] = JSONObject().also { cursor ->
             listOf("pageFlag", "fromColumnId", "fromItemId").forEach { f -> if (data.has(f)) cursor.put(f, data.opt(f)) }
             columns.lastOrNull()?.optInt("styleType")?.takeIf { it > 0 }?.let { cursor.put("lastColumnStyle", it) }
         }
