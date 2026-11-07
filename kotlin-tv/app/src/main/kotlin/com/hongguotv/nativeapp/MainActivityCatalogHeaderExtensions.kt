@@ -151,7 +151,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         // 片源入口紧跟「红果账户」；headerContent/pageNav 均按实际子项宽度测量，整体自动居中。
         val showThirdSource=getSharedPreferences("appearance-settings-v1",android.content.Context.MODE_PRIVATE)
             .getBoolean("show_third_source",false)
-        if(showThirdSource) {
+        if(showThirdSource && activePlatform==ContentPlatform.REDFRUIT) {
             val sourceItem=addButton(pageNav,"片源",screen=="third_source") { openThirdSource() }
             sourceItem.textSize=if(compactHeader) 13.5f else 14f
             sourceItem.minHeight=dp(40)
