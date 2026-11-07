@@ -85,14 +85,22 @@ import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.replenishRandomPool(onDone: () -> Unit) {
         if(randomReplenishing || resettingAllData) return
+        val platformAtStart=activePlatform
+        val recommenderAtStart=randomRecommender
         randomReplenishing=true
         io.execute {
-            val added=runCatching { randomRecommender.replenish() }.getOrDefault(0)
+            val added=runCatching { recommenderAtStart.replenish() }.getOrDefault(0)
             if(added>0 && !resettingAllData) {
-                val encoded=RandomPoolSnapshot.encode(randomRecommender.snapshot(), System.currentTimeMillis())
-                getSharedPreferences(if(activePlatform==ContentPlatform.HIPPO) "hippo_random_pool" else "random_pool", Context.MODE_PRIVATE).edit().putString("pool", encoded).apply()
+                val encoded=RandomPoolSnapshot.encode(recommenderAtStart.snapshot(), System.currentTimeMillis())
+                val prefsName=if(platformAtStart==ContentPlatform.HIPPO) "hippo_random_pool" else "random_pool"
+                getSharedPreferences(prefsName, Context.MODE_PRIVATE).edit().putString("pool", encoded).apply()
             }
-            main.post { randomReplenishing=false; if(!isDestroyed && !resettingAllData) onDone() }
+            main.post {
+                if(activePlatform==platformAtStart) {
+                    randomReplenishing=false
+                    if(!isDestroyed && !resettingAllData) onDone()
+                }
+            }
         }
     }
 
