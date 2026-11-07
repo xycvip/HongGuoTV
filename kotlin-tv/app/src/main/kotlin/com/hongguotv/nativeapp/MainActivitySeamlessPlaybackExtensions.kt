@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** 清理备用播放器及其独立网络会话；不会触碰当前正在播放的主播放器。 */
-internal fun MainActivity.clearStandbyPlayer(reason: String) {
+internal fun MainActivity.clearStandbyPlayer(reason: String, releaseFfmpegHandoffOutput: Boolean = true) {
     val oldStandby = standbyPlayer
     val oldRemote = standbyRemote
     val oldOutput = standbyOutputView
@@ -36,11 +36,20 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
         runCatching { player.playWhenReady = false; player.stop(); player.clearMediaItems(); player.release() }
     }
     standbyPlayer = null
-    seamlessHandoffInProgress = false
+    val protectedFfmpegOutput = ffmpegHandoffOutputView
+    val keepProtectedFfmpegOutput = protectedFfmpegOutput != null && !releaseFfmpegHandoffOutput
+    if (!keepProtectedFfmpegOutput) seamlessHandoffInProgress = false
     standbyOutputView?.let { view ->
-        if (view.parent === root) root.removeView(view)
+        if (view !== protectedFfmpegOutput && view.parent === root) root.removeView(view)
     }
     standbyOutputView = null
+    if (protectedFfmpegOutput != null && releaseFfmpegHandoffOutput) {
+        debugLog("FFmpeg诊断[LIFECYCLE] 释放受保护输出面 reason=$reason output=${System.identityHashCode(protectedFfmpegOutput)}")
+        if (protectedFfmpegOutput.parent === root) root.removeView(protectedFfmpegOutput)
+        ffmpegHandoffOutputView = null
+    } else if (keepProtectedFfmpegOutput) {
+        debugLog("FFmpeg诊断[LIFECYCLE] 暂不释放接管中的 FFmpeg 输出面 reason=$reason output=${System.identityHashCode(protectedFfmpegOutput)}")
+    }
     standbyRemote?.close()
     standbyRemote = null
     closeTransport(standbyHttp)
@@ -49,12 +58,14 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
     standbyReady = false
     // 先清空所有双播放器状态，再恢复普通缓冲提示；否则旧目标 ID 会让隐藏条件仍成立。
     updatePlaybackBufferingIndicator()
-    standbyPrepareStartedAt = 0L
-    standbyReadyAt = 0L
-    standbyFirstFrameAt = 0L
-    standbyPromotionAt = 0L
-    standbyAttachedAt = 0L
-    standbyVisibleFirstFrameAt = 0L
+    if (!keepProtectedFfmpegOutput) {
+        standbyPrepareStartedAt = 0L
+        standbyReadyAt = 0L
+        standbyFirstFrameAt = 0L
+        standbyPromotionAt = 0L
+        standbyAttachedAt = 0L
+        standbyVisibleFirstFrameAt = 0L
+    }
     debugLog("无感连播：备用播放器已清理，原因=$reason")
 }
 
@@ -86,7 +97,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
         standbyOutputView != null ||
         standbyByteCounterEnabled != null ||
         standbyEpisodeId.isNotEmpty()
-    if (hasOldStandbyResources) clearStandbyPlayer("准备新的下一集")
+    if (hasOldStandbyResources) clearStandbyPlayer("准备新的下一集", releaseFfmpegHandoffOutput = false)
     standbyFallbackEpisodeId = ""
     standbyEpisodeId = key
     // 从解析下一集地址开始就视为双播放器准备中，不等 ExoPlayer 创建完成。
@@ -222,11 +233,12 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                             } else if (player === secondary && standbyPromotionAt > 0L && standbyVisibleFirstFrameAt == 0L) {
                                 // FFmpeg handoff keeps the warm-up surface alive until this
                                 // first frame confirms that PlayerView's visible surface works.
-                                if (standbyOutputView === output) {
-                                    debugLog("FFmpeg诊断[LIFECYCLE] 正式画面首帧已到，释放备用输出面 output=" + System.identityHashCode(output))
+                                if (ffmpegHandoffOutputView === output) {
+                                    debugLog("FFmpeg诊断[LIFECYCLE] 正式画面首帧已到，释放受保护的 FFmpeg 输出面 output=" + System.identityHashCode(output))
                                     if (output.parent === root) root.removeView(output)
-                                    standbyOutputView = null
+                                    ffmpegHandoffOutputView = null
                                 }
+                                if (standbyOutputView === output) standbyOutputView = null
                                 standbyVisibleFirstFrameAt = now
                                 val handoffAt = standbyPromotionAt
                                 // 首帧刚出现时，播放器可能紧接着再短暂报告 BUFFERING。

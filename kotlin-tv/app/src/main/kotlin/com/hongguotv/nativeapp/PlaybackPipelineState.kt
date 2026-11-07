@@ -36,6 +36,8 @@ internal class PlaybackPipelineState {
     var standbyFallbackEpisodeId: String = ""
     var standbyJob: Future<*>? = null
     var standbyOutputView: View? = null
+    /** FFmpeg 接管后仍由 Native 渲染链路引用的预热输出面。 */
+    var ffmpegHandoffOutputView: View? = null
     var standbyByteCounterEnabled: AtomicBoolean? = null
     var standbyPrepareStartedAt: Long = 0L
     var standbyReadyAt: Long = 0L

@@ -102,7 +102,13 @@ import java.util.concurrent.atomic.AtomicLong
             val keepStandbyOutputForFfmpeg =
                 promoted != null && FfmpegPlayerRegistry.currentVideoMode(promoted) == DecoderMode.FFMPEG
             if (keepStandbyOutputForFfmpeg) {
-                debugLog("FFmpeg诊断[LIFECYCLE] handoff 保留备用输出面，等待正式 PlayerView 首帧 output=" + standbyOutputView?.let { System.identityHashCode(it) })
+                // 若上一次 FFmpeg 接管尚未收到正式首帧而再次接管，旧播放器即将释放，
+                // 此时先释放旧播放器的受保护输出面，再保护本次接管的输出面。
+                ffmpegHandoffOutputView?.let { staleOutput ->
+                    if (staleOutput !== standbyOutputView && staleOutput.parent === root) root.removeView(staleOutput)
+                }
+                ffmpegHandoffOutputView = standbyOutputView
+                debugLog("FFmpeg诊断[LIFECYCLE] handoff 保留备用输出面，等待正式 PlayerView 首帧 output=" + ffmpegHandoffOutputView?.let { System.identityHashCode(it) })
             } else {
                 standbyOutputView?.let { output -> if(output.parent===root) root.removeView(output) }
                 standbyOutputView=null

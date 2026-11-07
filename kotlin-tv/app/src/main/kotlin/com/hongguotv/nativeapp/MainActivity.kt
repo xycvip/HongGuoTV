@@ -122,6 +122,7 @@ class MainActivity: Activity() {
     internal var standbyFallbackEpisodeId by playbackPipelineState::standbyFallbackEpisodeId
     internal var standbyJob by playbackPipelineState::standbyJob
     internal var standbyOutputView by playbackPipelineState::standbyOutputView
+    internal var ffmpegHandoffOutputView by playbackPipelineState::ffmpegHandoffOutputView
     internal var standbyByteCounterEnabled by playbackPipelineState::standbyByteCounterEnabled
     internal var standbyPrepareStartedAt by playbackPipelineState::standbyPrepareStartedAt
     internal var standbyReadyAt by playbackPipelineState::standbyReadyAt
