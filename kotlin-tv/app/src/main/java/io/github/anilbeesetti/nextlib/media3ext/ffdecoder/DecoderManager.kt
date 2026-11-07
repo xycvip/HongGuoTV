@@ -170,6 +170,8 @@ class DecoderManager(
         if (restart) {
             activeVideoMode = null
             activeAudioMode = null
+            activeVideoDecoderName = null
+            activeAudioDecoderName = null
             player.stop()
         }
         controller.apply(trackSelector)
