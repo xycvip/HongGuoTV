@@ -194,6 +194,10 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
 
 internal fun MainActivity.closeLibMpvTest(restorePlayback: Boolean = true) {
     val session = LibMpvTestOverlay.sessions.remove(this) ?: return
+    val returnPositionMs = if (restorePlayback) {
+        runCatching { (session.view.currentPositionSeconds() * 1000.0).toLong().coerceAtLeast(0L) }
+            .getOrDefault(session.positionMs)
+    } else session.positionMs
     runCatching { session.view.close() }
     if (session.view.parent === root) root.removeView(session.view)
     if (session.toolbar.parent === root) root.removeView(session.toolbar)
@@ -201,10 +205,10 @@ internal fun MainActivity.closeLibMpvTest(restorePlayback: Boolean = true) {
     hud.visibility = session.oldHudVisibility
     danmakuView?.visibility = session.oldDanmakuVisibility
     if (restorePlayback) {
-        player?.seekTo(session.positionMs)
+        player?.seekTo(returnPositionMs)
         if (session.resumeExo) player?.play()
         updatePlaybackText()
         syncMediaSession()
     }
-    debugLog("libmpv A/B 测试已结束，恢复 ExoPlayer position=${session.positionMs} resume=${session.resumeExo}")
+    debugLog("libmpv A/B 测试已结束，恢复 ExoPlayer position=$returnPositionMs resume=${session.resumeExo}")
 }
