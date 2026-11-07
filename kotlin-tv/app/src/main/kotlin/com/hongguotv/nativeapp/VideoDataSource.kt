@@ -13,7 +13,8 @@ import java.io.IOException
 class VideoDataSource(
     private val video: RemoteVideo,
     private val onBytesRead: (Int) -> Unit = {},
-    private val diagnostic: (String) -> Unit = {}
+    private val diagnostic: (String) -> Unit = {},
+    private val diagnosticKey: String = ""
 ): BaseDataSource(true) {
     private var bytesReadForSession=0L
     private var lastLoggedMiB=0L
