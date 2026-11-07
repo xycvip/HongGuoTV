@@ -103,6 +103,7 @@ import java.util.concurrent.atomic.AtomicLong
         val unknown=Color.rgb(238,190,55)
         listOf("首页","搜索","播放","联想").forEach { animateApiStatus(it,checking,"检测中") }
         val progress=runCatching { library.history().firstOrNull() }.getOrNull()
+        val playbackSource=playbackStreamSource(repository.http)
 
         fun probe(name: String,action: ()->String) {
             val started=android.os.SystemClock.elapsedRealtime()
@@ -146,7 +147,7 @@ import java.util.concurrent.atomic.AtomicLong
         if(progress==null) {
             setApiStatus("播放",unknown,"暂无观看记录，无法验证播放地址")
         } else {
-            probe("播放") { "已获取播放地址 · ${repository.stream(progress.episodeId,library.maxQuality).quality}" }
+            probe("播放") { "已获取播放地址 · ${playbackSource.stream(progress.episodeId,library.maxQuality).quality}" }
         }
         probe("联想") { "官方接口直连成功 · 返回 ${repository.probeSuggest("xx")} 个词（已绕过缓存）" }
     }
@@ -275,8 +276,8 @@ import java.util.concurrent.atomic.AtomicLong
         add("搜索") { "返回 ${repository.search("修仙",1,library.contentType).items.size} 条" }
         add("播放") {
             val progress=library.history().firstOrNull() ?: throw IllegalStateException("暂无观看记录，先播放一集")
-            val info=repository.stream(progress.episodeId,library.maxQuality)
-            "获取成功 · ${info.quality}"
+            val info=playbackStreamSource(repository.http).stream(progress.episodeId,library.maxQuality)
+            "获取成功 · ${info.quality}（${playbackApiLabel()}线路）"
         }
         add("联想") { "官方接口直连成功 · 返回 ${repository.probeSuggest("修仙")} 个词（已绕过缓存）" }
         actionButtons.forEachIndexed { index,btn ->
