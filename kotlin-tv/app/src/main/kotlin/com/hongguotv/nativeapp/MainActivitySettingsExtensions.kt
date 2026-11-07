@@ -287,7 +287,7 @@ import java.util.concurrent.atomic.AtomicLong
                 val position=currentPosition()
                 playEpisode(episodeIndex,position,autoplay=resume,forceRebuild=true)
             }
-            playbackApiButton.text="播放接口  ·  ${playbackApiLabel(next)}"
+            playbackApiButton.text="播放线路  ·  ${playbackApiLabel(next)}"
                     }
         defaultSpeed=setting(playback,0,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
         frame=setting(playback,0,"画面模式  ·  ${library.frameMode.label}") { showFramePicker(frame,false) }
