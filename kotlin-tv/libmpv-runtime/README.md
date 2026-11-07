@@ -11,7 +11,7 @@ This module embeds the **libmpv native playback engine**. It does not embed the 
 
 ## Build
 
-The workflow `libmpv原生运行库构建.yml` builds the upstream native dependencies for `armeabi-v7a` and `arm64-v8a`, extracts the native libraries from the upstream universal debug APK, then builds HongGuoTV with this module.
+The workflow `libmpv原生运行库构建.yml` checks out mpv-android at `255901dd586fa750000fa0075f69d6ffdd26cd9c` and builds the upstream native dependencies for `armeabi-v7a` and `arm64-v8a`, extracts the native libraries from the upstream universal debug APK, then builds HongGuoTV with this module.
 
 Native libraries are generated during CI and are not committed as opaque binaries.
 
@@ -21,4 +21,4 @@ The engine is isolated from Media3/ExoPlayer and the existing FFmpeg renderer. I
 
 ## Third-party source
 
-The JNI wrapper API is adapted from mpv-android (GPL-3.0). The upstream application UI is not included.
+The JNI wrapper API is adapted from [mpv-android](https://github.com/mpv-android/mpv-android/tree/255901dd586fa750000fa0075f69d6ffdd26cd9c) (GPL-3.0). The upstream application UI is not included.
