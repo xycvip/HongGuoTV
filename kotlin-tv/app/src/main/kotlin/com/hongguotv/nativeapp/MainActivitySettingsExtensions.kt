@@ -272,7 +272,7 @@ import java.util.concurrent.atomic.AtomicLong
             sleepActionButton.text="定时关闭·${sleepActionLabel(next)}"
         }
         qualityButton=setting(playback,0,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
-        playbackApiButton=setting(playback,0,"播放线路  ·  ${playbackApiLabel()}") {
+        playbackApiButton=setting(playback,0,playbackApiLabel()) {
             val next=if(playbackApiSelection()=="native") "phoenix" else "native"
             getSharedPreferences("playback-api-v1",Context.MODE_PRIVATE)
                 .edit().putString("source",next).apply()
@@ -287,7 +287,7 @@ import java.util.concurrent.atomic.AtomicLong
                 val position=currentPosition()
                 playEpisode(episodeIndex,position,autoplay=resume,forceRebuild=true)
             }
-            playbackApiButton.text="播放线路  ·  ${playbackApiLabel(next)}"
+            playbackApiButton.text=playbackApiLabel(next)
             Toast.makeText(this@settings,"线路已切换至 ${if(next=="phoenix") "Phoenix" else "Native"}",Toast.LENGTH_SHORT).show()
                     }
         defaultSpeed=setting(playback,0,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
