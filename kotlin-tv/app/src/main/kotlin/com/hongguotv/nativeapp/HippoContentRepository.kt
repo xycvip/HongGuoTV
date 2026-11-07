@@ -166,7 +166,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             val value = root.opt(keys.next())
             val found = when (value) {
                 is JSONObject -> findList(value, key)
-                is JSONArray -> value.objects().firstNotNullOfOrNull { findList(it, key).takeIf(List<*>::isNotEmpty) }.orEmpty()
+                is JSONArray -> value.objects().firstNotNullOfOrNull { findList(it, key).takeIf { rows -> rows.isNotEmpty() } }.orEmpty()
                 else -> emptyList()
             }
             if (found.isNotEmpty()) return found
