@@ -40,7 +40,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
 
     override fun theater(page: Int, type: ContentType?, selected: Map<String, String>): TheaterCatalogPage {
         api.ensureInitialized()
-        val key = selected["channelGroupId"].orEmpty() + ":" + selected["channelId"].orEmpty()
+        val key = (type?.name ?: "ALL") + ":" + selected["channelGroupId"].orEmpty() + ":" + selected["channelId"].orEmpty()
         val previous = theatreCursors[key]
         val params = JSONObject()
         selected["channelGroupId"]?.takeIf { it.isNotBlank() }?.let { params.put("channelGroupId", it) }
@@ -62,11 +62,28 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             val isBookGroup = value(group, "channelGroupType") == "2"
             !isBookGroup || seenBookGroups.add(value(group, "channelGroupName", "title").trim())
         }
-        val selectedGroupId = selected["channelGroupId"]
-            ?: groups.firstOrNull { it.optBoolean("checkedFlag") }?.let { value(it, "channelGroupId", "id") }
-            ?: groups.firstOrNull()?.let { value(it, "channelGroupId", "id") }.orEmpty()
-        val selectedGroup = groups.firstOrNull { value(it, "channelGroupId", "id") == selectedGroupId }
-            ?: groups.firstOrNull()
+        // 1125/1121 的 checkedFlag 是服务端默认分类，不能拿它覆盖用户选择的内容类型。
+        // 河马剧场按接口返回的真实分类名称定位 groupId；绝不把漫剧默认组当成真人剧。
+        fun matchesContentType(group: JSONObject, requested: ContentType): Boolean {
+            val name = value(group, "channelGroupName", "title").trim().lowercase()
+            return when (requested) {
+                ContentType.SHORT -> (name.contains("真人") || name.contains("短剧")) &&
+                    !name.contains("漫剧") && !name.contains("动漫") && !name.contains("ai")
+                ContentType.COMIC -> name.contains("漫剧") || name.contains("动漫") || name.contains("漫画")
+                ContentType.AI -> name.contains("ai") || name.contains("人工智能")
+            }
+        }
+        val explicitlySelectedGroup = selected["channelGroupId"]?.let { id ->
+            groups.firstOrNull { value(it, "channelGroupId", "id") == id }
+        }
+        val typedGroup = type?.let { requested -> groups.firstOrNull { matchesContentType(it, requested) } }
+        val selectedGroup = when {
+            explicitlySelectedGroup != null && (type == null || matchesContentType(explicitlySelectedGroup, type)) -> explicitlySelectedGroup
+            typedGroup != null -> typedGroup
+            type == null -> groups.firstOrNull { it.optBoolean("checkedFlag") } ?: groups.firstOrNull()
+            else -> throw IOException("河马剧场未返回「${type.label}」分类，已阻止错误展示其他类型内容")
+        }
+        val selectedGroupId = selectedGroup?.let { value(it, "channelGroupId", "id") }.orEmpty()
         val groupOptions = groups.mapNotNull { group ->
             val id = value(group, "channelGroupId", "id")
             val label = value(group, "channelGroupName", "title")
