@@ -130,6 +130,24 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             if(tabId==9) { navByTab[3]=item; navByTab[4]=item }
             pageNavItems+=item
         }
+        // 平台切换紧跟「红果账户」，切换的是整个平台上下文而不是单个栏目。
+        val platformItem=addButton(pageNav,"切换平台",activePlatform==ContentPlatform.HIPPO) { switchContentPlatform() }
+        platformItem.textSize=if(compactHeader) 13.5f else 14f
+        platformItem.minHeight=dp(40)
+        platformItem.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
+        fun paintPlatform(focused:Boolean) {
+            val active=activePlatform==ContentPlatform.HIPPO
+            platformItem.setTextColor(if(focused) bg else if(active) accent else muted)
+            platformItem.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
+            platformItem.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
+            platformItem.elevation=if(focused) dp(5).toFloat() else 0f
+        }
+        paintPlatform(false)
+        platformItem.setOnFocusChangeListener { _,focused -> paintPlatform(focused); if(focused) revealCatalogNavForFocus() }
+        nav+=platformItem
+        navByTab[10]=platformItem
+        pageNavItems+=platformItem
+
         // 片源入口紧跟「红果账户」；headerContent/pageNav 均按实际子项宽度测量，整体自动居中。
         val showThirdSource=getSharedPreferences("appearance-settings-v1",android.content.Context.MODE_PRIVATE)
             .getBoolean("show_third_source",false)
