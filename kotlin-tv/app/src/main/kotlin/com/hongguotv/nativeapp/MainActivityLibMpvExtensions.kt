@@ -121,6 +121,7 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
         override fun onState(state: String) {
             status.text = "libmpv · $state · 解码器：${mpv.currentHardwareDecoder()}"
             if (state == "ENDED" && LibMpvTestOverlay.sessions.containsKey(this@openLibMpvTest)) {
+                saveProgress(true)
                 val shouldContinue = foreground && requestedAutoplay && !pausedForLifecycle
                 closeLibMpvTest(restorePlayback = false)
                 when {
@@ -212,6 +213,7 @@ internal fun MainActivity.closeLibMpvTest(restorePlayback: Boolean = true) {
     danmakuView?.visibility = session.oldDanmakuVisibility
     if (restorePlayback) {
         player?.seekTo(returnPositionMs)
+        saveProgress()
         if (session.resumeExo) player?.play()
         updatePlaybackText()
         syncMediaSession()
