@@ -12,13 +12,32 @@ import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import java.util.WeakHashMap
+import java.util.concurrent.atomic.AtomicLong
 
-/** 每个 ExoPlayer 独占一个 DecoderManager；解码模式切换即时通知所有活动播放器。 */
+/** 只管理 FFmpeg 扩展管线；普通 MediaCodec Renderer 的选择逻辑保持原样。 */
 @androidx.annotation.OptIn(UnstableApi::class)
 internal object FfmpegPlayerRegistry {
     private const val TAG = "HongguoTV-Decoder"
-    data class Setup(val renderersFactory: DefaultRenderersFactory, internal val decoderManager: DecoderManager?)
+
+    data class CreationIdentity(
+        val id: Long,
+        val role: String,
+        val requestedMode: DecoderMode,
+        val runtimeReady: Boolean,
+        val rendererFactory: String,
+        val fallbackReason: String?,
+        val createdAtMs: Long
+    )
+
+    data class Setup(
+        val renderersFactory: DefaultRenderersFactory,
+        internal val decoderManager: DecoderManager?,
+        val identity: CreationIdentity
+    )
+
     private val managers = WeakHashMap<ExoPlayer, DecoderManager>()
+    private val identities = WeakHashMap<ExoPlayer, CreationIdentity>()
+    private val nextIdentity = AtomicLong(1L)
     @Volatile private var requestedVideoMode: DecoderMode = DecoderMode.AUTO
     @Volatile private var preferencesLoaded = false
     val videoMode: DecoderMode get() = requestedVideoMode
@@ -55,7 +74,22 @@ internal object FfmpegPlayerRegistry {
         }
     }
 
-    private fun mediaCodecSetup(context: Context, modeProvider: () -> DecoderMode): Setup {
+    private fun identity(
+        role: String,
+        mode: DecoderMode,
+        runtimeReady: Boolean,
+        factory: String,
+        fallback: String? = null
+    ) = CreationIdentity(
+        nextIdentity.getAndIncrement(), role, mode, runtimeReady, factory, fallback,
+        android.os.SystemClock.elapsedRealtime()
+    )
+
+    private fun mediaCodecSetup(
+        context: Context,
+        modeProvider: () -> DecoderMode,
+        identity: CreationIdentity
+    ): Setup {
         val selector = MediaCodecSelector { mimeType, secure, tunneling ->
             val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
             val mode = modeProvider()
@@ -66,25 +100,38 @@ internal object FfmpegPlayerRegistry {
                 else -> decoders.sortedBy { when { it.hardwareAccelerated -> 0; it.softwareOnly -> 1; else -> 2 } }
             }
         }
-        return Setup(DefaultRenderersFactory(context.applicationContext)
-            .setEnableDecoderFallback(true).setMediaCodecSelector(selector), null)
+        return Setup(
+            DefaultRenderersFactory(context.applicationContext)
+                .setEnableDecoderFallback(true)
+                .setMediaCodecSelector(selector),
+            null,
+            identity
+        )
     }
 
-    fun create(context: Context): Setup {
+    fun create(context: Context, role: String): Setup {
         loadPreferences(context)
-        if (!FfmpegRuntimeLoader.isReady) {
-            Log.i(TAG, "创建 MediaCodec 管线 mode=$requestedVideoMode ffmpegReady=false")
-            return mediaCodecSetup(context) { requestedVideoMode }
+        val modeAtCreation = requestedVideoMode
+        val runtimeReadyAtCreation = FfmpegRuntimeLoader.isReady
+        if (!runtimeReadyAtCreation) {
+            val created = identity(role, modeAtCreation, false, "DefaultRenderersFactory/MediaCodec", "FFmpeg runtime 未就绪")
+            Log.i(TAG, "播放器创建身份 role=$role id=${created.id} mode=$modeAtCreation runtimeReady=false factory=MediaCodec")
+            return mediaCodecSetup(context, { requestedVideoMode }, created)
         }
         return try {
-            val manager = DecoderManager(initialVideoMode = requestedVideoMode, initialAudioMode = DecoderMode.AUTO)
+            val manager = DecoderManager(initialVideoMode = modeAtCreation, initialAudioMode = DecoderMode.AUTO)
             val factory = NextRenderersFactory(context.applicationContext).setDecoderManager(manager)
-            Log.i(TAG, "创建 FFmpeg 管线 mode=$requestedVideoMode")
-            Setup(factory, manager)
+            val created = identity(role, modeAtCreation, true, "NextRenderersFactory+FFmpeg")
+            Log.i(TAG, "播放器创建身份 role=$role id=${created.id} mode=$modeAtCreation runtimeReady=true factory=NextRenderersFactory+FFmpeg")
+            Setup(factory, manager, created)
         } catch (problem: Throwable) {
-            Log.e(TAG, "创建 FFmpeg renderer 失败，降级到 MediaCodec mode=$requestedVideoMode", problem)
+            Log.e(TAG, "创建 FFmpeg renderer 工厂失败，降级到 MediaCodec mode=$modeAtCreation", problem)
             if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
-            mediaCodecSetup(context) { requestedVideoMode }
+            val created = identity(
+                role, modeAtCreation, true, "DefaultRenderersFactory/MediaCodec",
+                "FFmpeg Renderer 工厂创建异常：${problem.javaClass.simpleName}: ${problem.message}"
+            )
+            mediaCodecSetup(context, { requestedVideoMode }, created)
         }
     }
 
