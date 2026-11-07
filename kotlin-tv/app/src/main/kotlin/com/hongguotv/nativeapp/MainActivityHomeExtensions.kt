@@ -17,8 +17,10 @@ import com.hongguotv.core.*
         // 首页导航按下方向固定进入首页首排第一张海报。
         nav.forEach { it.nextFocusDownId=home.firstId() }
         if(focusNav) navByTab[0]?.requestFocus() else if(focusType) (genreButton ?: home.firstId().let { root.findViewById<View>(it) })?.requestFocus()
-        loadHomeShelf(if(library.contentType==ContentType.SHORT) ContentType.COMIC else ContentType.SHORT,false)
-        loadHomeShelf(ContentType.AI,false)
+        if(activePlatform==ContentPlatform.REDFRUIT) {
+            loadHomeShelf(if(library.contentType==ContentType.SHORT) ContentType.COMIC else ContentType.SHORT,false)
+            loadHomeShelf(ContentType.AI,false)
+        }
         if(hot.isNotEmpty() && !homeContentLogged) {
             homeContentLogged=true
             body.post { android.util.Log.i("HongguoTV","Home content ready cached=$homeFromCache elapsedMs=${android.os.SystemClock.elapsedRealtime()-activityStarted}") }
