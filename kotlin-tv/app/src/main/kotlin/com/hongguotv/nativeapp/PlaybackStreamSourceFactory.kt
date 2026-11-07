@@ -24,7 +24,8 @@ internal fun Context.playbackApiSelection(): String {
 }
 
 internal fun Context.playbackResourceKey(id: String, quality: Int): String =
-    "$id:$quality:${playbackApiSelection()}"
+    if (this is MainActivity) "$id:$quality:${activePlatform.id}:${if (activePlatform == ContentPlatform.HIPPO) "hippo" else playbackApiSelection()}"
+    else "$id:$quality:${playbackApiSelection()}"
 
 internal fun Context.playbackApiLabel(value: String = playbackApiSelection()): String =
     if (value == "phoenix") "线路首选 · Phoenix" else "线路首选 · Native"
@@ -100,6 +101,23 @@ internal class AutoFallbackStreamSource(
 }
 
 internal fun Context.playbackStreamSource(http: OkHttpClient): StreamSource {
+    // 河马播放必须使用其 1133 解析、设备注册身份和门户协议；禁止回退到红果 Native/Phoenix。
+    if (this is MainActivity && activePlatform == ContentPlatform.HIPPO) {
+        return object : StreamSource {
+            override val name: String = "hippo"
+            override fun stream(id: String, maxQuality: Int): StreamInfo {
+                debugLog("河马播放接口：开始解析 chapterId")
+                return try {
+                    repository.stream(id, maxQuality).also {
+                        debugLog("河马播放接口：解析成功，清晰度=" + it.quality)
+                    }
+                } catch (error: Exception) {
+                    debugLog("河马播放接口：解析失败，异常=" + error.javaClass.simpleName + "，原因=" + error.message)
+                    throw error
+                }
+            }
+        }
+    }
     val primaryApi = playbackApiSelection()
     val fallbackApi = if (primaryApi == "phoenix") "native" else "phoenix"
 
