@@ -228,15 +228,23 @@ import java.util.concurrent.atomic.AtomicLong
         syncMediaSession()
         val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
         val attachPrepared: (RemoteVideo) -> Unit = { remote ->
+            var attachStage = "收到播放资源"
+            try {
+            debugLog("播放资源获取成功 quality=${remote.info.quality} total=${remote.total}；当前解码模式=${FfmpegPlayerRegistry.videoMode}；FFmpeg ready=${FfmpegRuntimeLoader.isReady}")
             video=remote; quality=remote.info.quality
+            attachStage = "创建播放器与解码器管线"
             val p=player ?: run {
+                attachStage = "创建解码器 Renderer"
                 val ffmpegSetup=FfmpegPlayerRegistry.create(this)
+                debugLog("解码管线创建完成 mode=${FfmpegPlayerRegistry.videoMode} ffmpegReady=${FfmpegRuntimeLoader.isReady} manager=${ffmpegSetup.decoderManager!=null}")
                 val renderers=ffmpegSetup.renderersFactory
                 val preloadBuilder=DefaultPreloadManager.Builder(this) { _: Int ->
                     DefaultPreloadManager.PreloadStatus.specifiedRangeLoaded(3000)
                 }.setRenderersFactory(renderers).setLoadControl(buildPlaybackLoadControl())
+                attachStage = "创建 ExoPlayer"
                 preloadManager=preloadBuilder.build()
                 preloadBuilder.buildExoPlayer().also {
+                    attachStage = "附加解码器管理器"
                     FfmpegPlayerRegistry.attach(it,ffmpegSetup)
                     player=it; playerView?.player=it
                     it.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true)
@@ -362,8 +370,11 @@ import java.util.concurrent.atomic.AtomicLong
                 }
             }
             playerListener=listener; p.addListener(listener)
+            attachStage = "创建媒体资源"
             val source=prefetchedSource ?: videoSource(remote,requestedId)
+            debugLog("媒体资源创建完成 episodeId=$requestedId prefetched=${prefetchedSource!=null}")
             val introSkip=if(position<=0 && (skipMark?.introSeconds ?: 0)>0) skipMark!!.introSeconds*1000L else position.coerceAtLeast(0)
+            attachStage = "绑定媒体资源并启动解码"
             if(promoteStandby && p.currentMediaItem?.mediaId==requestedId) {
                 p.volume=1f
                 // 备用播放器已在第 0 毫秒预解码并渲染过首帧；无片头跳过时不要再 seekTo(0)。
@@ -380,6 +391,24 @@ import java.util.concurrent.atomic.AtomicLong
                 p.setMediaSource(source); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
             }
             if(introSkip>0 && position<=0) Toast.makeText(this,"已跳过片头 ${skipMark!!.introSeconds} 秒",Toast.LENGTH_SHORT).show()
+            debugLog("播放器 prepare 已提交 stage=完成 decoderMode=${FfmpegPlayerRegistry.videoMode}")
+            } catch (problem: Throwable) {
+                android.util.Log.e("HongguoTV-Playback", "播放初始化失败 stage=$attachStage mode=${FfmpegPlayerRegistry.videoMode} ffmpegReady=${FfmpegRuntimeLoader.isReady}", problem)
+                debugLogError("播放初始化失败 stage=$attachStage", problem)
+                runCatching {
+                    playerListener?.let { player?.removeListener(it) }
+                    playerListener = null
+                    playerView?.player = null
+                    FfmpegPlayerRegistry.detach(player)
+                    player?.release()
+                }.onFailure { android.util.Log.e("HongguoTV-Playback", "失败播放器释放异常", it) }
+                player = null
+                video = null
+                runCatching { remote.close() }
+                if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
+                runCatching { playerFailure(problem) }
+                    .onFailure { android.util.Log.e("HongguoTV-Playback", "播放失败界面处理再次异常", it) }
+            }
         }
         if(promoteStandby) {
             // 备用 RemoteVideo 与播放器均已准备完成，直接在主线程接管，不再绕进 IO 工作队列。
