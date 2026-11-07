@@ -19,7 +19,9 @@ internal fun <T> MainActivity.work(action: ()->T,done: (T)->Unit,failed: (Throwa
                 else if(foreground) done(result)
                 else { deferredWork?.discard?.invoke(); deferredWork=DeferredUi({ done(result) },discard) }
             }
-        } catch(e: Exception) {
+        } catch(e: Throwable) {
+            android.util.Log.e("HongguoTV-Async", "后台播放任务失败 type=${e.javaClass.name} message=${e.message}", e)
+            if(e is VirtualMachineError || e is ThreadDeath) throw e
             main.post {
                 if(!isDestroyed && generation==ticket) {
                     if(foreground) failed(e) else deferredWork=DeferredUi({ failed(e) })
