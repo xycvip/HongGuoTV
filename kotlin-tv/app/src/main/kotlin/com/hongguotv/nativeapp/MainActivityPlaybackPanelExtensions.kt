@@ -96,6 +96,7 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
             decoderButtons[mode]=button
         }
         refreshDecoderButtons()
+        addButton(secondaryTransport, "libmpv测试") { openLibMpvTest() }
 
         lateinit var qualityButton: TextView
         qualityButton=addButton(secondaryTransport,"画质") { showQualityPicker(qualityButton,true) }
