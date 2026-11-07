@@ -44,7 +44,9 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
             secondaryTransport=transport
             controls.addView(primaryStrip,lp(-1,-2))
         }
-        addButton(transport,"评论") { openOfficialComments(transport.findViewWithTag<View>("player:comments")) }.apply { tag="player:comments" }
+        if(activePlatform==ContentPlatform.REDFRUIT) {
+            addButton(transport,"评论") { openOfficialComments(transport.findViewWithTag<View>("player:comments")) }.apply { tag="player:comments" }
+        }
         val play=addButton(transport,if(player?.playWhenReady==true) "暂停" else "播放") { togglePlayback() }.also { transportPlay=it }
         addButton(transport,"重播") { playEpisode(episodeIndex,0,autoplay=true,forceRebuild=true) }
         addButton(transport,"上集") { if(episodeIndex>0) playEpisode(episodeIndex-1) }.apply { isEnabled=episodeIndex>0; isFocusable=episodeIndex>0; alpha=if(episodeIndex>0) 1f else .4f }
