@@ -152,13 +152,23 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             val id = value(row, "id", "playListId")
             val title = value(row, "mainTitle", "name", "title")
             if (id.isBlank() || title.isBlank()) null else {
-                val subtitle = value(row, "subTitle", "subtitle")
+                val subtitle = value(row, "subTitle", "subtitle", "description")
+                // 1115 的剧单对象未必提供独立封面；Flutter 原版从 bookInfoVoList 读取成员，
+                // 因此优先取剧单显式封面，缺失时回退第一部短剧的封面。
+                val firstDrama = findList(row, "bookInfoVoList").firstOrNull()
+                val cover = value(
+                    row, "coverWap", "coverCutWap", "coverUrl", "cover", "pic",
+                    "coverImg", "imageUrl", "imgUrl", "playlistCover", "playListCover"
+                ).ifBlank {
+                    firstDrama?.let { value(it, "coverWap", "coverCutWap", "coverUrl", "chapterImg") }.orEmpty()
+                }
+                val dramaCount = findList(row, "bookInfoVoList").size
                 Series(
                     id = "hippo-playlist:$id",
                     title = title,
-                    cover = value(row, "coverWap", "coverUrl", "cover", "pic"),
+                    cover = cover,
                     description = subtitle,
-                    badge = if (row.optBoolean("showSort") || row.optInt("showSort") == 1) "排行榜单" else "精选剧单",
+                    badge = if (dramaCount > 0) "$dramaCount 部短剧" else if (row.optBoolean("showSort") || row.optInt("showSort") == 1) "排行榜单" else "精选剧单",
                     tags = "河马剧单"
                 )
             }
