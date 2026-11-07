@@ -118,11 +118,13 @@ internal fun MainActivity.videoSource(
     remote: RemoteVideo,
     id: String,
     includeInPlaybackStats: () -> Boolean = { true },
-    diagnostic: (String) -> Unit = {}
+    diagnostic: (String) -> Unit = {},
+    diagnosticKey: String = ""
 ) = ProgressiveMediaSource.Factory {
     VideoDataSource(
         remote,
         { count -> if (includeInPlaybackStats()) playbackBytes.addAndGet(count.toLong()) },
-        diagnostic
+        diagnostic,
+        diagnosticKey
     )
 }.createMediaSource(videoItem(id))
