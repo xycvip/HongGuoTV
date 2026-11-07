@@ -23,6 +23,9 @@ class RemoteVideo(
     data class Range(val bytes: ByteArray,val total: Long)
     var total: Long=0; private set
     private lateinit var prepared: MediaCrypto.Prepared
+
+    /** Number of CENC samples prepared for the current media resource. */
+    val preparedSampleCount: Int get() = if (::prepared.isInitialized) prepared.samples.size else 0
     private val lock=Object()
     private val cache=HashMap<Long,ByteArray>()
     private var fetchingRead=-1L
