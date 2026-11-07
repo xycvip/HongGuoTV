@@ -134,6 +134,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
 
     override fun stream(id: String, maxQuality: Int): StreamInfo {
         val (bookId, chapterId) = decodeEpisodeId(id)
+        if (chapterId.isBlank()) throw IOException("河马播放请求缺少 chapterId")
         api.ensureInitialized()
         val data = api.request("1133", JSONObject().put("bookId", bookId).put("chapterId", chapterId)
             .put("unClockType", "pay").put("confirmPay", 1).put("autoPayFlag", false))
@@ -200,7 +201,9 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
     private fun decodeEpisodeId(id: String): Pair<String, String> {
         val decoded = runCatching { String(Base64.decode(id, Base64.NO_WRAP or Base64.URL_SAFE)) }.getOrNull()
         val parts = decoded?.split('\u0000', limit = 2)
-        if (parts == null || parts.size != 2 || parts.any { it.isBlank() }) throw IOException("河马剧集标识无效")
+        // 详情入口传入原始 bookId；播放入口才传入编码后的 bookId/chapterId。
+        if (parts == null) return id to ""
+        if (parts.size != 2 || parts.any { it.isBlank() }) throw IOException("河马剧集标识无效")
         return parts[0] to parts[1]
     }
     private fun value(row: JSONObject, vararg keys: String): String = keys.firstNotNullOfOrNull { key ->
