@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "7743fb5261328239181e10c67fb0cb74d498a6cc",
-  "versionCode": 35,
-  "versionName": "0.0.35",
+  "sourceCommit": "64332dfb11c3e5e4c37c389b3cfcfb797929d6b3",
+  "versionCode": 36,
+  "versionName": "0.0.36",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.35",
+  "tag": "hongguotv-bate-v0.0.36",
   "apk": {
-    "name": "HongguoTV-0.0.35.apk",
-    "size": 1986845,
-    "sha256": "8fa30091626afc7c7f2a1b1e0af06db654e15d5db995c287ed6870996267ce29",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.35/HongguoTV-0.0.35.apk"
+    "name": "HongguoTV-0.0.36.apk",
+    "size": 1999993,
+    "sha256": "3c698001ef6856ef2f5ae55ab7bb73c292aec39d81ee91b68cd98e3489441ef3",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.36/HongguoTV-0.0.36.apk"
   },
-  "notes": "【播放与播放器】\n- 调整播放线路首选项说明文案\n- 将播放线路标签统一改为线路首选\n- 仅保留播放线路切换成功提示\n- 将播放接口设置文案统一改为播放线路\n- ui: 更新播放接口名称与设置说明\n- test: 覆盖播放接口自动故障切换逻辑\n- feat: 本地播放接口失败自动切换并记忆成功线路\n【网络与接口】\n- fix: 隔离 Phoenix 与原生接口的 CookieJar\n【调试与诊断】\n- ui: 统一调试面板 Phoenix 名称\n- ui: 统一诊断中的 Native 名称\n- fix: 防止诊断回调异常中断自动切换\n【界面与交互】\n- 统一 Native 线路优先显示文案"
+  "notes": "【播放与播放器】\n- 修正播放线路设置说明标题\n- 修正播放线路首选项显示文案\n【其他功能与问题修复】\n- feat: add isolated Hippo platform alongside Redfruit"
 }
