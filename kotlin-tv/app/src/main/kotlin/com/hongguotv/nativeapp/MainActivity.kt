@@ -988,7 +988,7 @@ class MainActivity: Activity() {
         favoriteMonitor.destroy(); tvTools.destroy(); updater.destroy(); if(!resettingAllData) saveProgress(); cloudAccount.destroy(); releasePlayer(); thirdSourceScreen?.release(); thirdSourceScreen=null; redfruitLibrary.close(); hippoLibrary.close()
         artwork.close(); releaseCatalogViews(); mediaSession.release(); main.removeCallbacksAndMessages(null)
         io.shutdownNow(); prefetchWorker.shutdownNow(); networkCleanup.shutdown(); debugLogExecutor.shutdown()
-        Thread({ repository.http.dispatcher.cancelAll(); repository.http.connectionPool.evictAll(); repository.http.dispatcher.executorService.shutdown() },"hongguotv-network-cleanup").start()
+        Thread({ listOf(redfruitRepository.http,hippoRepository.http).distinct().forEach { client -> client.dispatcher.cancelAll(); client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown() } },"hongguotv-network-cleanup").start()
         super.onDestroy()
         if(killOnDestroy) android.os.Process.killProcess(android.os.Process.myPid())
     }
