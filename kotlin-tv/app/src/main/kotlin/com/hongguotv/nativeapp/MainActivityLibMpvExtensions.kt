@@ -116,10 +116,14 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
     action("软件解码") { mpv.setHardwareMode(LibMpvPlaybackView.HardwareMode.SOFTWARE) }
     action("切回系统播放器") { switchToSystemPlayer() }
 
+    var firstMpvPositionReported = false
     mpv.listener = object : LibMpvPlaybackView.Listener {
         override fun onState(state: String) {
             status.text = "libmpv · $state · 解码器：${mpv.currentHardwareDecoder()}"
             if (state == "ENDED" && LibMpvTestOverlay.sessions.containsKey(this@openLibMpvTest)) {
+                val endedPositionMs = (mpv.currentPositionSeconds() * 1000.0).toLong()
+                if (endedPositionMs > 0L) player?.seekTo(endedPositionMs)
+                saveProgress(true)
                 val shouldContinue = foreground && requestedAutoplay && !pausedForLifecycle
                 closeLibMpvTest(restorePlayback = false)
                 when {
@@ -135,6 +139,11 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
             }
         }
         override fun onPosition(positionSeconds: Double, durationSeconds: Double) {
+            if (!firstMpvPositionReported) {
+                firstMpvPositionReported = true
+                hideBootSplash()
+                markStartupRecommendationPlaying()
+            }
             if (durationSeconds > 0.0) {
                 status.text = "libmpv · ${formatTime((positionSeconds * 1000).toLong())} / ${formatTime((durationSeconds * 1000).toLong())} · ${mpv.currentHardwareDecoder()}"
             }
@@ -194,6 +203,10 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
 
 internal fun MainActivity.closeLibMpvTest(restorePlayback: Boolean = true) {
     val session = LibMpvTestOverlay.sessions.remove(this) ?: return
+    val returnPositionMs = if (restorePlayback) {
+        runCatching { (session.view.currentPositionSeconds() * 1000.0).toLong() }
+            .getOrNull()?.takeIf { it > 0L } ?: session.positionMs
+    } else session.positionMs
     runCatching { session.view.close() }
     if (session.view.parent === root) root.removeView(session.view)
     if (session.toolbar.parent === root) root.removeView(session.toolbar)
@@ -201,10 +214,11 @@ internal fun MainActivity.closeLibMpvTest(restorePlayback: Boolean = true) {
     hud.visibility = session.oldHudVisibility
     danmakuView?.visibility = session.oldDanmakuVisibility
     if (restorePlayback) {
-        player?.seekTo(session.positionMs)
+        player?.seekTo(returnPositionMs)
+        saveProgress()
         if (session.resumeExo) player?.play()
         updatePlaybackText()
         syncMediaSession()
     }
-    debugLog("libmpv A/B 测试已结束，恢复 ExoPlayer position=${session.positionMs} resume=${session.resumeExo}")
+    debugLog("libmpv A/B 测试已结束，恢复 ExoPlayer position=$returnPositionMs resume=${session.resumeExo}")
 }
