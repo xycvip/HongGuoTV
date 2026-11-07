@@ -96,7 +96,7 @@ class MainActivity: Activity() {
     internal val platformUiState = PlatformUiState()
     internal var activePlatform by platformUiState::active
     internal val redfruitRepository by lazy { ContentRepository() }
-    internal val hippoRepository by lazy { HippoContentRepository(this, redfruitRepository.http) { if (::hippoLibrary.isInitialized) hippoLibrary.history().map { "${it.series.id}_${it.episodeIndex}" } else emptyList() } }
+    internal val hippoRepository by lazy { HippoContentRepository(this, watchRecords = { if (::hippoLibrary.isInitialized) hippoLibrary.history().map { "${it.series.id}_${it.episodeIndex}" } else emptyList() }) }
     internal val repository: ContentRepository
         get() = if (activePlatform == ContentPlatform.HIPPO) hippoRepository else redfruitRepository
     internal val redfruitRandomRecommender by lazy {
