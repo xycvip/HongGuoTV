@@ -288,10 +288,7 @@ import java.util.concurrent.atomic.AtomicLong
                 playEpisode(episodeIndex,position,autoplay=resume,forceRebuild=true)
             }
             playbackApiButton.text="播放接口  ·  ${playbackApiLabel(next)}"
-            Toast.makeText(this@settings,
-                if(next=="phoenix") "已切换 Phoenix 线路，旧线路任务已清理" else "已切换原生线路，旧线路任务已清理",
-                Toast.LENGTH_LONG).show()
-        }
+                    }
         defaultSpeed=setting(playback,0,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
         frame=setting(playback,0,"画面模式  ·  ${library.frameMode.label}") { showFramePicker(frame,false) }
         videoRendererButton=setting(playback,0,"渲染方式  ·  ${videoRendererModeLabel()}") {
