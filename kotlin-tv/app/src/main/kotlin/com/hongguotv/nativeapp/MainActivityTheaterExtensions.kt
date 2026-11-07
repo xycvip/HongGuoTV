@@ -61,6 +61,7 @@ import com.hongguotv.core.*
                             if(group.type in setOf("category_dim_theme","category_dim_role","category_dim_epoch","creation_status")) {
                                 listOf("category_dim_theme","category_dim_role","category_dim_epoch","creation_status").forEach { theaterSelections.remove(it) }
                             }
+                            if(group.type=="channelGroupId") theaterSelections.remove("channelId")
                             theaterSelections[group.type]=option.id; page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true)
                         }
                     }
