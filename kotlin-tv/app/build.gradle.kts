@@ -41,6 +41,8 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(project(":core")) { exclude(group = "org.json") }
+    // libmpv 独立播放内核；不替换 Media3/ExoPlayer 或 FFmpeg 实现。
+    implementation(project(":libmpv-runtime"))
     // Media3 统一使用 1.11.1，避免 ExoPlayer / HLS / UI 模块版本不一致。
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
