@@ -281,6 +281,7 @@ import java.util.concurrent.atomic.AtomicLong
             cancelPrefetch()
             clearStandbyPlayer("播放线路切换")
             apiStatusUiState.checkBatchId++
+            apiStatusUiState.cancelPlaybackProbes()
             if(screen=="player" && player!=null && detail!=null) {
                 val resume=player?.playWhenReady==true
                 val position=currentPosition()
