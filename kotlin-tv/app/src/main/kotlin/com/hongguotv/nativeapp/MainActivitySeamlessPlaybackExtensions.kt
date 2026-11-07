@@ -23,6 +23,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** 清理备用播放器及其独立网络会话；不会触碰当前正在播放的主播放器。 */
 internal fun MainActivity.clearStandbyPlayer(reason: String) {
+    val oldStandby = standbyPlayer
+    val oldRemote = standbyRemote
+    val oldOutput = standbyOutputView
+    debugLog("FFmpeg诊断[LIFECYCLE] clearStandby reason=$reason B=${oldStandby?.let { System.identityHashCode(it) }} BState=${oldStandby?.playbackState} BMedia=${oldStandby?.currentMediaItem?.mediaId} BPosition=${oldStandby?.currentPosition} BPlayWhenReady=${oldStandby?.playWhenReady} remote=${oldRemote?.let { System.identityHashCode(it) }} output=${oldOutput?.let { System.identityHashCode(it) }} outputState=${when(oldOutput) { is SurfaceView -> "SurfaceView valid=${oldOutput.holder.surface?.isValid}"; is TextureView -> "TextureView available=${oldOutput.isAvailable}"; else -> "none" }} A=${player?.let { System.identityHashCode(it) }} AState=${player?.playbackState} AMedia=${player?.currentMediaItem?.mediaId}")
     standbyJob?.cancel(true)
     standbyJob = null
     standbyByteCounterEnabled?.set(false)
@@ -174,6 +178,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         is SurfaceView -> secondary.setVideoSurfaceView(output)
                     }
 
+                    debugLog("FFmpeg诊断[LIFECYCLE] B created player=${System.identityHashCode(secondary)} remote=${System.identityHashCode(prepared)} output=${System.identityHashCode(output)} outputState=${when(output) { is SurfaceView -> "SurfaceView valid=${output.holder.surface?.isValid}"; is TextureView -> "TextureView available=${output.isAvailable}"; else -> "unknown" }} A=${player?.let { System.identityHashCode(it) }} AState=${player?.playbackState}")
                     secondary.addAnalyticsListener(object : AnalyticsListener {
                         override fun onVideoDecoderInitialized(
                             eventTime: AnalyticsListener.EventTime,
@@ -208,6 +213,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
 
                         override fun onRenderedFirstFrame() {
                             val now = android.os.SystemClock.elapsedRealtime()
+                            debugLog("FFmpeg诊断[LIFECYCLE] B firstFrame player=${System.identityHashCode(secondary)} state=${secondary.playbackState} position=${secondary.currentPosition} surface=${System.identityHashCode(output)} surfaceState=${when(output) { is SurfaceView -> "valid=${output.holder.surface?.isValid}"; is TextureView -> "available=${output.isAvailable}"; else -> "unknown" }} promoted=${player === secondary}")
                             if (standbyPlayer === secondary && standbyEpisodeId == key) {
                                 if (standbyFirstFrameAt == 0L) {
                                     standbyFirstFrameAt = now
@@ -236,6 +242,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                             if (standbyPlayer !== secondary && player !== secondary) return
                             debugLog("FFmpeg诊断[B][$id] PlayerError code=${error.errorCode} name=${error.errorCodeName} message=${error.message}")
+                            debugLog("FFmpeg诊断[LIFECYCLE] B error snapshot player=${System.identityHashCode(secondary)} state=${secondary.playbackState} position=${secondary.currentPosition} buffered=${secondary.bufferedPosition} playWhenReady=${secondary.playWhenReady} media=${secondary.currentMediaItem?.mediaId} remote=${standbyRemote?.let { System.identityHashCode(it) }} output=${System.identityHashCode(output)} outputState=${when(output) { is SurfaceView -> "valid=${output.holder.surface?.isValid}"; is TextureView -> "available=${output.isAvailable}"; else -> "unknown" }} A=${player?.let { System.identityHashCode(it) }} AState=${player?.playbackState} AMedia=${player?.currentMediaItem?.mediaId}")
                             debugLog("无感连播：备用播放器准备失败 ${error.errorCodeName} ${error.message}")
                             clearStandbyPlayer("备用播放器准备失败")
                             standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
