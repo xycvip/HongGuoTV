@@ -100,8 +100,8 @@ class LibMpvPlaybackView @JvmOverloads constructor(
             MPVLib.addObserver(this)
             MPVLib.addLogObserver(this)
             pendingUrl = localUrl
-            holder.addCallback(this)
             initialized = true
+            holder.addCallback(this)
             post { requestFocus() }
             Log.i(TAG, "libmpv initialized mode=$mode url=$localUrl")
         } catch (problem: Throwable) {
