@@ -358,7 +358,9 @@ import java.util.concurrent.atomic.AtomicLong
                 if(selected==DecoderMode.FFMPEG && !FfmpegRuntimeLoader.isReady) {
                     Toast.makeText(this@settings,"FFmpeg 运行库尚未安装，请在下方运行库管理中下载",Toast.LENGTH_LONG).show()
                 } else {
+                    val previousMode=FfmpegPlayerRegistry.videoMode
                     FfmpegPlayerRegistry.setVideoMode(this@settings,selected)
+                    debugLog("用户切换视频解码模式：$previousMode -> $selected；FFmpeg ready=${FfmpegRuntimeLoader.isReady}；当前播放器=${player!=null}；当前解码器=${activeDecoderName.ifBlank { "尚未初始化" }}")
                     videoDecoderButton.text="视频解码方式  ·  ${decoderModeLabel(selected)}"
                     val note=if(FfmpegRuntimeLoader.isReady)
                         "已切换为${decoderModeLabel(selected)}"
