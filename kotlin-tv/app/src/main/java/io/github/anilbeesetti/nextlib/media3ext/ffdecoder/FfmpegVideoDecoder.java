@@ -72,6 +72,11 @@ final class FfmpegVideoDecoder extends
         int rotation = format.rotationDegrees % 360;
         rotationDegrees = rotation % 90 == 0 ? (rotation + 360) % 360 : 0;
         nativeContext = ffmpegInitialize(codecName, extraData, threads);
+        android.util.Log.i("HongguoTV-FFmpegSurface",
+                "decoder initialized decoder=" + System.identityHashCode(this)
+                        + " context=0x" + Long.toHexString(nativeContext)
+                        + " codec=" + codecName + " threads=" + threads
+                        + " format=" + format.width + "x" + format.height);
         if (nativeContext == 0) {
             throw new FfmpegDecoderException("Failed to initialize decoder.");
         }
@@ -206,6 +211,9 @@ final class FfmpegVideoDecoder extends
             for (VideoDecoderOutputBuffer outputBuffer : outputBuffers) {
                 releaseNativeFrame(outputBuffer);
             }
+            android.util.Log.i("HongguoTV-FFmpegSurface",
+                    "decoder release decoder=" + System.identityHashCode(this)
+                            + " context=0x" + Long.toHexString(nativeContext));
             ffmpegRelease(nativeContext);
             nativeContext = 0;
         }
@@ -225,11 +233,20 @@ final class FfmpegVideoDecoder extends
         if (outputBuffer.mode != C.VIDEO_OUTPUT_MODE_SURFACE_YUV) {
             throw new FfmpegDecoderException("Invalid output mode.");
         }
-        if (ffmpegRenderFrame(
+        int renderResult = ffmpegRenderFrame(
                 nativeContext, surface,
                 outputBuffer, outputBuffer.width, outputBuffer.height,
-                rotationDegrees) == VIDEO_DECODER_ERROR_OTHER) {
-            throw new FfmpegDecoderException("Buffer render error: ");
+                rotationDegrees);
+        if (renderResult == VIDEO_DECODER_ERROR_OTHER) {
+            android.util.Log.e("HongguoTV-FFmpegSurface",
+                    "Java render failure decoder=" + System.identityHashCode(this)
+                            + " nativeContext=0x" + Long.toHexString(nativeContext)
+                            + " surface=0x" + Integer.toHexString(System.identityHashCode(surface))
+                            + " surfaceValid=" + surface.isValid()
+                            + " frame=" + outputBuffer.width + "x" + outputBuffer.height
+                            + " rotation=" + rotationDegrees
+                            + " outputMode=" + outputBuffer.mode);
+            throw new FfmpegDecoderException("Buffer render error (native stage in logcat).");
         }
     }
 
