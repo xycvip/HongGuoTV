@@ -220,6 +220,13 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                                     debugLog("无感连播：备用播放器隐藏输出已渲染首帧，距准备开始=${now - standbyPrepareStartedAt}ms，距 READY=${if (standbyReadyAt > 0L) now - standbyReadyAt else -1L}ms")
                                 }
                             } else if (player === secondary && standbyPromotionAt > 0L && standbyVisibleFirstFrameAt == 0L) {
+                                // FFmpeg handoff keeps the warm-up surface alive until this
+                                // first frame confirms that PlayerView's visible surface works.
+                                if (standbyOutputView === output) {
+                                    debugLog("FFmpeg诊断[LIFECYCLE] 正式画面首帧已到，释放备用输出面 output=" + System.identityHashCode(output))
+                                    if (output.parent === root) root.removeView(output)
+                                    standbyOutputView = null
+                                }
                                 standbyVisibleFirstFrameAt = now
                                 val handoffAt = standbyPromotionAt
                                 // 首帧刚出现时，播放器可能紧接着再短暂报告 BUFFERING。
