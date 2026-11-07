@@ -70,6 +70,7 @@ internal fun MainActivity.switchContentPlatform() {
     searchHotLoaded = false
     searchHotLoading = false
     theaterFocusTag = ""
+    theaterContentType = null
     theaterFiltersByType.clear()
     theaterSelections.clear()
     aiCatalog = false
