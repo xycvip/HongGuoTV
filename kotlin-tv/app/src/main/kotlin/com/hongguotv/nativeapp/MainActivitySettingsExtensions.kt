@@ -276,9 +276,19 @@ import java.util.concurrent.atomic.AtomicLong
             val next=if(playbackApiSelection()=="native") "phoenix" else "native"
             getSharedPreferences("playback-api-v1",Context.MODE_PRIVATE)
                 .edit().putString("source",next).apply()
+            PlaybackApiDebugState.select(next)
+            // 线路切换时丢弃旧线路的请求、单播放器预加载和隐藏备用播放器。
+            cancelPrefetch()
+            clearStandbyPlayer("播放线路切换")
+            apiStatusUiState.checkBatchId++
+            if(screen=="player" && player!=null && detail!=null) {
+                val resume=player?.playWhenReady==true
+                val position=currentPosition()
+                playEpisode(episodeIndex,position,autoplay=resume,forceRebuild=true)
+            }
             playbackApiButton.text="播放接口  ·  ${playbackApiLabel(next)}"
             Toast.makeText(this@settings,
-                if(next=="phoenix") "已选择 Phoenix 接口；仅影响新开始的播放" else "已选择原生接口；仅影响新开始的播放",
+                if(next=="phoenix") "已切换 Phoenix 线路，旧线路任务已清理" else "已切换原生线路，旧线路任务已清理",
                 Toast.LENGTH_LONG).show()
         }
         defaultSpeed=setting(playback,0,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
