@@ -5,6 +5,7 @@ import android.graphics.Typeface
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ScrollView
+import android.widget.TextView
 
 /** 河马平台的本机资料页；不展示红果云账户、二维码或云端同步状态。 */
 internal fun MainActivity.renderHippoAccountContent(host: FrameLayout) {
@@ -22,7 +23,8 @@ internal fun MainActivity.renderHippoAccountContent(host: FrameLayout) {
     val historyButton = addButton(body, "观看历史 · ${history.size}") { switchTab(4) }
     historyButton.nextFocusUpId = favoriteButton.id
     if (history.isNotEmpty()) {
-        val clear = addButton(body, "清空河马观看记录") {
+        lateinit var clear: TextView
+        clear = addButton(body, "清空河马观看记录") {
             tvTools.confirm("清空河马观看记录", "只删除河马剧场本机观看进度，不影响红果历史、收藏和账户。", clear) {
                 library.clearHistory()
                 showCatalog()
