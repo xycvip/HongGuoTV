@@ -29,6 +29,15 @@ class DecoderManager(
     var activeVideoMode: DecoderMode? = null
         private set
 
+    /** Actual initialized decoder names, retained for handoff diagnostics. */
+    @Volatile
+    var activeVideoDecoderName: String? = null
+        private set
+
+    @Volatile
+    var activeAudioDecoderName: String? = null
+        private set
+
     /** The audio decoder mode currently initialized by the player. */
     @Volatile
     var activeAudioMode: DecoderMode? = null
@@ -52,6 +61,7 @@ class DecoderManager(
             initializedTimestampMs: Long,
             initializationDurationMs: Long,
         ) {
+            activeVideoDecoderName = decoderName
             activeVideoMode = controller.activeMode(decoderName)
         }
 
@@ -61,6 +71,7 @@ class DecoderManager(
             initializedTimestampMs: Long,
             initializationDurationMs: Long,
         ) {
+            activeAudioDecoderName = decoderName
             activeAudioMode = controller.activeMode(decoderName)
         }
 
@@ -71,6 +82,7 @@ class DecoderManager(
             decoderReuseEvaluation: DecoderReuseEvaluation?,
         ) {
             if (decoderReuseEvaluation != null && decoderReuseEvaluation.result != DecoderReuseEvaluation.REUSE_RESULT_NO) {
+                activeVideoDecoderName = decoderReuseEvaluation.decoderName
                 activeVideoMode = controller.activeMode(decoderReuseEvaluation.decoderName)
             }
         }
@@ -81,6 +93,7 @@ class DecoderManager(
             decoderReuseEvaluation: DecoderReuseEvaluation?,
         ) {
             if (decoderReuseEvaluation != null && decoderReuseEvaluation.result != DecoderReuseEvaluation.REUSE_RESULT_NO) {
+                activeAudioDecoderName = decoderReuseEvaluation.decoderName
                 activeAudioMode = controller.activeMode(decoderReuseEvaluation.decoderName)
             }
         }
@@ -90,6 +103,7 @@ class DecoderManager(
             decoderCounters: DecoderCounters,
         ) {
             activeVideoMode = null
+            activeVideoDecoderName = null
         }
 
         override fun onAudioDisabled(
@@ -97,6 +111,7 @@ class DecoderManager(
             decoderCounters: DecoderCounters,
         ) {
             activeAudioMode = null
+            activeAudioDecoderName = null
         }
     }
 
@@ -135,6 +150,8 @@ class DecoderManager(
         trackSelector = null
         activeVideoMode = null
         activeAudioMode = null
+        activeVideoDecoderName = null
+        activeAudioDecoderName = null
     }
 
     private fun select(trackType: Int, mode: DecoderMode) {
@@ -143,6 +160,9 @@ class DecoderManager(
         val trackSelector = checkNotNull(trackSelector)
         val previousMode = controller.mode(trackType)
         if (previousMode == mode) return
+        if (trackType == C.TRACK_TYPE_VIDEO) {
+            android.util.Log.i("HongguoTV-FFmpeg", "Renderer 动态切换前 player=${System.identityHashCode(player)} media=${player.currentMediaItem?.mediaId} requested=$previousMode active=$activeVideoMode decoder=$activeVideoDecoderName target=$mode")
+        }
 
         if (trackType == C.TRACK_TYPE_VIDEO) controller.videoMode = mode else controller.audioMode = mode
         val restart = previousMode.requiresMediaCodecRestart(mode)
@@ -154,6 +174,9 @@ class DecoderManager(
         }
         controller.apply(trackSelector)
         if (shouldPrepare) player.prepare()
+        if (trackType == C.TRACK_TYPE_VIDEO) {
+            android.util.Log.i("HongguoTV-FFmpeg", "Renderer 动态切换已提交 player=${System.identityHashCode(player)} media=${player.currentMediaItem?.mediaId} requested=${controller.videoMode} active=$activeVideoMode decoder=$activeVideoDecoderName state=${player.playbackState} restart=$restart")
+        }
     }
 }
 
