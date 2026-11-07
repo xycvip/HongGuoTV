@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "e824277bc3690852df1551c73525378ab356358d",
-  "versionCode": 38,
-  "versionName": "0.0.38",
+  "sourceCommit": "ae91a905e836b24700aa427bbfdc100db30fdc4f",
+  "versionCode": 39,
+  "versionName": "0.0.39",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.38",
+  "tag": "hongguotv-bate-v0.0.39",
   "apk": {
-    "name": "HongguoTV-0.0.38.apk",
-    "size": 2001081,
-    "sha256": "9f8fd209cda576986e2df7173fd45acdabb934cda6431828f616d0b5acc0998d",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.38/HongguoTV-0.0.38.apk"
+    "name": "HongguoTV-0.0.39.apk",
+    "size": 2001077,
+    "sha256": "3b2a8f00c35e075c2a9c53d696f03868058518a1dbb102e64b52fe494e9eacae",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.39/HongguoTV-0.0.39.apk"
   },
-  "notes": "【网络与接口】\n- feat: 河马排行榜接入剧单接口 1115/1116"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
