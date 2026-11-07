@@ -1,3 +1,3 @@
 # libplayer.so resolves JNI methods by their exact Java class and method names.
--keep class is.xyz.mpv.MPVLib { *; }
+-keep class com.x.hongguotv.libmpv.LibMpvNativeBridge { *; }
 -keepclasseswithmembernames class * { native <methods>; }
