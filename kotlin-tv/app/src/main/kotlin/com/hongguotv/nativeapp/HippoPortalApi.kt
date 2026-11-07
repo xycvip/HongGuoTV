@@ -21,8 +21,8 @@ internal class HippoPortalApi(context: Context, private val http: OkHttpClient) 
     private val deviceId = prefs.getString("utdid", null) ?: UUID.randomUUID().toString().replace("-", "").also { prefs.edit().putString("utdid", it).apply() }
     private val tempId = prefs.getString("utdidTmp", null) ?: ("A" + java.text.SimpleDateFormat("yyyyMMddHHmmssSSS", java.util.Locale.US).format(java.util.Date()) + UUID.randomUUID().toString().take(6)).also { prefs.edit().putString("utdidTmp", it).apply() }
     private val installTime = prefs.getLong("installTime", 0L).takeIf { it > 0L } ?: System.currentTimeMillis().also { prefs.edit().putLong("installTime", it).apply() }
-    private var userId = prefs.getString("userId", "").orEmpty()
-    private var initialized = prefs.getBoolean("initialized", false)
+    @Volatile private var userId = prefs.getString("userId", "").orEmpty()
+    @Volatile private var initialized = prefs.getBoolean("initialized", false)
     @Volatile private var initializationAttempted = false
 
     @Synchronized fun ensureInitialized() {
