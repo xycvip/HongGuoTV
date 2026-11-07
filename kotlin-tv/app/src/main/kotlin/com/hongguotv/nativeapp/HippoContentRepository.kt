@@ -81,10 +81,10 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             explicitlySelectedGroup != null && (type == null || matchesContentType(explicitlySelectedGroup, type)) -> explicitlySelectedGroup
             typedGroup != null -> typedGroup
             type == null -> groups.firstOrNull { it.optBoolean("checkedFlag") } ?: groups.firstOrNull()
-            else -> throw IOException("河马剧场未返回「${type.label}」分类，已阻止错误展示其他类型内容")
+            else -> throw IOException("河马剧场未返回「${type?.label ?: "指定类型"}」分类，已阻止错误展示其他类型内容")
         }
         val selectedGroupId = selectedGroup?.let { value(it, "channelGroupId", "id") }.orEmpty()
-        val groupOptions = groups.mapNotNull { group ->
+        val groupOptions = (if (type == null) groups else emptyList()).mapNotNull { group ->
             val id = value(group, "channelGroupId", "id")
             val label = value(group, "channelGroupName", "title")
             if (id.isBlank() || label.isBlank()) null else TheaterFilterOption(id, label)
