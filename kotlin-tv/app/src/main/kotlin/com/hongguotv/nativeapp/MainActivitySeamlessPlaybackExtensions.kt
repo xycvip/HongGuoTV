@@ -273,11 +273,12 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     standbyRemote = prepared
                     standbyPlayer = secondary
                     updatePlaybackBufferingIndicator()
+                    val bDataSourceKey = if (FfmpegPlayerRegistry.isFfmpegManaged(secondary)) "B:${System.identityHashCode(secondary)}:$id" else ""
                     secondary.setMediaSource(videoSource(
                         prepared, id,
                         includeInPlaybackStats = { counterGate.get() },
-                        diagnostic = { event -> debugLog("FFmpeg诊断[B][$id] $event") },
-                        diagnosticKey = "B:${System.identityHashCode(secondary)}:$id"
+                        diagnostic = { event -> if (bDataSourceKey.isNotBlank()) debugLog("FFmpeg诊断[B][$id] $event") },
+                        diagnosticKey = bDataSourceKey
                     ))
                     secondary.prepare()
                     debugLog("无感连播：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
