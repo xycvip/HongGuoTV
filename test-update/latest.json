@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "64332dfb11c3e5e4c37c389b3cfcfb797929d6b3",
-  "versionCode": 36,
-  "versionName": "0.0.36",
+  "sourceCommit": "96381d7e2f01d6fb622c0a9aaad7a60a6f9a714a",
+  "versionCode": 37,
+  "versionName": "0.0.37",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.36",
+  "tag": "hongguotv-bate-v0.0.37",
   "apk": {
-    "name": "HongguoTV-0.0.36.apk",
+    "name": "HongguoTV-0.0.37.apk",
     "size": 1999993,
-    "sha256": "3c698001ef6856ef2f5ae55ab7bb73c292aec39d81ee91b68cd98e3489441ef3",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.36/HongguoTV-0.0.36.apk"
+    "sha256": "b70d22e2cffb3780c7949a94566e9d55df271095895b7f4780182cf0df1cd6cf",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.37/HongguoTV-0.0.37.apk"
   },
-  "notes": "【播放与播放器】\n- 修正播放线路设置说明标题\n- 修正播放线路首选项显示文案\n【其他功能与问题修复】\n- feat: add isolated Hippo platform alongside Redfruit"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
