@@ -43,8 +43,11 @@ internal object FfmpegPlayerRegistry {
         Log.i(TAG, "动态切换视频解码模式：$previous -> $mode；活动 FFmpeg 播放器=${managers.size}")
         managers.entries.toList().forEach { (player, manager) ->
             try {
+                val playerId = System.identityHashCode(player)
+                val before = "requested=${manager.videoMode} active=${manager.activeVideoMode} decoder=${manager.activeVideoDecoderName}"
+                Log.i(TAG, "动态切换前 player=$playerId media=${player.currentMediaItem?.mediaId} $before -> target=$mode")
                 manager.selectVideoDecoder(mode)
-                Log.i(TAG, "动态切换已提交 player=${System.identityHashCode(player)} mode=$mode state=${player.playbackState}")
+                Log.i(TAG, "动态切换已提交 player=$playerId media=${player.currentMediaItem?.mediaId} before={$before} after=requested=${manager.videoMode} active=${manager.activeVideoMode} decoder=${manager.activeVideoDecoderName} state=${player.playbackState}")
             } catch (problem: Throwable) {
                 Log.e(TAG, "动态切换解码模式失败 player=${System.identityHashCode(player)} mode=$mode", problem)
                 if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
