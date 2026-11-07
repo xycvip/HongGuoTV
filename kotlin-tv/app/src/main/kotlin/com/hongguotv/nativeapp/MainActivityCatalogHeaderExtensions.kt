@@ -290,53 +290,72 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
 }
 
 internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav: List<View>,loading: Boolean) {
+    val boardRow=row().apply { setPadding(0,0,0,dp(8)); gravity=android.view.Gravity.CENTER_VERTICAL }
+    if(activePlatform==ContentPlatform.HIPPO) {
+        boardRow.addView(text("河马精选剧单",16f).apply { setTypeface(null,android.graphics.Typeface.BOLD) },lp(0,dp(42)).apply { weight=1f })
+        rankRefresh=addButton(boardRow,"刷新") {
+            pendingRefreshFocus="rank:refresh"
+            rankFocusTag="rank:refresh"
+            page=1
+            catalogFocus=""
+            showCatalog(true)
+        }.apply {
+            tag="rank:refresh"
+            nextFocusUpId=navForTab().id
+        }
+        rankSwitch=rankRefresh
+        container.addView(boardRow)
+        rankSubtitle=text(if(loading) "正在读取河马官方剧单…" else "选择剧单卡片，查看合集中的短剧",13f,muted).apply { setPadding(0,0,0,dp(8)) }
+        container.addView(rankSubtitle)
+        nav.forEach { it.nextFocusDownId=rankRefresh?.id ?: View.NO_ID }
+        return
+    }
 
-            // 排行榜页直接从榜单筛选栏开始，不再显示重复的「热播榜」标题及其占位空间。
-            val boardRow=row().apply { setPadding(0,0,0,dp(8)) }
-            val boardFocusItems=mutableListOf<View>()
-            listOf(RankBoard.TOTAL, RankBoard.REAL, RankBoard.AI, RankBoard.COMIC).forEachIndexed { index, board ->
-                val focusTag = "rank:board:${board.name}"
-                val boardButton=addButton(boardRow, board.buttonLabel, rankBoard == board) {
-                    if (rankBoard != board) {
-                        pendingRefreshFocus=focusTag
-                        rankFocusTag=focusTag
-                        rankBoard=board
-                        aiCatalog=false
-                        aiGenre=null
-                        page=1
-                        catalogFocus=""
-                        tabState.remove(2)
-                        tabFocus.remove(2)
-                        showCatalog(true)
-                    }
-                }.apply {
-                    tag=focusTag
-                    nextFocusUpId=navForTab().id
-                }
-                boardFocusItems+=boardButton
-                if(index==0) rankSwitch=boardButton
-            }
-            genreButton=addButton(boardRow,genre?.let { "题材 · ${it.name}" } ?: "题材") { showGenrePicker() }.apply {
-                tag="rank:genre"
-                nextFocusUpId=navForTab().id
-            }.also { boardFocusItems+=it }
-            rankRefresh=addButton(boardRow,"刷新") {
-                pendingRefreshFocus="rank:refresh"
-                rankFocusTag="rank:refresh"
+    // 红果保留原有榜单类型与题材筛选。
+    val boardFocusItems=mutableListOf<View>()
+    listOf(RankBoard.TOTAL, RankBoard.REAL, RankBoard.AI, RankBoard.COMIC).forEachIndexed { index, board ->
+        val focusTag = "rank:board:${board.name}"
+        val boardButton=addButton(boardRow, board.buttonLabel, rankBoard == board) {
+            if (rankBoard != board) {
+                pendingRefreshFocus=focusTag
+                rankFocusTag=focusTag
+                rankBoard=board
+                aiCatalog=false
+                aiGenre=null
                 page=1
                 catalogFocus=""
+                tabState.remove(2)
+                tabFocus.remove(2)
                 showCatalog(true)
-            }.apply {
-                tag="rank:refresh"
-                nextFocusUpId=navForTab().id
-            }.also { boardFocusItems+=it }
-            boardFocusItems.forEachIndexed { index, view ->
-                view.nextFocusLeftId=boardFocusItems.getOrNull(index-1)?.id ?: view.id
-                view.nextFocusRightId=boardFocusItems.getOrNull(index+1)?.id ?: view.id
             }
-            container.addView(boardRow)
-            val defaultSource=rankBoard.sourceText
-            rankSubtitle=text(if(loading) "正在读取最新榜单…" else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,13f,muted).apply { setPadding(0,0,0,dp(8)) }
-            container.addView(rankSubtitle)
-            nav.forEach { it.nextFocusDownId=boardRow.getChildAt(0)?.id ?: View.NO_ID }
+        }.apply {
+            tag=focusTag
+            nextFocusUpId=navForTab().id
+        }
+        boardFocusItems+=boardButton
+        if(index==0) rankSwitch=boardButton
+    }
+    genreButton=addButton(boardRow,genre?.let { "题材 · ${it.name}" } ?: "题材") { showGenrePicker() }.apply {
+        tag="rank:genre"
+        nextFocusUpId=navForTab().id
+    }.also { boardFocusItems+=it }
+    rankRefresh=addButton(boardRow,"刷新") {
+        pendingRefreshFocus="rank:refresh"
+        rankFocusTag="rank:refresh"
+        page=1
+        catalogFocus=""
+        showCatalog(true)
+    }.apply {
+        tag="rank:refresh"
+        nextFocusUpId=navForTab().id
+    }.also { boardFocusItems+=it }
+    boardFocusItems.forEachIndexed { index, view ->
+        view.nextFocusLeftId=boardFocusItems.getOrNull(index-1)?.id ?: view.id
+        view.nextFocusRightId=boardFocusItems.getOrNull(index+1)?.id ?: view.id
+    }
+    container.addView(boardRow)
+    val defaultSource=rankBoard.sourceText
+    rankSubtitle=text(if(loading) "正在读取最新榜单…" else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,13f,muted).apply { setPadding(0,0,0,dp(8)) }
+    container.addView(rankSubtitle)
+    nav.forEach { it.nextFocusDownId=boardRow.getChildAt(0)?.id ?: View.NO_ID }
 }
