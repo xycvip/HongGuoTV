@@ -565,7 +565,7 @@ class MainActivity: Activity() {
             openDetail(remote.series, true)
         }
         cloudAccount.onHistoryChanged = {
-            if (library.isLoaded && !isDestroyed) cloudAccount.syncLocalFavorites(library.favorites())
+            if (activePlatform==ContentPlatform.REDFRUIT && library.isLoaded && !isDestroyed) cloudAccount.syncLocalFavorites(library.favorites())
             // History sync may emit several callbacks while the account page is visible.
             // Do not tear down and rebuild the whole account view tree here: doing so
             // repeatedly changes measured height, scroll position and focus, causing
