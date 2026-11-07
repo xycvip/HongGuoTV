@@ -82,24 +82,27 @@ import java.util.concurrent.atomic.AtomicLong
         if(!force && startupHomeRefreshStarted) return
         if(!force) startupHomeRefreshStarted=true
         homeRefreshInFlight=true
-        val type=library.contentType
+        val platformAtStart=activePlatform
+        val libraryAtStart=library
+        val repositoryAtStart=repository
+        val type=libraryAtStart.contentType
         io.execute {
-            val loaded=runCatching { repository.home(1,type,null) }
+            val loaded=runCatching { repositoryAtStart.home(1,type,null) }
             main.post {
+                if(activePlatform!=platformAtStart) return@post
                 homeRefreshInFlight=false
                 if(isDestroyed || resettingAllData) return@post
                 loaded.onSuccess { resultPage ->
-                    library.cacheHome(type,resultPage.items,resultPage.hasMore)
-                    if(library.contentType==type && tab==0 && collection==null && genre==null && screen=="catalog") {
+                    libraryAtStart.cacheHome(type,resultPage.items,resultPage.hasMore)
+                    if(libraryAtStart.contentType==type && tab==0 && collection==null && genre==null && screen=="catalog") {
                         if(page==1) {
                             catalog=resultPage.items; hasMore=resultPage.hasMore; homeFromCache=false
                             homeScreen?.updateShelves(homeShelves(),requestFocus=false)
                         }
                     }
-                    android.util.Log.i("HongguoTV","Background home refresh completed force=$force items=${resultPage.items.size}")
+                    android.util.Log.i("HongguoTV","Background home refresh completed platform=${platformAtStart.id} force=$force items=${resultPage.items.size}")
                 }.onFailure { problem ->
-                    // 保留已有缓存与首页模型；后台刷新失败不打断用户操作。
-                    android.util.Log.i("HongguoTV","Background home refresh failed; cached content retained: ${problem.message}")
+                    android.util.Log.i("HongguoTV","Background home refresh failed platform=${platformAtStart.id}; cached content retained: ${problem.message}")
                 }
             }
         }
