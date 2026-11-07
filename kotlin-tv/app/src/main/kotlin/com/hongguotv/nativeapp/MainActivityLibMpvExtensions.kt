@@ -215,6 +215,7 @@ internal fun MainActivity.closeLibMpvTest(restorePlayback: Boolean = true) {
     danmakuView?.visibility = session.oldDanmakuVisibility
     if (restorePlayback) {
         player?.seekTo(returnPositionMs)
+        danmakuView?.seekTo(returnPositionMs)
         saveProgress()
         if (session.resumeExo) player?.play()
         updatePlaybackText()
