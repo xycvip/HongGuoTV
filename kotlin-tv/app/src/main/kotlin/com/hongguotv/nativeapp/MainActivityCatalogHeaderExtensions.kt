@@ -307,7 +307,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
         container.addView(boardRow)
         rankSubtitle=text(if(loading) "正在读取河马官方剧单…" else "选择剧单卡片，查看合集中的短剧",13f,muted).apply { setPadding(0,0,0,dp(8)) }
         container.addView(rankSubtitle)
-        nav.forEach { it.nextFocusDownId=rankRefresh.id }
+        nav.forEach { it.nextFocusDownId=rankRefresh?.id ?: View.NO_ID }
         return
     }
 
