@@ -73,8 +73,9 @@ import java.util.concurrent.atomic.AtomicLong
         if(promoteStandby) {
             val oldPlayer=player
             val promoted=standbyPlayer
-            val rendererIdentityBeforeHandoff = FfmpegPlayerRegistry.identitySnapshot(promoted)
-            debugLog("FFmpeg诊断[HANDOFF] 接管前 $rendererIdentityBeforeHandoff")
+            val rendererIdentityBeforeHandoff = FfmpegPlayerRegistry.rendererIdentitySnapshot(promoted)
+            val decoderStateBeforeHandoff = FfmpegPlayerRegistry.identitySnapshot(promoted)
+            debugLog("FFmpeg诊断[HANDOFF] 接管前 $rendererIdentityBeforeHandoff decoderState=$decoderStateBeforeHandoff")
             playerListener?.let { oldPlayer?.removeListener(it) }
             playerListener=null
             seamlessHandoffInProgress=true
@@ -97,8 +98,9 @@ import java.util.concurrent.atomic.AtomicLong
             player=promoted
             // 让 PlayerView 在一次 setPlayer 中完成输出面交接，避免先置空造成额外黑屏。
             playerView?.player=promoted
-            val rendererIdentityAfterHandoff = FfmpegPlayerRegistry.identitySnapshot(promoted)
-            debugLog("FFmpeg诊断[HANDOFF] 接管后 $rendererIdentityAfterHandoff rendererIdentityChanged=${rendererIdentityBeforeHandoff != rendererIdentityAfterHandoff}")
+            val rendererIdentityAfterHandoff = FfmpegPlayerRegistry.rendererIdentitySnapshot(promoted)
+            val decoderStateAfterHandoff = FfmpegPlayerRegistry.identitySnapshot(promoted)
+            debugLog("FFmpeg诊断[HANDOFF] 接管后 $rendererIdentityAfterHandoff decoderState=$decoderStateAfterHandoff rendererIdentityChanged=${rendererIdentityBeforeHandoff != rendererIdentityAfterHandoff}")
             standbyAttachedAt=android.os.SystemClock.elapsedRealtime()
             // FFmpeg owns its Surface/ANativeWindow bridge. Keep its hidden warm-up
             // output alive until the promoted player has rendered on PlayerView's
