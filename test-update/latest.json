@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "9c5d2dc6a48d1778db5e0eb7f2122fc3f13f6664",
-  "versionCode": 32,
-  "versionName": "0.0.32",
+  "sourceCommit": "16abcd7346ddee112cd7465aa2a05bacf29c0866",
+  "versionCode": 33,
+  "versionName": "0.0.33",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.32",
+  "tag": "hongguotv-bate-v0.0.33",
   "apk": {
-    "name": "HongguoTV-0.0.32.apk",
-    "size": 1956645,
-    "sha256": "342ef6227af7b28ef552db8399b989aa4df26837972e588128acedb833c26d6e",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.32/HongguoTV-0.0.32.apk"
+    "name": "HongguoTV-0.0.33.apk",
+    "size": 1984761,
+    "sha256": "570daff167f76d46c48d9796afa5a2fdfe4c3b7eaa7821e91395ea3f5d3f127c",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.33/HongguoTV-0.0.33.apk"
   },
-  "notes": "【其他功能与问题修复】\n- ui: 首页题材标签文字改为亮橘色"
+  "notes": "【播放与播放器】\n- 修复播放接口诊断列表编译错误\n- 增加播放接口调试诊断信息\n- 接入 Phoenix 播放接口选择\n【界面与交互】\n- fix: 返回键支持从搜索导航返回首页\n【其他功能与问题修复】\n- ui: 片库和排行榜题材标签改为亮橘色"
 }
