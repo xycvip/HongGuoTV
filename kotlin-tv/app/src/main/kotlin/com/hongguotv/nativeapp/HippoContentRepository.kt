@@ -121,6 +121,10 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
 
     override fun searchCombined(keyword: String, page: Int): CatalogPage = search(keyword, page, ContentType.SHORT)
 
+    override fun probeSuggest(query: String): Int = suggest(query).size
+
+    override fun sameNameSeasons(current: Series, related: List<Series>): List<Series> = emptyList()
+
     override fun suggest(query: String): List<String> {
         api.ensureInitialized()
         val data = api.request("1801")
