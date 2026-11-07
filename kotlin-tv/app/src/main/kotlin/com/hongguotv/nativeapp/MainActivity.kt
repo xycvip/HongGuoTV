@@ -93,7 +93,12 @@ class MainActivity: Activity() {
     internal val muted get() = TvStyle.muted
     internal val main=Handler(Looper.getMainLooper())
     internal val io=Executors.newFixedThreadPool(3)
-    internal val repository=ContentRepository()
+    internal val platformUiState = PlatformUiState()
+    internal var activePlatform by platformUiState::active
+    internal val redfruitRepository by lazy { ContentRepository() }
+    internal val hippoRepository by lazy { HippoContentRepository(this, redfruitRepository.http) }
+    internal val repository: ContentRepository
+        get() = if (activePlatform == ContentPlatform.HIPPO) hippoRepository else redfruitRepository
     internal val randomRecommender by lazy {
         val raw=getSharedPreferences("random_pool", MODE_PRIVATE).getString("pool", null)
         val items=raw?.let { RandomPoolSnapshot.decode(it, System.currentTimeMillis()) } ?: emptyList()
@@ -218,7 +223,10 @@ class MainActivity: Activity() {
     internal var accountApiLabelView by accountUiState::apiLabelView
     internal var accountSection by accountUiState::section
     internal lateinit var cloudAccount: AccountController
-    internal lateinit var library: Library
+    internal lateinit var redfruitLibrary: Library
+    internal lateinit var hippoLibrary: Library
+    internal val library: Library
+        get() = if (activePlatform == ContentPlatform.HIPPO) hippoLibrary else redfruitLibrary
     internal lateinit var tvTools: TvTools
     internal lateinit var extras: PlaybackExtras
     internal lateinit var updater: AppUpdater
