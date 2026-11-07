@@ -255,7 +255,7 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
             container.addView(sectionRow)
             val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
             heading.addView(text(if(tab==3) "我的收藏" else "接着上次看",25f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
-            if(tab==3) {
+            if(tab==3 && activePlatform==ContentPlatform.REDFRUIT) {
                 favoriteCheck=addButton(heading,"检查更新") {
                     if(favoriteMonitor.running) Toast.makeText(this,"正在检查收藏更新…",Toast.LENGTH_SHORT).show()
                     else if(library.favorites().isEmpty()) Toast.makeText(this,"先收藏几部剧，再来检查更新",Toast.LENGTH_SHORT).show()
@@ -283,7 +283,8 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
             }
             container.addView(heading)
             if(tab==3) {
-                favoriteStatus=text(favoriteMonitor.status,13f,muted).apply { setPadding(0,0,0,dp(6)) }; container.addView(favoriteStatus)
+                val statusText=if(activePlatform==ContentPlatform.REDFRUIT) favoriteMonitor.status else "河马剧场本机收藏"
+                favoriteStatus=text(statusText,13f,muted).apply { setPadding(0,0,0,dp(6)) }; container.addView(favoriteStatus)
             }
 
 }
