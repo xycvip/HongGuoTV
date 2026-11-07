@@ -47,7 +47,7 @@ import java.util.concurrent.atomic.AtomicLong
     internal fun MainActivity.resetPlaybackPreferences() {
         // 只重置「播放偏好」分组，不动片单类型、系统风格、系统时间和片源入口等设备偏好。
         library.resetPlaybackPreferences()
-        getSharedPreferences("playback-extras-v1", Context.MODE_PRIVATE).edit().clear().apply()
+        extras.clearAll()
         getSharedPreferences("third-sources-v1", Context.MODE_PRIVATE).edit()
             .remove("playbackSpeed").remove("resizeMode").remove("skipMarks").apply()
         getSharedPreferences("startup_playback", Context.MODE_PRIVATE).edit().clear().apply()
@@ -123,7 +123,7 @@ import java.util.concurrent.atomic.AtomicLong
             optionsDialog.dismiss()
             TvDialog.confirm(this,"恢复软件设置","将恢复默认播放与界面设置。观看记录、收藏、稍后看、片源配置和账号信息都会保留。") {
                 library.resetSettings()
-                getSharedPreferences("playback-extras-v1",Context.MODE_PRIVATE).edit().clear().apply()
+                extras.clearAll()
                 // 仅清理探活/聚合搜索缓存；倍速、画面比例和跳过设置保持不变。
                 ThirdStore(this).clearProbeCache()
                 getSharedPreferences("startup_playback",Context.MODE_PRIVATE).edit().clear().apply()
