@@ -57,7 +57,7 @@ import java.util.concurrent.atomic.AtomicLong
         debugPlaybackStartedAt=playbackStarted; debugPlaybackReadyAt=0L; debugFirstFrameAt=0L
         debugLog("开始播放 index=${index+1} position=$position autoplay=$autoplay recovering=$recovering")
         val selectedIndex=index.coerceIn(0,data.episodes.lastIndex)
-        val standbyKey="${data.episodes[selectedIndex]}:${library.maxQuality}"
+        val standbyKey=playbackResourceKey(data.episodes[selectedIndex],library.maxQuality)
         val promoteStandby=position==0L && !recovering && !forceRebuild && seamlessPlaybackEnabled &&
             standbyEpisodeId==standbyKey && standbyReady && standbyFirstFrameAt>0L &&
             standbyPlayer?.currentMediaItem?.mediaId==data.episodes[selectedIndex] && standbyRemote!=null
@@ -383,7 +383,9 @@ import java.util.concurrent.atomic.AtomicLong
             cancelWork()
             attachPrepared(prefetched!!)
         } else {
-            work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality)).prepare() }, attachPrepared, { problem -> playerFailure(problem) })
+            // 普通播放与两种预加载共用同一线路工厂，避免 Phoenix 设置被原生直连绕过。
+            val source = playbackStreamSource(repository.http)
+            work({ prefetched ?: RemoteVideo(repository.http,source.stream(requestedId,maxQuality)).prepare() }, attachPrepared, { problem -> playerFailure(problem) })
         }
     }
 
