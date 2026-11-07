@@ -245,7 +245,9 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     secondary.setMediaSource(videoSource(prepared, id) { counterGate.get() })
                     secondary.prepare()
                     debugLog("无感连播：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
-                } catch (problem: Exception) {
+                } catch (problem: Throwable) {
+                    android.util.Log.e("HongguoTV-Standby", "备用播放器初始化失败 mode=${FfmpegPlayerRegistry.videoMode} ffmpegReady=${FfmpegRuntimeLoader.isReady}", problem)
+                    if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
                     if (secondaryPlayer != null && standbyPlayer !== secondaryPlayer) {
                         FfmpegPlayerRegistry.detach(secondaryPlayer)
                         runCatching { secondaryPlayer?.release() }
@@ -253,11 +255,13 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     if (standbyRemote !== prepared) runCatching { prepared.close() }
                     clearStandbyPlayer("第二播放器初始化异常")
                     standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
-                    debugLog("无感连播：第二播放器初始化失败，回退单播放器：${problem.message}")
+                    debugLogError("无感连播：第二播放器初始化失败，回退单播放器", problem)
                     maybePrefetch(force = true)
                 }
             }
-        } catch (problem: Exception) {
+        } catch (problem: Throwable) {
+            android.util.Log.e("HongguoTV-Standby", "备用集地址准备失败 episodeId=$id", problem)
+            if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
             remote?.close()
             closeTransport(http)
             main.post {
@@ -274,7 +278,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     standbyReadyAt = 0L
                     standbyFirstFrameAt = 0L
                     standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
-                    debugLog("无感连播：下一集预备失败，回退单播放器：${problem.message}")
+                    debugLogError("无感连播：下一集预备失败，回退单播放器", problem)
                     maybePrefetch(force = true)
                 }
             }
