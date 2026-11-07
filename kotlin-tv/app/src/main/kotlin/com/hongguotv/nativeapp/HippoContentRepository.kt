@@ -159,6 +159,8 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         return StreamInfo(url, null, if (url.contains("1080")) "1080P" else "720P", mime)
     }
 
+    fun rememberSeries(series: Series) { seriesCache[series.id] = series }
+
     private fun series(row: JSONObject): Series? {
         val episodeId = value(row, "chapterId", "id")
         val bookId = value(row, "bookId", "book_id", "bookid").ifBlank { value(row, "id") }
