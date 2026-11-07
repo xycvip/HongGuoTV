@@ -27,7 +27,7 @@ internal fun Context.playbackResourceKey(id: String, quality: Int): String =
     "$id:$quality:${playbackApiSelection()}"
 
 internal fun Context.playbackApiLabel(value: String = playbackApiSelection()): String =
-    if (value == "phoenix") "自动选择 · Phoenix 优先" else "自动选择 · 原生优先"
+    if (value == "phoenix") "接口优先 · Phoenix" else "接口优先 · Native"
 
 internal object PlaybackApiDebugState {
     @Volatile var selected: String = "native"
@@ -40,7 +40,7 @@ internal object PlaybackApiDebugState {
         if (selected == normalized) return
         selected = normalized
         events.clear()
-        val label = if (normalized == "phoenix") "Phoenix" else "原生"
+        val label = if (normalized == "phoenix") "Phoenix" else "Native"
         append(normalized, "当前优先线路已设为${label}")
     }
 
@@ -112,18 +112,18 @@ internal fun Context.playbackStreamSource(http: OkHttpClient): StreamSource {
                 }
             }
         } else {
-            PlaybackApiDebugState.record(api, "选择原生播放接口")
+            PlaybackApiDebugState.record(api, "选择 Native 播放接口")
             val repository = ContentRepository(http)
             object : StreamSource {
                 override val name: String = "native"
                 override fun stream(id: String, maxQuality: Int): StreamInfo {
-                    PlaybackApiDebugState.record(api, "原生：开始获取播放地址")
+                    PlaybackApiDebugState.record(api, "Native：开始获取播放地址")
                     return try {
                         repository.stream(id, maxQuality).also {
-                            PlaybackApiDebugState.record(api, "原生：播放地址获取成功，清晰度=${it.quality}")
+                            PlaybackApiDebugState.record(api, "Native：播放地址获取成功，清晰度=${it.quality}")
                         }
                     } catch (error: Exception) {
-                        PlaybackApiDebugState.record(api, "原生：播放地址获取失败，异常类型=${error.javaClass.simpleName}")
+                        PlaybackApiDebugState.record(api, "Native：播放地址获取失败，异常类型=${error.javaClass.simpleName}")
                         throw error
                     }
                 }
