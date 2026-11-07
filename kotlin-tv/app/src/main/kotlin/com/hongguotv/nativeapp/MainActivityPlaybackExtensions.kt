@@ -405,10 +405,11 @@ import java.util.concurrent.atomic.AtomicLong
             }
             playerListener=listener; p.addListener(listener)
             attachStage = "创建媒体资源"
+            val aDataSourceKey = if (FfmpegPlayerRegistry.isFfmpegManaged(p)) "A:${System.identityHashCode(p)}:$requestedId" else ""
             val source=prefetchedSource ?: videoSource(
                 remote, requestedId,
-                diagnostic = { event -> debugLog("FFmpeg诊断[A][DATASOURCE] $event") },
-                diagnosticKey = "A:${System.identityHashCode(p)}:$requestedId"
+                diagnostic = { event -> if (aDataSourceKey.isNotBlank()) debugLog("FFmpeg诊断[A][DATASOURCE] $event") },
+                diagnosticKey = aDataSourceKey
             )
             debugLog("媒体资源创建完成 episodeId=$requestedId prefetched=${prefetchedSource!=null}")
             val introSkip=if(position<=0 && (skipMark?.introSeconds ?: 0)>0) skipMark!!.introSeconds*1000L else position.coerceAtLeast(0)
