@@ -4,12 +4,6 @@ package com.hongguotv.core
 import java.io.IOException
 import java.util.logging.Logger
 
-/** One independently replaceable playback-address channel. */
-interface StreamSource {
-    val name: String
-    fun stream(id: String, maxQuality: Int): StreamInfo
-}
-
 /**
  * Sequential fallback: the primary App API always gets the first chance.
  * Secondary channels are touched only after a primary IOException, so a healthy

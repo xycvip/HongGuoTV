@@ -44,6 +44,7 @@ dependencies {
     implementation(project(":playback-native"))
     implementation(project(":playback-api"))
     implementation(project(":playback-media"))
+    implementation(project(":playback-phoenix"))
     // Media3 统一使用 1.11.1，避免 ExoPlayer / HLS / UI 模块版本不一致。
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
