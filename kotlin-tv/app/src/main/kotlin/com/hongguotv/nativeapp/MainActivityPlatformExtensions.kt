@@ -20,6 +20,9 @@ internal fun MainActivity.switchContentPlatform() {
     cancelWork()
     cancelRecovery()
     cancelPrefetch()
+    randomReplenishing = false
+    randomPlaybackLaunching = false
+    randomLoadingLabel = null
     favoriteMonitor.stop()
 
     platformUiState.snapshots[previous] = PlatformCatalogSnapshot(
