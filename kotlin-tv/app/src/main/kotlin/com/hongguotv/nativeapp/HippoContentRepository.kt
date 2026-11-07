@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 河马剧场的 ContentRepository 适配层。
  * UI 继续使用现有 Series/CatalogPage/Detail 模型，但所有数据请求均由独立 HippoPortalApi 完成。
  */
-internal class HippoContentRepository(context: Context, http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(45, TimeUnit.SECONDS).cookieJar(CookieJar.NO_COOKIES).build(), private val watchRecords: () -> List<String> = { emptyList() }) : ContentRepository(http) {
+internal class HippoContentRepository(context: Context, http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(45, TimeUnit.SECONDS).cookieJar(CookieJar.NO_COOKIES).build()) : ContentRepository(http) {
     private val api = HippoPortalApi(context, http)
     private val homeCursors = ConcurrentHashMap<String, String>()
     private val seriesCache = ConcurrentHashMap<String, Series>()
@@ -29,7 +29,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         api.ensureInitialized()
         val key = "home:${type.name}:${genre?.slug.orEmpty()}"
         val cursor = if (page <= 1) "" else homeCursors[key].orEmpty()
-        val params = JSONObject().put("pageFlag", cursor).put("watchRecords", JSONArray().apply { watchRecords().forEach { put(it) } })
+        val params = JSONObject().put("pageFlag", cursor).put("watchRecords", JSONArray())
         val data = api.request("1113", params)
         val rows = findList(data, "dataList")
         val items = rows.mapNotNull(::series).filter { it.id.isNotBlank() }
