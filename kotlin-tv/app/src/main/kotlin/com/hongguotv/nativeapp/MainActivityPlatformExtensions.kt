@@ -28,7 +28,9 @@ internal fun MainActivity.switchContentPlatform() {
     platformUiState.snapshots[previous] = PlatformCatalogSnapshot(
         tab = tab, page = page, catalog = catalog.toList(), hasMore = hasMore,
         ranking = ranking, rankBoard = rankBoard, genre = genre, catalogFocus = catalogFocus,
-        tabState = tabState.toMap(), tabFocus = tabFocus.toMap()
+        query = query, aggregateSearch = aggregateSearch, theaterContentType = theaterContentType,
+        theaterSelections = theaterSelections.toMap(), theaterFocusTag = theaterFocusTag,
+        rankFocusTag = rankFocusTag, tabState = tabState.toMap(), tabFocus = tabFocus.toMap()
     )
 
     activePlatform = next
@@ -46,6 +48,12 @@ internal fun MainActivity.switchContentPlatform() {
         rankBoard = saved.rankBoard
         genre = saved.genre
         catalogFocus = saved.catalogFocus
+        query = saved.query
+        aggregateSearch = saved.aggregateSearch
+        theaterContentType = saved.theaterContentType
+        theaterSelections.putAll(saved.theaterSelections)
+        theaterFocusTag = saved.theaterFocusTag.orEmpty()
+        rankFocusTag = saved.rankFocusTag
         tabState.putAll(saved.tabState)
         tabFocus.putAll(saved.tabFocus)
     } else {
@@ -60,8 +68,8 @@ internal fun MainActivity.switchContentPlatform() {
     }
 
     // 搜索、剧场筛选及焦点状态属于各自平台；不把上一平台的临时控件状态带过去。
-    query = ""
-    aggregateSearch = true
+    if (saved == null) query = ""
+    if (saved == null) aggregateSearch = true
     phoneSearched = false
     lastSuggestWords = emptyList()
     lastSuggestKey = ""
@@ -69,10 +77,12 @@ internal fun MainActivity.switchContentPlatform() {
     keyboardLastLabel = null
     searchHotLoaded = false
     searchHotLoading = false
-    theaterFocusTag = ""
-    theaterContentType = null
+    if (saved == null) {
+        theaterFocusTag = ""
+        theaterContentType = null
+        theaterSelections.clear()
+    }
     theaterFiltersByType.clear()
-    theaterSelections.clear()
     aiCatalog = false
     aiGenre = null
     collection = null
