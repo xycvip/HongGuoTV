@@ -84,7 +84,10 @@ internal fun MainActivity.switchContentPlatform() {
         }
     }) {
         if (isDestroyed || activePlatform != target) return@loadAsync
-        if (target == ContentPlatform.REDFRUIT) cloudAccount.syncLocalFavorites(library.favorites())
+        if (target == ContentPlatform.REDFRUIT) {
+            cloudAccount.syncLocalFavorites(library.favorites())
+            favoriteMonitor.check()
+        }
         val shouldLoad = saved == null || saved.catalog.isEmpty() || saved.tab == 0 || saved.tab == 7
         showCatalog(load = shouldLoad)
         if (!shouldLoad) navForTab().post { if (activePlatform == target && screen == "catalog") navForTab().requestFocus() }
