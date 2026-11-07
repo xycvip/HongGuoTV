@@ -20,6 +20,7 @@ internal fun MainActivity.closeActiveVideo() {
     }
 
     internal fun MainActivity.releasePlayer(resetOrientation: Boolean = true) {
+        closeLibMpvTest(restorePlayback = false)
         commentGeneration++
         commentListScope?.cancel(); commentListScope=null
         commentPanel?.let { if(it.parent===root) root.removeView(it) }
