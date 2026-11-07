@@ -23,17 +23,25 @@ internal class HippoPortalApi(context: Context, private val http: OkHttpClient) 
     private val installTime = prefs.getLong("installTime", 0L).takeIf { it > 0L } ?: System.currentTimeMillis().also { prefs.edit().putLong("installTime", it).apply() }
     private var userId = prefs.getString("userId", "").orEmpty()
     private var initialized = prefs.getBoolean("initialized", false)
+    @Volatile private var initializationAttempted = false
 
     @Synchronized fun ensureInitialized() {
+        if (initializationAttempted) return
+        initializationAttempted = true
         if (initialized) return
-        val data = request("1103", JSONObject().put("oaid", "").put("userAgent", "HongGuoTV/Android")
-            .put("requestType", 1).put("activeType", if (initialized) 4 else 1).put("isFirstLaunch", !initialized)
-            .put("todayLaunchNums", 1).put("launchTime", installTime))
-        val user = data.optJSONObject("userInfoVo")
-        userId = user?.optString("userId").orEmpty().ifBlank { data.optString("userId") }
-        prefs.edit().putString("userId", userId).putBoolean("initialized", true).apply()
-        initialized = true
-        Log.i("HongguoTV-Hippo", "河马设备初始化完成，userId=${userId.isNotBlank()}")
+        try {
+            val data = request("1103", JSONObject().put("oaid", "").put("userAgent", "Android/HongGuoTV")
+                .put("requestType", 1).put("activeType", 1).put("isFirstLaunch", true)
+                .put("todayLaunchNums", 1).put("launchTime", System.currentTimeMillis()))
+            val user = data.optJSONObject("userInfoVo")
+            userId = user?.optString("userId").orEmpty().ifBlank { data.optString("userId") }
+            prefs.edit().putString("userId", userId).putBoolean("initialized", true).apply()
+            initialized = true
+            Log.i("HongguoTV-Hippo", "河马设备初始化成功，已获取 userId=${userId.isNotBlank()}")
+        } catch (error: Exception) {
+            // 与 hmjc-flutter 一致：注册接口暂时不可用时，不阻断首页内容请求。
+            Log.w("HongguoTV-Hippo", "河马设备初始化失败，继续尝试内容接口：${error.message}")
+        }
     }
 
     fun request(api: String, params: JSONObject = JSONObject()): JSONObject {
@@ -53,7 +61,7 @@ internal class HippoPortalApi(context: Context, private val http: OkHttpClient) 
                     if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
                     val envelope = JSONObject(raw.ifBlank { "{}" })
                     val code = envelope.optInt("code", 0)
-                    if (code != 0 && code != 200) throw IOException("业务 code=$code: ${envelope.optString("msg")}")
+                    if (code != 0) throw IOException("业务 code=$code: ${envelope.optString("msg")}")
                     val value = envelope.opt("data")
                     if (value is JSONObject) return value
                     if (value is String && value.isNotBlank()) return JSONObject(if (encrypted) decrypt(value) else value)
@@ -70,8 +78,8 @@ internal class HippoPortalApi(context: Context, private val http: OkHttpClient) 
         .put("version", "1.4.0").put("pname", "com.dz.hmjc").put("channelCode", "Google")
         .put("utdidTmp", tempId).put("token", prefs.getString("token", "").orEmpty())
         .put("utdid", deviceId).put("os", "android").put("osv", android.os.Build.VERSION.RELEASE)
-        .put("brand", android.os.Build.BRAND).put("model", android.os.Build.MODEL)
-        .put("manu", android.os.Build.MANUFACTURER).put("userId", userId)
+        .put("brand", "android").put("model", "flutter")
+        .put("manu", "android").put("userId", userId)
         .put("launch", "shortcut").put("mchid", "Google").put("nchid", "Google")
         .put("session1", deviceId).put("session2", System.currentTimeMillis().toString())
         .put("oaid", "").put("imei", "").put("startScene", "shortcut").put("installTime", installTime).put("p", 9)
