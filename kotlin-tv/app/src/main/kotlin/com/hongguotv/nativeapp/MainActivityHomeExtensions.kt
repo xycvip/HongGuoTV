@@ -50,7 +50,11 @@ import com.hongguotv.core.*
         if(!force && !library.cachedHome(type)?.items.isNullOrEmpty()) return
         if(!homeShelfLoads.add(type)) { if(force) queuedHomeShelfRefresh.add(type); return }
         io.execute {
-            val result=runCatching { if(type==ContentType.AI) repository.ranking(RankBoard.AI,1) else repository.home(1,type,null) }
+            val result=runCatching {
+                if(activePlatform==ContentPlatform.HIPPO) repository.home(1,type,null)
+                else if(type==ContentType.AI) repository.ranking(RankBoard.AI,1)
+                else repository.home(1,type,null)
+            }
             main.post {
                 homeShelfLoads.remove(type)
                 if(isDestroyed || resettingAllData) return@post
