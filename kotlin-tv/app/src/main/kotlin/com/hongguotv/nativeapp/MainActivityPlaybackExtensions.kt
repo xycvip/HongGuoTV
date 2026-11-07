@@ -261,7 +261,8 @@ import java.util.concurrent.atomic.AtomicLong
                                 decoderName.contains("google",true) || decoderName.contains("c2.android",true) -> "system software"
                                 else -> "platform decoder (hardware status depends on device implementation)"
                             }
-                            android.util.Log.i("HongguoTV","Video decoder initialized: $decoderName kind=$kind init=${initializationDurationMs}ms")
+                            android.util.Log.i("HongguoTV","Video decoder initialized: $decoderName kind=$kind init=${initializationDurationMs}ms mode=${FfmpegPlayerRegistry.videoMode} managerMode=${FfmpegPlayerRegistry.currentVideoMode(it)}")
+                            debugLog("解码器初始化完成 name=$decoderName kind=$kind init=${initializationDurationMs}ms requestedMode=${FfmpegPlayerRegistry.videoMode} managerMode=${FfmpegPlayerRegistry.currentVideoMode(it)}")
                             if(player===it) {
                                 activeDecoderName=decoderName
                                 main.post { if(player===it) refreshVideoInfoOverlay() }
@@ -399,6 +400,8 @@ import java.util.concurrent.atomic.AtomicLong
                     playerListener?.let { player?.removeListener(it) }
                     playerListener = null
                     playerView?.player = null
+                    preloadManager?.release()
+                    preloadManager = null
                     FfmpegPlayerRegistry.detach(player)
                     player?.release()
                 }.onFailure { android.util.Log.e("HongguoTV-Playback", "失败播放器释放异常", it) }
