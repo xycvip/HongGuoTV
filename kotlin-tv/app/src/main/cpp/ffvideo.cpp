@@ -244,6 +244,10 @@ struct JniContext {
 
     void ReleaseSurface(JNIEnv *env) {
         if (native_window) {
+            __android_log_print(ANDROID_LOG_WARN, "HongguoTV-FFmpegSurface",
+                    "release context=%p surface=%p window=%p cpuConnected=%d size=%dx%d",
+                    this, surface, native_window, connected_as_cpu ? 1 : 0,
+                    native_window_width, native_window_height);
             if (connected_as_cpu) {
                 native_window_api_disconnect(native_window, NATIVE_WINDOW_API_CPU);
             }
@@ -261,7 +265,13 @@ struct JniContext {
         if (surface && env->IsSameObject(surface, new_surface)) return true;
         ReleaseSurface(env);
         native_window = ANativeWindow_fromSurface(env, new_surface);
-        if (!native_window) return false;
+        if (!native_window) {
+            __android_log_print(ANDROID_LOG_ERROR, "HongguoTV-FFmpegSurface",
+                    "acquire FAILED context=%p surface=%p", this, new_surface);
+            return false;
+        }
+        __android_log_print(ANDROID_LOG_INFO, "HongguoTV-FFmpegSurface",
+                "acquire context=%p surface=%p window=%p", this, new_surface, native_window);
         surface = env->NewGlobalRef(new_surface);
         if (!surface) {
             ReleaseSurface(env);
@@ -401,7 +411,14 @@ Java_io_github_anilbeesetti_nextlib_media3ext_ffdecoder_FfmpegVideoDecoder_ffmpe
     auto *const jniContext = reinterpret_cast<JniContext *>(jContext);
     auto *frame = reinterpret_cast<AVFrame *>(
             env->GetLongField(output_buffer, jniContext->decoder_private_field));
-    if (!frame || !jniContext->MaybeAcquireNativeWindow(env, surface)) {
+    if (!frame) {
+        __android_log_print(ANDROID_LOG_ERROR, "HongguoTV-FFmpegSurface",
+                "render FAILED stage=missing_frame context=%p surface=%p", jniContext, surface);
+        return VIDEO_DECODER_ERROR_OTHER;
+    }
+    if (!jniContext->MaybeAcquireNativeWindow(env, surface)) {
+        __android_log_print(ANDROID_LOG_ERROR, "HongguoTV-FFmpegSurface",
+                "render FAILED stage=acquire_window context=%p surface=%p", jniContext, surface);
         return VIDEO_DECODER_ERROR_OTHER;
     }
 
@@ -409,8 +426,13 @@ Java_io_github_anilbeesetti_nextlib_media3ext_ffdecoder_FfmpegVideoDecoder_ffmpe
         jniContext->native_window_height != displayed_height) {
         // RGBA is a public NDK window format; YV12 CPU buffers are not portable
         // across Surface producers (including the emulator's graphics backend).
-        if (ANativeWindow_setBuffersGeometry(jniContext->native_window,
-                displayed_width, displayed_height, WINDOW_FORMAT_RGBA_8888)) {
+        int geometryResult = ANativeWindow_setBuffersGeometry(jniContext->native_window,
+                displayed_width, displayed_height, WINDOW_FORMAT_RGBA_8888);
+        if (geometryResult) {
+            __android_log_print(ANDROID_LOG_ERROR, "HongguoTV-FFmpegSurface",
+                    "render FAILED stage=set_geometry result=%d context=%p surface=%p window=%p requested=%dx%d",
+                    geometryResult, jniContext, surface, jniContext->native_window,
+                    displayed_width, displayed_height);
             return VIDEO_DECODER_ERROR_OTHER;
         }
         jniContext->native_window_width = displayed_width;
@@ -420,10 +442,20 @@ Java_io_github_anilbeesetti_nextlib_media3ext_ffdecoder_FfmpegVideoDecoder_ffmpe
     ANativeWindow_Buffer buffer;
     int result = ANativeWindow_lock(jniContext->native_window, &buffer, nullptr);
     if (result == -19) {
+        __android_log_print(ANDROID_LOG_WARN, "HongguoTV-FFmpegSurface",
+                "render surface_lost result=%d context=%p surface=%p window=%p size=%dx%d",
+                result, jniContext, surface, jniContext->native_window,
+                displayed_width, displayed_height);
         jniContext->ReleaseSurface(env);
         return VIDEO_DECODER_SUCCESS;
     }
-    if (result) return VIDEO_DECODER_ERROR_OTHER;
+    if (result) {
+        __android_log_print(ANDROID_LOG_ERROR, "HongguoTV-FFmpegSurface",
+                "render FAILED stage=window_lock result=%d context=%p surface=%p window=%p size=%dx%d",
+                result, jniContext, surface, jniContext->native_window,
+                displayed_width, displayed_height);
+        return VIDEO_DECODER_ERROR_OTHER;
+    }
     jniContext->connected_as_cpu = true;
 
     bool converted = false;
@@ -436,12 +468,26 @@ Java_io_github_anilbeesetti_nextlib_media3ext_ffdecoder_FfmpegVideoDecoder_ffmpe
                 dest, strides, rotation_degrees);
     }
     if (!converted) {
-        jniContext->connected_as_cpu = DiscardLockedBuffer(jniContext->native_window) != 0;
+        const int discardResult = DiscardLockedBuffer(jniContext->native_window);
+        jniContext->connected_as_cpu = discardResult != 0;
+        __android_log_print(ANDROID_LOG_ERROR, "HongguoTV-FFmpegSurface",
+                "render FAILED stage=frame_convert context=%p surface=%p window=%p frame=%dx%d fmt=%d buffer=%dx%d stride=%d windowFmt=%d bits=%p discardResult=%d rotation=%d",
+                jniContext, surface, jniContext->native_window,
+                frame->width, frame->height, frame->format,
+                buffer.width, buffer.height, buffer.stride, buffer.format,
+                buffer.bits, discardResult, rotation_degrees);
         jniContext->ReleaseSurface(env);
         return VIDEO_DECODER_ERROR_OTHER;
     }
     result = ANativeWindow_unlockAndPost(jniContext->native_window);
-    return !result ? VIDEO_DECODER_SUCCESS : VIDEO_DECODER_ERROR_OTHER;
+    if (result) {
+        __android_log_print(ANDROID_LOG_ERROR, "HongguoTV-FFmpegSurface",
+                "render FAILED stage=unlock_post result=%d context=%p surface=%p window=%p size=%dx%d buffer=%dx%d stride=%d",
+                result, jniContext, surface, jniContext->native_window,
+                displayed_width, displayed_height, buffer.width, buffer.height, buffer.stride);
+        return VIDEO_DECODER_ERROR_OTHER;
+    }
+    return VIDEO_DECODER_SUCCESS;
 }
 
 extern "C"
