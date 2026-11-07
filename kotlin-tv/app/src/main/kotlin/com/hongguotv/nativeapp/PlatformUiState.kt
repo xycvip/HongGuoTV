@@ -28,6 +28,12 @@ internal data class PlatformCatalogSnapshot(
     val rankBoard: RankBoard,
     val genre: Genre?,
     val catalogFocus: String,
+    val query: String,
+    val aggregateSearch: Boolean,
+    val theaterContentType: ContentType?,
+    val theaterSelections: Map<String, String>,
+    val theaterFocusTag: String?,
+    val rankFocusTag: String?,
     val tabState: Map<Int, CatalogState>,
     val tabFocus: Map<Int, String>
 )
