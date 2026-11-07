@@ -22,6 +22,8 @@ internal fun MainActivity.switchContentPlatform() {
     cancelPrefetch()
     randomReplenishing = false
     randomPlaybackLaunching = false
+    startupHomeRefreshStarted = false
+    homeRefreshInFlight = false
     randomLoadingLabel = null
     favoriteMonitor.stop()
 
