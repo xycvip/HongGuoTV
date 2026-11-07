@@ -231,7 +231,6 @@ import java.util.concurrent.atomic.AtomicLong
         lateinit var keySettings:TextView
         lateinit var themeButton:TextView
         lateinit var clockButton:TextView
-        lateinit var sourceDisplayButton:TextView
         lateinit var fileBackup:TextView
         lateinit var backup:TextView
         lateinit var hidden:TextView
@@ -387,6 +386,7 @@ import java.util.concurrent.atomic.AtomicLong
             clockButton.text="显示系统时间  ·  ${if(library.showClock) "开启" else "关闭"}"
             applyClock()
         }
+        if(activePlatform==ContentPlatform.REDFRUIT) {
         sourceDisplayButton=setting(appearance,4,"片源显示  ·  ${if(getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE).getBoolean("show_third_source",false)) "开启" else "关闭"}") {
             val prefs=getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE)
             val enabled=!prefs.getBoolean("show_third_source",false)
@@ -394,6 +394,7 @@ import java.util.concurrent.atomic.AtomicLong
             sourceDisplayButton.text="片源显示  ·  ${if(enabled) "开启" else "关闭"}"
             settingsFocusKey="片源显示"
             showCatalog()
+        }
         }
         fileBackup=setting(data,2,"备份与恢复") { showFileBackupDialog(fileBackup) }
         backup=setting(data,2,"远程文件管理") {
