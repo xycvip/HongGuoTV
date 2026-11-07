@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - "kotlin-tv/core/**"
+      - "kotlin-tv/playback-api/**"
+      - "kotlin-tv/playback-media/**"
+      - "kotlin-tv/playback-native/**"
       - "kotlin-tv/app/**"
       - "kotlin-tv/gradle/**"
       - "kotlin-tv/gradlew"

@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 private class PlaybackHttpException(val statusCode: Int, message: String): IOException(message)
 
-internal class PlaybackRepository(
+class PlaybackRepository(
     private val http: OkHttpClient,
     private val clock: () -> Long,
     private val playbackSession: PlaybackDeviceSession,
@@ -199,8 +199,8 @@ internal class PlaybackRepository(
                 val definition=meta.str("definition").ifEmpty { o.str("definition") }
                 val height=meta.str("vheight").ifEmpty { o.str("vheight") }.toIntOrNull() ?: 0
                 val width=meta.str("vwidth").ifEmpty { o.str("vwidth") }.toIntOrNull() ?: 0
-                val quality=ContentRepository.qualityNumber(definition).takeIf { it>0 }
-                    ?: if(width>0 && height>0) (if(width<height) width else height) else ContentRepository.qualityNumber(o.str("quality_desc").ifEmpty { o.str("height").ifEmpty { o.str("vheight").ifEmpty { o.str("quality").ifEmpty { k } } } })
+                val quality=playbackQualityNumber(definition).takeIf { it>0 }
+                    ?: if(width>0 && height>0) (if(width<height) width else height) else playbackQualityNumber(o.str("quality_desc").ifEmpty { o.str("height").ifEmpty { o.str("vheight").ifEmpty { o.str("quality").ifEmpty { k } } } })
                 Triple(quality,codec,o)
             }.sortedByDescending { it.first }.toList()
         val playable=rows.filter { it.second !in setOf("bytevc2","bvc2") }
@@ -329,3 +329,9 @@ internal class PlaybackRepository(
         private const val PLAYBACK_UA="com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)"
     }
 }
+
+
+private fun playbackQualityNumber(value: String): Int =
+    Regex("2160|1440|1080|720|576|540|480|360").find(value)?.value?.toInt()
+        ?: mapOf("1920" to 1080, "1280" to 720, "1024" to 576, "854" to 480, "640" to 360)[value]
+        ?: value.toIntOrNull() ?: 0

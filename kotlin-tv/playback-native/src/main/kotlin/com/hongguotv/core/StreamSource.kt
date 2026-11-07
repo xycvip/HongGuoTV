@@ -5,7 +5,7 @@ import java.io.IOException
 import java.util.logging.Logger
 
 /** One independently replaceable playback-address channel. */
-internal interface StreamSource {
+interface StreamSource {
     val name: String
     fun stream(id: String, maxQuality: Int): StreamInfo
 }
@@ -15,7 +15,7 @@ internal interface StreamSource {
  * Secondary channels are touched only after a primary IOException, so a healthy
  * playback path does not pay any extra network round trips.
  */
-internal class StreamScheduler(private val sources: List<StreamSource>) {
+class StreamScheduler(private val sources: List<StreamSource>) {
     private val log=Logger.getLogger("com.hongguotv.core.stream")
 
     fun stream(id: String,maxQuality: Int): StreamInfo {
@@ -38,7 +38,7 @@ internal class StreamScheduler(private val sources: List<StreamSource>) {
 }
 
 /** Last-resort public MP4 route; it is intentionally low priority and fixed at 360p. */
-internal class PublicMp4StreamSource(
+class PublicMp4StreamSource(
     private val http: okhttp3.OkHttpClient,
     private val webUa: String,
     private val site: String
@@ -73,7 +73,7 @@ internal class PublicMp4StreamSource(
 
 
 /** The public MP4 probe must satisfy the same byte-range contract as RemoteVideo.range(). */
-internal fun isValidPublicMp4RangeResponse(code: Int, contentRange: String?): Boolean {
+fun isValidPublicMp4RangeResponse(code: Int, contentRange: String?): Boolean {
     if(code!=206) return false
     val total=Regex("""bytes 0-0/(\d+)""").matchEntire(contentRange.orEmpty())
         ?.groupValues?.get(1)?.toLongOrNull()

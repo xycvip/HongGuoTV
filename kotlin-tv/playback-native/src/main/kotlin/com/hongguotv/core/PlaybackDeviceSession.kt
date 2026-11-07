@@ -36,13 +36,13 @@ class PlaybackDeviceSession(
         val shared = PlaybackDeviceSession()
     }
 
-    internal data class Profile(val values: Map<String, String>, val cookie: String)
+    data class Profile(val values: Map<String, String>, val cookie: String)
 
     private val cdid = UUID.randomUUID().toString()
     private var ready: Profile? = null
 
     @Synchronized
-    internal fun profile(http: OkHttpClient): Profile {
+    fun profile(http: OkHttpClient): Profile {
         ready?.let { return it }
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
         val device =
@@ -76,7 +76,7 @@ class PlaybackDeviceSession(
 
     /** 丢弃进程内匿名播放身份并重新注册；不读写账号登录凭证。 */
     @Synchronized
-    internal fun renew(http: OkHttpClient): Profile {
+    fun renew(http: OkHttpClient): Profile {
         ready = null
         return profile(http)
     }

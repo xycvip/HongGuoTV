@@ -29,10 +29,6 @@ data class Genre(val slug: String, val name: String, val ids: List<String>)
 data class TheaterFilterOption(val id: String, val label: String)
 data class TheaterFilterGroup(val type: String, val label: String, val options: List<TheaterFilterOption>)
 data class TheaterCatalogPage(val catalog: CatalogPage, val filters: List<TheaterFilterGroup>, val nextOffset: Int?, val sessionId: String)
-data class StreamInfo(val url: String, val key: ByteArray?, val quality: String, val mimeType: String = "video/mp4")
 class SearchSessionExpiredException: IOException("搜索结果已过期，请从第 1 页重新搜索")
 /** 平台对该集只产出了 ByteVC2 等电视无法解码的编码，重试与换清晰度都不会成功。 */
-class UnplayableVideoException(message: String): IOException(message)
-class UnsupportedVideoFormatException(message: String): IOException(message)
 /** 播放信息接口返回了 HTTP 200 空体；已按有界退避重读仍未成功。 */
-class EmptyPlaybackResponseException: IOException("播放接口暂时返回空响应，请稍后重试")

@@ -44,7 +44,7 @@ class RequestScope {
 
     companion object {
         private val current = ThreadLocal<RequestScope>()
-        internal fun currentScope(): RequestScope? = current.get()
+        fun currentScope(): RequestScope? = current.get()
 
         /** Retry/backoff code must respect both navigation cancellation and thread interruption. */
         fun ensureActive() {

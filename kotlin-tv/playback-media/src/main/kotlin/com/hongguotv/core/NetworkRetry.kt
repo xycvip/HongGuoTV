@@ -11,7 +11,7 @@ import java.net.SocketException
 import java.net.UnknownHostException
 
 /** HTTP status with retry metadata kept separate from user-facing error text. */
-internal class HttpStatusException(
+class HttpStatusException(
     val status: Int,
     val retryAfter: String?,
     message: String
@@ -21,7 +21,7 @@ internal class HttpStatusException(
  * Retries only idempotent GETs and only failures known to be transient.
  * A fresh OkHttp Call must be created by [action] for every attempt.
  */
-internal object NetworkRetry {
+object NetworkRetry {
     fun <T> execute(request: Request, action: () -> T): T {
         var retries = 0
         while (true) {
