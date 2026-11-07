@@ -9,6 +9,7 @@ on:
       - "kotlin-tv/playback-api/**"
       - "kotlin-tv/playback-media/**"
       - "kotlin-tv/playback-native/**"
+      - "kotlin-tv/playback-phoenix/**"
       - "kotlin-tv/app/**"
       - "kotlin-tv/gradle/**"
       - "kotlin-tv/gradlew"
@@ -19,6 +20,11 @@ on:
   pull_request:
     paths:
       - "kotlin-tv/core/**"
+      - "kotlin-tv/playback-api/**"
+      - "kotlin-tv/playback-media/**"
+      - "kotlin-tv/playback-native/**"
+      - "kotlin-tv/playback-phoenix/**"
+      - "kotlin-tv/app/**"
       - "kotlin-tv/gradle/**"
       - "kotlin-tv/gradlew"
       - "kotlin-tv/gradle.properties"
@@ -53,5 +59,5 @@ jobs:
       - name: 运行核心模块单元测试
         working-directory: kotlin-tv
         run: |
-          ./gradlew --no-daemon :core:test
+          ./gradlew --no-daemon :playback-api:test :playback-media:test :playback-native:test :playback-phoenix:test :core:test
           ./gradlew --no-daemon :app:compileDebugKotlin
