@@ -2,6 +2,7 @@
 package com.hongguotv.nativeapp
 
 import android.content.Context
+import android.util.Log
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -12,25 +13,14 @@ import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import java.util.WeakHashMap
 
-/**
- * Owns one DecoderManager per ExoPlayer. Main and seamless standby players must
- * never share a manager because each manager is attached to exactly one player.
- */
+/** 每个 ExoPlayer 独占一个 DecoderManager；解码模式切换即时通知所有活动播放器。 */
 @androidx.annotation.OptIn(UnstableApi::class)
 internal object FfmpegPlayerRegistry {
-    data class Setup(
-        val renderersFactory: DefaultRenderersFactory,
-        internal val decoderManager: DecoderManager?
-    )
-
+    private const val TAG = "HongguoTV-Decoder"
+    data class Setup(val renderersFactory: DefaultRenderersFactory, internal val decoderManager: DecoderManager?)
     private val managers = WeakHashMap<ExoPlayer, DecoderManager>()
-
-    @Volatile
-    private var requestedVideoMode: DecoderMode = DecoderMode.AUTO
-
-    @Volatile
-    private var preferencesLoaded = false
-
+    @Volatile private var requestedVideoMode: DecoderMode = DecoderMode.AUTO
+    @Volatile private var preferencesLoaded = false
     val videoMode: DecoderMode get() = requestedVideoMode
 
     @Synchronized
@@ -38,80 +28,102 @@ internal object FfmpegPlayerRegistry {
         if (preferencesLoaded) return
         val saved = context.getSharedPreferences("ffmpeg-settings-v1", Context.MODE_PRIVATE)
             .getString("video_decoder_mode", DecoderMode.AUTO.name)
-        requestedVideoMode = runCatching { DecoderMode.valueOf(saved ?: DecoderMode.AUTO.name) }
-            .getOrDefault(DecoderMode.AUTO)
+        requestedVideoMode = runCatching { DecoderMode.valueOf(saved ?: DecoderMode.AUTO.name) }.getOrDefault(DecoderMode.AUTO)
         preferencesLoaded = true
+        Log.i(TAG, "解码设置已加载 mode=$requestedVideoMode")
     }
 
     @Synchronized
     fun setVideoMode(context: Context, mode: DecoderMode) {
+        val previous = requestedVideoMode
         requestedVideoMode = mode
         preferencesLoaded = true
         context.applicationContext.getSharedPreferences("ffmpeg-settings-v1", Context.MODE_PRIVATE)
             .edit().putString("video_decoder_mode", mode.name).apply()
-        managers.values.toList().forEach { manager ->
-            manager.selectVideoDecoder(mode)
+        Log.i(TAG, "动态切换视频解码模式：$previous -> $mode；活动 FFmpeg 播放器=${managers.size}")
+        managers.entries.toList().forEach { (player, manager) ->
+            try {
+                manager.selectVideoDecoder(mode)
+                Log.i(TAG, "动态切换已提交 player=${System.identityHashCode(player)} mode=$mode state=${player.playbackState}")
+            } catch (problem: Throwable) {
+                Log.e(TAG, "动态切换解码模式失败 player=${System.identityHashCode(player)} mode=$mode", problem)
+                if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
+            }
         }
+    }
+
+    private fun mediaCodecSetup(context: Context, modeProvider: () -> DecoderMode): Setup {
+        val selector = MediaCodecSelector { mimeType, secure, tunneling ->
+            val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
+            val mode = modeProvider()
+            when {
+                !MimeTypes.isVideo(mimeType) -> decoders
+                mode == DecoderMode.HARDWARE -> decoders.filter { it.hardwareAccelerated }
+                mode == DecoderMode.SOFTWARE -> decoders.filter { it.softwareOnly }
+                else -> decoders.sortedBy { when { it.hardwareAccelerated -> 0; it.softwareOnly -> 1; else -> 2 } }
+            }
+        }
+        return Setup(DefaultRenderersFactory(context.applicationContext)
+            .setEnableDecoderFallback(true).setMediaCodecSelector(selector), null)
     }
 
     fun create(context: Context): Setup {
         loadPreferences(context)
-        // Before FFmpeg is installed, still expose hardware/software MediaCodec
-        // selection. The optional FFmpeg renderer is added only after activation.
         if (!FfmpegRuntimeLoader.isReady) {
-            val selector = MediaCodecSelector { mimeType, secure, tunneling ->
-                val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
-                val mode = requestedVideoMode
-                when {
-                    !MimeTypes.isVideo(mimeType) -> decoders
-                    mode == DecoderMode.HARDWARE -> decoders.filter { it.hardwareAccelerated }
-                    mode == DecoderMode.SOFTWARE -> decoders.filter { it.softwareOnly }
-                    else -> decoders.sortedBy {
-                        when {
-                            it.hardwareAccelerated -> 0
-                            it.softwareOnly -> 1
-                            else -> 2
-                        }
-                    }
-                }
-            }
-            return Setup(
-                DefaultRenderersFactory(context)
-                    .setEnableDecoderFallback(true)
-                    .setMediaCodecSelector(selector),
-                null
-            )
+            Log.i(TAG, "创建 MediaCodec 管线 mode=$requestedVideoMode ffmpegReady=false")
+            return mediaCodecSetup(context) { requestedVideoMode }
         }
-        val manager = DecoderManager(
-            initialVideoMode = requestedVideoMode,
-            initialAudioMode = DecoderMode.AUTO
-        )
-        val factory = NextRenderersFactory(context.applicationContext)
-            .setDecoderManager(manager)
-        return Setup(factory, manager)
+        return try {
+            val manager = DecoderManager(initialVideoMode = requestedVideoMode, initialAudioMode = DecoderMode.AUTO)
+            val factory = NextRenderersFactory(context.applicationContext).setDecoderManager(manager)
+            Log.i(TAG, "创建 FFmpeg 管线 mode=$requestedVideoMode")
+            Setup(factory, manager)
+        } catch (problem: Throwable) {
+            Log.e(TAG, "创建 FFmpeg renderer 失败，降级到 MediaCodec mode=$requestedVideoMode", problem)
+            if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
+            mediaCodecSetup(context) { requestedVideoMode }
+        }
     }
 
     @Synchronized
     fun attach(player: ExoPlayer, setup: Setup) {
         val manager = setup.decoderManager ?: return
-        manager.attach(player)
-        managers[player] = manager
+        try {
+            manager.attach(player)
+            manager.selectVideoDecoder(requestedVideoMode)
+            managers[player] = manager
+            Log.i(TAG, "DecoderManager 已附加 player=${System.identityHashCode(player)} mode=$requestedVideoMode")
+        } catch (problem: Throwable) {
+            Log.e(TAG, "DecoderManager 附加失败 player=${System.identityHashCode(player)}", problem)
+            runCatching { manager.detach() }
+            if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
+            throw IllegalStateException("FFmpeg 解码管理器附加失败", problem)
+        }
     }
 
     @Synchronized
     fun detach(player: ExoPlayer?) {
         if (player == null) return
         managers.remove(player)?.let { manager ->
-            runCatching { manager.detach() }
+            runCatching { manager.detach() }.onFailure {
+                Log.e(TAG, "DecoderManager detach 失败 player=${System.identityHashCode(player)}", it)
+            }
         }
+        Log.d(TAG, "播放器解码管理器已解绑 player=${System.identityHashCode(player)}")
     }
 
     @Synchronized
     fun selectVideo(player: ExoPlayer, mode: DecoderMode) {
-        managers[player]?.selectVideoDecoder(mode)
+        val manager = managers[player] ?: return
+        try {
+            manager.selectVideoDecoder(mode)
+            Log.i(TAG, "指定播放器动态切换 player=${System.identityHashCode(player)} mode=$mode")
+        } catch (problem: Throwable) {
+            Log.e(TAG, "指定播放器动态切换失败 player=${System.identityHashCode(player)} mode=$mode", problem)
+            if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
+        }
     }
 
     @Synchronized
-    fun currentVideoMode(player: ExoPlayer): DecoderMode? =
-        managers[player]?.activeVideoMode
+    fun currentVideoMode(player: ExoPlayer): DecoderMode? = managers[player]?.activeVideoMode
 }
