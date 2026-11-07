@@ -260,12 +260,16 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         return priority.flatMap { found[it].orEmpty() }
     }
 
-    private fun encodeEpisodeId(book: String, chapter: String) = Base64.encodeToString("$book\u0000$chapter".toByteArray(), Base64.NO_WRAP or Base64.URL_SAFE)
+    private companion object { const val EPISODE_ID_PREFIX = "hippo-episode:" }
+    private fun encodeEpisodeId(book: String, chapter: String) = EPISODE_ID_PREFIX +
+        Base64.encodeToString("$book\u0000$chapter".toByteArray(), Base64.NO_WRAP or Base64.URL_SAFE)
     private fun decodeEpisodeId(id: String): Pair<String, String> {
-        val decoded = runCatching { String(Base64.decode(id, Base64.NO_WRAP or Base64.URL_SAFE)) }.getOrNull()
-        val parts = decoded?.split('\u0000', limit = 2)
-        // 详情入口传入原始 bookId；播放入口才传入编码后的 bookId/chapterId。
-        if (parts == null) return id to ""
+        // 普通 bookId（详情入口）绝不尝试 Base64 解码；仅识别带专用前缀的内部剧集 ID。
+        if (!id.startsWith(EPISODE_ID_PREFIX)) return id to ""
+        val payload = id.removePrefix(EPISODE_ID_PREFIX)
+        val decoded = runCatching { String(Base64.decode(payload, Base64.NO_WRAP or Base64.URL_SAFE)) }
+            .getOrElse { throw IOException("河马剧集标识编码损坏", it) }
+        val parts = decoded.split('\u0000', limit = 2)
         if (parts.size != 2 || parts.any { it.isBlank() }) throw IOException("河马剧集标识无效")
         return parts[0] to parts[1]
     }
