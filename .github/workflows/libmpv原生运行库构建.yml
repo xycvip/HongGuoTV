@@ -51,7 +51,7 @@ jobs:
           chmod +x buildscripts/download.sh buildscripts/buildall.sh
           sudo apt-get update
           sudo apt-get install -y autoconf pkg-config libtool ninja-build unzip wget meson gperf nasm
-          IN_CI=1 ./buildscripts/download.sh
+          (cd buildscripts && IN_CI=1 ./download.sh)
 
       - name: 构建 ARM 32 位 libmpv
         working-directory: mpv-android
