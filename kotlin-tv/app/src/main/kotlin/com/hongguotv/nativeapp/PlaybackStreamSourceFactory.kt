@@ -27,7 +27,7 @@ internal fun Context.playbackResourceKey(id: String, quality: Int): String =
     "$id:$quality:${playbackApiSelection()}"
 
 internal fun Context.playbackApiLabel(value: String = playbackApiSelection()): String =
-    if (value == "phoenix") "接口优先 · Phoenix" else "接口优先 · Native"
+    if (value == "phoenix") "线路优先 · Phoenix" else "接口优先 · Native"
 
 internal object PlaybackApiDebugState {
     @Volatile var selected: String = "native"
