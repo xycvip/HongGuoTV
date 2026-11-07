@@ -17,6 +17,7 @@ import java.io.IOException
 internal class HippoContentRepository(context: Context, http: OkHttpClient = OkHttpClient()) : ContentRepository(http) {
     private val api = HippoPortalApi(context, http)
     private val homeCursors = mutableMapOf<String, String>()
+    private val seriesCache = linkedMapOf<String, Series>()
     private val theatreCursors = mutableMapOf<String, JSONObject>()
 
     override fun home(page: Int, type: ContentType, genre: Genre?): CatalogPage {
@@ -138,7 +139,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             chapterId.takeIf { it.isNotBlank() }?.let { encodeEpisodeId(bookId, it) }
         }
         val info = findObject(data, setOf("bookInfoVo", "bookInfo", "bookVo"))
-        val series = Series(bookId, value(info, "bookName", "title").ifBlank { "河马短剧" },
+        val series = seriesCache[bookId] ?: Series(bookId, value(info, "bookName", "title").ifBlank { "河马短剧" },
             value(info, "coverWap", "coverCutWap", "coverUrl"), value(info, "introduction", "description", "bookDesc"),
             value(info, "finishStatusCn"), value(info, "bookTags", "tags"))
         return Detail(series, episodes)
@@ -167,8 +168,11 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         val count = row.optInt("updateNum", row.optInt("chapterCount", row.optInt("totalChapterNum", 0)))
         val tags = strings(row.opt("bookTags")).ifEmpty { strings(row.opt("tags") ) }.joinToString(" · ")
         val badge = value(row, "finishStatusCn", "chapterName", "coverBottomTips")
-        return Series(id, title, value(row, "coverWap", "coverCutWap", "coverUrl", "chapterImg"),
+        val mapped = Series(id, title, value(row, "coverWap", "coverCutWap", "coverUrl", "chapterImg"),
             value(row, "introduction", "description", "bookDesc"), badge.ifBlank { if (count > 0) "全 $count 集" else "" }, tags)
+        seriesCache[id] = mapped
+        while (seriesCache.size > 500) seriesCache.remove(seriesCache.keys.first())
+        return mapped
     }
 
     private fun findList(root: JSONObject, key: String): List<JSONObject> {
