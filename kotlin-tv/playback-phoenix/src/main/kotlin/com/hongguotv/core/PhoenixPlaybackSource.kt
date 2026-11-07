@@ -37,7 +37,8 @@ data class PhoenixPlaybackDiagnostic(
 class PhoenixPlaybackSource(
     private val http: OkHttpClient,
     private val session: PhoenixPlaybackDeviceSession,
-    private val signer: PhoenixRequestSigner, // retained for constructor compatibility; Phoenix uses PhoenixRequestSigner
+    private val signer: PhoenixRequestSigner,
+    private val onDiagnostic: (String) -> Unit = {},
 ) : StreamSource {
     override val name: String = "phoenix-video-model"
 
