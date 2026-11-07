@@ -36,7 +36,8 @@ import com.hongguotv.core.*
                 }
             }
         }
-        if(activePlatform==ContentPlatform.REDFRUIT) host.addView(types)
+        // 河马剧场也必须提供内容类型入口，不能依赖服务端默认 checkedFlag（常见默认值为漫剧）。
+        host.addView(types)
         val groups=theaterFiltersByType[theaterFilterKey(theaterContentType)].orEmpty().filterNot { it.type=="genre" }
         if(groups.isEmpty()) host.addView(text("正在读取红果官方筛选条件…",13f,muted).apply { setPadding(0,dp(5),0,dp(10)) })
         else groups.forEach { group ->
