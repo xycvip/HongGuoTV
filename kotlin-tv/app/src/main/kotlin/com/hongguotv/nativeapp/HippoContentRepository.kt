@@ -184,7 +184,10 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         val mapped = Series(id, title, value(row, "coverWap", "coverCutWap", "coverUrl", "chapterImg"),
             value(row, "introduction", "description", "bookDesc"), badge.ifBlank { if (count > 0) "全 $count 集" else "" }, tags)
         seriesCache[id] = mapped
-        while (seriesCache.size > 500) seriesCache.keys.firstOrNull()?.let(seriesCache::remove) ?: break
+        while (seriesCache.size > 500) {
+            val oldest = seriesCache.keys.firstOrNull() ?: break
+            seriesCache.remove(oldest)
+        }
         return mapped
     }
 
