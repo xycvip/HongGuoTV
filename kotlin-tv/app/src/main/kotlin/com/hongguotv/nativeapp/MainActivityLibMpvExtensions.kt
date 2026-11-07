@@ -11,6 +11,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.hongguotv.core.RemoteVideo
+import androidx.media3.common.Player
 import com.x.hongguotv.libmpv.LibMpvPlaybackView
 import java.util.WeakHashMap
 
@@ -19,6 +20,29 @@ import java.util.WeakHashMap
  * but paused underneath, so closing this overlay returns to the same episode without
  * touching the MediaCodec or FFmpeg implementation.
  */
+internal fun MainActivity.libMpvDefaultEnabled(): Boolean =
+    getSharedPreferences("libmpv-settings-v1", android.content.Context.MODE_PRIVATE)
+        .getBoolean("default_engine_libmpv", false)
+
+internal fun MainActivity.setLibMpvDefaultEnabled(enabled: Boolean) {
+    getSharedPreferences("libmpv-settings-v1", android.content.Context.MODE_PRIVATE)
+        .edit().putBoolean("default_engine_libmpv", enabled).apply()
+}
+
+internal fun MainActivity.switchToLibMpv() {
+    setLibMpvDefaultEnabled(true)
+    if (screen != "player" || video == null || player?.playbackState != Player.STATE_READY) {
+        Toast.makeText(this, "已设为默认 libmpv 内核，下次进入播放页时启用", Toast.LENGTH_LONG).show()
+        return
+    }
+    openLibMpvTest()
+}
+
+internal fun MainActivity.switchToSystemPlayer() {
+    setLibMpvDefaultEnabled(false)
+    closeLibMpvTest()
+}
+
 internal object LibMpvTestOverlay {
     data class Session(
         val view: LibMpvPlaybackView,
@@ -32,7 +56,7 @@ internal object LibMpvTestOverlay {
     val sessions = WeakHashMap<MainActivity, Session>()
 }
 
-internal fun MainActivity.openLibMpvTest() {
+internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
     if (LibMpvTestOverlay.sessions.containsKey(this)) return
     val remote: RemoteVideo = video ?: run {
         Toast.makeText(this, "播放地址尚未准备好，请等画面开始播放后再试", Toast.LENGTH_LONG).show()
@@ -45,7 +69,7 @@ internal fun MainActivity.openLibMpvTest() {
     val oldHudVisibility = oldHud.visibility
     val oldDanmakuVisibility = oldDanmaku?.visibility ?: View.GONE
     val position = currentPosition().coerceAtLeast(0L)
-    val resume = player?.playWhenReady ?: requestedAutoplay
+    val resume = resumeOverride ?: (player?.playWhenReady ?: requestedAutoplay)
     saveProgress()
     player?.pause()
 
@@ -90,11 +114,25 @@ internal fun MainActivity.openLibMpvTest() {
     action("暂停/播放") { mpv.togglePause() }
     action("硬件解码") { mpv.setHardwareMode(LibMpvPlaybackView.HardwareMode.HARDWARE) }
     action("软件解码") { mpv.setHardwareMode(LibMpvPlaybackView.HardwareMode.SOFTWARE) }
-    action("返回原播放器") { closeLibMpvTest() }
+    action("切回系统播放器") { switchToSystemPlayer() }
 
     mpv.listener = object : LibMpvPlaybackView.Listener {
         override fun onState(state: String) {
             status.text = "libmpv · $state · 解码器：${mpv.currentHardwareDecoder()}"
+            if (state == "ENDED" && LibMpvTestOverlay.sessions.containsKey(this@openLibMpvTest)) {
+                val shouldContinue = foreground && requestedAutoplay && !pausedForLifecycle
+                closeLibMpvTest(restorePlayback = false)
+                when {
+                    sleepTimer.episodeEnded() -> stopForSleep()
+                    shouldContinue && library.autoNext && episodeIndex < (detail?.episodes?.lastIndex ?: -1) ->
+                        playEpisode(episodeIndex + 1)
+                    shouldContinue && continueToNextSeason() -> Unit
+                    else -> {
+                        requestedAutoplay = false
+                        showEndedPanel()
+                    }
+                }
+            }
         }
         override fun onPosition(positionSeconds: Double, durationSeconds: Double) {
             if (durationSeconds > 0.0) {
@@ -116,6 +154,7 @@ internal fun MainActivity.openLibMpvTest() {
             startPositionSeconds = position / 1000.0,
             autoplay = resume
         )
+        mpv.setSpeed(library.playbackSpeed.toDouble())
         oldPlayerView?.visibility = View.INVISIBLE
         oldHud.visibility = View.GONE
         oldDanmaku?.visibility = View.GONE
@@ -146,7 +185,9 @@ internal fun MainActivity.openLibMpvTest() {
         oldPlayerView?.visibility = oldPlayerViewVisibility
         oldHud.visibility = oldHudVisibility
         oldDanmaku?.visibility = oldDanmakuVisibility
-        Toast.makeText(this, "libmpv 启动失败：${problem.message}", Toast.LENGTH_LONG).show()
+        setLibMpvDefaultEnabled(false)
+        if (resume) player?.play()
+        Toast.makeText(this, "libmpv 启动失败：${problem.message}，已恢复系统播放器", Toast.LENGTH_LONG).show()
         debugLogError("libmpv 测试启动失败", problem)
     }
 }
