@@ -116,6 +116,7 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
     action("软件解码") { mpv.setHardwareMode(LibMpvPlaybackView.HardwareMode.SOFTWARE) }
     action("切回系统播放器") { switchToSystemPlayer() }
 
+    var firstMpvPositionReported = false
     mpv.listener = object : LibMpvPlaybackView.Listener {
         override fun onState(state: String) {
             status.text = "libmpv · $state · 解码器：${mpv.currentHardwareDecoder()}"
@@ -135,6 +136,11 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
             }
         }
         override fun onPosition(positionSeconds: Double, durationSeconds: Double) {
+            if (!firstMpvPositionReported) {
+                firstMpvPositionReported = true
+                hideBootSplash()
+                markStartupRecommendationPlaying()
+            }
             if (durationSeconds > 0.0) {
                 status.text = "libmpv · ${formatTime((positionSeconds * 1000).toLong())} / ${formatTime((durationSeconds * 1000).toLong())} · ${mpv.currentHardwareDecoder()}"
             }
