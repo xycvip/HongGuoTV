@@ -5,7 +5,7 @@ This module embeds the **libmpv native playback engine**. It does not embed the 
 ## Architecture
 
 - `libmpv.so`: mpv playback engine built from the mpv-android native build scripts.
-- `libplayer.so`: JNI bridge built from mpv-android's Android JNI sources. The bridge's JNI class name is intentionally kept as `is.xyz.mpv.MPVLib`; this is an internal JNI compatibility layer, not the playback engine.
+- `libplayer.so`: JNI bridge built from mpv-android's Android JNI sources and adapted to HongGuoTV's `LibMpvNativeBridge` class. The bridge is only a JNI adapter; the playback engine is `libmpv.so`.
 - `LibMpvPlaybackView`: HongGuoTV-owned SurfaceView and playback API.
 - `LibMpvHttpBridge`: loopback-only HTTP Range adapter. HongGuoTV's current `RemoteVideo` stream is encrypted and decrypted on demand; libmpv cannot consume the source URL directly. The bridge exposes those already-decrypted bytes locally and does not issue another upstream request.
 
@@ -21,4 +21,4 @@ The engine is isolated from Media3/ExoPlayer and the existing FFmpeg renderer. I
 
 ## Third-party source
 
-The JNI wrapper API is adapted from [mpv-android](https://github.com/mpv-android/mpv-android/tree/255901dd586fa750000fa0075f69d6ffdd26cd9c) (GPL-3.0). The upstream application UI is not included.
+The JNI bridge implementation is adapted from [mpv-android](https://github.com/mpv-android/mpv-android/tree/255901dd586fa750000fa0075f69d6ffdd26cd9c) (GPL-3.0). The upstream application UI is not included.
