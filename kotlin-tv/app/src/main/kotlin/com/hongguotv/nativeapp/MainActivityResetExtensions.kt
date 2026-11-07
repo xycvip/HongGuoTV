@@ -51,7 +51,7 @@ import java.util.concurrent.atomic.AtomicLong
         getSharedPreferences("third-sources-v1", Context.MODE_PRIVATE).edit()
             .remove("playbackSpeed").remove("resizeMode").remove("skipMarks").apply()
         getSharedPreferences("startup_playback", Context.MODE_PRIVATE).edit().clear().apply()
-        getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit().remove("sleep_action_mode").apply()
+        getSharedPreferences(platformPrefsName("playback-settings-v1"), Context.MODE_PRIVATE).edit().remove("sleep_action_mode").apply()
         getSharedPreferences("playback-renderer-v1", Context.MODE_PRIVATE).edit().remove("video_renderer_mode").apply()
     }
 
@@ -130,7 +130,7 @@ import java.util.concurrent.atomic.AtomicLong
                 getSharedPreferences("app_updates",Context.MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences("random_pool",Context.MODE_PRIVATE).edit().clear().apply()
                 // 这些偏好独立于 Library：恢复定时关闭、弹幕颜色、渲染方式、片源入口和设备方向默认值。
-                getSharedPreferences("playback-settings-v1",Context.MODE_PRIVATE).edit().clear().apply()
+                getSharedPreferences(platformPrefsName("playback-settings-v1"),Context.MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences("playback-renderer-v1",Context.MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences("playback-device-v1",Context.MODE_PRIVATE).edit().clear().apply()
