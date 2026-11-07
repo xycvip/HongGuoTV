@@ -268,7 +268,7 @@ import java.util.concurrent.atomic.AtomicLong
                 Toast.makeText(this@settings,"请在播放视频页面启用定时功能",Toast.LENGTH_LONG).show()
             }
             val next=(sleepActionMode+1)%2
-            getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit().putInt("sleep_action_mode",next).apply()
+            getSharedPreferences(platformPrefsName("playback-settings-v1"), Context.MODE_PRIVATE).edit().putInt("sleep_action_mode",next).apply()
             sleepActionButton.text="定时关闭·${sleepActionLabel(next)}"
         }
         qualityButton=setting(playback,0,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
@@ -309,7 +309,7 @@ import java.util.concurrent.atomic.AtomicLong
         lateinit var seamlessPlaybackButton:TextView
         seamlessPlaybackButton=setting(playback,0,"无感连播  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
             val enabled=!seamlessPlaybackEnabled
-            getSharedPreferences("playback-settings-v1",Context.MODE_PRIVATE)
+            getSharedPreferences(platformPrefsName("playback-settings-v1"),Context.MODE_PRIVATE)
                 .edit().putBoolean("seamless_playback",enabled).apply()
             seamlessPlaybackButton.text="无感连播  ·  ${if(enabled) "开启" else "关闭"}"
             applyVideoRenderer()
