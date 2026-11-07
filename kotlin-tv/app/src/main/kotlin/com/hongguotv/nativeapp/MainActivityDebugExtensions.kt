@@ -279,6 +279,8 @@ import java.util.concurrent.atomic.AtomicLong
             "播放器A进度：${formatTime(position)} / ${formatTime(duration)}  缓冲至 ${formatTime(buffered)}",
             "播放器B（下一集备用）：$secondState",
             "播放器B详情：${second?.let { "state=${it.playbackState} isPlaying=${it.isPlaying} playWhenReady=${it.playWhenReady} pos=${formatTime(it.currentPosition.coerceAtLeast(0))}" } ?: if(standbyEpisodeId.isNotBlank()) "目标集=$standbyEpisodeId" else "无备用实例"}",
+            "播放接口：${if(PlaybackApiDebugState.selected == "phoenix") "Phoenix（实验）" else "原生"}",
+            "接口诊断：${PlaybackApiDebugState.snapshot().lastOrNull() ?: "暂无请求记录"}",
             "清晰度：${video?.info?.quality ?: quality}  画面：$size  FPS：$fps",
             "编码：$codec  解码器：${activeDecoderName.ifBlank { "N/A" }}",
             "音频：$audio  MIME：${video?.info?.mimeType ?: "N/A"}",
@@ -289,7 +291,9 @@ import java.util.concurrent.atomic.AtomicLong
             "首帧耗时：${if(debugFirstFrameAt>0) debugFirstFrameAt-debugPlaybackStartedAt else -1}ms  READY耗时：${if(debugPlaybackReadyAt>0) debugPlaybackReadyAt-debugPlaybackStartedAt else -1}ms",
             "无感连播：${if(seamlessPlaybackEnabled) "开启" else "关闭"}  B准备耗时：${if(standbyPrepareStartedAt>0L) (if(standbyReadyAt>0L) standbyReadyAt-standbyPrepareStartedAt else android.os.SystemClock.elapsedRealtime()-standbyPrepareStartedAt) else -1L}ms  B隐藏首帧：${if(standbyFirstFrameAt>0L && standbyPrepareStartedAt>0L) standbyFirstFrameAt-standbyPrepareStartedAt else -1L}ms",
             "最近一次切集交接：${if(standbyPromotionAt>0L) "已接管" else "未发生"}  接管后可见首帧：${if(standbyVisibleFirstFrameAt>0L) standbyVisibleFirstFrameAt-standbyPromotionAt else -1L}ms  PlayerView绑定：${if(standbyAttachedAt>0L && standbyPromotionAt>0L) standbyAttachedAt-standbyPromotionAt else -1L}ms",
-            "播放错误：${if(playError) "是" else "否"}  自动恢复：$autoRecovery  资源重试：${recovery.attempts}/3"
+            "播放错误：${if(playError) "是" else "否"}  自动恢复：$autoRecovery  资源重试：${recovery.attempts}/3",
+            "播放接口事件：",
+            *PlaybackApiDebugState.snapshot().takeLast(8).map { "  " + it }
         ).joinToString("\n")
     }
 
