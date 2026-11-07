@@ -293,7 +293,7 @@ import java.util.concurrent.atomic.AtomicLong
             "最近一次切集交接：${if(standbyPromotionAt>0L) "已接管" else "未发生"}  接管后可见首帧：${if(standbyVisibleFirstFrameAt>0L) standbyVisibleFirstFrameAt-standbyPromotionAt else -1L}ms  PlayerView绑定：${if(standbyAttachedAt>0L && standbyPromotionAt>0L) standbyAttachedAt-standbyPromotionAt else -1L}ms",
             "播放错误：${if(playError) "是" else "否"}  自动恢复：$autoRecovery  资源重试：${recovery.attempts}/3",
             "播放接口事件：",
-            *PlaybackApiDebugState.snapshot().takeLast(8).map { "  " + it }
+            *PlaybackApiDebugState.snapshot().takeLast(8).map { "  " + it }.toTypedArray()
         ).joinToString("\n")
     }
 
