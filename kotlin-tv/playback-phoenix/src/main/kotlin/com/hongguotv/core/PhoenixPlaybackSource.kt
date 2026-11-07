@@ -44,6 +44,11 @@ class PhoenixPlaybackSource(
 
     override fun stream(id: String, maxQuality: Int): StreamInfo = resolve(id, maxQuality)
 
+    /** Diagnostics must never be allowed to change playback behavior. */
+    private fun emitDiagnostic(message: String) {
+        runCatching { onDiagnostic(message) }
+    }
+
     /**
      * 独立诊断：先获取 Phoenix 播放地址，再用 Range GET 读取最多 1 KiB，
      * 验证 CDN 是否实际返回媒体数据。不会记录完整 URL、Cookie 或签名参数。
@@ -89,9 +94,16 @@ class PhoenixPlaybackSource(
 
     fun resolve(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}"))) { "无效的分集 ID" }
-        onDiagnostic("Phoenix：开始获取设备注册身份")
-        var identity = try { session.profile(http) } catch (error: IOException) { onDiagnostic("Phoenix：设备注册/会话失败：" + (error.message ?: "未知错误")); throw error }
-        onDiagnostic("Phoenix：设备身份已就绪（身份字段已校验，敏感值不记录）")
+        emitDiagnostic("Phoenix：开始获取设备注册身份")
+        var identity = try {
+            session.profile(http)
+        } catch (error: java.io.InterruptedIOException) {
+            throw error
+        } catch (error: IOException) {
+            emitDiagnostic("Phoenix：设备注册/会话失败，异常类型=" + error.javaClass.simpleName)
+            throw error
+        }
+        emitDiagnostic("Phoenix：设备身份已就绪（身份字段已校验，敏感值不记录）")
         val payload = JSONObject()
             .put("video_id", id)
             .put("biz_param", JSONObject()
@@ -127,14 +139,14 @@ class PhoenixPlaybackSource(
                     if (values["device_id"].isNullOrBlank() || values["iid"].isNullOrBlank()) {
                         throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
                     }
-                    onDiagnostic("Phoenix：正在生成播放请求签名，host=" + host)
+                    emitDiagnostic("Phoenix：正在生成播放请求签名，host=" + host)
                     val signed = signer.signPlayback(
                         "https://$host/novel/player/video_model/v1/",
                         values,
                         payload,
                         VendorConstants.VIDEO_UA
                     )
-                    onDiagnostic("Phoenix：请求签名完成，开始发送 video_model/v1 POST")
+                    emitDiagnostic("Phoenix：请求签名完成，开始发送 video_model/v1 POST")
                     val request = Request.Builder()
                         .url(signed.url)
                         .apply {
@@ -155,12 +167,12 @@ class PhoenixPlaybackSource(
                             bytes.size
                         )
                     }
-                    onDiagnostic("Phoenix：播放接口响应 HTTP " + result.status + "，Content-Type=" + result.contentType.take(60) + "，正文=" + result.size + " bytes")
+                    emitDiagnostic("Phoenix：播放接口响应 HTTP " + result.status + "，Content-Type=" + result.contentType.take(60) + "，正文=" + result.size + " bytes")
                     if ((result.size == 0 || result.status == 403) && rotations < 2) {
                         rotations++
-                        onDiagnostic("Phoenix：响应为空或 403，执行第 " + rotations + " 次设备会话轮换")
+                        emitDiagnostic("Phoenix：响应为空或 403，执行第 " + rotations + " 次设备会话轮换")
                         identity = session.renew(http)
-                        onDiagnostic("Phoenix：设备会话轮换完成")
+                        emitDiagnostic("Phoenix：设备会话轮换完成")
                         continue
                     }
                     if (result.status !in 200..299) {
@@ -170,7 +182,7 @@ class PhoenixPlaybackSource(
                         throw IOException("Phoenix 播放接口返回空正文（HTTP ${result.status}，Content-Type=${result.contentType.take(80)}）")
                     }
                     return try {
-                        resolveResponse(result.raw, maxQuality).also { onDiagnostic("Phoenix：播放模型解析成功，清晰度=" + it.quality + "，MIME=" + it.mimeType) }
+                        resolveResponse(result.raw, maxQuality).also { emitDiagnostic("Phoenix：播放模型解析成功，清晰度=" + it.quality + "，MIME=" + it.mimeType) }
                     } catch (error: IOException) {
                         val preview = result.raw
                             .replace(Regex("[\\r\\n\\t]+"), " ")
@@ -184,7 +196,7 @@ class PhoenixPlaybackSource(
                     throw error
                 } catch (error: IOException) {
                     last = error
-                    onDiagnostic("Phoenix：host=" + host + " 请求失败：" + (error.message ?: "未知错误").take(140))
+                    emitDiagnostic("Phoenix：host=" + host + " 请求失败，异常类型=" + error.javaClass.simpleName)
                     break
                 }
             }
