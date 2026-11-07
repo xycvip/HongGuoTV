@@ -107,7 +107,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     standbyJob = prefetchWorker.submit {
         var remote: RemoteVideo? = null
         try {
-            val prepared = RemoteVideo(http, source.stream(id, quality)).also {
+            val prepared = RemoteVideo(http, source.stream(id, quality), diagnostic = { event -> main.post { if (!isDestroyed) debugLog("FFmpeg诊断[B][$id] $event") } }).also {
                 remote = it
                 it.prepare()
             }
@@ -185,8 +185,10 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         }
                     })
                     secondary.addListener(object : Player.Listener {
+                        override fun onIsLoadingChanged(isLoading: Boolean) { if (standbyPlayer === secondary || player === secondary) debugLog("FFmpeg诊断[B][$id] loading=$isLoading state=${secondary.playbackState} position=${secondary.currentPosition} buffered=${secondary.bufferedPosition}") }
                         override fun onPlaybackStateChanged(state: Int) {
-                            if (standbyPlayer !== secondary || standbyEpisodeId != key) return
+                            if (standbyPlayer !== secondary && player !== secondary) return
+                            debugLog("FFmpeg诊断[B][$id] state=$state position=${secondary.currentPosition} buffered=${secondary.bufferedPosition} playWhenReady=${secondary.playWhenReady}")
                             if (state == Player.STATE_READY) {
                                 if (!secondary.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)) {
                                     debugLog("无感连播：备用播放器 READY 但没有已选视频轨道，拒绝接管")
@@ -232,7 +234,8 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         }
 
                         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                            if (standbyPlayer !== secondary || standbyEpisodeId != key) return
+                            if (standbyPlayer !== secondary && player !== secondary) return
+                            debugLog("FFmpeg诊断[B][$id] PlayerError code=${error.errorCode} name=${error.errorCodeName} message=${error.message}")
                             debugLog("无感连播：备用播放器准备失败 ${error.errorCodeName} ${error.message}")
                             clearStandbyPlayer("备用播放器准备失败")
                             standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
@@ -242,7 +245,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     standbyRemote = prepared
                     standbyPlayer = secondary
                     updatePlaybackBufferingIndicator()
-                    secondary.setMediaSource(videoSource(prepared, id) { counterGate.get() })
+                    secondary.setMediaSource(videoSource(prepared, id, { counterGate.get() }) { event -> debugLog("FFmpeg诊断[B][$id] $event") })
                     secondary.prepare()
                     debugLog("无感连播：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
                 } catch (problem: Throwable) {

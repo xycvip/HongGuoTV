@@ -17,7 +17,9 @@ class RemoteVideo(
     val info: StreamInfo,
     private val chunkBytes: Int = 2*1024*1024,
     private val aheadBytes: Long = 8*1024*1024L,
+    private val diagnostic: (String) -> Unit = {},
 ): Closeable {
+    private fun trace(message: String) { runCatching { diagnostic("thread=${Thread.currentThread().name} $message") } }
     @Volatile private var closed=false
     private val calls=mutableSetOf<Call>()
     data class Range(val bytes: ByteArray,val total: Long)
@@ -45,7 +47,9 @@ class RemoteVideo(
         if(closed) throw IOException("播放请求已取消")
         require(start>=0 && end>=start && end-start<8*1024*1024)
         val request=Request.Builder().url(info.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Referer","https://novel.snssdk.com/").header("Range","bytes=$start-$end").header("Accept-Encoding","identity").build()
-        return NetworkRetry.execute(request) {
+        val startedAt=System.nanoTime()
+        trace("Range开始 bytes=$start-$end")
+        return try { NetworkRetry.execute(request) {
             val call=http.newCall(request)
             synchronized(calls) { if(closed) throw IOException("播放请求已取消"); calls+=call }
             try {
@@ -62,9 +66,13 @@ class RemoteVideo(
                     val n=(last-start+1).toInt(); val body=response.body ?: throw IOException("视频分段为空")
                     val bytes=body.source().readByteArray(n.toLong())
                     if(bytes.size!=n) throw java.io.EOFException("视频分段长度不完整：期望 ${n} 字节，实际 ${bytes.size} 字节")
+                    trace("Range成功 bytes=$start-$end http=${response.code} contentRange=${response.header("Content-Range")} received=${bytes.size} total=$full elapsedMs=${(System.nanoTime()-startedAt)/1_000_000}")
                     Range(bytes,full)
                 }
             } finally { synchronized(calls) { calls-=call } }
+        } } catch (problem: Throwable) {
+            trace("Range失败 bytes=$start-$end elapsedMs=${(System.nanoTime()-startedAt)/1_000_000} error=${problem.javaClass.simpleName}: ${problem.message.orEmpty().take(180)}")
+            throw problem
         }
     }
     private fun fetchChunk(start: Long): Range {
@@ -187,7 +195,9 @@ class RemoteVideo(
             if(count<=0) throw IOException("视频分段数据不完整")
             System.arraycopy(chunk,from,raw,written,count); written+=count; pos+=count
         }
-        return MediaCrypto.decrypt(raw,start,info.key,prepared)
+        val decrypted=MediaCrypto.decrypt(raw,start,info.key,prepared)
+        trace("read完成 offset=$start requested=$length raw=${raw.size} decrypted=${decrypted.size} stats=${stats()}")
+        return decrypted
     }
     override fun close() {
         synchronized(lock) { closed=true; lock.notifyAll() }

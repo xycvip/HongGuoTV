@@ -12,8 +12,12 @@ import java.io.IOException
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class VideoDataSource(
     private val video: RemoteVideo,
-    private val onBytesRead: (Int) -> Unit = {}
+    private val onBytesRead: (Int) -> Unit = {},
+    private val diagnostic: (String) -> Unit = {}
 ): BaseDataSource(true) {
+    private var bytesReadForSession=0L
+    private var lastLoggedMiB=0L
+    private fun trace(message: String) { runCatching { diagnostic(message) } }
     private var position=0L
     private var remaining=0L
     private var buffer=byteArrayOf()
@@ -36,6 +40,9 @@ class VideoDataSource(
         buffer=byteArrayOf()
         offset=0
         opened=true
+        bytesReadForSession=0L
+        lastLoggedMiB=0L
+        trace("DataSource open position=${spec.position} length=${spec.length} uri=${spec.uri}")
         transferStarted(spec)
         return remaining
     }
@@ -48,7 +55,9 @@ class VideoDataSource(
         if(remaining<=0L) return C.RESULT_END_OF_INPUT
         if(offset>=buffer.size) {
             val request=minOf(512L*1024L,remaining).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-            buffer=video.read(position,request)
+            val started=android.os.SystemClock.elapsedRealtime()
+            try { buffer=video.read(position,request); trace("DataSource read offset=$position requested=$request returned=${buffer.size} elapsedMs=${android.os.SystemClock.elapsedRealtime()-started}") }
+            catch(problem: Throwable) { trace("DataSource read失败 offset=$position requested=$request elapsedMs=${android.os.SystemClock.elapsedRealtime()-started} error=${problem.javaClass.simpleName}: ${problem.message.orEmpty().take(200)}"); throw problem }
             offset=0
         }
         if(buffer.isEmpty()) throw EOFException("视频分段意外结束")
@@ -63,6 +72,9 @@ class VideoDataSource(
         remaining-=count.toLong()
         bytesTransferred(count)
         onBytesRead(count)
+        bytesReadForSession+=count.toLong()
+        val mib=bytesReadForSession/(1024L*1024L)
+        if(mib>lastLoggedMiB) { lastLoggedMiB=mib; trace("DataSource进度 bytes=$bytesReadForSession MiB=$mib position=$position") }
         return count
     }
 
@@ -74,6 +86,7 @@ class VideoDataSource(
         uri=null
         if(opened) {
             opened=false
+            trace("DataSource close bytesRead=$bytesReadForSession finalPosition=$position")
             transferEnded()
         }
     }
