@@ -169,7 +169,8 @@ import java.util.concurrent.atomic.AtomicLong
                     showInitialScreen()
                     favoriteMonitor.check()
                 } else {
-                    // 河马平台不读取红果账户、不启动红果推荐池；首次进入直接加载河马首页。
+                    // 河马门户当前提供统一推荐流，不套用红果的短剧/漫剧/AI 类型切换。
+                    library.contentType = ContentType.SHORT
                     showCatalog(load=true)
                     hideBootSplash()
                 }
