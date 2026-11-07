@@ -213,16 +213,38 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
     }
 
     private fun collectUrls(root: JSONObject): List<String> {
-        val keys = setOf("m3u81080pUrl","m3u81080p","mp41080pUrl","mp41080p","m3u8720pUrl","m3u8720p","mp4720pUrl","mp4720p","mp4","m3u8","url","m3u81080pSwitchUrl","mp41080pSwitchUrl","m3u8720pSwitchUrl","mp4720pSwitchUrl")
-        val out = linkedSetOf<String>()
+        val priority = listOf(
+            "m3u81080pUrl", "m3u81080p", "mp41080pUrl", "mp41080p",
+            "m3u8720pUrl", "m3u8720p", "mp4720pUrl", "mp4720p",
+            "mp4", "m3u8", "url",
+            "m3u81080pSwitchUrl", "mp41080pSwitchUrl",
+            "m3u8720pSwitchUrl", "mp4720pSwitchUrl"
+        )
+        val found = linkedMapOf<String, LinkedHashSet<String>>()
         fun visit(value: Any?) {
             when (value) {
-                is JSONObject -> { val it=value.keys(); while(it.hasNext()) { val key=it.next(); val child=value.opt(key); if(key in keys) { if(child is String && child.startsWith("http")) out+=child else if(child is JSONArray) child.objectsOrStrings().filter { it.startsWith("http") }.forEach(out::add) } else visit(child) } }
-                is JSONArray -> value.objects().forEach(::visit)
+                is JSONObject -> {
+                    val iterator = value.keys()
+                    while (iterator.hasNext()) {
+                        val key = iterator.next()
+                        val child = value.opt(key)
+                        if (key in priority) {
+                            when (child) {
+                                is String -> if (child.startsWith("http")) found.getOrPut(key) { linkedSetOf() }.add(child)
+                                is JSONArray -> for (index in 0 until child.length()) {
+                                    val url = child.optString(index)
+                                    if (url.startsWith("http")) found.getOrPut(key) { linkedSetOf() }.add(url)
+                                }
+                                else -> visit(child)
+                            }
+                        } else visit(child)
+                    }
+                }
+                is JSONArray -> for (index in 0 until value.length()) visit(value.opt(index))
             }
         }
         visit(root)
-        return out.toList()
+        return priority.flatMap { found[it].orEmpty() }
     }
 
     private fun encodeEpisodeId(book: String, chapter: String) = Base64.encodeToString("$book\u0000$chapter".toByteArray(), Base64.NO_WRAP or Base64.URL_SAFE)
