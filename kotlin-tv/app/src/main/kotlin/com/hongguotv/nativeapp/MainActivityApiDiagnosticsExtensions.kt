@@ -87,6 +87,7 @@ import java.util.concurrent.atomic.AtomicLong
     internal fun MainActivity.runAutomaticApiChecks(force: Boolean = false) {
         if(!library.isLoaded || isDestroyed || (!force && (tab!=0 || apiStatusCheckStarted))) return
         val batch=++apiStatusUiState.checkBatchId
+        apiStatusUiState.cancelPlaybackProbes()
         if(!hasValidatedInternet()) {
             val failed=Color.rgb(235,75,75)
             listOf("首页","搜索","播放","联想").forEach { setApiStatus(it,failed,"网络不可用") }
@@ -107,39 +108,50 @@ import java.util.concurrent.atomic.AtomicLong
 
         fun probe(name: String,action: ()->String) {
             val started=android.os.SystemClock.elapsedRealtime()
-            io.execute {
-                var final: Pair<Int,String>?=null
-                var lastError="请求失败"
-                for(attempt in 0..3) {
-                    if(Thread.currentThread().isInterrupted) return@execute
-                    if(attempt>0) {
-                        main.post {
-                            if(!isDestroyed && batch==apiStatusUiState.checkBatchId) {
-                                animateApiStatus(name,retrying,"重试中（$attempt/3）")
+            val requestScope=if(name=="播放") RequestScope().also { apiStatusUiState.playbackProbeScopes.add(it) } else null
+            lateinit var task: java.util.concurrent.Future<*>
+            task=io.submit {
+                try {
+                    var final: Pair<Int,String>?=null
+                    var lastError="请求失败"
+                    for(attempt in 0..3) {
+                        if(Thread.currentThread().isInterrupted) return@submit
+                        if(attempt>0) {
+                            main.post {
+                                if(!isDestroyed && batch==apiStatusUiState.checkBatchId) {
+                                    animateApiStatus(name,retrying,"重试中（$attempt/3）")
+                                }
+                            }
+                            try { Thread.sleep(650L) } catch (_: InterruptedException) {
+                                Thread.currentThread().interrupt()
+                                return@submit
                             }
                         }
-                        try { Thread.sleep(650L) } catch (_: InterruptedException) {
-                            Thread.currentThread().interrupt()
-                            return@execute
+                        val result=runCatching {
+                            if(requestScope!=null) requestScope.run(action) else action()
+                        }
+                        if(result.isSuccess) {
+                            final=ok to result.getOrThrow()
+                            break
+                        }
+                        lastError=(result.exceptionOrNull()?.message ?: result.exceptionOrNull()?.javaClass?.simpleName ?: "请求失败").take(100)
+                    }
+                    val result=final ?: (failed to lastError)
+                    val elapsed=android.os.SystemClock.elapsedRealtime()-started
+                    main.post {
+                        if(!isDestroyed && batch==apiStatusUiState.checkBatchId) {
+                            if(hasValidatedInternet()) setApiStatus(name,result.first,result.second,elapsed)
+                            else setApiStatus(name,failed,"网络已断开",elapsed)
                         }
                     }
-                    val result=runCatching(action)
-                    if(result.isSuccess) {
-                        final=ok to result.getOrThrow()
-                        break
-                    }
-                    lastError=(result.exceptionOrNull()?.message ?: result.exceptionOrNull()?.javaClass?.simpleName ?: "请求失败").take(100)
-                }
-                val result=final ?: (failed to lastError)
-                val elapsed=android.os.SystemClock.elapsedRealtime()-started
-                main.post {
-                    // 只允许当前批次写入结果，迟到的旧请求不得覆盖新一轮检测。
-                    if(!isDestroyed && batch==apiStatusUiState.checkBatchId) {
-                        if(hasValidatedInternet()) setApiStatus(name,result.first,result.second,elapsed)
-                        else setApiStatus(name,failed,"网络已断开",elapsed)
+                } finally {
+                    if(requestScope!=null) {
+                        apiStatusUiState.playbackProbeScopes.remove(requestScope)
+                        main.post { apiStatusUiState.playbackProbeJobs.remove(task) }
                     }
                 }
             }
+            if(requestScope!=null) apiStatusUiState.playbackProbeJobs.add(task)
         }
 
         probe("首页") { "请求成功 · 返回 ${repository.home(1,library.contentType).items.size} 条" }
@@ -246,18 +258,28 @@ import java.util.concurrent.atomic.AtomicLong
             status.text="正在检测 $name…"
             btn.text=dotLabel(name,accent)
             val started=android.os.SystemClock.elapsedRealtime()
-            io.execute {
-                val result=runCatching(probe)
-                main.post {
-                    if(!dialog.isShowing || isDestroyed) return@post
-                    val elapsed=android.os.SystemClock.elapsedRealtime()-started
-                    result.fold(
-                        { detail -> status.text="$name · 正常 · $detail · ${elapsed}ms"; btn.text=dotLabel(name,dotOk) },
-                        { problem -> status.text="$name · 失败 · ${(problem.message ?: problem.javaClass.simpleName).take(80)}"; btn.text=dotLabel(name,dotFail) }
-                    )
-                    busy-=name
+            val requestScope=if(name=="播放") RequestScope().also { apiStatusUiState.playbackProbeScopes.add(it) } else null
+            lateinit var task: java.util.concurrent.Future<*>
+            task=io.submit {
+                try {
+                    val result=runCatching { if(requestScope!=null) requestScope.run(probe) else probe() }
+                    main.post {
+                        if(!dialog.isShowing || isDestroyed) return@post
+                        val elapsed=android.os.SystemClock.elapsedRealtime()-started
+                        result.fold(
+                            { detail -> status.text="$name · 正常 · $detail · ${elapsed}ms"; btn.text=dotLabel(name,dotOk) },
+                            { problem -> status.text="$name · 失败 · ${(problem.message ?: problem.javaClass.simpleName).take(80)}"; btn.text=dotLabel(name,dotFail) }
+                        )
+                        busy-=name
+                    }
+                } finally {
+                    if(requestScope!=null) {
+                        apiStatusUiState.playbackProbeScopes.remove(requestScope)
+                        main.post { apiStatusUiState.playbackProbeJobs.remove(task) }
+                    }
                 }
             }
+            if(requestScope!=null) apiStatusUiState.playbackProbeJobs.add(task)
         }
         fun add(name: String,probe: ()->String) {
             lateinit var btn:Button
