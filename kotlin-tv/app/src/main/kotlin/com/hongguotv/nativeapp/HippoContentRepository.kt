@@ -9,6 +9,7 @@ import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 河马剧场的 ContentRepository 适配层。
@@ -16,9 +17,9 @@ import java.io.IOException
  */
 internal class HippoContentRepository(context: Context, http: OkHttpClient = OkHttpClient()) : ContentRepository(http) {
     private val api = HippoPortalApi(context, http)
-    private val homeCursors = mutableMapOf<String, String>()
-    private val seriesCache = linkedMapOf<String, Series>()
-    private val theatreCursors = mutableMapOf<String, JSONObject>()
+    private val homeCursors = ConcurrentHashMap<String, String>()
+    private val seriesCache = ConcurrentHashMap<String, Series>()
+    private val theatreCursors = ConcurrentHashMap<String, JSONObject>()
 
     override fun home(page: Int, type: ContentType, genre: Genre?): CatalogPage {
         require(page in 1..100)
@@ -183,7 +184,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         val mapped = Series(id, title, value(row, "coverWap", "coverCutWap", "coverUrl", "chapterImg"),
             value(row, "introduction", "description", "bookDesc"), badge.ifBlank { if (count > 0) "全 $count 集" else "" }, tags)
         seriesCache[id] = mapped
-        while (seriesCache.size > 500) seriesCache.remove(seriesCache.keys.first())
+        while (seriesCache.size > 500) seriesCache.keys.firstOrNull()?.let(seriesCache::remove) ?: break
         return mapped
     }
 
