@@ -48,6 +48,8 @@ import java.util.concurrent.atomic.AtomicLong
         // 首页随机入口直接播放，不再展示随机荐剧列表供用户二次选择。
         if(screen!="catalog" || randomPlaybackLaunching || isDestroyed || resettingAllData) return
         randomPlaybackLaunching=true
+        val platformAtStart=activePlatform
+        val recommenderAtStart=randomRecommender
         // 先给出明确反馈；选中视频后只更新片名，不重建页面，避免等待画面闪烁。
         val waiting=base()
         waiting.setBackgroundColor(Color.BLACK)
@@ -61,8 +63,8 @@ import java.util.concurrent.atomic.AtomicLong
         waitingContent.addView(randomLoadingLabel,lp(-2,-2))
         waiting.addView(waitingContent,lp(-1,-1))
         fun playPickedVideo() {
-            if(isDestroyed || resettingAllData) { randomPlaybackLaunching=false; randomLoadingLabel=null; return }
-            val picked=randomRecommender.pick(1).firstOrNull()
+            if(isDestroyed || resettingAllData || activePlatform!=platformAtStart) { randomPlaybackLaunching=false; randomLoadingLabel=null; return }
+            val picked=recommenderAtStart.pick(1).firstOrNull()
                 ?: library.cachedHome(library.contentType)?.items?.shuffled()?.firstOrNull()
             if(picked!=null) {
                 randomPlaybackLaunching=false
@@ -74,12 +76,12 @@ import java.util.concurrent.atomic.AtomicLong
                 Toast.makeText(this,"暂时无法获取随机视频，请检查网络后重试",Toast.LENGTH_SHORT).show()
             }
         }
-        val cached=randomRecommender.pick(1).firstOrNull()
+        val cached=recommenderAtStart.pick(1).firstOrNull()
         if(cached!=null) {
             randomPlaybackLaunching=false
             openDetail(cached,resume=true,autoplay=true,randomLoading=true)
         } else {
-            replenishRandomPool { playPickedVideo() }
+            replenishRandomPool { if(activePlatform==platformAtStart) playPickedVideo() }
         }
     }
 
