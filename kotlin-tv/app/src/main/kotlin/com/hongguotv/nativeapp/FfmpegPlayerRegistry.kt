@@ -87,12 +87,17 @@ internal object FfmpegPlayerRegistry {
 
     @Synchronized
     fun attach(player: ExoPlayer, setup: Setup) {
-        val manager = setup.decoderManager ?: return
+        identities[player] = setup.identity
+        val manager = setup.decoderManager
+        if (manager == null) {
+            Log.i(TAG, "Renderer 创建完成 role=${setup.identity.role} player=${System.identityHashCode(player)} media=${player.currentMediaItem?.mediaId} identity=${setup.identity} renderers=${rendererTypes(player)}")
+            return
+        }
         try {
             manager.attach(player)
             manager.selectVideoDecoder(requestedVideoMode)
             managers[player] = manager
-            Log.i(TAG, "DecoderManager 已附加 player=${System.identityHashCode(player)} mode=$requestedVideoMode")
+            Log.i(TAG, "DecoderManager 已附加 player=${System.identityHashCode(player)} mode=$requestedVideoMode ffmpegRendererPresent=${manager.controller.owns(player)} renderers=${rendererTypes(player)}")
         } catch (problem: Throwable) {
             Log.e(TAG, "DecoderManager 附加失败 player=${System.identityHashCode(player)}", problem)
             runCatching { manager.detach() }
@@ -109,6 +114,7 @@ internal object FfmpegPlayerRegistry {
                 Log.e(TAG, "DecoderManager detach 失败 player=${System.identityHashCode(player)}", it)
             }
         }
+        identities.remove(player)
         Log.d(TAG, "播放器解码管理器已解绑 player=${System.identityHashCode(player)}")
     }
 
@@ -116,12 +122,30 @@ internal object FfmpegPlayerRegistry {
     fun selectVideo(player: ExoPlayer, mode: DecoderMode) {
         val manager = managers[player] ?: return
         try {
+            val before = "requested=${manager.videoMode} active=${manager.activeVideoMode} decoder=${manager.activeVideoDecoderName}"
+            Log.i(TAG, "指定播放器切换前 player=${System.identityHashCode(player)} media=${player.currentMediaItem?.mediaId} $before -> $mode")
             manager.selectVideoDecoder(mode)
-            Log.i(TAG, "指定播放器动态切换 player=${System.identityHashCode(player)} mode=$mode")
+            Log.i(TAG, "指定播放器切换后 player=${System.identityHashCode(player)} media=${player.currentMediaItem?.mediaId} before={$before} requested=${manager.videoMode} active=${manager.activeVideoMode} decoder=${manager.activeVideoDecoderName}")
         } catch (problem: Throwable) {
             Log.e(TAG, "指定播放器动态切换失败 player=${System.identityHashCode(player)} mode=$mode", problem)
             if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
         }
+    }
+
+    private fun rendererTypes(player: ExoPlayer): String =
+        (0 until player.rendererCount).joinToString(",") { index ->
+            "${index}:${player.getRenderer(index).javaClass.simpleName}#${System.identityHashCode(player.getRenderer(index))}"
+        }
+
+    @Synchronized
+    fun identitySnapshot(player: ExoPlayer?): String {
+        if (player == null) return "player=null"
+        val identity = identities[player]
+        val manager = managers[player]
+        return "player=${System.identityHashCode(player)} media=${player.currentMediaItem?.mediaId} " +
+            "creation=${identity ?: "UNKNOWN"} manager=${manager != null} " +
+            "managerRequested=${manager?.videoMode} activeMode=${manager?.activeVideoMode} " +
+            "activeDecoder=${manager?.activeVideoDecoderName} renderers=[${rendererTypes(player)}]"
     }
 
     @Synchronized
