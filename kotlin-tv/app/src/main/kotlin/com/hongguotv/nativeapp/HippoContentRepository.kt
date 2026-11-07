@@ -19,6 +19,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
     private val api = HippoPortalApi(context, http)
     private val homeCursors = ConcurrentHashMap<String, String>()
     private val seriesCache = ConcurrentHashMap<String, Series>()
+    private val lockedEpisodeIds = ConcurrentHashMap.newKeySet<String>()
     private val theatreCursors = ConcurrentHashMap<String, JSONObject>()
 
     override fun home(page: Int, type: ContentType, genre: Genre?): CatalogPage {
@@ -147,7 +148,12 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         val chapters = findList(data, "chapterList").sortedBy { it.optInt("chapterIndex", it.optInt("index", 0)) }
         val episodes = chapters.mapNotNull { chapter ->
             val chapterId = value(chapter, "chapterId", "chapter_id", "chapterid", "id")
-            chapterId.takeIf { it.isNotBlank() }?.let { encodeEpisodeId(bookId, it) }
+            chapterId.takeIf { it.isNotBlank() }?.let {
+                val encoded = encodeEpisodeId(bookId, it)
+                if (chapter.optInt("isCharge", 0) == 1) lockedEpisodeIds.add(encoded)
+                else lockedEpisodeIds.remove(encoded)
+                encoded
+            }
         }
         val info = findObject(data, setOf("bookInfoVo", "bookInfo", "bookVo"))
         val series = seriesCache[bookId] ?: Series(bookId, value(info, "bookName", "title").ifBlank { "河马短剧" },
@@ -157,6 +163,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
     }
 
     override fun stream(id: String, maxQuality: Int): StreamInfo {
+        if (lockedEpisodeIds.contains(id)) throw IOException("该集为付费内容，已按原平台规则阻止播放")
         val (bookId, chapterId) = decodeEpisodeId(id)
         if (chapterId.isBlank()) throw IOException("河马播放请求缺少 chapterId")
         api.ensureInitialized()
