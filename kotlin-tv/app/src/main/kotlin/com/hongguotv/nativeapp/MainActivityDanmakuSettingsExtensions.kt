@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicLong
     internal fun MainActivity.resetDanmakuPrefs() {
         library.danmakuOpacity=DanmakuPrefs.OPACITY_DEFAULT; library.danmakuFont=DanmakuPrefs.FONT_DEFAULT
         library.danmakuSpeed=DanmakuPrefs.SPEED_DEFAULT; library.danmakuRows=DanmakuPrefs.ROWS_DEFAULT
-        getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit()
+        getSharedPreferences(platformPrefsName("playback-settings-v1"), Context.MODE_PRIVATE).edit()
             .putInt("danmaku_color_mode", DanmakuView.COLOR_MODE_DEFAULT).apply()
         applyDanmakuPrefs()
     }
@@ -90,7 +90,7 @@ import java.util.concurrent.atomic.AtomicLong
                 in 2..options.lastIndex -> DanmakuView.COLOR_MODE_FIRST + choice - 2
                 else -> DanmakuView.COLOR_MODE_DEFAULT
             }
-            getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit()
+            getSharedPreferences(platformPrefsName("playback-settings-v1"), Context.MODE_PRIVATE).edit()
                 .putInt("danmaku_color_mode",mode).apply()
             danmakuView?.setColorMode(mode)
             if(anchor.tag!="playback-settings") anchor.text="弹幕颜色  ·  ${danmakuColorModeLabel(mode)}"
