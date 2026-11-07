@@ -171,7 +171,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             .put("unClockType", "pay").put("confirmPay", 1).put("autoPayFlag", false))
         val rows = findList(data, "chapterInfo")
         val row = rows.firstOrNull { value(it, "chapterId", "chapter_id") == chapterId } ?: rows.firstOrNull() ?: data
-        val urls = collectUrls(row)
+        val urls = collectUrls(row, maxQuality)
         val url = urls.firstOrNull() ?: throw IOException("河马播放接口未返回可用地址")
         val mime = if (url.substringBefore('?').endsWith(".m3u8", true)) "application/x-mpegURL" else "video/mp4"
         return StreamInfo(url, null, if (url.contains("1080")) "1080P" else "720P", mime)
@@ -223,10 +223,10 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         return JSONObject()
     }
 
-    private fun collectUrls(root: JSONObject): List<String> {
-        val priority = listOf(
-            "m3u81080pUrl", "m3u81080p", "mp41080pUrl", "mp41080p",
-            "m3u8720pUrl", "m3u8720p", "mp4720pUrl", "mp4720p",
+    private fun collectUrls(root: JSONObject, maxQuality: Int): List<String> {
+        val high = listOf("m3u81080pUrl", "m3u81080p", "mp41080pUrl", "mp41080p")
+        val medium = listOf("m3u8720pUrl", "m3u8720p", "mp4720pUrl", "mp4720p")
+        val priority = (if (maxQuality in 1..719) medium + high else high + medium) + listOf(
             "mp4", "m3u8", "url",
             "m3u81080pSwitchUrl", "mp41080pSwitchUrl",
             "m3u8720pSwitchUrl", "mp4720pSwitchUrl"
