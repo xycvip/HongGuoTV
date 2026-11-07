@@ -99,11 +99,18 @@ class MainActivity: Activity() {
     internal val hippoRepository by lazy { HippoContentRepository(this, redfruitRepository.http) }
     internal val repository: ContentRepository
         get() = if (activePlatform == ContentPlatform.HIPPO) hippoRepository else redfruitRepository
-    internal val randomRecommender by lazy {
+    internal val redfruitRandomRecommender by lazy {
         val raw=getSharedPreferences("random_pool", MODE_PRIVATE).getString("pool", null)
         val items=raw?.let { RandomPoolSnapshot.decode(it, System.currentTimeMillis()) } ?: emptyList()
-        RandomRecommender(repository, items)
+        RandomRecommender(redfruitRepository, items)
     }
+    internal val hippoRandomRecommender by lazy {
+        val raw=getSharedPreferences("hippo_random_pool", MODE_PRIVATE).getString("pool", null)
+        val items=raw?.let { RandomPoolSnapshot.decode(it, System.currentTimeMillis()) } ?: emptyList()
+        RandomRecommender(hippoRepository, items)
+    }
+    internal val randomRecommender: RandomRecommender
+        get() = if (activePlatform == ContentPlatform.HIPPO) hippoRandomRecommender else redfruitRandomRecommender
     internal var randomReplenishing by playbackPipelineState::randomReplenishing
     internal var randomPlaybackLaunching by playbackPipelineState::randomPlaybackLaunching
     internal var randomLoadingLabel by playbackPipelineState::randomLoadingLabel
