@@ -51,10 +51,12 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
                 second.addSuppressed(first); throw second
             }
         }
-        theatreCursors[key] = JSONObject().also { cursor ->
-            listOf("pageFlag", "fromColumnId", "fromItemId", "lastColumnStyle").forEach { f -> if (data.has(f)) cursor.put(f, data.opt(f)) }
+        val rawGroups = findList(data, "channelGroupData")
+        val seenBookGroups = mutableSetOf<String>()
+        val groups = rawGroups.filter { group ->
+            val isBookGroup = value(group, "channelGroupType") == "2"
+            !isBookGroup || seenBookGroups.add(value(group, "channelGroupName", "title").trim())
         }
-        val groups = findList(data, "channelGroupData")
         val selectedGroupId = selected["channelGroupId"]
             ?: groups.firstOrNull { it.optBoolean("checkedFlag") }?.let { value(it, "channelGroupId", "id") }
             ?: groups.firstOrNull()?.let { value(it, "channelGroupId", "id") }.orEmpty()
@@ -79,6 +81,10 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             if (channelOptions.isNotEmpty()) add(TheaterFilterGroup("channelId", selectedGroup?.let { value(it, "channelGroupName", "title") } ?: "频道", channelOptions))
         }
         val columns = findList(data, "columnData")
+        theatreCursors[key] = JSONObject().also { cursor ->
+            listOf("pageFlag", "fromColumnId", "fromItemId").forEach { f -> if (data.has(f)) cursor.put(f, data.opt(f)) }
+            columns.lastOrNull()?.optInt("styleType")?.takeIf { it > 0 }?.let { cursor.put("lastColumnStyle", it) }
+        }
         val items = columns.flatMap { column -> findList(column, "videoData") }.mapNotNull(::series)
         return TheaterCatalogPage(CatalogPage(items, data.optBoolean("hasMore")), filters,
             if (data.optBoolean("hasMore")) page + 1 else null, "hippo:$key")
