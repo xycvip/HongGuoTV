@@ -3,8 +3,10 @@ package com.hongguotv.nativeapp
 
 import android.content.Context
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
@@ -26,23 +28,57 @@ internal object FfmpegPlayerRegistry {
     @Volatile
     private var requestedVideoMode: DecoderMode = DecoderMode.AUTO
 
+    @Volatile
+    private var preferencesLoaded = false
+
     val videoMode: DecoderMode get() = requestedVideoMode
 
     @Synchronized
-    fun setVideoMode(mode: DecoderMode) {
+    private fun loadPreferences(context: Context) {
+        if (preferencesLoaded) return
+        val saved = context.getSharedPreferences("ffmpeg-settings-v1", Context.MODE_PRIVATE)
+            .getString("video_decoder_mode", DecoderMode.AUTO.name)
+        requestedVideoMode = runCatching { DecoderMode.valueOf(saved ?: DecoderMode.AUTO.name) }
+            .getOrDefault(DecoderMode.AUTO)
+        preferencesLoaded = true
+    }
+
+    @Synchronized
+    fun setVideoMode(context: Context, mode: DecoderMode) {
         requestedVideoMode = mode
+        preferencesLoaded = true
+        context.applicationContext.getSharedPreferences("ffmpeg-settings-v1", Context.MODE_PRIVATE)
+            .edit().putString("video_decoder_mode", mode.name).apply()
         managers.values.toList().forEach { manager ->
             manager.selectVideoDecoder(mode)
         }
     }
 
     fun create(context: Context): Setup {
-        // Do not touch NextLib renderers before the downloaded runtime is activated.
-        // This lets users download/activate FFmpeg later in the same app process,
-        // provided no FFmpeg renderer has attempted a native load yet.
+        loadPreferences(context)
+        // Before FFmpeg is installed, still expose hardware/software MediaCodec
+        // selection. The optional FFmpeg renderer is added only after activation.
         if (!FfmpegRuntimeLoader.isReady) {
+            val selector = MediaCodecSelector { mimeType, secure, tunneling ->
+                val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
+                val mode = requestedVideoMode
+                when {
+                    !MimeTypes.isVideo(mimeType) -> decoders
+                    mode == DecoderMode.HARDWARE -> decoders.filter { it.hardwareAccelerated }
+                    mode == DecoderMode.SOFTWARE -> decoders.filter { it.softwareOnly }
+                    else -> decoders.sortedBy {
+                        when {
+                            it.hardwareAccelerated -> 0
+                            it.softwareOnly -> 1
+                            else -> 2
+                        }
+                    }
+                }
+            }
             return Setup(
-                DefaultRenderersFactory(context).setEnableDecoderFallback(true),
+                DefaultRenderersFactory(context)
+                    .setEnableDecoderFallback(true)
+                    .setMediaCodecSelector(selector),
                 null
             )
         }
