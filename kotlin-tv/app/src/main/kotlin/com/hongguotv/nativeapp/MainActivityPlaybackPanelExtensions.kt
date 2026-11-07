@@ -96,7 +96,10 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
             decoderButtons[mode]=button
         }
         refreshDecoderButtons()
-        addButton(secondaryTransport, "libmpv测试") { openLibMpvTest() }
+        addButton(secondaryTransport, if (LibMpvTestOverlay.sessions.containsKey(this)) "切回系统播放器" else "切换到 libmpv") {
+            if (LibMpvTestOverlay.sessions.containsKey(this)) switchToSystemPlayer()
+            else switchToLibMpv()
+        }
 
         lateinit var qualityButton: TextView
         qualityButton=addButton(secondaryTransport,"画质") { showQualityPicker(qualityButton,true) }
