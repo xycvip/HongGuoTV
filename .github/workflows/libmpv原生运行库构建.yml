@@ -53,6 +53,13 @@ jobs:
           sudo apt-get install -y autoconf pkg-config libtool ninja-build unzip wget meson gperf nasm
           (cd buildscripts && IN_CI=1 ./download.sh)
 
+      - name: 将上游 JNI 符号适配为 HongGuoTV LibMpvNativeBridge
+        working-directory: mpv-android
+        run: |
+          sed -i 's/Java_is_xyz_mpv_MPVLib_/Java_com_x_hongguotv_libmpv_LibMpvNativeBridge_/g' app/src/main/jni/jni_utils.h
+          sed -i 's#is/xyz/mpv/MPVLib#com/x/hongguotv/libmpv/LibMpvNativeBridge#g' app/src/main/jni/jni_utils.cpp
+          sed -i 's/mpv_MPVLib/mpv_LibMpvNativeBridge/g' app/src/main/jni/*.h app/src/main/jni/*.cpp
+
       - name: 构建 ARM 32 位 libmpv
         working-directory: mpv-android
         run: ./buildscripts/buildall.sh --arch armv7l mpv
