@@ -19,55 +19,87 @@ import java.util.concurrent.ConcurrentHashMap
  */
 internal class HippoContentRepository(context: Context, http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(45, TimeUnit.SECONDS).cookieJar(CookieJar.NO_COOKIES).build()) : ContentRepository(http) {
     private val api = HippoPortalApi(context, http)
-    private val homeCursors = ConcurrentHashMap<String, String>()
     private val seriesCache = ConcurrentHashMap<String, Series>()
     private val lockedEpisodeIds = ConcurrentHashMap.newKeySet<String>()
     private val theatreCursors = ConcurrentHashMap<String, JSONObject>()
     private val rankingCursors = ConcurrentHashMap<String, String>()
 
+    /**
+     * 河马首页与剧场共用 1125/1121 内容接口，不再请求旧版 1113 首页接口。
+     * 首页只复用剧场返回的目标分类内容，UI 仍由原首页组件负责展示。
+     */
     override fun home(page: Int, type: ContentType, genre: Genre?): CatalogPage {
         require(page in 1..100)
-        api.ensureInitialized()
-        val key = "home:${type.name}:${genre?.slug.orEmpty()}"
-        val cursor = if (page <= 1) "" else homeCursors[key].orEmpty()
-        val params = JSONObject().put("pageFlag", cursor).put("watchRecords", JSONArray())
-        val data = api.request("1113", params)
-        val rows = findList(data, "dataList")
-        val items = rows.mapNotNull(::series).filter { it.id.isNotBlank() }
-        homeCursors[key] = data.optString("pageFlag")
-        return CatalogPage(items, data.optBoolean("hasMore"))
+        val selected = genre?.slug?.takeIf { it.isNotBlank() }?.let { mapOf("channelId" to it) }.orEmpty()
+        return theater(page, type, selected).catalog
+    }
+
+    private val theatreGroupIds = ConcurrentHashMap<String, String>()
+
+    private fun requestTheater(params: JSONObject): JSONObject = try {
+        api.request("1125", params)
+    } catch (first: Exception) {
+        params.put("recSwitch", true).put("playListFlag", true)
+        try {
+            api.request("1121", params)
+        } catch (second: Exception) {
+            second.addSuppressed(first)
+            throw second
+        }
     }
 
     override fun theater(page: Int, type: ContentType?, selected: Map<String, String>): TheaterCatalogPage {
+        require(page in 1..100)
         api.ensureInitialized()
-        val key = selected["channelGroupId"].orEmpty() + ":" + selected["channelId"].orEmpty()
+        val typeKey = type?.name ?: "ALL"
+        val requestedGroupId = selected["channelGroupId"]?.takeIf { it.isNotBlank() }
+            ?: theatreGroupIds[typeKey]?.takeIf { page > 1 }
+        val key = typeKey + ":" + requestedGroupId.orEmpty() + ":" + selected["channelId"].orEmpty()
         val previous = theatreCursors[key]
         val params = JSONObject()
-        selected["channelGroupId"]?.takeIf { it.isNotBlank() }?.let { params.put("channelGroupId", it) }
+        requestedGroupId?.let { params.put("channelGroupId", it) }
         selected["channelId"]?.takeIf { it.isNotBlank() }?.let { params.put("channelId", it.toIntOrNull() ?: it) }
         if (page > 1 && previous != null) {
             listOf("pageFlag", "fromColumnId", "fromItemId", "lastColumnStyle").forEach { field ->
                 if (previous.has(field) && !previous.isNull(field)) params.put(field, previous.opt(field))
             }
         }
-        val data = try { api.request("1125", params) } catch (first: Exception) {
-            params.put("recSwitch", true).put("playListFlag", true)
-            try { api.request("1121", params) } catch (second: Exception) {
-                second.addSuppressed(first); throw second
-            }
-        }
+        var data = requestTheater(params)
         val rawGroups = findList(data, "channelGroupData")
         val seenBookGroups = mutableSetOf<String>()
         val groups = rawGroups.filter { group ->
             val isBookGroup = value(group, "channelGroupType") == "2"
             !isBookGroup || seenBookGroups.add(value(group, "channelGroupName", "title").trim())
         }
-        val selectedGroupId = selected["channelGroupId"]
-            ?: groups.firstOrNull { it.optBoolean("checkedFlag") }?.let { value(it, "channelGroupId", "id") }
-            ?: groups.firstOrNull()?.let { value(it, "channelGroupId", "id") }.orEmpty()
-        val selectedGroup = groups.firstOrNull { value(it, "channelGroupId", "id") == selectedGroupId }
-            ?: groups.firstOrNull()
-        val groupOptions = groups.mapNotNull { group ->
+        fun matchesContentType(group: JSONObject, requested: ContentType): Boolean {
+            val name = value(group, "channelGroupName", "title").trim().lowercase()
+            return when (requested) {
+                ContentType.SHORT -> (name.contains("真人") || name.contains("短剧")) &&
+                    !name.contains("漫剧") && !name.contains("动漫") && !name.contains("ai")
+                ContentType.COMIC -> name.contains("漫剧") || name.contains("动漫") || name.contains("漫画")
+                ContentType.AI -> name.contains("ai") || name.contains("人工智能")
+            }
+        }
+        val explicitlySelectedGroup = selected["channelGroupId"]?.let { id ->
+            groups.firstOrNull { value(it, "channelGroupId", "id") == id }
+        }
+        val typedGroup = type?.let { requested -> groups.firstOrNull { matchesContentType(it, requested) } }
+        val selectedGroup = when {
+            explicitlySelectedGroup != null && (type == null || matchesContentType(explicitlySelectedGroup, type)) -> explicitlySelectedGroup
+            typedGroup != null -> typedGroup
+            type == null -> groups.firstOrNull { it.optBoolean("checkedFlag") } ?: groups.firstOrNull()
+            else -> throw IOException("河马剧场未返回「${type.label}」分类，已阻止错误展示其他类型内容")
+        }
+        val selectedGroupId = selectedGroup?.let { value(it, "channelGroupId", "id") }.orEmpty()
+        if (selectedGroupId.isNotBlank()) {
+            theatreGroupIds[typeKey] = selectedGroupId
+            if (requestedGroupId != selectedGroupId) {
+                params.put("channelGroupId", selectedGroupId)
+                data = requestTheater(params)
+            }
+        }
+        val resolvedKey = typeKey + ":" + selectedGroupId + ":" + selected["channelId"].orEmpty()
+        val groupOptions = (if (type == null) groups else emptyList()).mapNotNull { group ->
             val id = value(group, "channelGroupId", "id")
             val label = value(group, "channelGroupName", "title")
             if (id.isBlank() || label.isBlank()) null else TheaterFilterOption(id, label)
@@ -78,21 +110,24 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             val label = value(channel, "channelName", "title")
             if (id.isBlank() || label.isBlank()) null else TheaterFilterOption(id, label)
         }
-        val selectedChannelId = selected["channelId"]
-            ?: channelRows.firstOrNull { it.optBoolean("checkedFlag") }?.let { value(it, "channelId", "id") }
-            ?: channelOptions.firstOrNull()?.id
         val filters = buildList {
             if (groupOptions.isNotEmpty()) add(TheaterFilterGroup("channelGroupId", "分类", groupOptions))
             if (channelOptions.isNotEmpty()) add(TheaterFilterGroup("channelId", selectedGroup?.let { value(it, "channelGroupName", "title") } ?: "频道", channelOptions))
         }
         val columns = findList(data, "columnData")
-        theatreCursors[key] = JSONObject().also { cursor ->
-            listOf("pageFlag", "fromColumnId", "fromItemId").forEach { f -> if (data.has(f)) cursor.put(f, data.opt(f)) }
+        theatreCursors[resolvedKey] = JSONObject().also { cursor ->
+            listOf("pageFlag", "fromColumnId", "fromItemId").forEach { field ->
+                if (data.has(field)) cursor.put(field, data.opt(field))
+            }
             columns.lastOrNull()?.optInt("styleType")?.takeIf { it > 0 }?.let { cursor.put("lastColumnStyle", it) }
         }
         val items = columns.flatMap { column -> findList(column, "videoData") }.mapNotNull(::series)
-        return TheaterCatalogPage(CatalogPage(items, data.optBoolean("hasMore")), filters,
-            if (data.optBoolean("hasMore")) page + 1 else null, "hippo:$key")
+        return TheaterCatalogPage(
+            CatalogPage(items, data.optBoolean("hasMore")),
+            filters,
+            if (data.optBoolean("hasMore")) page + 1 else null,
+            "hippo:$resolvedKey"
+        )
     }
 
     override fun theaterFilters(type: ContentType): List<TheaterFilterGroup> = theater(1, type).filters
