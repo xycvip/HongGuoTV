@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   build:
-    name: 构建 libmpv（ARM 32/64 位）并编译红果TV
+    name: 构建 libmpv（仅 ARM 32 位）并编译红果TV
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     steps:
@@ -50,7 +50,11 @@ jobs:
         run: |
           chmod +x buildscripts/download.sh buildscripts/buildall.sh
           sudo apt-get update
-          sudo apt-get install -y autoconf pkg-config libtool ninja-build unzip wget meson gperf nasm
+          sudo apt-get install -y autoconf pkg-config libtool ninja-build unzip wget python3-pip gperf nasm
+          python3 -m pip install --user --upgrade 'meson>=1.11.0'
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          meson --version
           (cd buildscripts && IN_CI=1 ./download.sh)
 
       - name: 将上游 JNI 符号适配为 HongGuoTV LibMpvNativeBridge
@@ -64,13 +68,9 @@ jobs:
         working-directory: mpv-android
         run: ./buildscripts/buildall.sh --arch armv7l mpv
 
-      - name: 构建 ARM 64 位 libmpv
+      - name: 构建 ARM 32 位上游 JNI 桥接库
         working-directory: mpv-android
-        run: ./buildscripts/buildall.sh --arch arm64 mpv
-
-      - name: 构建上游 JNI 桥接库
-        working-directory: mpv-android
-        run: ./buildscripts/buildall.sh --arch arm64 -n mpv-android
+        run: ./buildscripts/buildall.sh --arch armv7l -n mpv-android
 
       - name: 提取 libmpv 及其依赖库
         shell: bash
@@ -78,7 +78,7 @@ jobs:
           set -euo pipefail
           apk="mpv-android/app/build/outputs/apk/default/debug/app-default-universal-debug.apk"
           test -f "$apk"
-          for abi in armeabi-v7a arm64-v8a; do
+          for abi in armeabi-v7a; do
             destination="kotlin-tv/libmpv-runtime/src/main/jniLibs/$abi"
             mkdir -p "$destination"
             unzip -Z1 "$apk" | grep "^lib/$abi/.*\.so$" | while read -r entry; do
@@ -104,6 +104,5 @@ jobs:
           path: |
             kotlin-tv/app/build/outputs/apk/debug/app-debug.apk
             kotlin-tv/libmpv-runtime/src/main/jniLibs/armeabi-v7a/*.so
-            kotlin-tv/libmpv-runtime/src/main/jniLibs/arm64-v8a/*.so
           if-no-files-found: error
           retention-days: 14
