@@ -142,7 +142,7 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
             if (!firstMpvPositionReported) {
                 firstMpvPositionReported = true
                 hideBootSplash()
-                markStartupRecommendationPlaying()
+                if (resume) markStartupRecommendationPlaying()
             }
             if (durationSeconds > 0.0) {
                 status.text = "libmpv · ${formatTime((positionSeconds * 1000).toLong())} / ${formatTime((durationSeconds * 1000).toLong())} · ${mpv.currentHardwareDecoder()}"
