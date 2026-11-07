@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       book_id:
-        description: "可选：短剧 bookId；留空只验证设备注册"
+        description: "可选：手动指定 bookId；留空自动从首页发现"
         required: false
         type: string
       chapter_id:
-        description: "可选：分集 chapterId；填写后验证 1132/1133"
+        description: "可选：手动指定 chapterId；留空自动选择第一集"
         required: false
         type: string
       test_playback_url:
@@ -153,29 +153,89 @@ jobs:
               meta["user_id_returned"]=bool(USER_ID)
               print(f"[通过] 1103 设备初始化：{meta['domain']} / {meta['transport']}；userId 返回={bool(USER_ID)}")
 
-              if BOOK:
-                  detail,meta=request_api("1132",{"bookId":BOOK,"chapterMin":0,"chapterMax":100})
-                  chapters=find_list(detail,"chapterList")
-                  meta["chapter_count"]=len(chapters)
-                  print(f"[通过] 1132 目录接口：{len(chapters)} 集")
-                  if CHAPTER:
-                      data,meta=request_api("1133",{"bookId":BOOK,"chapterId":CHAPTER,
-                        "unClockType":"pay","confirmPay":1,"autoPayFlag":False})
-                      rows=find_list(data,"chapterInfo")
-                      urls=find_urls(rows if rows else data)
-                      meta["chapter_info_count"]=len(rows)
-                      meta["playback_url_count"]=len(urls)
-                      meta["playback_urls_redacted"]=[redacted(x) for x in urls[:8]]
-                      print(f"[通过] 1133 播放解析：chapterInfo={len(rows)}，URL={len(urls)}")
-                      if not urls: raise RuntimeError("1133 请求成功，但响应未识别到播放 URL")
-                      if TEST_URL:
-                          checks=[probe(u) for u in urls[:4]]
-                          meta["url_probes"]=checks
-                          for i,c in enumerate(checks,1):print(f"[播放地址 {i}] {c}")
-                          if not any(c.get("status")=="可访问" for c in checks):
-                              raise RuntimeError("1133 返回了 URL，但抽样地址均无法访问")
-                  else: print("[跳过] 未填写 chapter_id，未调用 1133")
-              else: print("[跳过] 未填写 book_id，未调用 1132/1133")
+              # 未提供 bookId 时，先从首页 1113 自动发现短剧；尝试常见分页参数，兼容不同服务端版本。
+              selected_book = BOOK
+              selected_chapter = CHAPTER
+              if not selected_book:
+                  feed = None
+                  feed_errors = []
+                  for params in ({}, {"pageNum":1,"pageSize":20}, {"page":1,"pageSize":20}, {"current":1,"size":20}):
+                      try:
+                          feed, feed_meta = request_api("1113", params)
+                          feed_meta["request_params"] = params
+                          print(f"[通过] 1113 首页内容：{feed_meta['domain']} / {feed_meta['transport']}")
+                          break
+                      except Exception as e:
+                          feed_errors.append(str(e)[:160])
+                  if feed is None:
+                      raise RuntimeError("1113 首页接口未能获取内容：" + "；".join(feed_errors[-2:]))
+                  candidates=[]
+                  def collect_books(obj, depth=0):
+                      if depth>10:return
+                      if isinstance(obj,dict):
+                          bid = obj.get("bookId") or obj.get("book_id") or obj.get("bookid")
+                          title = obj.get("bookName") or obj.get("title") or obj.get("name") or ""
+                          if bid:
+                              candidates.append((str(bid),str(title)[:100]))
+                          elif obj.get("id") and title:
+                              candidates.append((str(obj["id"]),str(title)[:100]))
+                          for v in obj.values(): collect_books(v,depth+1)
+                      elif isinstance(obj,list):
+                          for v in obj: collect_books(v,depth+1)
+                  collect_books(feed)
+                  seen=set()
+                  candidates=[x for x in candidates if not (x[0] in seen or seen.add(x[0]))]
+                  if not candidates:
+                      raise RuntimeError("1113 已响应，但未能从首页数据识别 bookId；需要检查接口返回字段结构")
+                  selected_book, selected_title = candidates[0]
+                  REPORT["auto_discovery"]={"source_api":"1113","candidate_count":len(candidates),
+                    "selected_book_id":selected_book,"selected_title":selected_title}
+                  print(f"[通过] 自动发现短剧：{selected_title or '未返回标题'}；候选 {len(candidates)} 个")
+
+              detail,meta=request_api("1132",{"bookId":selected_book,"chapterMin":0,"chapterMax":100})
+              chapters=find_list(detail,"chapterList")
+              if not chapters:
+                  def collect_chapters(obj,depth=0):
+                      if depth>10:return []
+                      if isinstance(obj,dict):
+                          cid=obj.get("chapterId") or obj.get("chapter_id") or obj.get("chapterid")
+                          if cid:return [obj]
+                          out=[]
+                          for v in obj.values():out.extend(collect_chapters(v,depth+1))
+                          return out
+                      if isinstance(obj,list):
+                          out=[]
+                          for v in obj:out.extend(collect_chapters(v,depth+1))
+                          return out
+                      return []
+                  chapters=collect_chapters(detail)
+              meta["chapter_count"]=len(chapters)
+              print(f"[通过] 1132 目录接口：识别到 {len(chapters)} 集")
+              if not chapters:
+                  raise RuntimeError("1132 请求成功，但没有识别到 chapterId/剧集目录")
+              if not selected_chapter:
+                  first=chapters[0]
+                  selected_chapter=str(first.get("chapterId") or first.get("chapter_id") or first.get("chapterid") or "")
+              if not selected_chapter:
+                  raise RuntimeError("已获取目录，但第一集缺少 chapterId")
+              REPORT["selected_ids"]={"book_id":selected_book,"chapter_id":selected_chapter}
+              print("[通过] 自动选择测试剧集：第一集")
+
+              data,meta=request_api("1133",{"bookId":selected_book,"chapterId":selected_chapter,
+                "unClockType":"pay","confirmPay":1,"autoPayFlag":False})
+              rows=find_list(data,"chapterInfo")
+              urls=find_urls(rows if rows else data)
+              meta["chapter_info_count"]=len(rows)
+              meta["playback_url_count"]=len(urls)
+              meta["playback_urls_redacted"]=[redacted(x) for x in urls[:8]]
+              print(f"[通过] 1133 播放解析：chapterInfo={len(rows)}，URL={len(urls)}")
+              if not urls: raise RuntimeError("1133 请求成功，但响应未识别到播放 URL")
+              if TEST_URL:
+                  checks=[probe(u) for u in urls[:4]]
+                  meta["url_probes"]=checks
+                  for i,check in enumerate(checks,1):print(f"[播放地址 {i}] {check}")
+                  if not any(check.get("status")=="可访问" for check in checks):
+                      raise RuntimeError("1133 返回了 URL，但抽样地址均无法访问")
               REPORT["result"]="SUCCESS"
           except Exception as e:
               REPORT["result"]="FAILED"
@@ -187,8 +247,8 @@ jobs:
               out=os.path.join(os.getenv("RUNNER_TEMP","."),"hema-api-report.json")
               with open(out,"w",encoding="utf-8") as f:json.dump(REPORT,f,ensure_ascii=False,indent=2)
               rows=["## 河马接口验证结果","",f"- 结果：**{REPORT.get('result','FAILED')}**",
-                    f"- bookId：{'已提供' if BOOK else '未提供'}",
-                    f"- chapterId：{'已提供' if CHAPTER else '未提供'}","",
+                    f"- bookId：{'手动提供' if BOOK else '自动发现'}",
+                    f"- chapterId：{'手动提供' if CHAPTER else '自动选择'}","",
                     "| 接口 | 域名 | 传输 | HTTP | 耗时 |","|---|---|---|---:|---:|"]
               for x in REPORT["checks"]:
                   rows.append(f"| {x.get('api','-')} | {x.get('domain','-')} | {x.get('transport','-')} | {x.get('http','-')} | {x.get('elapsed_ms','-')} ms |")
