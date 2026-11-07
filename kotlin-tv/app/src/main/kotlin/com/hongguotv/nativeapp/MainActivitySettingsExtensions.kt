@@ -346,22 +346,27 @@ import java.util.concurrent.atomic.AtomicLong
         ffmpegRuntimeButton=setting(playback,0,if(FfmpegRuntimeLoader.isReady) "FFmpeg运行库  ·  已安装" else "FFmpeg运行库  ·  未安装（点击安装）") {
             openFfmpegRuntimeInstaller()
         }
-        videoDecoderButton=setting(playback,0,"视频解码  ·  ${decoderModeLabel(FfmpegPlayerRegistry.videoMode)}") {
-            if(!FfmpegRuntimeLoader.isReady) {
-                Toast.makeText(this@settings,"请先安装 FFmpeg 运行库，再选择解码策略",Toast.LENGTH_LONG).show()
-                openFfmpegRuntimeInstaller()
-            } else {
-                val modes=listOf(DecoderMode.AUTO,DecoderMode.HARDWARE,DecoderMode.SOFTWARE,DecoderMode.FFMPEG)
-                val labels=modes.map(::decoderModeLabel)
-                TvDialog.choose(this@settings,"视频解码策略",labels,{ index ->
-                    val selected=modes.getOrNull(index) ?: DecoderMode.AUTO
-                    getSharedPreferences("ffmpeg-settings-v1",Context.MODE_PRIVATE).edit()
-                        .putString("video_decoder_mode",selected.name).apply()
-                    FfmpegPlayerRegistry.setVideoMode(selected)
-                    videoDecoderButton.text="视频解码  ·  ${decoderModeLabel(selected)}"
-                    Toast.makeText(this@settings,"已切换为${decoderModeLabel(selected)}",Toast.LENGTH_LONG).show()
-                }).show()
+        videoDecoderButton=setting(playback,0,"视频解码方式  ·  ${decoderModeLabel(FfmpegPlayerRegistry.videoMode)}") {
+            val modes=listOf(DecoderMode.AUTO,DecoderMode.HARDWARE,DecoderMode.SOFTWARE,DecoderMode.FFMPEG)
+            val labels=modes.map { mode ->
+                if(mode==DecoderMode.FFMPEG && !FfmpegRuntimeLoader.isReady)
+                    "FFmpeg 软件解码（需先安装运行库）"
+                else decoderModeLabel(mode)
             }
+            TvDialog.choose(this@settings,"视频解码方式",labels,{ index ->
+                val selected=modes.getOrNull(index) ?: DecoderMode.AUTO
+                if(selected==DecoderMode.FFMPEG && !FfmpegRuntimeLoader.isReady) {
+                    Toast.makeText(this@settings,"FFmpeg 运行库尚未安装，请在下方运行库管理中下载",Toast.LENGTH_LONG).show()
+                } else {
+                    FfmpegPlayerRegistry.setVideoMode(this@settings,selected)
+                    videoDecoderButton.text="视频解码方式  ·  ${decoderModeLabel(selected)}"
+                    val note=if(FfmpegRuntimeLoader.isReady)
+                        "已切换为${decoderModeLabel(selected)}"
+                    else
+                        "已保存为${decoderModeLabel(selected)}，下一次开始播放时生效"
+                    Toast.makeText(this@settings,note,Toast.LENGTH_LONG).show()
+                }
+            }).show()
         }
         lateinit var seamlessPlaybackButton:TextView
         seamlessPlaybackButton=setting(playback,0,"无感连播  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
