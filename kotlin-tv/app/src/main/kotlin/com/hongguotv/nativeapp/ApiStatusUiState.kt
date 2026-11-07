@@ -3,6 +3,9 @@ package com.hongguotv.nativeapp
 import android.animation.ValueAnimator
 import android.view.View
 import android.widget.FrameLayout
+import com.hongguotv.core.RequestScope
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Future
 
 internal class ApiStatusUiState {
     val views = mutableMapOf<String, ApiStatusFlowerView>()
@@ -15,4 +18,13 @@ internal class ApiStatusUiState {
     var catalogNavFlower: View? = null
     var catalogNavVisible = true
     var checkStarted = false
+    val playbackProbeScopes = CopyOnWriteArrayList<RequestScope>()
+    val playbackProbeJobs = CopyOnWriteArrayList<Future<*>>()
+
+    fun cancelPlaybackProbes() {
+        playbackProbeScopes.forEach { it.cancel() }
+        playbackProbeScopes.clear()
+        playbackProbeJobs.forEach { it.cancel(true) }
+        playbackProbeJobs.clear()
+    }
 }
