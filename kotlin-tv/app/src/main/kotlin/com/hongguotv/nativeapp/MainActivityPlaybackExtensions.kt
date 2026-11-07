@@ -37,6 +37,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.preload.DefaultPreloadManager
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 import androidx.media3.ui.PlayerView
 import com.hongguotv.core.*
 import java.util.Locale
@@ -95,8 +96,17 @@ import java.util.concurrent.atomic.AtomicLong
             // 让 PlayerView 在一次 setPlayer 中完成输出面交接，避免先置空造成额外黑屏。
             playerView?.player=promoted
             standbyAttachedAt=android.os.SystemClock.elapsedRealtime()
-            standbyOutputView?.let { output -> if(output.parent===root) root.removeView(output) }
-            standbyOutputView=null
+            // FFmpeg owns its Surface/ANativeWindow bridge. Keep its hidden warm-up
+            // output alive until the promoted player has rendered on PlayerView's
+            // visible surface. MediaCodec paths retain the original immediate cleanup.
+            val keepStandbyOutputForFfmpeg =
+                promoted != null && FfmpegPlayerRegistry.currentVideoMode(promoted) == DecoderMode.FFMPEG
+            if (keepStandbyOutputForFfmpeg) {
+                debugLog("FFmpeg诊断[LIFECYCLE] handoff 保留备用输出面，等待正式 PlayerView 首帧 output=" + standbyOutputView?.let { System.identityHashCode(it) })
+            } else {
+                standbyOutputView?.let { output -> if(output.parent===root) root.removeView(output) }
+                standbyOutputView=null
+            }
             FfmpegPlayerRegistry.detach(oldPlayer)
             oldPlayer?.release()
             standbyPlayer=null
