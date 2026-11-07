@@ -7,7 +7,7 @@ import java.net.URLEncoder
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-internal class PhoenixRequestSigner(private val clock: () -> Long = System::currentTimeMillis, private val random: () -> Double = Math::random) {
+class PhoenixRequestSigner(private val clock: () -> Long = System::currentTimeMillis, private val random: () -> Double = Math::random) {
     private var device: Map<String, String> = VendorConstants.device
     constructor(device: Map<String, String>) : this() { this.device = device }
     data class Request(val url: String, val headers: Map<String, String>, val body: ByteArray?)

@@ -109,7 +109,7 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
             .readTimeout(15,java.util.concurrent.TimeUnit.SECONDS)
             .callTimeout(20,java.util.concurrent.TimeUnit.SECONDS)
             .build()
-        val source=ContentRepository(http); prefetchHttp=http
+        val source=playbackStreamSource(http); prefetchHttp=http
         val scope=RequestScope(); prefetchScope=scope
         prefetchJob=prefetchWorker.submit {
             var remote: RemoteVideo?=null

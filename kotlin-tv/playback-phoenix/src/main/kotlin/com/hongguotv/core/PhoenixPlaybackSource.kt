@@ -34,10 +34,10 @@ data class PhoenixPlaybackDiagnostic(
         (!cencKeyPresent || cencSampleCount > 0)
 }
 
-internal class PhoenixPlaybackSource(
+class PhoenixPlaybackSource(
     private val http: OkHttpClient,
     private val session: PhoenixPlaybackDeviceSession,
-    private val signer: PhoenixRequestSigner, // retained for constructor compatibility; Phoenix uses PhoenixPlayerPhoenixRequestSigner
+    private val signer: PhoenixRequestSigner, // retained for constructor compatibility; Phoenix uses PhoenixRequestSigner
 ) : StreamSource {
     override val name: String = "phoenix-video-model"
 

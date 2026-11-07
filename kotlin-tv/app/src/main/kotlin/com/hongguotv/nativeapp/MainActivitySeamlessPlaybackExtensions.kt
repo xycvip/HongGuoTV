@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
-import com.hongguotv.core.ContentRepository
 import com.hongguotv.core.RemoteVideo
 
 import android.content.Context
@@ -100,7 +99,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
         .callTimeout(25, TimeUnit.SECONDS)
         .build()
     standbyHttp = http
-    val source = ContentRepository(http)
+    val source = playbackStreamSource(http)
     val requestGeneration = generation
     val requestSeries = data.series.id
     standbyJob = prefetchWorker.submit {

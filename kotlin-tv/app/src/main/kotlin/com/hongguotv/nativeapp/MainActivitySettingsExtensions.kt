@@ -214,6 +214,7 @@ import java.util.concurrent.atomic.AtomicLong
 
         lateinit var startupAutoplayButton:TextView
         lateinit var qualityButton:TextView
+        lateinit var playbackApiButton:TextView
         lateinit var defaultSpeed:TextView
         lateinit var frame:TextView
         lateinit var videoRendererButton:TextView
@@ -271,6 +272,15 @@ import java.util.concurrent.atomic.AtomicLong
             sleepActionButton.text="定时关闭·${sleepActionLabel(next)}"
         }
         qualityButton=setting(playback,0,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
+        playbackApiButton=setting(playback,0,"播放接口  ·  ${playbackApiLabel()}") {
+            val next=if(playbackApiSelection()=="native") "phoenix" else "native"
+            getSharedPreferences("playback-api-v1",Context.MODE_PRIVATE)
+                .edit().putString("source",next).apply()
+            playbackApiButton.text="播放接口  ·  ${playbackApiLabel(next)}"
+            Toast.makeText(this@settings,
+                if(next=="phoenix") "已选择 Phoenix 接口；仅影响新开始的播放" else "已选择原生接口；仅影响新开始的播放",
+                Toast.LENGTH_LONG).show()
+        }
         defaultSpeed=setting(playback,0,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
         frame=setting(playback,0,"画面模式  ·  ${library.frameMode.label}") { showFramePicker(frame,false) }
         videoRendererButton=setting(playback,0,"渲染方式  ·  ${videoRendererModeLabel()}") {
