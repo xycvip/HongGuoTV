@@ -141,7 +141,7 @@ class MainActivity: Activity() {
     internal var standbyAttachedAt by playbackPipelineState::standbyAttachedAt
     internal var standbyVisibleFirstFrameAt by playbackPipelineState::standbyVisibleFirstFrameAt
     internal val seamlessPlaybackEnabled: Boolean
-        get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE).getBoolean("seamless_playback", true)
+        get() = getSharedPreferences(platformPrefsName("playback-settings-v1"), MODE_PRIVATE).getBoolean("seamless_playback", true)
     internal var prefetchJob by playbackPipelineState::prefetchJob
     internal var prefetchScope by playbackPipelineState::prefetchScope
     internal var prefetchedFor by playbackPipelineState::prefetchedFor
@@ -243,7 +243,7 @@ class MainActivity: Activity() {
     internal lateinit var mediaSession: TvMediaSession
     internal val sleepTimer=SleepTimer { android.os.SystemClock.elapsedRealtime() }
     internal val sleepActionMode: Int
-        get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE).getInt("sleep_action_mode", 0).let { if(it in 0..1) it else 0 }
+        get() = getSharedPreferences(platformPrefsName("playback-settings-v1"), MODE_PRIVATE).getInt("sleep_action_mode", 0).let { if(it in 0..1) it else 0 }
 
     // 每次启动软件后首次点击时提示一次；不依赖设备开机次数。
     internal var sleepSettingHintShown by playbackUiState::sleepSettingHintShown
@@ -253,7 +253,7 @@ class MainActivity: Activity() {
     internal var danmakuView by danmakuUiState::view
     internal var danmakuLoader by danmakuUiState::loader
     internal val danmakuColorMode: Int
-        get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE)
+        get() = getSharedPreferences(platformPrefsName("playback-settings-v1"), MODE_PRIVATE)
             .getInt("danmaku_color_mode", DanmakuView.COLOR_MODE_DEFAULT)
             .coerceIn(DanmakuView.COLOR_MODE_DEFAULT, DanmakuView.COLOR_MODE_LAST)
 
