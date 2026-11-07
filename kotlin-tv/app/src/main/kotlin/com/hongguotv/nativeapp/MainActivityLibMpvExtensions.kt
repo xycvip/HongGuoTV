@@ -41,6 +41,9 @@ internal fun MainActivity.openLibMpvTest() {
     val oldPlayerView = playerView
     val oldHud = hud
     val oldDanmaku = danmakuView
+    val oldPlayerViewVisibility = oldPlayerView?.visibility ?: View.VISIBLE
+    val oldHudVisibility = oldHud.visibility
+    val oldDanmakuVisibility = oldDanmaku?.visibility ?: View.GONE
     val position = currentPosition().coerceAtLeast(0L)
     val resume = player?.playWhenReady ?: requestedAutoplay
     saveProgress()
@@ -121,9 +124,9 @@ internal fun MainActivity.openLibMpvTest() {
         root.addView(toolbar, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
         LibMpvTestOverlay.sessions[this] = LibMpvTestOverlay.Session(
             mpv, toolbar,
-            oldPlayerView?.visibility ?: View.VISIBLE,
-            oldHud.visibility,
-            oldDanmaku?.visibility ?: View.GONE,
+            oldPlayerViewVisibility,
+            oldHudVisibility,
+            oldDanmakuVisibility,
             resume, position
         )
         mpv.setOnKeyListener { _, keyCode, event ->
@@ -140,8 +143,9 @@ internal fun MainActivity.openLibMpvTest() {
         debugLog("libmpv A/B 测试已启动 position=$position resume=$resume mode=HARDWARE")
     } catch (problem: Throwable) {
         runCatching { mpv.close() }
-        oldPlayerView?.visibility = View.VISIBLE
-        oldHud.visibility = View.VISIBLE
+        oldPlayerView?.visibility = oldPlayerViewVisibility
+        oldHud.visibility = oldHudVisibility
+        oldDanmaku?.visibility = oldDanmakuVisibility
         Toast.makeText(this, "libmpv 启动失败：${problem.message}", Toast.LENGTH_LONG).show()
         debugLogError("libmpv 测试启动失败", problem)
     }
