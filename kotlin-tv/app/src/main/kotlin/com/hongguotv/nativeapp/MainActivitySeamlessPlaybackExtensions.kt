@@ -149,7 +149,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                 }
                 var secondaryPlayer: ExoPlayer? = null
                 try {
-                    val ffmpegSetup = FfmpegPlayerRegistry.create(this)
+                    val ffmpegSetup = FfmpegPlayerRegistry.create(this, "B")
                     val renderers = ffmpegSetup.renderersFactory
                     val secondary = ExoPlayer.Builder(this)
                         .setRenderersFactory(renderers)
@@ -167,6 +167,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         .build()
                     secondaryPlayer = secondary
                     FfmpegPlayerRegistry.attach(secondary, ffmpegSetup)
+                    debugLog("FFmpeg诊断[B][ATTACH] identity=${ffmpegSetup.identity} ${FfmpegPlayerRegistry.identitySnapshot(secondary)}")
                     secondary.setAudioAttributes(
                         AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
                             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true
@@ -189,7 +190,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         is SurfaceView -> secondary.setVideoSurfaceView(output)
                     }
 
-                    debugLog("FFmpeg诊断[LIFECYCLE] B created player=${System.identityHashCode(secondary)} remote=${System.identityHashCode(prepared)} output=${System.identityHashCode(output)} outputState=${when(output) { is SurfaceView -> "SurfaceView valid=${output.holder.surface?.isValid}"; is TextureView -> "TextureView available=${output.isAvailable}"; else -> "unknown" }} A=${player?.let { System.identityHashCode(it) }} AState=${player?.playbackState}")
+                    debugLog("FFmpeg诊断[B][CREATE] identity=${ffmpegSetup.identity} ${FfmpegPlayerRegistry.identitySnapshot(secondary)} remote=${System.identityHashCode(prepared)} output=${System.identityHashCode(output)} outputState=${when(output) { is SurfaceView -> "SurfaceView valid=${output.holder.surface?.isValid}"; is TextureView -> "TextureView available=${output.isAvailable}"; else -> "unknown" }} A=${player?.let { System.identityHashCode(it) }} AState=${player?.playbackState}")
                     secondary.addAnalyticsListener(object : AnalyticsListener {
                         override fun onVideoDecoderInitialized(
                             eventTime: AnalyticsListener.EventTime,
@@ -197,7 +198,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                             initializedTimestampMs: Long,
                             initializationDurationMs: Long
                         ) {
-                            debugLog("无感连播：备用解码器初始化 name=$decoderName init=${initializationDurationMs}ms")
+                            debugLog("FFmpeg诊断[B][DECODER] player=${System.identityHashCode(secondary)} media=${secondary.currentMediaItem?.mediaId} name=$decoderName init=${initializationDurationMs}ms globalMode=${FfmpegPlayerRegistry.videoMode} actualMode=${FfmpegPlayerRegistry.currentVideoMode(secondary)} identity=${FfmpegPlayerRegistry.identitySnapshot(secondary)}")
                         }
                     })
                     secondary.addListener(object : Player.Listener {
@@ -261,6 +262,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                             if (standbyPlayer !== secondary && player !== secondary) return
                             debugLog("FFmpeg诊断[B][$id] PlayerError code=${error.errorCode} name=${error.errorCodeName} message=${error.message}")
+                            debugLog("FFmpeg诊断[B][ERROR] ${FfmpegPlayerRegistry.identitySnapshot(secondary)} ${VideoDataSourceTraceRegistry.errorSnapshot("B:${System.identityHashCode(secondary)}:$id")}")
                             debugLog("FFmpeg诊断[LIFECYCLE] B error snapshot player=${System.identityHashCode(secondary)} state=${secondary.playbackState} position=${secondary.currentPosition} buffered=${secondary.bufferedPosition} playWhenReady=${secondary.playWhenReady} media=${secondary.currentMediaItem?.mediaId} remote=${standbyRemote?.let { System.identityHashCode(it) }} output=${System.identityHashCode(output)} outputState=${when(output) { is SurfaceView -> "valid=${output.holder.surface?.isValid}"; is TextureView -> "available=${output.isAvailable}"; else -> "unknown" }} A=${player?.let { System.identityHashCode(it) }} AState=${player?.playbackState} AMedia=${player?.currentMediaItem?.mediaId}")
                             debugLog("无感连播：备用播放器准备失败 ${error.errorCodeName} ${error.message}")
                             clearStandbyPlayer("备用播放器准备失败")
@@ -271,7 +273,12 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     standbyRemote = prepared
                     standbyPlayer = secondary
                     updatePlaybackBufferingIndicator()
-                    secondary.setMediaSource(videoSource(prepared, id, { counterGate.get() }) { event -> debugLog("FFmpeg诊断[B][$id] $event") })
+                    secondary.setMediaSource(videoSource(
+                        prepared, id,
+                        includeInPlaybackStats = { counterGate.get() },
+                        diagnostic = { event -> debugLog("FFmpeg诊断[B][$id] $event") },
+                        diagnosticKey = "B:${System.identityHashCode(secondary)}:$id"
+                    ))
                     secondary.prepare()
                     debugLog("无感连播：第二播放器开始准备下一集 index=${index + 1}，独立输出面已创建")
                 } catch (problem: Throwable) {
