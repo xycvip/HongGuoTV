@@ -6,6 +6,7 @@ import com.hongguotv.core.*
 
 /** 弹幕生命周期、剧集开关与屏蔽词应用。 */
 internal fun MainActivity.startDanmaku() {
+        if(activePlatform==ContentPlatform.HIPPO) return
         val layer=danmakuView ?: return
         val data=detail ?: return
         val p=player
@@ -25,6 +26,10 @@ internal fun MainActivity.startDanmaku() {
     }
 
 internal fun MainActivity.toggleSeriesDanmaku(seriesId: String) {
+        if(activePlatform==ContentPlatform.HIPPO) {
+            Toast.makeText(this,"河马平台暂未接入红果弹幕接口",Toast.LENGTH_SHORT).show()
+            return
+        }
         if(!library.danmaku) {
             Toast.makeText(this,"弹幕总开关已关闭，请先在设置或播放设置中开启",Toast.LENGTH_SHORT).show(); return
         }
