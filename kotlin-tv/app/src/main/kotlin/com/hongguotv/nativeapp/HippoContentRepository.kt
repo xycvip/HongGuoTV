@@ -6,6 +6,8 @@ import android.util.Base64
 import android.util.Log
 import com.hongguotv.core.*
 import okhttp3.OkHttpClient
+import okhttp3.CookieJar
+import java.util.concurrent.TimeUnit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -15,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 河马剧场的 ContentRepository 适配层。
  * UI 继续使用现有 Series/CatalogPage/Detail 模型，但所有数据请求均由独立 HippoPortalApi 完成。
  */
-internal class HippoContentRepository(context: Context, http: OkHttpClient = OkHttpClient(), private val watchRecords: () -> List<String> = { emptyList() }) : ContentRepository(http) {
+internal class HippoContentRepository(context: Context, http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(45, TimeUnit.SECONDS).cookieJar(CookieJar.NO_COOKIES).build(), private val watchRecords: () -> List<String> = { emptyList() }) : ContentRepository(http) {
     private val api = HippoPortalApi(context, http)
     private val homeCursors = ConcurrentHashMap<String, String>()
     private val seriesCache = ConcurrentHashMap<String, Series>()
