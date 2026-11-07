@@ -9,6 +9,7 @@ import com.hongguotv.core.PhoenixRequestSigner
 import com.hongguotv.core.StreamSource
 import com.hongguotv.core.StreamInfo
 import okhttp3.OkHttpClient
+import java.io.IOException
 
 private const val PLAYBACK_API_PREFS = "playback-api-v1"
 private const val PLAYBACK_API_KEY = "source"
@@ -25,7 +26,7 @@ internal fun Context.playbackResourceKey(id: String, quality: Int): String =
     "$id:$quality:${playbackApiSelection()}"
 
 internal fun Context.playbackApiLabel(value: String = playbackApiSelection()): String =
-    if (value == "phoenix") "Phoenix（实验）" else "原生"
+    if (value == "phoenix") "自动选择 · Phoenix 优先" else "自动选择 · 原生优先"
 
 internal object PlaybackApiDebugState {
     @Volatile var selected: String = "native"
@@ -39,7 +40,7 @@ internal object PlaybackApiDebugState {
         selected = normalized
         events.clear()
         val label = if (normalized == "phoenix") "Phoenix" else "原生"
-        append(normalized, "已切换到${label}播放线路")
+        append(normalized, "当前优先线路已设为${label}")
     }
 
     @Synchronized
@@ -60,31 +61,94 @@ internal object PlaybackApiDebugState {
     fun snapshot(): List<String> = events.toList()
 }
 
-internal fun Context.playbackStreamSource(http: OkHttpClient): StreamSource {
-    val api = playbackApiSelection()
-    return if (api == "phoenix") {
-        PlaybackApiDebugState.record(api, "选择 Phoenix 播放接口")
-        PhoenixPlaybackSource(http, PhoenixPlaybackDeviceSession.shared, PhoenixRequestSigner()) { event ->
-            if (PlaybackApiDebugState.record(api, event) && this is MainActivity) {
-                debugLog("播放接口诊断：[$api] $event")
+internal class AutoFallbackStreamSource(
+    private val primary: StreamSource,
+    private val fallback: () -> StreamSource,
+    private val onFallbackStart: (String) -> Unit = {},
+    private val onFallbackSuccess: (String) -> Unit = {},
+    private val onFallbackFailure: (String) -> Unit = {}
+) : StreamSource {
+    override val name: String = "auto:${primary.name}"
+
+    override fun stream(id: String, maxQuality: Int): StreamInfo {
+        try {
+            return primary.stream(id, maxQuality)
+        } catch (primaryError: IOException) {
+            if (isPlaybackRequestCancelled(primaryError)) throw primaryError
+            val backup = fallback()
+            onFallbackStart(backup.name)
+            try {
+                return backup.stream(id, maxQuality).also { onFallbackSuccess(backup.name) }
+            } catch (fallbackError: IOException) {
+                onFallbackFailure(primary.name)
+                if (isPlaybackRequestCancelled(fallbackError)) throw fallbackError
+                fallbackError.addSuppressed(primaryError)
+                throw IOException(
+                    "首选播放接口 ${primary.name} 失败，备用接口 ${backup.name} 也失败：${fallbackError.message}",
+                    fallbackError
+                )
             }
         }
-    } else {
-        PlaybackApiDebugState.record(api, "选择原生播放接口")
-        val repository = ContentRepository(http)
-        object : StreamSource {
-            override val name: String = "native"
-            override fun stream(id: String, maxQuality: Int): StreamInfo {
-                PlaybackApiDebugState.record(api, "原生：开始获取播放地址")
-                return try {
-                    repository.stream(id, maxQuality).also {
-                        PlaybackApiDebugState.record(api, "原生：播放地址获取成功，清晰度=${it.quality}")
+    }
+
+    private fun isPlaybackRequestCancelled(error: IOException): Boolean {
+        if (Thread.currentThread().isInterrupted) return true
+        val message = error.message.orEmpty().trim().lowercase(java.util.Locale.ROOT)
+        return message.contains("请求已取消") || message == "canceled" || message == "cancelled"
+    }
+}
+
+internal fun Context.playbackStreamSource(http: OkHttpClient): StreamSource {
+    val primaryApi = playbackApiSelection()
+    val fallbackApi = if (primaryApi == "phoenix") "native" else "phoenix"
+
+    fun createSource(api: String): StreamSource {
+        return if (api == "phoenix") {
+            PlaybackApiDebugState.record(api, "选择 Phoenix 播放接口")
+            PhoenixPlaybackSource(http, PhoenixPlaybackDeviceSession.shared, PhoenixRequestSigner()) { event ->
+                if (PlaybackApiDebugState.record(api, event) && this is MainActivity) {
+                    debugLog("播放接口诊断：[$api] $event")
+                }
+            }
+        } else {
+            PlaybackApiDebugState.record(api, "选择原生播放接口")
+            val repository = ContentRepository(http)
+            object : StreamSource {
+                override val name: String = "native"
+                override fun stream(id: String, maxQuality: Int): StreamInfo {
+                    PlaybackApiDebugState.record(api, "原生：开始获取播放地址")
+                    return try {
+                        repository.stream(id, maxQuality).also {
+                            PlaybackApiDebugState.record(api, "原生：播放地址获取成功，清晰度=${it.quality}")
+                        }
+                    } catch (error: Exception) {
+                        PlaybackApiDebugState.record(api, "原生：播放地址获取失败，异常类型=${error.javaClass.simpleName}")
+                        throw error
                     }
-                } catch (error: Exception) {
-                    PlaybackApiDebugState.record(api, "原生：播放地址获取失败，异常类型=${error.javaClass.simpleName}")
-                    throw error
                 }
             }
         }
     }
+
+    val preferred = createSource(primaryApi)
+    return AutoFallbackStreamSource(
+        primary = preferred,
+        fallback = { createSource(fallbackApi) },
+        onFallbackStart = { api ->
+            PlaybackApiDebugState.select(api)
+            PlaybackApiDebugState.record(api, "首选接口失败，自动尝试备用接口")
+            if (this is MainActivity) debugLog("播放接口自动切换：$primaryApi 失败，开始尝试 $api")
+        },
+        onFallbackSuccess = { api ->
+            getSharedPreferences(PLAYBACK_API_PREFS, Context.MODE_PRIVATE)
+                .edit().putString(PLAYBACK_API_KEY, api).apply()
+            PlaybackApiDebugState.select(api)
+            PlaybackApiDebugState.record(api, "备用接口获取播放资源成功，已记为下次优先线路")
+            if (this is MainActivity) debugLog("播放接口自动切换成功：后续优先使用 $api")
+        },
+        onFallbackFailure = { api ->
+            PlaybackApiDebugState.select(api)
+            PlaybackApiDebugState.record(api, "备用接口也失败，保留原优先线路")
+        }
+    )
 }
