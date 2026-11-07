@@ -121,6 +121,8 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
         override fun onState(state: String) {
             status.text = "libmpv · $state · 解码器：${mpv.currentHardwareDecoder()}"
             if (state == "ENDED" && LibMpvTestOverlay.sessions.containsKey(this@openLibMpvTest)) {
+                val endedPositionMs = (mpv.currentPositionSeconds() * 1000.0).toLong()
+                if (endedPositionMs > 0L) player?.seekTo(endedPositionMs)
                 saveProgress(true)
                 val shouldContinue = foreground && requestedAutoplay && !pausedForLifecycle
                 closeLibMpvTest(restorePlayback = false)
