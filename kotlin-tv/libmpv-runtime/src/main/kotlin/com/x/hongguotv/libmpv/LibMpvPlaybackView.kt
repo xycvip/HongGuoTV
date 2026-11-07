@@ -40,7 +40,9 @@ class LibMpvPlaybackView @JvmOverloads constructor(
     @Volatile var listener: Listener? = null
     @Volatile private var initialized = false
     @Volatile private var surfaceAttached = false
-    @Volatile private var pendingUrl: String? = null\n    @Volatile private var pendingStartPositionSeconds: Double = 0.0\n    @Volatile private var startAutoplay: Boolean = true
+    @Volatile private var pendingUrl: String? = null
+    @Volatile private var pendingStartPositionSeconds: Double = 0.0
+    @Volatile private var startAutoplay: Boolean = true
     private var bridge: LibMpvHttpBridge? = null
     private var currentMode = HardwareMode.HARDWARE
     private val destroyed = AtomicBoolean(false)
@@ -57,7 +59,12 @@ class LibMpvPlaybackView @JvmOverloads constructor(
      * The caller retains ownership of [video] and must close it after this view.
      */
     @Synchronized
-    fun initialize(\n        video: RemoteVideo,\n        mode: HardwareMode = HardwareMode.HARDWARE,\n        startPositionSeconds: Double = 0.0,\n        autoplay: Boolean = true\n    ) {
+    fun initialize(
+        video: RemoteVideo,
+        mode: HardwareMode = HardwareMode.HARDWARE,
+        startPositionSeconds: Double = 0.0,
+        autoplay: Boolean = true
+    ) {
         check(!initialized) { "libmpv view is already initialized" }
         check(!destroyed.get()) { "libmpv view has been destroyed" }
         check(engineClaimed.compareAndSet(false, true)) {
@@ -189,7 +196,12 @@ class LibMpvPlaybackView @JvmOverloads constructor(
 
     override fun event(eventId: Int) {
         val state = when (eventId) {
-            MPVLib.MpvEvent.MPV_EVENT_FILE_LOADED -> {\n                val start = pendingStartPositionSeconds\n                if (start > 0.0) MPVLib.command(arrayOf("seek", start.toString(), "absolute+exact"))\n                MPVLib.setPropertyBoolean("pause", !startAutoplay)\n                if (startAutoplay) "PLAYING" else "PAUSED"\n            }
+            MPVLib.MpvEvent.MPV_EVENT_FILE_LOADED -> {
+                val start = pendingStartPositionSeconds
+                if (start > 0.0) MPVLib.command(arrayOf("seek", start.toString(), "absolute+exact"))
+                MPVLib.setPropertyBoolean("pause", !startAutoplay)
+                if (startAutoplay) "PLAYING" else "PAUSED"
+            }
             MPVLib.MpvEvent.MPV_EVENT_PLAYBACK_RESTART -> "PLAYING"
             MPVLib.MpvEvent.MPV_EVENT_END_FILE -> "ENDED"
             MPVLib.MpvEvent.MPV_EVENT_SHUTDOWN -> "SHUTDOWN"
