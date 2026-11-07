@@ -333,6 +333,11 @@ import java.util.concurrent.atomic.AtomicLong
                         }
                         updateDebugOverlay()
                         if(hud.visibility==View.VISIBLE) updatePlaybackText()
+                        if(libMpvDefaultEnabled() && !LibMpvTestOverlay.sessions.containsKey(this@playEpisode)) {
+                            openLibMpvTest(
+                                resumeOverride = foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
+                            )
+                        }
                     }
                     syncMediaSession()
                     if(state==Player.STATE_ENDED) {
@@ -424,10 +429,10 @@ import java.util.concurrent.atomic.AtomicLong
                 } else if (p.currentPosition > 250L) {
                     p.seekTo(0L)
                 }
-                p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
+                p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null && !libMpvDefaultEnabled()
                 if(p.playbackState==Player.STATE_READY) listener.onPlaybackStateChanged(p.playbackState)
             } else {
-                p.setMediaSource(source); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null
+                p.setMediaSource(source); p.seekTo(introSkip); p.prepare(); p.playWhenReady=foreground && requestedAutoplay && !pausedForLifecycle && episodePanel==null && !libMpvDefaultEnabled()
             }
             if(introSkip>0 && position<=0) Toast.makeText(this,"已跳过片头 ${skipMark!!.introSeconds} 秒",Toast.LENGTH_SHORT).show()
             debugLog("播放器 prepare 已提交 stage=完成 decoderMode=${FfmpegPlayerRegistry.videoMode}")
