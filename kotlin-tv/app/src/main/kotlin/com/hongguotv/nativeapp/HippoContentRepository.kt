@@ -23,6 +23,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
     private val seriesCache = ConcurrentHashMap<String, Series>()
     private val lockedEpisodeIds = ConcurrentHashMap.newKeySet<String>()
     private val theatreCursors = ConcurrentHashMap<String, JSONObject>()
+    private val rankingCursors = ConcurrentHashMap<String, String>()
 
     override fun home(page: Int, type: ContentType, genre: Genre?): CatalogPage {
         require(page in 1..100)
@@ -100,21 +101,43 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         Genre(group.type, group.label, group.options.map { it.id })
     }
 
+    /**
+     * 河马平台的「排行榜」入口展示官方精选剧单。
+     * 1115 返回剧单卡片与 formItemId 游标；点开卡片后再由 1116 拉取剧单内短剧。
+     */
     override fun ranking(board: RankBoard, page: Int): CatalogPage {
         api.ensureInitialized()
-        val data = api.request("1801")
-        val ranks = findList(data, "rankVos")
-        val selected = ranks.firstOrNull { row ->
-            val name = value(row, "rankName", "name")
-            when (board) {
-                RankBoard.AI -> name.contains("AI")
-                RankBoard.COMIC -> name.contains("漫")
-                RankBoard.REAL -> name.contains("短剧")
-                else -> name.contains("热") || name.contains("综合")
+        val cursor = if (page <= 1) "" else rankingCursors["playlist"].orEmpty()
+        val params = JSONObject()
+        if (cursor.isNotBlank()) params.put("formItemId", cursor)
+        val data = api.request("1115", params)
+        val rows = findList(data, "playListData")
+        val items = rows.mapNotNull { row ->
+            val id = value(row, "id", "playListId")
+            val title = value(row, "mainTitle", "name", "title")
+            if (id.isBlank() || title.isBlank()) null else {
+                val subtitle = value(row, "subTitle", "subtitle")
+                Series(
+                    id = "hippo-playlist:$id",
+                    title = title,
+                    cover = value(row, "coverWap", "coverUrl", "cover", "pic"),
+                    description = subtitle,
+                    badge = if (row.optBoolean("showSort") || row.optInt("showSort") == 1) "排行榜单" else "精选剧单",
+                    tags = "河马剧单"
+                )
             }
-        } ?: ranks.firstOrNull()
-        val dramas = selected?.let { findList(it, "recommendHots") } ?: emptyList()
-        return CatalogPage(dramas.mapNotNull(::series), false)
+        }
+        rankingCursors["playlist"] = data.optString("formItemId")
+        return CatalogPage(items, data.optBoolean("hasMore"))
+    }
+
+    /** 1116：获取剧单详情中的短剧列表，短剧本身仍走 1132/1133 原生详情与播放链路。 */
+    fun playlistDetail(playlistId: String): List<Series> {
+        api.ensureInitialized()
+        val data = api.request("1116", JSONObject().put("playListId", playlistId))
+        val payload = data.optJSONObject("playListVo") ?: data
+        val rows = findList(payload, "bookInfoVoList")
+        return rows.mapNotNull(::series)
     }
 
     override fun search(keyword: String, page: Int, type: ContentType): CatalogPage {
