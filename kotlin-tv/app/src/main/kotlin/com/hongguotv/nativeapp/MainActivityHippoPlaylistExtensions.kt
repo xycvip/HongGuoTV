@@ -19,7 +19,7 @@ internal fun MainActivity.openHippoPlaylist(playlist: Series) {
     io.execute {
         val result = runCatching { hippoRepository.playlistDetail(playlistId) }
         main.post {
-            if (isFinishing || isDestroyed || activePlatform != com.hongguotv.core.ContentPlatform.HIPPO) return@post
+            if (isFinishing || isDestroyed || activePlatform != ContentPlatform.HIPPO) return@post
             result.onSuccess { dramas ->
                 if (dramas.isEmpty()) {
                     Toast.makeText(this, "该剧单暂时没有短剧内容", Toast.LENGTH_LONG).show()
