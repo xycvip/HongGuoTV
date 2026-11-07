@@ -27,7 +27,7 @@ internal class HippoPortalApi(context: Context, private val http: OkHttpClient) 
     @Synchronized fun ensureInitialized() {
         if (initialized) return
         val data = request("1103", JSONObject().put("oaid", "").put("userAgent", "HongGuoTV/Android")
-            .put("requestType", 1).put("activeType", 1).put("isFirstLaunch", true)
+            .put("requestType", 1).put("activeType", if (initialized) 4 else 1).put("isFirstLaunch", !initialized)
             .put("todayLaunchNums", 1).put("launchTime", installTime))
         val user = data.optJSONObject("userInfoVo")
         userId = user?.optString("userId").orEmpty().ifBlank { data.optString("userId") }
@@ -76,7 +76,7 @@ internal class HippoPortalApi(context: Context, private val http: OkHttpClient) 
         .put("session1", deviceId).put("session2", System.currentTimeMillis().toString())
         .put("oaid", "").put("imei", "").put("startScene", "shortcut").put("installTime", installTime).put("p", 9)
 
-    private fun encrypt(value: String): String = crypt(value.toByteArray(Charsets.UTF_8), Cipher.ENCRYPT_MODE).joinToString("") { "%02x".format(it) }
+    private fun encrypt(value: String): String = crypt(value.toByteArray(Charsets.UTF_8), Cipher.ENCRYPT_MODE).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     private fun decrypt(value: String): String {
         require(value.length % 2 == 0) { "河马加密响应长度错误" }
         val bytes = ByteArray(value.length / 2) { index -> value.substring(index * 2, index * 2 + 2).toInt(16).toByte() }
