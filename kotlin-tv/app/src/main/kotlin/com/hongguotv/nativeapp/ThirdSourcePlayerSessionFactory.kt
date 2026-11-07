@@ -115,11 +115,12 @@ internal class ThirdSourcePlayerSessionFactory(
         center.addView(error)
         host.addView(center, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
 
-        val ffmpegSetup = FfmpegPlayerRegistry.create(activity)
+        val ffmpegSetup = FfmpegPlayerRegistry.create(activity, "THIRD_SOURCE")
         val player = ExoPlayer.Builder(activity)
             .setRenderersFactory(ffmpegSetup.renderersFactory)
             .build()
         FfmpegPlayerRegistry.attach(player, ffmpegSetup)
+        android.util.Log.i("HongguoTV-Decoder", "第三方播放器创建身份 ${FfmpegPlayerRegistry.identitySnapshot(player)}")
         player.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
