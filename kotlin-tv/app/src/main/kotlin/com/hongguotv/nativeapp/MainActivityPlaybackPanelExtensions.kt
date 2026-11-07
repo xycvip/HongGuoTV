@@ -65,13 +65,14 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
         lateinit var speedButton: TextView
         speedButton=addButton(secondaryTransport,speedLabel()) { showSpeedPicker(speedButton) }
 
-        // 播放工具栏提供直接解码模式切换：自动 / 硬解 / FFmpeg软解。
-        // FFmpeg 运行库未安装时明确提示，不悄悄改成另一种解码器。
-        val decoderModes=listOf(DecoderMode.AUTO,DecoderMode.HARDWARE,DecoderMode.FFMPEG)
+        // 播放工具栏与设置页保持一致，提供四种解码模式。
+        // 系统软解是 MediaCodec 的 softwareOnly 解码器；FFmpeg 软解使用独立原生运行库。
+        val decoderModes=listOf(DecoderMode.AUTO,DecoderMode.HARDWARE,DecoderMode.SOFTWARE,DecoderMode.FFMPEG)
         val decoderLabels=mapOf(
             DecoderMode.AUTO to "自动",
             DecoderMode.HARDWARE to "硬解",
-            DecoderMode.FFMPEG to "软解"
+            DecoderMode.SOFTWARE to "系统软解",
+            DecoderMode.FFMPEG to "FFmpeg软解"
         )
         val decoderButtons=mutableMapOf<DecoderMode,TextView>()
         fun refreshDecoderButtons() {
