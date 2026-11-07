@@ -77,11 +77,11 @@ internal class AutoFallbackStreamSource(
         } catch (primaryError: IOException) {
             if (isPlaybackRequestCancelled(primaryError)) throw primaryError
             val backup = fallback()
-            onFallbackStart(backup.name)
+            runCatching { onFallbackStart(backup.name) }
             try {
-                return backup.stream(id, maxQuality).also { onFallbackSuccess(backup.name) }
+                return backup.stream(id, maxQuality).also { runCatching { onFallbackSuccess(backup.name) } }
             } catch (fallbackError: IOException) {
-                onFallbackFailure(primary.name)
+                runCatching { onFallbackFailure(primary.name) }
                 if (isPlaybackRequestCancelled(fallbackError)) throw fallbackError
                 fallbackError.addSuppressed(primaryError)
                 throw IOException(
