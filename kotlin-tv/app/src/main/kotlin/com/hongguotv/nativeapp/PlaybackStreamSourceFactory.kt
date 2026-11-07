@@ -7,6 +7,7 @@ import com.hongguotv.core.PhoenixPlaybackDeviceSession
 import com.hongguotv.core.PhoenixPlaybackSource
 import com.hongguotv.core.PhoenixRequestSigner
 import com.hongguotv.core.StreamSource
+import com.hongguotv.core.StreamInfo
 import okhttp3.OkHttpClient
 
 private const val PLAYBACK_API_PREFS = "playback-api-v1"
@@ -38,7 +39,7 @@ internal object PlaybackApiDebugState {
         selected = normalized
         events.clear()
         val label = if (normalized == "phoenix") "Phoenix" else "原生"
-        append(normalized, "已切换到$label播放线路")
+        append(normalized, "已切换到${label}播放线路")
     }
 
     @Synchronized
