@@ -238,12 +238,21 @@ import java.util.concurrent.atomic.AtomicLong
                 val ffmpegSetup=FfmpegPlayerRegistry.create(this)
                 debugLog("解码管线创建完成 mode=${FfmpegPlayerRegistry.videoMode} ffmpegReady=${FfmpegRuntimeLoader.isReady} manager=${ffmpegSetup.decoderManager!=null}")
                 val renderers=ffmpegSetup.renderersFactory
+                // DefaultPreloadManager.build() 会为预加载器创建自己的内部 ExoPlayer。
+                // NextRenderersFactory/DecoderRendererController 每个实例只允许创建一组 Renderers，
+                // 因此不能把主播放器的 FFmpeg factory 交给 PreloadManager 后再复用。
+                // 预加载器使用独立的默认 MediaCodec factory；主播放器单独使用 FFmpeg factory。
                 val preloadBuilder=DefaultPreloadManager.Builder(this) { _: Int ->
                     DefaultPreloadManager.PreloadStatus.specifiedRangeLoaded(3000)
-                }.setRenderersFactory(renderers).setLoadControl(buildPlaybackLoadControl())
-                attachStage = "创建 ExoPlayer"
+                }.setLoadControl(buildPlaybackLoadControl())
+                attachStage = "创建预加载管理器"
                 preloadManager=preloadBuilder.build()
-                preloadBuilder.buildExoPlayer().also {
+                debugLog("预加载管理器创建完成；使用独立默认 RendererFactory；主播放器 FFmpeg factory 尚未消费")
+                attachStage = "创建 ExoPlayer"
+                ExoPlayer.Builder(this)
+                    .setRenderersFactory(renderers)
+                    .setLoadControl(buildPlaybackLoadControl())
+                    .build().also {
                     attachStage = "附加解码器管理器"
                     FfmpegPlayerRegistry.attach(it,ffmpegSetup)
                     player=it; playerView?.player=it
