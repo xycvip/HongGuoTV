@@ -10,6 +10,7 @@ import android.view.*
 import android.widget.*
 import androidx.media3.common.*
 import com.hongguotv.core.*
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 
 internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
         tvTools.choose("全局画面模式",listOf("完整画面 · 保留比例与全部内容","等比铺满 · 会裁掉部分画面与字幕","拉伸铺满 · 画面比例会改变"),anchor,{ index ->
@@ -63,6 +64,38 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
         fun speedLabel()=String.format(java.util.Locale.US,"%.2f",library.playbackSpeed.toDouble())
         lateinit var speedButton: TextView
         speedButton=addButton(secondaryTransport,speedLabel()) { showSpeedPicker(speedButton) }
+
+        // 播放工具栏提供直接解码模式切换：自动 / 硬解 / FFmpeg软解。
+        // FFmpeg 运行库未安装时明确提示，不悄悄改成另一种解码器。
+        val decoderModes=listOf(DecoderMode.AUTO,DecoderMode.HARDWARE,DecoderMode.FFMPEG)
+        val decoderLabels=mapOf(
+            DecoderMode.AUTO to "自动",
+            DecoderMode.HARDWARE to "硬解",
+            DecoderMode.FFMPEG to "软解"
+        )
+        val decoderButtons=mutableMapOf<DecoderMode,TextView>()
+        fun refreshDecoderButtons() {
+            val selected=FfmpegPlayerRegistry.videoMode
+            decoderModes.forEach { mode ->
+                decoderButtons[mode]?.text=(if(selected==mode) "✓ " else "")+decoderLabels.getValue(mode)
+            }
+        }
+        decoderModes.forEach { mode ->
+            val button=addButton(secondaryTransport,decoderLabels.getValue(mode)) {
+                if(mode==DecoderMode.FFMPEG && !FfmpegRuntimeLoader.isReady) {
+                    Toast.makeText(this,"FFmpeg软解运行库尚未安装，请先到设置→播放→FFmpeg运行库下载",Toast.LENGTH_LONG).show()
+                    return@addButton
+                }
+                val previous=FfmpegPlayerRegistry.videoMode
+                FfmpegPlayerRegistry.setVideoMode(this,mode)
+                debugLog("播放器工具栏切换解码模式：$previous -> $mode；FFmpeg ready=${FfmpegRuntimeLoader.isReady}；当前解码器=${activeDecoderName.ifBlank { "尚未初始化" }}")
+                refreshDecoderButtons()
+                Toast.makeText(this,"解码方式：${decoderLabels.getValue(mode)}（动态切换）",Toast.LENGTH_SHORT).show()
+            }
+            decoderButtons[mode]=button
+        }
+        refreshDecoderButtons()
+
         lateinit var qualityButton: TextView
         qualityButton=addButton(secondaryTransport,"画质") { showQualityPicker(qualityButton,true) }
         lateinit var timerButton: TextView
