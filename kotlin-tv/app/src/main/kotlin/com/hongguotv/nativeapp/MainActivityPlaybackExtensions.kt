@@ -73,6 +73,8 @@ import java.util.concurrent.atomic.AtomicLong
         if(promoteStandby) {
             val oldPlayer=player
             val promoted=standbyPlayer
+            val rendererIdentityBeforeHandoff = FfmpegPlayerRegistry.identitySnapshot(promoted)
+            debugLog("FFmpeg诊断[HANDOFF] 接管前 $rendererIdentityBeforeHandoff")
             playerListener?.let { oldPlayer?.removeListener(it) }
             playerListener=null
             seamlessHandoffInProgress=true
@@ -95,6 +97,8 @@ import java.util.concurrent.atomic.AtomicLong
             player=promoted
             // 让 PlayerView 在一次 setPlayer 中完成输出面交接，避免先置空造成额外黑屏。
             playerView?.player=promoted
+            val rendererIdentityAfterHandoff = FfmpegPlayerRegistry.identitySnapshot(promoted)
+            debugLog("FFmpeg诊断[HANDOFF] 接管后 $rendererIdentityAfterHandoff rendererIdentityChanged=${rendererIdentityBeforeHandoff != rendererIdentityAfterHandoff}")
             standbyAttachedAt=android.os.SystemClock.elapsedRealtime()
             // FFmpeg owns its Surface/ANativeWindow bridge. Keep its hidden warm-up
             // output alive until the promoted player has rendered on PlayerView's
@@ -251,8 +255,8 @@ import java.util.concurrent.atomic.AtomicLong
             attachStage = "创建播放器与解码器管线"
             val p=player ?: run {
                 attachStage = "创建解码器 Renderer"
-                val ffmpegSetup=FfmpegPlayerRegistry.create(this)
-                debugLog("解码管线创建完成 mode=${FfmpegPlayerRegistry.videoMode} ffmpegReady=${FfmpegRuntimeLoader.isReady} manager=${ffmpegSetup.decoderManager!=null}")
+                val ffmpegSetup=FfmpegPlayerRegistry.create(this, "A")
+                debugLog("FFmpeg诊断[A][CREATE] identity=${ffmpegSetup.identity} globalMode=${FfmpegPlayerRegistry.videoMode} runtimeReadyNow=${FfmpegRuntimeLoader.isReady} manager=${ffmpegSetup.decoderManager!=null}")
                 val renderers=ffmpegSetup.renderersFactory
                 // DefaultPreloadManager.build() 会为预加载器创建自己的内部 ExoPlayer。
                 // NextRenderersFactory/DecoderRendererController 每个实例只允许创建一组 Renderers，
@@ -271,6 +275,7 @@ import java.util.concurrent.atomic.AtomicLong
                     .build().also {
                     attachStage = "附加解码器管理器"
                     FfmpegPlayerRegistry.attach(it,ffmpegSetup)
+                    debugLog("FFmpeg诊断[A][ATTACH] ${FfmpegPlayerRegistry.identitySnapshot(it)}")
                     player=it; playerView?.player=it
                     it.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true)
                     it.setHandleAudioBecomingNoisy(true)
@@ -287,7 +292,7 @@ import java.util.concurrent.atomic.AtomicLong
                                 else -> "platform decoder (hardware status depends on device implementation)"
                             }
                             android.util.Log.i("HongguoTV","Video decoder initialized: $decoderName kind=$kind init=${initializationDurationMs}ms mode=${FfmpegPlayerRegistry.videoMode} managerMode=${FfmpegPlayerRegistry.currentVideoMode(it)}")
-                            debugLog("解码器初始化完成 name=$decoderName kind=$kind init=${initializationDurationMs}ms requestedMode=${FfmpegPlayerRegistry.videoMode} managerMode=${FfmpegPlayerRegistry.currentVideoMode(it)}")
+                            debugLog("FFmpeg诊断[A][DECODER] player=${System.identityHashCode(it)} media=${it.currentMediaItem?.mediaId} name=$decoderName kind=$kind init=${initializationDurationMs}ms globalMode=${FfmpegPlayerRegistry.videoMode} actualMode=${FfmpegPlayerRegistry.currentVideoMode(it)} identity=${FfmpegPlayerRegistry.identitySnapshot(it)}")
                             if(player===it) {
                                 activeDecoderName=decoderName
                                 main.post { if(player===it) refreshVideoInfoOverlay() }
@@ -390,14 +395,19 @@ import java.util.concurrent.atomic.AtomicLong
                 override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,newPosition: Player.PositionInfo,reason: Int) { if(active()) { syncMediaSession(); danmakuView?.seekTo(newPosition.positionMs) } }
                 override fun onPlayerError(error: PlaybackException) {
                     if(active()) {
-                        debugLog("Player error code=${error.errorCode} name=${error.errorCodeName} message=${error.message}")
+                        debugLog("FFmpeg诊断[A][ERROR] player=${System.identityHashCode(p)} media=$requestedId code=${error.errorCode} name=${error.errorCodeName} message=${error.message}")
+                        debugLog("FFmpeg诊断[A][ERROR] ${FfmpegPlayerRegistry.identitySnapshot(p)} ${VideoDataSourceTraceRegistry.errorSnapshot("A:${System.identityHashCode(p)}:$requestedId")}")
                         playerFailure(error)
                     }
                 }
             }
             playerListener=listener; p.addListener(listener)
             attachStage = "创建媒体资源"
-            val source=prefetchedSource ?: videoSource(remote,requestedId)
+            val source=prefetchedSource ?: videoSource(
+                remote, requestedId,
+                diagnostic = { event -> debugLog("FFmpeg诊断[A][DATASOURCE] $event") },
+                diagnosticKey = "A:${System.identityHashCode(p)}:$requestedId"
+            )
             debugLog("媒体资源创建完成 episodeId=$requestedId prefetched=${prefetchedSource!=null}")
             val introSkip=if(position<=0 && (skipMark?.introSeconds ?: 0)>0) skipMark!!.introSeconds*1000L else position.coerceAtLeast(0)
             attachStage = "绑定媒体资源并启动解码"
