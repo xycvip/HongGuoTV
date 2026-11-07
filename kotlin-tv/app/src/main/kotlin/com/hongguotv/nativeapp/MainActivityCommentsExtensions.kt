@@ -45,7 +45,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.openOfficialComments(anchor: View?) {
-        if(screen!="player" || commentPanel!=null) return
+        if(activePlatform==ContentPlatform.HIPPO || screen!="player" || commentPanel!=null) return
         val data=detail ?: return
         commentAnchor=anchor
         panel=false
