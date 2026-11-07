@@ -143,7 +143,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         val (bookId, _) = decodeEpisodeId(id)
         api.ensureInitialized()
         val data = api.request("1132", JSONObject().put("bookId", bookId).put("chapterMin", 0).put("chapterMax", 100))
-        val chapters = findList(data, "chapterList")
+        val chapters = findList(data, "chapterList").sortedBy { it.optInt("chapterIndex", it.optInt("index", 0)) }
         val episodes = chapters.mapNotNull { chapter ->
             val chapterId = value(chapter, "chapterId", "chapter_id", "chapterid", "id")
             chapterId.takeIf { it.isNotBlank() }?.let { encodeEpisodeId(bookId, it) }
