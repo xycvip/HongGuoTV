@@ -28,10 +28,9 @@ internal class HippoPortalApi(context: Context, private val http: OkHttpClient) 
     @Synchronized fun ensureInitialized() {
         if (initializationAttempted) return
         initializationAttempted = true
-        if (initialized) return
         try {
-            val data = request("1103", JSONObject().put("oaid", "").put("userAgent", "Android/HongGuoTV")
-                .put("requestType", 1).put("activeType", 1).put("isFirstLaunch", true)
+            val data = request("1103", JSONObject().put("oaid", "").put("userAgent", "Flutter/Android " + android.os.Build.VERSION.RELEASE)
+                .put("requestType", 1).put("activeType", if (initialized) 4 else 1).put("isFirstLaunch", !initialized)
                 .put("todayLaunchNums", 1).put("launchTime", System.currentTimeMillis()))
             val user = data.optJSONObject("userInfoVo")
             userId = user?.optString("userId").orEmpty().ifBlank { data.optString("userId") }
@@ -60,7 +59,7 @@ internal class HippoPortalApi(context: Context, private val http: OkHttpClient) 
                     val raw = response.body?.string().orEmpty()
                     if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
                     val envelope = JSONObject(raw.ifBlank { "{}" })
-                    val code = envelope.optInt("code", 0)
+                    val code = envelope.optInt("code", -1)
                     if (code != 0) throw IOException("业务 code=$code: ${envelope.optString("msg")}")
                     val value = envelope.opt("data")
                     if (value is JSONObject) return value
