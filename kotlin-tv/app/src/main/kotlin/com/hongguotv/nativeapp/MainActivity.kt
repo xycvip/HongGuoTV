@@ -533,16 +533,18 @@ class MainActivity: Activity() {
         // 调试入口的显示状态仅保存在进程内；调试模式本身仍由持久化开关控制。
         applyDeviceOrientationPolicy()
         applyImmersiveFullscreen()
-        library=Library(this)
+        platformUiState.active = PlatformPreferenceStore(this).load()
+        redfruitLibrary=Library(this)
+        hippoLibrary=Library(this,"hippo")
         // 第三方片源独立存储，但源配置、观看历史和收藏必须进入整机备份。
         // ThirdSourceScreen 使用同一 SharedPreferences；整机恢复时三类数据均按备份内容完整替换。
         val thirdStore = ThirdStore(applicationContext)
-        library.thirdSourcesProvider = { thirdStore.backupSources() }
-        library.thirdSourcesRestore = { thirdStore.restoreSources(it) }
-        library.thirdHistoryProvider = { thirdStore.backupHistory() }
-        library.thirdHistoryRestore = { thirdStore.restoreHistory(it) }
-        library.thirdFavoritesProvider = { thirdStore.backupFavorites() }
-        library.thirdFavoritesRestore = { thirdStore.restoreFavorites(it) }
+        redfruitLibrary.thirdSourcesProvider = { thirdStore.backupSources() }
+        redfruitLibrary.thirdSourcesRestore = { thirdStore.restoreSources(it) }
+        redfruitLibrary.thirdHistoryProvider = { thirdStore.backupHistory() }
+        redfruitLibrary.thirdHistoryRestore = { thirdStore.restoreHistory(it) }
+        redfruitLibrary.thirdFavoritesProvider = { thirdStore.backupFavorites() }
+        redfruitLibrary.thirdFavoritesRestore = { thirdStore.restoreFavorites(it) }
         artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
         // 全局焦点变化统一记录，覆盖电视遥控器导航、设置项、列表和弹窗焦点迁移。
         root.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus,newFocus ->
@@ -590,7 +592,7 @@ class MainActivity: Activity() {
         }
         connectivity=getSystemService(ConnectivityManager::class.java)
         runCatching { connectivity.registerDefaultNetworkCallback(networkCallback); networkRegistered=true }
-        favoriteMonitor=FavoriteMonitor(library,repository) { refreshFavoriteLabels() }
+        favoriteMonitor=FavoriteMonitor(redfruitLibrary,redfruitRepository) { refreshFavoriteLabels() }
         mediaSession=TvMediaSession(this,{ if(foreground && screen=="player") requestPlayback(true) },{ if(foreground && screen=="player") requestPlayback(false) },{ position -> if(foreground && screen=="player") seekTo(position) },{ direction -> skipEpisode(direction) },{ if(foreground && screen=="player") returnToDetail() })
         loadLibrary()
     }
