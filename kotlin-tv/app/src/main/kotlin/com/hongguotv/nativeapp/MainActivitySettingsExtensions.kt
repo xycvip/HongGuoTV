@@ -272,7 +272,7 @@ import java.util.concurrent.atomic.AtomicLong
             sleepActionButton.text="定时关闭·${sleepActionLabel(next)}"
         }
         qualityButton=setting(playback,0,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
-        playbackApiButton=setting(playback,0,"播放接口  ·  ${playbackApiLabel()}") {
+        playbackApiButton=setting(playback,0,"播放线路  ·  ${playbackApiLabel()}") {
             val next=if(playbackApiSelection()=="native") "phoenix" else "native"
             getSharedPreferences("playback-api-v1",Context.MODE_PRIVATE)
                 .edit().putString("source",next).apply()
