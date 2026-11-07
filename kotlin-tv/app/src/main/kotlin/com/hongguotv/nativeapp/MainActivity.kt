@@ -975,7 +975,7 @@ class MainActivity: Activity() {
         stopApiStatusAnimations()
         generation++; cancelWork()
         if(networkRegistered) connectivity.unregisterNetworkCallback(networkCallback)
-        favoriteMonitor.destroy(); tvTools.destroy(); updater.destroy(); if(!resettingAllData) saveProgress(); cloudAccount.destroy(); releasePlayer(); thirdSourceScreen?.release(); thirdSourceScreen=null; library.close()
+        favoriteMonitor.destroy(); tvTools.destroy(); updater.destroy(); if(!resettingAllData) saveProgress(); cloudAccount.destroy(); releasePlayer(); thirdSourceScreen?.release(); thirdSourceScreen=null; redfruitLibrary.close(); hippoLibrary.close()
         artwork.close(); releaseCatalogViews(); mediaSession.release(); main.removeCallbacksAndMessages(null)
         io.shutdownNow(); prefetchWorker.shutdownNow(); networkCleanup.shutdown(); debugLogExecutor.shutdown()
         Thread({ repository.http.dispatcher.cancelAll(); repository.http.connectionPool.evictAll(); repository.http.dispatcher.executorService.shutdown() },"hongguotv-network-cleanup").start()
