@@ -130,6 +130,13 @@ class LibMpvPlaybackView @JvmOverloads constructor(
         if (initialized) MPVLib.setPropertyBoolean("pause", true)
     }
 
+    fun togglePause() {
+        if (initialized) MPVLib.command(arrayOf("cycle", "pause"))
+    }
+
+    fun currentPositionSeconds(): Double =
+        if (initialized) MPVLib.getPropertyDouble("time-pos") ?: 0.0 else 0.0
+
     fun seekTo(seconds: Double) {
         if (initialized && seconds.isFinite() && seconds >= 0.0) {
             MPVLib.command(arrayOf("seek", seconds.toString(), "absolute+exact"))
