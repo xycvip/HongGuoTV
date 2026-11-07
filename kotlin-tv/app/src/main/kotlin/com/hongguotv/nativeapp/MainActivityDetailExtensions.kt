@@ -57,6 +57,7 @@ import java.util.concurrent.atomic.AtomicLong
     internal fun MainActivity.openDetail(series: Series,resume: Boolean=false,autoplay: Boolean=true,randomLoading: Boolean=false) {
         debugLog("页面导航：打开剧集详情 title=${series.title} resume=$resume autoplay=$autoplay random=$randomLoading")
         val startupAttempt=bootAutoPlaybackPending
+        if(activePlatform==ContentPlatform.HIPPO) hippoRepository.rememberSeries(series)
         pendingDetail=series; detailAutoplay=autoplay
         invalidatePage(); releaseCatalogViews(); screen="detail"; directPlayback=resume; detail=null; synopsisExpanded=false
         val reuseRandomWaiting=randomLoading && randomLoadingLabel?.isAttachedToWindow==true
