@@ -54,7 +54,7 @@ internal object PlaybackApiDebugState {
 
     private fun append(api: String, event: String) {
         val stamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
-        val label = if (api == "phoenix") "Phoenix" else "原生"
+        val label = if (api == "phoenix") "Phoenix" else "Native"
         events.add("$stamp [$label] $event")
         while (events.size > 12) events.removeAt(0)
     }
