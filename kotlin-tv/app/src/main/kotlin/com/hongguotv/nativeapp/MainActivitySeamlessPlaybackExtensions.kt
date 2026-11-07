@@ -60,7 +60,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     if (index !in data.episodes.indices) return
     val id = data.episodes[index]
     val quality = library.maxQuality
-    val key = "$id:$quality"
+    val key = playbackResourceKey(id, quality)
     if (standbyEpisodeId == key && (standbyReady || standbyJob?.isDone == false)) return
 
     val manager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
