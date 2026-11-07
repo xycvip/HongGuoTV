@@ -528,7 +528,7 @@ class MainActivity: Activity() {
         val initialDecoderMode = runCatching {
             DecoderMode.valueOf(savedDecoderMode)
         }.getOrDefault(DecoderMode.AUTO)
-        FfmpegPlayerRegistry.setVideoMode(initialDecoderMode)
+        FfmpegPlayerRegistry.setVideoMode(this, initialDecoderMode)
         // 已下载 FFmpeg 运行库时，在后台提前加载；未下载则保持原有 MediaCodec 播放路径。
         io.execute {
             when (val result = FfmpegRuntimeLoader.activateInstalled(this)) {
