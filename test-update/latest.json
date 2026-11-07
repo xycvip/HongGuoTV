@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "06d83831a7b0a04253a514da332ffa089a9484dc",
-  "versionCode": 34,
-  "versionName": "0.0.34",
+  "sourceCommit": "7743fb5261328239181e10c67fb0cb74d498a6cc",
+  "versionCode": 35,
+  "versionName": "0.0.35",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.34",
+  "tag": "hongguotv-bate-v0.0.35",
   "apk": {
-    "name": "HongguoTV-0.0.34.apk",
-    "size": 1985793,
-    "sha256": "07634a998a16afb4d8353f2b5e3cce96280f94f1c2e527397a759aa2becad687",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.34/HongguoTV-0.0.34.apk"
+    "name": "HongguoTV-0.0.35.apk",
+    "size": 1986845,
+    "sha256": "8fa30091626afc7c7f2a1b1e0af06db654e15d5db995c287ed6870996267ce29",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.35/HongguoTV-0.0.35.apk"
   },
-  "notes": "【播放与播放器】\n- 修复播放线路工厂 Kotlin 编译错误\n- 切换播放线路时取消旧接口检测请求\n- 自动与手动播放接口检测支持线路切换取消\n- 为播放接口检测增加可取消请求作用域\n- 接口检测遵循当前播放线路\n- 切换播放线路时清理旧任务并重启当前播放\n- 隔离单播放器预加载线路缓存\n- 普通播放统一使用当前播放线路\n- 修复播放线路选择与诊断隔离\n【其他功能与问题修复】\n- 隔离无感连播备用线路缓存"
+  "notes": "【播放与播放器】\n- 调整播放线路首选项说明文案\n- 将播放线路标签统一改为线路首选\n- 仅保留播放线路切换成功提示\n- 将播放接口设置文案统一改为播放线路\n- ui: 更新播放接口名称与设置说明\n- test: 覆盖播放接口自动故障切换逻辑\n- feat: 本地播放接口失败自动切换并记忆成功线路\n【网络与接口】\n- fix: 隔离 Phoenix 与原生接口的 CookieJar\n【调试与诊断】\n- ui: 统一调试面板 Phoenix 名称\n- ui: 统一诊断中的 Native 名称\n- fix: 防止诊断回调异常中断自动切换\n【界面与交互】\n- 统一 Native 线路优先显示文案"
 }
