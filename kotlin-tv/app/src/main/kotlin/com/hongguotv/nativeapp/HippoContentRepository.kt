@@ -26,7 +26,7 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
         api.ensureInitialized()
         val key = "home:${type.name}:${genre?.slug.orEmpty()}"
         val cursor = if (page <= 1) "" else homeCursors[key].orEmpty()
-        val params = JSONObject().put("pageFlag", cursor).put("watchRecords", JSONArray().apply { watchRecords().forEach(::put) })
+        val params = JSONObject().put("pageFlag", cursor).put("watchRecords", JSONArray().apply { watchRecords().forEach { put(it) } })
         val data = api.request("1113", params)
         val rows = findList(data, "dataList")
         val items = rows.mapNotNull(::series).filter { it.id.isNotBlank() }
