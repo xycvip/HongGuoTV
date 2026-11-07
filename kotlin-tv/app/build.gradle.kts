@@ -41,6 +41,7 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(project(":core")) { exclude(group = "org.json") }
+    implementation(project(":playback-native"))
     implementation(project(":playback-api"))
     implementation(project(":playback-media"))
     // Media3 统一使用 1.11.1，避免 ExoPlayer / HLS / UI 模块版本不一致。
