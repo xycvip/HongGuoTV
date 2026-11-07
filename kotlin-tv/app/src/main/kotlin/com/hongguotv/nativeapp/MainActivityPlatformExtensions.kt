@@ -38,6 +38,7 @@ internal fun MainActivity.switchContentPlatform() {
     leaveCollection()
     tabState.clear()
     tabFocus.clear()
+    theaterSelections.clear()
     val saved = platformUiState.snapshots[next]
     if (saved != null) {
         tab = saved.tab
@@ -80,7 +81,6 @@ internal fun MainActivity.switchContentPlatform() {
     if (saved == null) {
         theaterFocusTag = ""
         theaterContentType = null
-        theaterSelections.clear()
     }
     theaterFiltersByType.clear()
     aiCatalog = false
