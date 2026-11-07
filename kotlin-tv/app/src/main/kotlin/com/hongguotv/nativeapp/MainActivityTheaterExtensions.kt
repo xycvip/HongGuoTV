@@ -36,7 +36,7 @@ import com.hongguotv.core.*
                 }
             }
         }
-        host.addView(types)
+        if(activePlatform==ContentPlatform.REDFRUIT) host.addView(types)
         val groups=theaterFiltersByType[theaterFilterKey(theaterContentType)].orEmpty().filterNot { it.type=="genre" }
         if(groups.isEmpty()) host.addView(text("正在读取红果官方筛选条件…",13f,muted).apply { setPadding(0,dp(5),0,dp(10)) })
         else groups.forEach { group ->
