@@ -70,7 +70,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
         searchRepository.search(keyword,page,type)
     open fun searchCombined(keyword: String, page: Int = 1): CatalogPage = searchRepository.searchCombined(keyword,page)
     open fun suggest(query: String): List<String> = searchRepository.suggest(query)
-    fun probeSuggest(query: String): Int = searchRepository.probeSuggest(query)
+    open fun probeSuggest(query: String): Int = searchRepository.probeSuggest(query)
 
     private val detailRepository by lazy { DetailRepository(site,{ url -> text(url) },::card,::valid,searchRepository) }
     open fun detail(id: String): Detail = detailRepository.detail(id)
