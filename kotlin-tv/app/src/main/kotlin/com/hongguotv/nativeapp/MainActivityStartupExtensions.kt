@@ -156,13 +156,20 @@ import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.loadLibrary() {
         libraryLoadError=null
+        val platformAtStart=activePlatform
         library.loadAsync(onFailure={ problem ->
-            if(!isDestroyed && !resettingAllData) { libraryLoadError=problem; if(foreground) showLibraryError(problem) }
+            if(!isDestroyed && !resettingAllData && activePlatform==platformAtStart) { libraryLoadError=problem; if(foreground) showLibraryError(problem) }
         }) {
-            if(!isDestroyed && !resettingAllData && foreground) {
-                cloudAccount.syncLocalFavorites(library.favorites())
-                showInitialScreen()
-                favoriteMonitor.check()
+            if(!isDestroyed && !resettingAllData && foreground && activePlatform==platformAtStart) {
+                if(platformAtStart==ContentPlatform.REDFRUIT) {
+                    cloudAccount.syncLocalFavorites(library.favorites())
+                    showInitialScreen()
+                    favoriteMonitor.check()
+                } else {
+                    // 河马平台不读取红果账户、不启动红果推荐池；首次进入直接加载河马首页。
+                    showCatalog(load=true)
+                    hideBootSplash()
+                }
             }
         }
     }
