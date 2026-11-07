@@ -72,6 +72,8 @@ class LibMpvPlaybackView @JvmOverloads constructor(
         }
         try {
             currentMode = mode
+            pendingStartPositionSeconds = startPositionSeconds.coerceAtLeast(0.0)
+            startAutoplay = autoplay
             val localBridge = LibMpvHttpBridge(video) { Log.i(TAG, it) }
             val localUrl = localBridge.start()
             bridge = localBridge

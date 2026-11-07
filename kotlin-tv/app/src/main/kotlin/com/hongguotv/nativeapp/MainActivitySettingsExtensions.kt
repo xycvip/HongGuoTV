@@ -370,6 +370,31 @@ import java.util.concurrent.atomic.AtomicLong
                 }
             }).show()
         }
+        lateinit var libMpvEngineButton:TextView
+        fun libMpvEngineLabel() =
+            if(libMpvDefaultEnabled()) "默认播放内核  ·  libmpv" else "默认播放内核  ·  系统播放器"
+        libMpvEngineButton=setting(playback,0,libMpvEngineLabel()) {
+            TvDialog.choose(
+                this@settings,
+                "默认播放内核",
+                listOf("系统播放器（ExoPlayer）","libmpv（实验内核）"),
+                { index ->
+                    val useLibMpv=index==1
+                    setLibMpvDefaultEnabled(useLibMpv)
+                    libMpvEngineButton.text=libMpvEngineLabel()
+                    if(useLibMpv) {
+                        if(screen=="player" && player?.playbackState==Player.STATE_READY) {
+                            openLibMpvTest()
+                        } else {
+                            Toast.makeText(this@settings,"已设为默认 libmpv 内核，下次进入播放页时启用",Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        if(LibMpvTestOverlay.sessions.containsKey(this@settings)) switchToSystemPlayer()
+                        Toast.makeText(this@settings,"默认播放内核已切回系统播放器",Toast.LENGTH_SHORT).show()
+                    }
+                }
+            ).show()
+        }
         lateinit var seamlessPlaybackButton:TextView
         seamlessPlaybackButton=setting(playback,0,"无感连播  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
             val enabled=!seamlessPlaybackEnabled
