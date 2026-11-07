@@ -195,8 +195,8 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
 internal fun MainActivity.closeLibMpvTest(restorePlayback: Boolean = true) {
     val session = LibMpvTestOverlay.sessions.remove(this) ?: return
     val returnPositionMs = if (restorePlayback) {
-        runCatching { (session.view.currentPositionSeconds() * 1000.0).toLong().coerceAtLeast(0L) }
-            .getOrDefault(session.positionMs)
+        runCatching { (session.view.currentPositionSeconds() * 1000.0).toLong() }
+            .getOrNull()?.takeIf { it > 0L } ?: session.positionMs
     } else session.positionMs
     runCatching { session.view.close() }
     if (session.view.parent === root) root.removeView(session.view)
