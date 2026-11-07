@@ -272,7 +272,9 @@ import java.util.concurrent.atomic.AtomicLong
             sleepActionButton.text="定时关闭·${sleepActionLabel(next)}"
         }
         qualityButton=setting(playback,0,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
-        playbackApiButton=setting(playback,0,playbackApiLabel()) {
+        playbackApiButton=if(activePlatform==ContentPlatform.HIPPO) {
+            setting(playback,0,"线路首选 · 河马") { Toast.makeText(this@settings,"河马剧场使用独立接口，线路由平台自动管理",Toast.LENGTH_SHORT).show() }
+        } else setting(playback,0,playbackApiLabel()) {
             val next=if(playbackApiSelection()=="native") "phoenix" else "native"
             getSharedPreferences("playback-api-v1",Context.MODE_PRIVATE)
                 .edit().putString("source",next).apply()
