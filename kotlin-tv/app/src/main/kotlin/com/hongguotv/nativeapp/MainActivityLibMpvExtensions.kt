@@ -171,7 +171,7 @@ internal fun MainActivity.openLibMpvTest(resumeOverride: Boolean? = null) {
         mpv.setOnKeyListener { _, keyCode, event ->
             if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
             when (keyCode) {
-                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> { closeLibMpvTest(); true }
+                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> { switchToSystemPlayer(); true }
                 KeyEvent.KEYCODE_DPAD_LEFT -> { mpv.seekTo((mpv.currentPositionSeconds() - 10.0).coerceAtLeast(0.0)); true }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> { mpv.seekTo(mpv.currentPositionSeconds() + 10.0); true }
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { mpv.togglePause(); true }
