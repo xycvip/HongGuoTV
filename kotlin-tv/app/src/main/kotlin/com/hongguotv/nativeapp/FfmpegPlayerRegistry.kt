@@ -206,5 +206,8 @@ internal object FfmpegPlayerRegistry {
     }
 
     @Synchronized
+    fun isFfmpegManaged(player: ExoPlayer): Boolean = managers.containsKey(player)
+
+    @Synchronized
     fun currentVideoMode(player: ExoPlayer): DecoderMode? = managers[player]?.activeVideoMode
 }
