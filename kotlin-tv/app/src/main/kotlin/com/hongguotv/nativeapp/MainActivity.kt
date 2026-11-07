@@ -93,12 +93,24 @@ class MainActivity: Activity() {
     internal val muted get() = TvStyle.muted
     internal val main=Handler(Looper.getMainLooper())
     internal val io=Executors.newFixedThreadPool(3)
-    internal val repository=ContentRepository()
-    internal val randomRecommender by lazy {
+    internal val platformUiState = PlatformUiState()
+    internal var activePlatform by platformUiState::active
+    internal val redfruitRepository by lazy { ContentRepository() }
+    internal val hippoRepository by lazy { HippoContentRepository(this) }
+    internal val repository: ContentRepository
+        get() = if (activePlatform == ContentPlatform.HIPPO) hippoRepository else redfruitRepository
+    internal val redfruitRandomRecommender by lazy {
         val raw=getSharedPreferences("random_pool", MODE_PRIVATE).getString("pool", null)
         val items=raw?.let { RandomPoolSnapshot.decode(it, System.currentTimeMillis()) } ?: emptyList()
-        RandomRecommender(repository, items)
+        RandomRecommender(redfruitRepository, items)
     }
+    internal val hippoRandomRecommender by lazy {
+        val raw=getSharedPreferences("hippo_random_pool", MODE_PRIVATE).getString("pool", null)
+        val items=raw?.let { RandomPoolSnapshot.decode(it, System.currentTimeMillis()) } ?: emptyList()
+        RandomRecommender(hippoRepository, items)
+    }
+    internal val randomRecommender: RandomRecommender
+        get() = if (activePlatform == ContentPlatform.HIPPO) hippoRandomRecommender else redfruitRandomRecommender
     internal var randomReplenishing by playbackPipelineState::randomReplenishing
     internal var randomPlaybackLaunching by playbackPipelineState::randomPlaybackLaunching
     internal var randomLoadingLabel by playbackPipelineState::randomLoadingLabel
@@ -129,7 +141,7 @@ class MainActivity: Activity() {
     internal var standbyAttachedAt by playbackPipelineState::standbyAttachedAt
     internal var standbyVisibleFirstFrameAt by playbackPipelineState::standbyVisibleFirstFrameAt
     internal val seamlessPlaybackEnabled: Boolean
-        get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE).getBoolean("seamless_playback", true)
+        get() = getSharedPreferences(platformPrefsName("playback-settings-v1"), MODE_PRIVATE).getBoolean("seamless_playback", true)
     internal var prefetchJob by playbackPipelineState::prefetchJob
     internal var prefetchScope by playbackPipelineState::prefetchScope
     internal var prefetchedFor by playbackPipelineState::prefetchedFor
@@ -218,14 +230,20 @@ class MainActivity: Activity() {
     internal var accountApiLabelView by accountUiState::apiLabelView
     internal var accountSection by accountUiState::section
     internal lateinit var cloudAccount: AccountController
-    internal lateinit var library: Library
+    internal lateinit var redfruitLibrary: Library
+    internal lateinit var hippoLibrary: Library
+    internal val library: Library
+        get() = if (activePlatform == ContentPlatform.HIPPO) hippoLibrary else redfruitLibrary
     internal lateinit var tvTools: TvTools
-    internal lateinit var extras: PlaybackExtras
+    internal lateinit var redfruitExtras: PlaybackExtras
+    internal lateinit var hippoExtras: PlaybackExtras
+    internal val extras: PlaybackExtras
+        get() = if (activePlatform == ContentPlatform.HIPPO) hippoExtras else redfruitExtras
     internal lateinit var updater: AppUpdater
     internal lateinit var mediaSession: TvMediaSession
     internal val sleepTimer=SleepTimer { android.os.SystemClock.elapsedRealtime() }
     internal val sleepActionMode: Int
-        get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE).getInt("sleep_action_mode", 0).let { if(it in 0..1) it else 0 }
+        get() = getSharedPreferences(platformPrefsName("playback-settings-v1"), MODE_PRIVATE).getInt("sleep_action_mode", 0).let { if(it in 0..1) it else 0 }
 
     // 每次启动软件后首次点击时提示一次；不依赖设备开机次数。
     internal var sleepSettingHintShown by playbackUiState::sleepSettingHintShown
@@ -235,7 +253,7 @@ class MainActivity: Activity() {
     internal var danmakuView by danmakuUiState::view
     internal var danmakuLoader by danmakuUiState::loader
     internal val danmakuColorMode: Int
-        get() = getSharedPreferences("playback-settings-v1", MODE_PRIVATE)
+        get() = getSharedPreferences(platformPrefsName("playback-settings-v1"), MODE_PRIVATE)
             .getInt("danmaku_color_mode", DanmakuView.COLOR_MODE_DEFAULT)
             .coerceIn(DanmakuView.COLOR_MODE_DEFAULT, DanmakuView.COLOR_MODE_LAST)
 
@@ -525,17 +543,19 @@ class MainActivity: Activity() {
         // 调试入口的显示状态仅保存在进程内；调试模式本身仍由持久化开关控制。
         applyDeviceOrientationPolicy()
         applyImmersiveFullscreen()
-        library=Library(this)
+        platformUiState.active = PlatformPreferenceStore(this).load()
+        redfruitLibrary=Library(this)
+        hippoLibrary=Library(this,"hippo")
         // 第三方片源独立存储，但源配置、观看历史和收藏必须进入整机备份。
         // ThirdSourceScreen 使用同一 SharedPreferences；整机恢复时三类数据均按备份内容完整替换。
         val thirdStore = ThirdStore(applicationContext)
-        library.thirdSourcesProvider = { thirdStore.backupSources() }
-        library.thirdSourcesRestore = { thirdStore.restoreSources(it) }
-        library.thirdHistoryProvider = { thirdStore.backupHistory() }
-        library.thirdHistoryRestore = { thirdStore.restoreHistory(it) }
-        library.thirdFavoritesProvider = { thirdStore.backupFavorites() }
-        library.thirdFavoritesRestore = { thirdStore.restoreFavorites(it) }
-        artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
+        redfruitLibrary.thirdSourcesProvider = { thirdStore.backupSources() }
+        redfruitLibrary.thirdSourcesRestore = { thirdStore.restoreSources(it) }
+        redfruitLibrary.thirdHistoryProvider = { thirdStore.backupHistory() }
+        redfruitLibrary.thirdHistoryRestore = { thirdStore.restoreHistory(it) }
+        redfruitLibrary.thirdFavoritesProvider = { thirdStore.backupFavorites() }
+        redfruitLibrary.thirdFavoritesRestore = { thirdStore.restoreFavorites(it) }
+        artwork=ArtworkLoader(this); tvTools=TvTools(this); redfruitExtras=PlaybackExtras(this); hippoExtras=PlaybackExtras(this,"hippo"); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
         // 全局焦点变化统一记录，覆盖电视遥控器导航、设置项、列表和弹窗焦点迁移。
         root.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus,newFocus ->
             if(debugEnabled) {
@@ -555,7 +575,7 @@ class MainActivity: Activity() {
             openDetail(remote.series, true)
         }
         cloudAccount.onHistoryChanged = {
-            if (library.isLoaded && !isDestroyed) cloudAccount.syncLocalFavorites(library.favorites())
+            if (activePlatform==ContentPlatform.REDFRUIT && library.isLoaded && !isDestroyed) cloudAccount.syncLocalFavorites(library.favorites())
             // History sync may emit several callbacks while the account page is visible.
             // Do not tear down and rebuild the whole account view tree here: doing so
             // repeatedly changes measured height, scroll position and focus, causing
@@ -582,7 +602,7 @@ class MainActivity: Activity() {
         }
         connectivity=getSystemService(ConnectivityManager::class.java)
         runCatching { connectivity.registerDefaultNetworkCallback(networkCallback); networkRegistered=true }
-        favoriteMonitor=FavoriteMonitor(library,repository) { refreshFavoriteLabels() }
+        favoriteMonitor=FavoriteMonitor(redfruitLibrary,redfruitRepository) { refreshFavoriteLabels() }
         mediaSession=TvMediaSession(this,{ if(foreground && screen=="player") requestPlayback(true) },{ if(foreground && screen=="player") requestPlayback(false) },{ position -> if(foreground && screen=="player") seekTo(position) },{ direction -> skipEpisode(direction) },{ if(foreground && screen=="player") returnToDetail() })
         loadLibrary()
     }
@@ -965,10 +985,10 @@ class MainActivity: Activity() {
         stopApiStatusAnimations()
         generation++; cancelWork()
         if(networkRegistered) connectivity.unregisterNetworkCallback(networkCallback)
-        favoriteMonitor.destroy(); tvTools.destroy(); updater.destroy(); if(!resettingAllData) saveProgress(); cloudAccount.destroy(); releasePlayer(); thirdSourceScreen?.release(); thirdSourceScreen=null; library.close()
+        favoriteMonitor.destroy(); tvTools.destroy(); updater.destroy(); if(!resettingAllData) saveProgress(); cloudAccount.destroy(); releasePlayer(); thirdSourceScreen?.release(); thirdSourceScreen=null; redfruitLibrary.close(); hippoLibrary.close()
         artwork.close(); releaseCatalogViews(); mediaSession.release(); main.removeCallbacksAndMessages(null)
         io.shutdownNow(); prefetchWorker.shutdownNow(); networkCleanup.shutdown(); debugLogExecutor.shutdown()
-        Thread({ repository.http.dispatcher.cancelAll(); repository.http.connectionPool.evictAll(); repository.http.dispatcher.executorService.shutdown() },"hongguotv-network-cleanup").start()
+        Thread({ listOf(redfruitRepository.http,hippoRepository.http).distinct().forEach { client -> client.dispatcher.cancelAll(); client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown() } },"hongguotv-network-cleanup").start()
         super.onDestroy()
         if(killOnDestroy) android.os.Process.killProcess(android.os.Process.myPid())
     }

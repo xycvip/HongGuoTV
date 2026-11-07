@@ -231,7 +231,6 @@ import java.util.concurrent.atomic.AtomicLong
         lateinit var keySettings:TextView
         lateinit var themeButton:TextView
         lateinit var clockButton:TextView
-        lateinit var sourceDisplayButton:TextView
         lateinit var fileBackup:TextView
         lateinit var backup:TextView
         lateinit var hidden:TextView
@@ -268,11 +267,13 @@ import java.util.concurrent.atomic.AtomicLong
                 Toast.makeText(this@settings,"请在播放视频页面启用定时功能",Toast.LENGTH_LONG).show()
             }
             val next=(sleepActionMode+1)%2
-            getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit().putInt("sleep_action_mode",next).apply()
+            getSharedPreferences(platformPrefsName("playback-settings-v1"), Context.MODE_PRIVATE).edit().putInt("sleep_action_mode",next).apply()
             sleepActionButton.text="定时关闭·${sleepActionLabel(next)}"
         }
         qualityButton=setting(playback,0,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
-        playbackApiButton=setting(playback,0,playbackApiLabel()) {
+        playbackApiButton=if(activePlatform==ContentPlatform.HIPPO) {
+            setting(playback,0,"线路首选 · 河马") { Toast.makeText(this@settings,"河马剧场使用独立接口，线路由平台自动管理",Toast.LENGTH_SHORT).show() }
+        } else setting(playback,0,playbackApiLabel()) {
             val next=if(playbackApiSelection()=="native") "phoenix" else "native"
             getSharedPreferences("playback-api-v1",Context.MODE_PRIVATE)
                 .edit().putString("source",next).apply()
@@ -307,7 +308,7 @@ import java.util.concurrent.atomic.AtomicLong
         lateinit var seamlessPlaybackButton:TextView
         seamlessPlaybackButton=setting(playback,0,"无感连播  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
             val enabled=!seamlessPlaybackEnabled
-            getSharedPreferences("playback-settings-v1",Context.MODE_PRIVATE)
+            getSharedPreferences(platformPrefsName("playback-settings-v1"),Context.MODE_PRIVATE)
                 .edit().putBoolean("seamless_playback",enabled).apply()
             seamlessPlaybackButton.text="无感连播  ·  ${if(enabled) "开启" else "关闭"}"
             applyVideoRenderer()
@@ -385,6 +386,8 @@ import java.util.concurrent.atomic.AtomicLong
             clockButton.text="显示系统时间  ·  ${if(library.showClock) "开启" else "关闭"}"
             applyClock()
         }
+        if(activePlatform==ContentPlatform.REDFRUIT) {
+        lateinit var sourceDisplayButton:TextView
         sourceDisplayButton=setting(appearance,4,"片源显示  ·  ${if(getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE).getBoolean("show_third_source",false)) "开启" else "关闭"}") {
             val prefs=getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE)
             val enabled=!prefs.getBoolean("show_third_source",false)
@@ -392,6 +395,7 @@ import java.util.concurrent.atomic.AtomicLong
             sourceDisplayButton.text="片源显示  ·  ${if(enabled) "开启" else "关闭"}"
             settingsFocusKey="片源显示"
             showCatalog()
+        }
         }
         fileBackup=setting(data,2,"备份与恢复") { showFileBackupDialog(fileBackup) }
         backup=setting(data,2,"远程文件管理") {

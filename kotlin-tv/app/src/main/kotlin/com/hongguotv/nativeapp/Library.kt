@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 typealias WatchProgress = BackupProgress
 
 /** Memory-only UI access; disk reads, JSON serialization and commits run on workers. */
-class Library(context: Context) {
+class Library(context: Context, private val namespace: String = "redfruit") {
     private companion object {
         // A replacement Activity must not load before its predecessor's final checkpoint commits.
         val retiredWrites = mutableListOf<LatestWriteQueue<String, () -> Any?>>()
@@ -22,8 +22,8 @@ class Library(context: Context) {
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private val loader = Executors.newSingleThreadExecutor { task -> Thread(task, "hongguotv-library-load") }
-    private val prefs by lazy { app.getSharedPreferences("native-library-v1", Context.MODE_PRIVATE) }
-    private val homePrefs by lazy { app.getSharedPreferences("native-home-cache-v1", Context.MODE_PRIVATE) }
+    private val prefs by lazy { app.getSharedPreferences(if (namespace == "redfruit") "native-library-v1" else "$namespace-native-library-v1", Context.MODE_PRIVATE) }
+    private val homePrefs by lazy { app.getSharedPreferences(if (namespace == "redfruit") "native-home-cache-v1" else "$namespace-native-home-cache-v1", Context.MODE_PRIVATE) }
     private val writes = LatestWriteQueue<String, () -> Any?>("hongguotv-library-write", write = { batch -> commit(prefs, batch) },
         failed = { Log.w("HongguoTV", "Local library commit failed; pending changes retained for retry") })
     private val homeWrites = LatestWriteQueue<String, () -> Any?>("hongguotv-home-write", write = { batch -> commit(homePrefs, batch) },

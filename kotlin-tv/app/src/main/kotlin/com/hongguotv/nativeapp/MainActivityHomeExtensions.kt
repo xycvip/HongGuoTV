@@ -17,8 +17,10 @@ import com.hongguotv.core.*
         // 首页导航按下方向固定进入首页首排第一张海报。
         nav.forEach { it.nextFocusDownId=home.firstId() }
         if(focusNav) navByTab[0]?.requestFocus() else if(focusType) (genreButton ?: home.firstId().let { root.findViewById<View>(it) })?.requestFocus()
-        loadHomeShelf(if(library.contentType==ContentType.SHORT) ContentType.COMIC else ContentType.SHORT,false)
-        loadHomeShelf(ContentType.AI,false)
+        if(activePlatform==ContentPlatform.REDFRUIT) {
+            loadHomeShelf(if(library.contentType==ContentType.SHORT) ContentType.COMIC else ContentType.SHORT,false)
+            loadHomeShelf(ContentType.AI,false)
+        }
         if(hot.isNotEmpty() && !homeContentLogged) {
             homeContentLogged=true
             body.post { android.util.Log.i("HongguoTV","Home content ready cached=$homeFromCache elapsedMs=${android.os.SystemClock.elapsedRealtime()-activityStarted}") }
@@ -69,7 +71,22 @@ import com.hongguotv.core.*
     internal fun MainActivity.homeShelves(): List<HomeScreen.Shelf> {
         val recent=library.history().filterNot { library.watched(it.series.id) }
         val updates=library.favorites().filter { library.favoriteUpdate(it.id)?.hasUpdate == true }
-        val later=library.later(); val hidden=library.hidden()
+        val later=library.later()
+        val hidden=library.hidden()
+        if(activePlatform==ContentPlatform.HIPPO) {
+            val items=(if(library.contentType==ContentType.SHORT) catalog else library.cachedHome(ContentType.SHORT)?.items.orEmpty()).filterNot { it.id in hidden }
+            return listOf(
+                HomeScreen.Shelf("resume","接着看",recent.take(8).map { p -> HomeScreen.Entry(p.series,
+                    "第 ${p.episodeIndex+1} 集 · ${if(p.completed) "接着看下一集" else formatTime(p.position)}",true,
+                    if(p.duration>0) (p.position*100/p.duration).toInt().coerceIn(0,100) else null) },
+                    if(recent.size>8) { { showCollection("resume") } } else null),
+                HomeScreen.Shelf("updates","收藏有更新",updates.take(8).map { HomeScreen.Entry(it,library.favoriteLabel(it.id),true) },
+                    if(updates.size>8) { { showCollection("updates") } } else null),
+                HomeScreen.Shelf("later","稍后看",later.take(10).map { HomeScreen.Entry(it,"稍后看 · 长按管理") },
+                    if(later.size>10) { { showCollection("later") } } else null),
+                HomeScreen.Shelf("hot-hippo","河马推荐",items.take(10).map { HomeScreen.Entry(it,it.badge.ifBlank { "查看剧集" }) })
+            )
+        }
         val shortItems=(if(library.contentType==ContentType.SHORT) catalog else library.cachedHome(ContentType.SHORT)?.items.orEmpty()).filterNot { it.id in hidden }
         val comicItems=(if(library.contentType==ContentType.COMIC) catalog else library.cachedHome(ContentType.COMIC)?.items.orEmpty()).filterNot { it.id in hidden }
         val aiItems=library.cachedHome(ContentType.AI)?.items.orEmpty().filterNot { it.id in hidden }

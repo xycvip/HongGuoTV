@@ -66,15 +66,15 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
     private val searchRepository by lazy {
         SearchRepository(http,clock,playbackSession,signer,site,{ url,signed -> text(url,signed) },::router,::card,::valid,::categoryPath)
     }
-    fun search(keyword: String, page: Int = 1, type: ContentType = ContentType.SHORT): CatalogPage =
+    open fun search(keyword: String, page: Int = 1, type: ContentType = ContentType.SHORT): CatalogPage =
         searchRepository.search(keyword,page,type)
-    fun searchCombined(keyword: String, page: Int = 1): CatalogPage = searchRepository.searchCombined(keyword,page)
-    fun suggest(query: String): List<String> = searchRepository.suggest(query)
-    fun probeSuggest(query: String): Int = searchRepository.probeSuggest(query)
+    open fun searchCombined(keyword: String, page: Int = 1): CatalogPage = searchRepository.searchCombined(keyword,page)
+    open fun suggest(query: String): List<String> = searchRepository.suggest(query)
+    open fun probeSuggest(query: String): Int = searchRepository.probeSuggest(query)
 
     private val detailRepository by lazy { DetailRepository(site,{ url -> text(url) },::card,::valid,searchRepository) }
-    fun detail(id: String): Detail = detailRepository.detail(id)
-    fun sameNameSeasons(current: Series, related: List<Series>): List<Series> =
+    open fun detail(id: String): Detail = detailRepository.detail(id)
+    open fun sameNameSeasons(current: Series, related: List<Series>): List<Series> =
         detailRepository.sameNameSeasons(current,related)
 
     /**
@@ -83,7 +83,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
      * Keep this first attempt deliberately single-shot: the existing POST path remains the bounded
      * compatibility/recovery path when GET is unavailable or returns an unusable model.
      */
-    fun stream(id: String, maxQuality: Int = 1080): StreamInfo = playbackRepository.stream(id,maxQuality)
+    open fun stream(id: String, maxQuality: Int = 1080): StreamInfo = playbackRepository.stream(id,maxQuality)
 
     companion object {
         fun extractRouter(html: String): JSONObject {

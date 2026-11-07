@@ -55,12 +55,13 @@ internal fun MainActivity.renderCatalogContent(
     focusFilter: Boolean,
     compactHeader: Boolean,
 ) {
-        if(tab==0) container.post { if(screen=="catalog" && tab==0) runAutomaticApiChecks() }
+        if(tab==0 && activePlatform==ContentPlatform.REDFRUIT) container.post { if(screen=="catalog" && tab==0 && activePlatform==ContentPlatform.REDFRUIT) runAutomaticApiChecks() }
         if(tab==6) {
             val host = FrameLayout(this)
             accountContentHost = host
             container.addView(host, lp(-1,0).apply { weight=1f })
-            renderAccountContent(host)
+            if (activePlatform == ContentPlatform.HIPPO) renderHippoAccountContent(host)
+            else renderAccountContent(host)
             return
         }
         if(tab==5) {
