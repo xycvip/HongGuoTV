@@ -43,3 +43,6 @@ internal class PlatformPreferenceStore(context: Context) {
     fun load(): ContentPlatform = ContentPlatform.from(prefs.getString("active", "redfruit"))
     fun save(platform: ContentPlatform) { prefs.edit().putString("active", platform.id).apply() }
 }
+
+internal fun Context.platformPrefsName(base: String): String =
+    if (this is MainActivity && activePlatform == ContentPlatform.HIPPO) "hippo-$base" else base
