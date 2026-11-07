@@ -235,7 +235,10 @@ class MainActivity: Activity() {
     internal val library: Library
         get() = if (activePlatform == ContentPlatform.HIPPO) hippoLibrary else redfruitLibrary
     internal lateinit var tvTools: TvTools
-    internal lateinit var extras: PlaybackExtras
+    internal lateinit var redfruitExtras: PlaybackExtras
+    internal lateinit var hippoExtras: PlaybackExtras
+    internal val extras: PlaybackExtras
+        get() = if (activePlatform == ContentPlatform.HIPPO) hippoExtras else redfruitExtras
     internal lateinit var updater: AppUpdater
     internal lateinit var mediaSession: TvMediaSession
     internal val sleepTimer=SleepTimer { android.os.SystemClock.elapsedRealtime() }
@@ -552,7 +555,7 @@ class MainActivity: Activity() {
         redfruitLibrary.thirdHistoryRestore = { thirdStore.restoreHistory(it) }
         redfruitLibrary.thirdFavoritesProvider = { thirdStore.backupFavorites() }
         redfruitLibrary.thirdFavoritesRestore = { thirdStore.restoreFavorites(it) }
-        artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
+        artwork=ArtworkLoader(this); tvTools=TvTools(this); redfruitExtras=PlaybackExtras(this); hippoExtras=PlaybackExtras(this,"hippo"); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
         // 全局焦点变化统一记录，覆盖电视遥控器导航、设置项、列表和弹窗焦点迁移。
         root.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus,newFocus ->
             if(debugEnabled) {
