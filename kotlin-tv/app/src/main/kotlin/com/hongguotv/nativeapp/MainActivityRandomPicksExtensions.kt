@@ -90,7 +90,7 @@ import java.util.concurrent.atomic.AtomicLong
             val added=runCatching { randomRecommender.replenish() }.getOrDefault(0)
             if(added>0 && !resettingAllData) {
                 val encoded=RandomPoolSnapshot.encode(randomRecommender.snapshot(), System.currentTimeMillis())
-                getSharedPreferences("random_pool", Context.MODE_PRIVATE).edit().putString("pool", encoded).apply()
+                getSharedPreferences(if(activePlatform==ContentPlatform.HIPPO) "hippo_random_pool" else "random_pool", Context.MODE_PRIVATE).edit().putString("pool", encoded).apply()
             }
             main.post { randomReplenishing=false; if(!isDestroyed && !resettingAllData) onDone() }
         }
