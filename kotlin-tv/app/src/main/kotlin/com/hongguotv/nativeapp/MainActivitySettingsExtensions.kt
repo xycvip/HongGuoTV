@@ -387,6 +387,7 @@ import java.util.concurrent.atomic.AtomicLong
             applyClock()
         }
         if(activePlatform==ContentPlatform.REDFRUIT) {
+        lateinit var sourceDisplayButton:TextView
         sourceDisplayButton=setting(appearance,4,"片源显示  ·  ${if(getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE).getBoolean("show_third_source",false)) "开启" else "关闭"}") {
             val prefs=getSharedPreferences("appearance-settings-v1",Context.MODE_PRIVATE)
             val enabled=!prefs.getBoolean("show_third_source",false)
