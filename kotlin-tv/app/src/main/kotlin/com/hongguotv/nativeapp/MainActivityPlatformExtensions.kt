@@ -64,6 +64,7 @@ internal fun MainActivity.switchContentPlatform() {
         hasMore = false
         ranking = null
         rankBoard = RankBoard.TOTAL
+        rankFocusTag = null
         genre = null
         catalogFocus = ""
     }
