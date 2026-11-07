@@ -54,16 +54,28 @@ internal class HippoContentRepository(context: Context, http: OkHttpClient = OkH
             listOf("pageFlag", "fromColumnId", "fromItemId", "lastColumnStyle").forEach { f -> if (data.has(f)) cursor.put(f, data.opt(f)) }
         }
         val groups = findList(data, "channelGroupData")
-        val filters = groups.mapNotNull { group ->
+        val selectedGroupId = selected["channelGroupId"]
+            ?: groups.firstOrNull { it.optBoolean("checkedFlag") }?.let { value(it, "channelGroupId", "id") }
+            ?: groups.firstOrNull()?.let { value(it, "channelGroupId", "id") }.orEmpty()
+        val selectedGroup = groups.firstOrNull { value(it, "channelGroupId", "id") == selectedGroupId }
+            ?: groups.firstOrNull()
+        val groupOptions = groups.mapNotNull { group ->
             val id = value(group, "channelGroupId", "id")
             val label = value(group, "channelGroupName", "title")
-            val channels = (group.optJSONArray("channelData") ?: JSONArray()).objects()
-                .mapNotNull { channel ->
-                    val channelId = value(channel, "channelId", "id")
-                    val name = value(channel, "channelName", "title")
-                    if (channelId.isBlank() || name.isBlank()) null else TheaterFilterOption(channelId, name)
-                }
-            if (id.isBlank() || label.isBlank()) null else TheaterFilterGroup(id, label, channels)
+            if (id.isBlank() || label.isBlank()) null else TheaterFilterOption(id, label)
+        }
+        val channelRows = (selectedGroup?.optJSONArray("channelData") ?: JSONArray()).objects()
+        val channelOptions = channelRows.mapNotNull { channel ->
+            val id = value(channel, "channelId", "id")
+            val label = value(channel, "channelName", "title")
+            if (id.isBlank() || label.isBlank()) null else TheaterFilterOption(id, label)
+        }
+        val selectedChannelId = selected["channelId"]
+            ?: channelRows.firstOrNull { it.optBoolean("checkedFlag") }?.let { value(it, "channelId", "id") }
+            ?: channelOptions.firstOrNull()?.id
+        val filters = buildList {
+            if (groupOptions.isNotEmpty()) add(TheaterFilterGroup("channelGroupId", "分类", groupOptions))
+            if (channelOptions.isNotEmpty()) add(TheaterFilterGroup("channelId", selectedGroup?.let { value(it, "channelGroupName", "title") } ?: "频道", channelOptions))
         }
         val columns = findList(data, "columnData")
         val items = columns.flatMap { column -> findList(column, "videoData") }.mapNotNull(::series)
