@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "16abcd7346ddee112cd7465aa2a05bacf29c0866",
-  "versionCode": 33,
-  "versionName": "0.0.33",
+  "sourceCommit": "06d83831a7b0a04253a514da332ffa089a9484dc",
+  "versionCode": 34,
+  "versionName": "0.0.34",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.33",
+  "tag": "hongguotv-bate-v0.0.34",
   "apk": {
-    "name": "HongguoTV-0.0.33.apk",
-    "size": 1984761,
-    "sha256": "570daff167f76d46c48d9796afa5a2fdfe4c3b7eaa7821e91395ea3f5d3f127c",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.33/HongguoTV-0.0.33.apk"
+    "name": "HongguoTV-0.0.34.apk",
+    "size": 1985793,
+    "sha256": "07634a998a16afb4d8353f2b5e3cce96280f94f1c2e527397a759aa2becad687",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.34/HongguoTV-0.0.34.apk"
   },
-  "notes": "【播放与播放器】\n- 修复播放接口诊断列表编译错误\n- 增加播放接口调试诊断信息\n- 接入 Phoenix 播放接口选择\n【界面与交互】\n- fix: 返回键支持从搜索导航返回首页\n【其他功能与问题修复】\n- ui: 片库和排行榜题材标签改为亮橘色"
+  "notes": "【播放与播放器】\n- 修复播放线路工厂 Kotlin 编译错误\n- 切换播放线路时取消旧接口检测请求\n- 自动与手动播放接口检测支持线路切换取消\n- 为播放接口检测增加可取消请求作用域\n- 接口检测遵循当前播放线路\n- 切换播放线路时清理旧任务并重启当前播放\n- 隔离单播放器预加载线路缓存\n- 普通播放统一使用当前播放线路\n- 修复播放线路选择与诊断隔离\n【其他功能与问题修复】\n- 隔离无感连播备用线路缓存"
 }
