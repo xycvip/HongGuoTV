@@ -110,6 +110,8 @@ internal fun MainActivity.switchContentPlatform() {
         if (target == ContentPlatform.REDFRUIT) {
             cloudAccount.syncLocalFavorites(library.favorites())
             favoriteMonitor.check()
+        } else {
+            library.contentType = ContentType.SHORT
         }
         val shouldLoad = saved == null || saved.catalog.isEmpty() || saved.tab == 0 || saved.tab == 7
         showCatalog(load = shouldLoad)
