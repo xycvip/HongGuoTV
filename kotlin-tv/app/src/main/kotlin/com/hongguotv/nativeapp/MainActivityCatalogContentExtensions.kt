@@ -60,7 +60,8 @@ internal fun MainActivity.renderCatalogContent(
             val host = FrameLayout(this)
             accountContentHost = host
             container.addView(host, lp(-1,0).apply { weight=1f })
-            renderAccountContent(host)
+            if (activePlatform == ContentPlatform.HIPPO) renderHippoAccountContent(host)
+            else renderAccountContent(host)
             return
         }
         if(tab==5) {
