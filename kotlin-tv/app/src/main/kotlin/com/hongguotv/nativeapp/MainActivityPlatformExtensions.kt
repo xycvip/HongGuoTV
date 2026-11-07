@@ -20,6 +20,12 @@ internal fun MainActivity.switchContentPlatform() {
     cancelWork()
     cancelRecovery()
     cancelPrefetch()
+    main.removeCallbacks(startupRecommendationTimeout)
+    bootAutoPlaybackPending = false
+    startupAutoPlaybackActive = false
+    startupRecommendationExpired = false
+    startupPreviewEpisodeId = null
+    initialCatalogPending = false
     randomReplenishing = false
     randomPlaybackLaunching = false
     startupHomeRefreshStarted = false
