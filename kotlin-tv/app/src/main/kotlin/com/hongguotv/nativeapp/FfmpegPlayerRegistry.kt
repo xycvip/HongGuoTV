@@ -72,6 +72,9 @@ internal object FfmpegPlayerRegistry {
                 if (problem is VirtualMachineError || problem is ThreadDeath) throw problem
             }
         }
+        identities.entries.toList().filter { (player, _) -> !managers.containsKey(player) }.forEach { (player, identity) ->
+            Log.i(TAG, "动态切换未作用于 FFmpeg Manager：player=${System.identityHashCode(player)} media=${player.currentMediaItem?.mediaId} creation=$identity renderers=[${rendererTypes(player)}] target=$mode")
+        }
     }
 
     private fun identity(
@@ -186,6 +189,10 @@ internal object FfmpegPlayerRegistry {
         (0 until player.rendererCount).joinToString(",") { index ->
             "${index}:${player.getRenderer(index).javaClass.simpleName}#${System.identityHashCode(player.getRenderer(index))}"
         }
+
+    @Synchronized
+    fun rendererIdentitySnapshot(player: ExoPlayer?): String =
+        if (player == null) "player=null" else "player=${System.identityHashCode(player)} renderers=[${rendererTypes(player)}]"
 
     @Synchronized
     fun identitySnapshot(player: ExoPlayer?): String {
