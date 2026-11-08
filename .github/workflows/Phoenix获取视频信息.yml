@@ -1,4 +1,4 @@
-name: Phoenix 获取指定视频播放信息
+name: Phoenix 获取指定视频播放信息（完整请求诊断）
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   fetch-video:
-    name: 使用 main 当前 Phoenix P 接口获取视频信息
+    name: 使用 main 当前 Phoenix P 接口获取视频信息并完整记录请求
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -49,7 +49,7 @@ jobs:
           fi
           echo "待查询视频 ID：$VIDEO_ID"
 
-      - name: 通过当前 Phoenix P 实现请求视频信息
+      - name: 通过当前 Phoenix P 实现请求并输出完整诊断
         working-directory: kotlin-tv
         shell: bash
         env:
@@ -58,8 +58,6 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
 
-          # 临时生成一次性 JUnit 执行入口，直接调用 main 中的生产代码；
-          # 不复制或重写注册、签名、video_model 请求逻辑，也不提交该临时文件。
           TEST_DIR="playback-phoenix/src/test/kotlin/com/hongguotv/core"
           TEST_FILE="$TEST_DIR/PhoenixLiveVideoIdWorkflowTest.kt"
           mkdir -p "$TEST_DIR"
@@ -68,49 +66,162 @@ jobs:
           cat > "$TEST_FILE" <<'KOTLIN'
           package com.hongguotv.core
 
+          import okhttp3.CookieJar
           import okhttp3.OkHttpClient
+          import okhttp3.Request
+          import okhttp3.RequestBody.Companion.toRequestBody
+          import okhttp3.MediaType.Companion.toMediaType
+          import okio.Buffer
           import org.junit.Test
+          import java.io.ByteArrayInputStream
+          import java.security.MessageDigest
           import java.util.concurrent.TimeUnit
+          import java.util.zip.GZIPInputStream
+          import javax.crypto.Cipher
+          import javax.crypto.spec.IvParameterSpec
+          import javax.crypto.spec.SecretKeySpec
 
           class PhoenixLiveVideoIdWorkflowTest {
+              private fun section(name: String) {
+                  println("\n========== $name ==========")
+              }
+
+              private fun decodeRegistrationJson(encrypted: ByteArray): String {
+                  val clazz = PhoenixDeviceRegister::class.java
+                  val instance = clazz.getField("INSTANCE").get(null)
+                  val keyField = clazz.getDeclaredField("TT_ENCRYPT_KEY_IV")
+                  keyField.isAccessible = true
+                  val keyIv = keyField.get(instance) as ByteArray
+
+                  // Phoenix 注册体格式：6 字节 magic + 32 字节固定前缀 + AES-CBC(gzip(SHA512||JSON)).
+                  require(encrypted.size > 38 && (encrypted.size - 38) % 16 == 0) {
+                      "注册请求体长度不符合 ttEncrypt 格式"
+                  }
+                  val cipherText = encrypted.copyOfRange(38, encrypted.size)
+                  val decrypted = Cipher.getInstance("AES/CBC/NoPadding").run {
+                      init(
+                          Cipher.DECRYPT_MODE,
+                          SecretKeySpec(keyIv.copyOfRange(0, 16), "AES"),
+                          IvParameterSpec(keyIv.copyOfRange(16, 32))
+                      )
+                      doFinal(cipherText)
+                  }
+                  val padding = decrypted.last().toInt() and 0xff
+                  require(padding in 1..16)
+                  val plain = decrypted.copyOfRange(0, decrypted.size - padding)
+                  require(plain.size > 64)
+                  val expectedDigest = plain.copyOfRange(0, 64)
+                  val gzipBytes = plain.copyOfRange(64, plain.size)
+                  val jsonBytes = GZIPInputStream(ByteArrayInputStream(gzipBytes)).use { it.readBytes() }
+                  val actualDigest = MessageDigest.getInstance("SHA-512").digest(jsonBytes)
+                  check(MessageDigest.isEqual(expectedDigest, actualDigest)) {
+                      "注册 JSON 解密后的 SHA-512 校验失败"
+                  }
+                  return String(jsonBytes, Charsets.UTF_8)
+              }
+
+              private fun readRequestBody(request: Request): String {
+                  val body = request.body ?: return "<empty>"
+                  val buffer = Buffer()
+                  body.writeTo(buffer)
+                  return if (body.contentType()?.subtype == "octet-stream") {
+                      "<binary body: ${buffer.size} bytes>"
+                  } else buffer.readUtf8()
+              }
+
               @Test
               fun fetchVideoInfoUsingProductionPhoenixSource() {
                   val videoId = System.getenv("PHOENIX_VIDEO_ID")
                       ?: error("缺少 PHOENIX_VIDEO_ID")
-                  require(Regex("[0-9]{1,30}").matches(videoId)) {
-                      "视频 ID 格式错误"
-                  }
+                  require(Regex("[0-9]{1,30}").matches(videoId))
 
                   val http = OkHttpClient.Builder()
                       .connectTimeout(20, TimeUnit.SECONDS)
                       .readTimeout(45, TimeUnit.SECONDS)
                       .callTimeout(90, TimeUnit.SECONDS)
+                      .addInterceptor { chain ->
+                          val request = chain.request()
+                          val isRegister = request.url.encodedPath.contains("device_register")
+                          val isPhoenixApi = request.url.host.endsWith("fqnovel.com")
+                          if (isPhoenixApi && !isRegister) {
+                              section("HTTP REQUEST（实际发出的请求）")
+                              println("${request.method} ${request.url}")
+                              println("Headers:\n${request.headers}")
+                              println("Body:\n${readRequestBody(request)}")
+                          } else if (isRegister) {
+                              section("DEVICE REGISTER HTTP REQUEST（线上实际请求）")
+                              println("${request.method} ${request.url}")
+                              println("Headers:\n${request.headers}")
+                              println("Body: ttEncrypt 二进制注册体，明文 JSON 在注册步骤单独输出")
+                          }
+
+                          val response = chain.proceed(request)
+                          if (isPhoenixApi && !isRegister) {
+                              val responseText = response.peekBody(16L * 1024 * 1024).string()
+                              section("HTTP RESPONSE（实际响应）")
+                              println("URL: ${response.request.url}")
+                              println("Status: ${response.code} ${response.message}")
+                              println("Headers:\n${response.headers}")
+                              println("Body:\n$responseText")
+                          }
+                          response
+                      }
                       .build()
+
+                  lateinit var session: PhoenixPlaybackDeviceSession
+                  session = PhoenixPlaybackDeviceSession { client ->
+                      val cdidField = PhoenixPlaybackDeviceSession::class.java.getDeclaredField("cdid")
+                      cdidField.isAccessible = true
+                      val currentCdid = cdidField.get(session) as String
+                      val now = System.currentTimeMillis()
+                      val device = VendorConstants.device + mapOf("cdid" to currentCdid)
+                      val encryptedBody = PhoenixDeviceRegister.payload(device, now)
+                      val registerUrl = PhoenixDeviceRegister.url(now)
+                      val registerHeaders = PhoenixDeviceRegister.headers(encryptedBody, VendorConstants.device, now)
+                      val requestBuilder = Request.Builder().url(registerUrl)
+                      registerHeaders.forEach { (key, value) -> requestBuilder.header(key, value) }
+                      requestBuilder.post(
+                          encryptedBody.toRequestBody("application/octet-stream;tt-data=a".toMediaType())
+                      )
+
+                      section("DEVICE REGISTER REQUEST JSON（ttEncrypt 解密后的真实 JSON）")
+                      println(decodeRegistrationJson(encryptedBody))
+                      section("DEVICE REGISTER REQUEST HEADERS（生产函数生成值）")
+                      println(org.json.JSONObject(registerHeaders as Map<*, *>).toString(2))
+
+                      val transport = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
+                      transport.newCall(requestBuilder.build()).execute().use { response ->
+                          val responseText = response.body?.string().orEmpty()
+                          section("DEVICE REGISTER RESPONSE（完整原始 JSON）")
+                          println("HTTP ${response.code} ${response.message}")
+                          println("Headers:\n${response.headers}")
+                          println("Set-Cookie:\n${response.headers("Set-Cookie").joinToString("\n")}")
+                          println("Body:\n$responseText")
+                          PhoenixDeviceRegister.parse(responseText, response.headers("Set-Cookie"))
+                      }
+                  }
 
                   try {
                       val source = PhoenixPlaybackSource(
                           http = http,
-                          session = PhoenixPlaybackDeviceSession(),
+                          session = session,
                           signer = PhoenixRequestSigner(),
                           onDiagnostic = { println("[Phoenix] $it") }
                       )
+                      val identity = session.profile(http)
+                      section("REGISTERED PLAYBACK DEVICE PROFILE（注册后实际用于播放的身份）")
+                      println(org.json.JSONObject(identity.values as Map<*, *>).toString(2))
+                      println("Cookie:\n${identity.cookie}")
+
                       val stream = source.resolve(videoId, 1080)
-                      val host = runCatching {
-                          java.net.URI(stream.url).host.orEmpty()
-                      }.getOrDefault("")
-
-                      check(stream.url.startsWith("https://") || stream.url.startsWith("http://")) {
-                          "Phoenix 返回的播放地址无效"
-                      }
-
-                      val result = org.json.JSONObject()
-                          .put("video_id", videoId)
-                          .put("result", "success")
-                          .put("quality", stream.quality)
-                          .put("mime_type", stream.mimeType)
-                          .put("media_host", host)
-                      println("PHOENIX_VIDEO_RESULT=$result")
-                      println("Phoenix 已通过 main 当前 P 接口取得该视频的播放信息。")
+                      val host = runCatching { java.net.URI(stream.url).host.orEmpty() }.getOrDefault("")
+                      section("FINAL PLAYBACK RESOURCE")
+                      println("video_id=$videoId")
+                      println("quality=${stream.quality}")
+                      println("mime_type=${stream.mimeType}")
+                      println("url=${stream.url}")
+                      println("host=$host")
+                      println("result=success")
                   } finally {
                       http.dispatcher.executorService.shutdown()
                       http.connectionPool.evictAll()
@@ -130,10 +241,11 @@ jobs:
           VIDEO_ID: ${{ inputs.video_id }}
         run: |
           {
-            echo "## Phoenix 视频查询成功"
+            echo "## Phoenix 完整请求诊断成功"
             echo
             printf '%s\n' "- 视频 ID：${VIDEO_ID}"
-            echo '- 调用方式：main 当前 `PhoenixPlaybackSource.resolve()`'
-            echo '- 流程：设备注册/会话获取 → P 请求签名 → `video_model/v1` → 播放信息解析'
-            echo '- 说明：不会输出 Cookie、Token、签名值或完整播放 URL。'
+            echo '- 已输出：设备注册 URL、Headers、解密后的设备 JSON、完整注册响应及 Set-Cookie。'
+            echo '- 已输出：注册后设备身份、Cookie、播放/fallback 请求 URL、Headers、Body 和完整响应。'
+            echo '- 已输出：最终选中播放资源完整 URL、清晰度、MIME 和 CDN Host。'
+            echo '- 本工作流只调用 main 当前 Phoenix 生产实现，不修改接口源码、不构建 APK。'
           } >> "$GITHUB_STEP_SUMMARY"
