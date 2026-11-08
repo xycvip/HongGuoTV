@@ -15,6 +15,11 @@ on:
         required: true
         type: boolean
         default: true
+      phoenix_video_id:
+        description: "Real Phoenix episode/video ID for live resource diagnosis"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -58,6 +63,16 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace :playback-phoenix:test
+
+      - name: Run live Phoenix API resource diagnosis
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.phoenix_video_id != '' }}
+        working-directory: kotlin-tv
+        env:
+          PHOENIX_VIDEO_ID: ${{ inputs.phoenix_video_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --rerun-tasks --stacktrace :playback-phoenix:test --tests "com.hongguotv.core.PhoenixLiveResourceDiagnosticTest"
 
       - name: Run application regression tests
         if: ${{ inputs.run_app_regression }}
