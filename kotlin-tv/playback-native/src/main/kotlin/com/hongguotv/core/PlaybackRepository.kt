@@ -31,11 +31,12 @@ class PlaybackRepository(
 
     private fun tabVideoModelResponse(id: String, identity: PlaybackDeviceSession.Profile, host: String): String? {
         val values = identity.values.toMutableMap().apply {
-            put("version_code", "73932")
-            put("manifest_version_code", "73932")
-            put("update_version_code", "73932")
-            put("pv_player", "73932")
-            put("version_name", "7.3.9.32")
+            // Keep Native's endpoint-specific query fields; share Phoenix's app/device profile.
+            put("version_code", "71332")
+            put("manifest_version_code", "71332")
+            put("update_version_code", "71332")
+            put("pv_player", "71332")
+            put("version_name", "7.1.3.32")
             put("video_id", id)
             put("video_id_type", "0")
             put("device_level", "1")
@@ -242,11 +243,11 @@ class PlaybackRepository(
     }
     private fun playerRequest(id: String,payload: ByteArray,identity: PlaybackDeviceSession.Profile,host: String): Request {
         val values = identity.values.toMutableMap().apply {
-            put("version_code", "73932")
-            put("manifest_version_code", "73932")
-            put("update_version_code", "73932")
-            put("pv_player", "73932")
-            put("version_name", "7.3.9.32")
+            put("version_code", "71332")
+            put("manifest_version_code", "71332")
+            put("update_version_code", "71332")
+            put("pv_player", "71332")
+            put("version_name", "7.1.3.32")
         }
         val signed = signer.signPlayback(
             "https://$host/novel/player/multi_video_model/v1/",
@@ -325,8 +326,8 @@ class PlaybackRepository(
     }
 
     companion object {
-        // 播放接口认的客户端版本与内容接口不同，沿用抓包样本里 7.1.5.32 + tt-ok 的 UA。
-        private const val PLAYBACK_UA="com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)"
+        // Native and Phoenix playback share the same app/device User-Agent.
+        private const val PLAYBACK_UA = VendorConstants.VIDEO_UA
     }
 }
 
