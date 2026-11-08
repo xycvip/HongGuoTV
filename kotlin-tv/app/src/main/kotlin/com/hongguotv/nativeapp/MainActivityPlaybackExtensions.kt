@@ -65,6 +65,9 @@ import java.util.concurrent.atomic.AtomicLong
         library.setWatched(data.series.id,false)
         val isStartupPreview=bootAutoPlaybackPending && autoplay && !recovering
         val prefetched=if(promoteStandby) standbyRemote else if(position==0L && !recovering && !forceRebuild) preparedNext.take(standbyKey) else null
+        if(prefetched==null && !promoteStandby) {
+            PlaybackApiDebugState.clearFallbackNotice(data.episodes[selectedIndex],library.maxQuality)
+        }
         val prefetchedSource=if(prefetched!=null && !promoteStandby) preloadManager?.getMediaSource(videoItem(data.episodes[selectedIndex])) else null
         val claimedHttp=if(promoteStandby) standbyHttp.also { standbyHttp=null } else if(prefetched!=null) prefetchHttp.also { prefetchHttp=null } else null
         // 必须在替换活动播放器前保存旧集进度，不能从尚未播放的备用播放器读取旧集位置。
@@ -308,6 +311,10 @@ import java.util.concurrent.atomic.AtomicLong
                         debugFirstFrameAt=android.os.SystemClock.elapsedRealtime()
                         android.util.Log.i("HongguoTV","Playback first frame episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${debugFirstFrameAt-playbackStarted}")
                         debugLog("Playback first frame elapsedMs=${debugFirstFrameAt-playbackStarted}")
+                        PlaybackApiDebugState.consumeFallbackNotice(requestedId,maxQuality)?.let { notice ->
+                            Toast.makeText(this@MainActivity,notice,Toast.LENGTH_SHORT).show()
+                            debugLog("播放线路提示：$notice（首帧已显示）")
+                        }
                     }
                 }
                 override fun onIsPlayingChanged(playing: Boolean) {
