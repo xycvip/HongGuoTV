@@ -132,8 +132,8 @@ jobs:
           {
             echo "## Phoenix 视频查询成功"
             echo
-            echo "- 视频 ID：`$VIDEO_ID`"
-            echo "- 调用方式：main 当前 `PhoenixPlaybackSource.resolve()`"
-            echo "- 流程：设备注册/会话获取 → P 请求签名 → `video_model/v1` → 播放信息解析"
-            echo "- 说明：不会输出 Cookie、Token、签名值或完整播放 URL。"
+            printf '%s\n' "- 视频 ID：${VIDEO_ID}"
+            echo '- 调用方式：main 当前 `PhoenixPlaybackSource.resolve()`'
+            echo '- 流程：设备注册/会话获取 → P 请求签名 → `video_model/v1` → 播放信息解析'
+            echo '- 说明：不会输出 Cookie、Token、签名值或完整播放 URL。'
           } >> "$GITHUB_STEP_SUMMARY"
