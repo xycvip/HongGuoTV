@@ -123,17 +123,28 @@ class PhoenixPlaybackSource(
                 RequestScope.ensureActive()
                 try {
                     // 使用注册会话下发的设备 ID，并与上游 7.3.5.32 播放请求参数保持一致。
-                    val values = VendorConstants.device.toMutableMap().apply {
-                        putAll(identity.values.filterKeys { it in setOf("device_id", "iid", "cdid", "ac") })
-                        put("device_id", identity.values["device_id"].orEmpty())
-                        put("iid", identity.values["iid"].orEmpty())
-                        put("cdid", identity.values["cdid"].orEmpty())
-                        put("ac", identity.values["ac"]?.ifBlank { "wifi" } ?: "wifi")
-                        put("version_code", "73532")
-                        put("version_name", "7.3.5.32")
-                        put("manifest_version_code", "73532")
-                        put("update_version_code", "73532")
-                    }
+                    val values = linkedMapOf(
+                        "aid" to "8662",
+                        "app_name" to "novelread",
+                        "version_code" to "73532",
+                        "version_name" to "7.3.5.32",
+                        "manifest_version_code" to "73532",
+                        "update_version_code" to "73532",
+                        "channel" to "update_64",
+                        "device_platform" to "android",
+                        "os" to "android",
+                        "ssmix" to "a",
+                        "device_type" to "25053RT47C",
+                        "device_brand" to "Redmi",
+                        "language" to "zh",
+                        "os_api" to "36",
+                        "os_version" to "16",
+                        "resolution" to "1280*2772",
+                        "dpi" to "520",
+                        "ac" to (identity.values["ac"]?.ifBlank { "wifi" } ?: "wifi"),
+                        "device_id" to identity.values["device_id"].orEmpty(),
+                        "iid" to identity.values["iid"].orEmpty()
+                    )
                     if (values["device_id"].isNullOrBlank() || values["iid"].isNullOrBlank()) {
                         throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
                     }
@@ -206,8 +217,17 @@ class PhoenixPlaybackSource(
      * This is a plain GET with the reader UA; credentials and signed query data are not logged.
      */
     private fun resolveResponse(raw: String, maxQuality: Int, cookie: String): StreamInfo {
-        val fallbackUrl = PhoenixMediaResolver.fallbackUrl(raw)
-        val fallbackRaw = if (fallbackUrl.startsWith("https://") || fallbackUrl.startsWith("http://")) {
+        val primaryError = try {
+            return PhoenixMediaResolver.parse(raw, maxQuality)
+        } catch (error: IOException) {
+            error
+        }
+        val fallbackUrl = runCatching { PhoenixMediaResolver.fallbackUrl(raw) }.getOrDefault("")
+        if (fallbackUrl.isBlank()) throw primaryError
+        if (!fallbackUrl.startsWith("https://") && !fallbackUrl.startsWith("http://")) {
+            throw primaryError
+        }
+        val fallbackRaw = try {
             val request = Request.Builder()
                 .url(fallbackUrl)
                 .header("User-Agent", PHOENIX_APP_UA)
@@ -225,8 +245,18 @@ class PhoenixPlaybackSource(
                 if (bytes.size > 16 * 1024 * 1024) throw IOException("Phoenix fallback_api 响应过大")
                 String(bytes, Charsets.UTF_8)
             }
-        } else null
-        return PhoenixMediaResolver.parse(raw, maxQuality, fallbackRaw)
+        } catch (error: java.io.InterruptedIOException) {
+            throw error
+        } catch (error: IOException) {
+            primaryError.addSuppressed(error)
+            throw primaryError
+        }
+        return try {
+            PhoenixMediaResolver.parse(raw, maxQuality, fallbackRaw)
+        } catch (error: IOException) {
+            error.addSuppressed(primaryError)
+            throw error
+        }
     }
 
     companion object {
