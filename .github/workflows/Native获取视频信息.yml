@@ -1,0 +1,241 @@
+name: Native N 获取指定视频播放信息（完整请求诊断）
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: 视频 ID
+        required: true
+        type: string
+        default: "7703473857260162073"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-video-id-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  fetch-video:
+    name: 使用 main 当前 Native N 实现获取视频信息并完整记录请求
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出 main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: 配置 Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: kotlin-tv/**/*.gradle*
+
+      - name: 校验视频 ID
+        shell: bash
+        env:
+          VIDEO_ID: ${{ inputs.video_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VIDEO_ID" =~ ^[0-9]{1,30}$ ]]; then
+            echo "::error::视频 ID 必须为 1 到 30 位数字"
+            exit 1
+          fi
+          echo "待查询视频 ID：$VIDEO_ID"
+
+      - name: 通过当前 Native N 实现请求并输出完整诊断
+        working-directory: kotlin-tv
+        shell: bash
+        env:
+          NATIVE_VIDEO_ID: ${{ inputs.video_id }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+
+          BUILD_FILE="playback-native/build.gradle.kts"
+          TEST_DIR="playback-native/src/test/kotlin/com/hongguotv/core"
+          TEST_FILE="$TEST_DIR/NativeLiveVideoIdWorkflowTest.kt"
+          cp "$BUILD_FILE" "$BUILD_FILE.workflow-backup"
+          mkdir -p "$TEST_DIR"
+          cleanup() {
+            rm -f "$TEST_FILE"
+            mv -f "$BUILD_FILE.workflow-backup" "$BUILD_FILE"
+          }
+          trap cleanup EXIT
+
+          printf '\n\ndependencies { testImplementation("junit:junit:4.13.2") }\n' >> "$BUILD_FILE"
+
+          cat > "$TEST_FILE" <<'KOTLIN'
+          package com.hongguotv.core
+
+          import okhttp3.OkHttpClient
+          import okhttp3.Request
+          import okhttp3.RequestBody
+          import okio.Buffer
+          import org.junit.Test
+          import java.io.ByteArrayInputStream
+          import java.security.MessageDigest
+          import java.util.concurrent.TimeUnit
+          import java.util.zip.GZIPInputStream
+          import javax.crypto.Cipher
+          import javax.crypto.spec.IvParameterSpec
+          import javax.crypto.spec.SecretKeySpec
+
+          class NativeLiveVideoIdWorkflowTest {
+              private fun section(name: String) {
+                  println("\n========== $name ==========")
+              }
+
+              private fun hex(value: String): ByteArray =
+                  value.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
+              private fun decodeRegistrationJson(encrypted: ByteArray): String {
+                  val magic = hex("746305100000")
+                  require(encrypted.size > 38 && encrypted.copyOfRange(0, 6).contentEquals(magic)) {
+                      "Native 注册体 magic/长度不符合预期"
+                  }
+                  val random = encrypted.copyOfRange(6, 38)
+                  val salt = hex("4dd4c2e6b83162090e52b3c7a6733ba41cb2462b829ab58a196b39db57177524f49baf7f08e8d68d26a72e37c1a95a2f1f05a51892aef2949732b62a38aadd58")
+                  val first = MessageDigest.getInstance("SHA-512").digest(random)
+                  val material = MessageDigest.getInstance("SHA-512").digest(first + salt)
+                  val cipherText = encrypted.copyOfRange(38, encrypted.size)
+                  require(cipherText.isNotEmpty() && cipherText.size % 16 == 0)
+                  val plain = Cipher.getInstance("AES/CBC/NoPadding").run {
+                      init(
+                          Cipher.DECRYPT_MODE,
+                          SecretKeySpec(material.copyOfRange(0, 16), "AES"),
+                          IvParameterSpec(material.copyOfRange(16, 32))
+                      )
+                      doFinal(cipherText)
+                  }
+                  val padding = plain.last().toInt() and 0xff
+                  require(padding in 1..16)
+                  val unpadded = plain.copyOfRange(0, plain.size - padding)
+                  require(unpadded.size > 64)
+                  val expected = unpadded.copyOfRange(0, 64)
+                  val compressed = unpadded.copyOfRange(64, unpadded.size)
+                  val json = GZIPInputStream(ByteArrayInputStream(compressed)).use { it.readBytes() }
+                  check(MessageDigest.isEqual(expected, MessageDigest.getInstance("SHA-512").digest(json))) {
+                      "Native 注册 JSON SHA-512 校验失败"
+                  }
+                  return String(json, Charsets.UTF_8)
+              }
+
+              private fun bodyText(body: RequestBody?): String {
+                  if (body == null) return "<empty>"
+                  val buffer = Buffer()
+                  body.writeTo(buffer)
+                  val type = body.contentType()?.toString().orEmpty()
+                  return if (type.contains("octet-stream")) {
+                      "<binary body: ${buffer.size} bytes; decoded JSON is printed in registration section>"
+                  } else buffer.readUtf8()
+              }
+
+              @Test
+              fun fetchVideoInfoUsingProductionNativeSource() {
+                  val videoId = System.getenv("NATIVE_VIDEO_ID") ?: error("缺少 NATIVE_VIDEO_ID")
+                  require(Regex("[0-9]{1,30}").matches(videoId))
+                  VendorConstants.regenerate()
+
+                  val http = OkHttpClient.Builder()
+                      .connectTimeout(20, TimeUnit.SECONDS)
+                      .readTimeout(45, TimeUnit.SECONDS)
+                      .callTimeout(120, TimeUnit.SECONDS)
+                      .addInterceptor { chain ->
+                          val request = chain.request()
+                          val isRegister = request.url.encodedPath.contains("device_register")
+                          val isApi = request.url.host.contains("fqnovel.com")
+                          if (isRegister || isApi || request.url.encodedPath.contains("/video/public/")) {
+                              section(if (isRegister) "N DEVICE REGISTER REQUEST" else "N PLAYBACK/FALLBACK REQUEST")
+                              println("${request.method} ${request.url}")
+                              println("Headers:\n${request.headers}")
+                              println("Body:\n${bodyText(request.body)}")
+                              if (isRegister && request.body != null) {
+                                  val buffer = Buffer()
+                                  request.body!!.writeTo(buffer)
+                                  section("N DEVICE REGISTER DECRYPTED JSON")
+                                  println(decodeRegistrationJson(buffer.readByteArray()))
+                              }
+                          }
+                          val response = chain.proceed(request)
+                          if (isRegister || isApi || request.url.encodedPath.contains("/video/public/")) {
+                              val peek = response.peekBody(16L * 1024 * 1024).string()
+                              section("N HTTP RESPONSE")
+                              println("URL: ${response.request.url}")
+                              println("Status: ${response.code} ${response.message}")
+                              println("Headers:\n${response.headers}")
+                              println("Set-Cookie:\n${response.headers("Set-Cookie").joinToString("\n")}")
+                              println("Body:\n$peek")
+                          }
+                          response
+                      }
+                      .build()
+
+                  try {
+                      val session = PlaybackDeviceSession()
+                      val signer = Signer()
+                      val identity = session.profile(http)
+                      section("N REGISTERED DEVICE PROFILE")
+                      println(org.json.JSONObject(identity.values as Map<*, *>).toString(2))
+                      println("Cookie:\n${identity.cookie}")
+
+                      val repository = PlaybackRepository(
+                          http = http,
+                          clock = System::currentTimeMillis,
+                          playbackSession = session,
+                          signer = signer,
+                          site = "https://www.fqnovel.com",
+                          requestText = { url, signed ->
+                              val builder = Request.Builder().url(signed?.url ?: url)
+                              signed?.headers?.forEach { (key, value) -> builder.header(key, value) }
+                              builder.get().build().let { request ->
+                                  http.newCall(request).execute().use { response ->
+                                      val raw = response.body?.string().orEmpty()
+                                      if (!response.isSuccessful) error("fallback API HTTP ${response.code}: $raw")
+                                      raw
+                                  }
+                              }
+                          }
+                      )
+
+                      val stream = repository.stream(videoId, 1080)
+                      section("N FINAL PLAYBACK RESOURCE")
+                      println("video_id=$videoId")
+                      println("quality=${stream.quality}")
+                      println("mime_type=${stream.mimeType}")
+                      println("url=${stream.url}")
+                      println("key_present=${stream.key != null}")
+                      println("result=success")
+                  } finally {
+                      http.dispatcher.executorService.shutdown()
+                      http.connectionPool.evictAll()
+                  }
+              }
+          }
+          KOTLIN
+
+          ./gradlew --no-daemon --stacktrace \
+            :playback-native:test \
+            --tests com.hongguotv.core.NativeLiveVideoIdWorkflowTest
+
+      - name: 输出查询结果
+        if: success()
+        shell: bash
+        env:
+          VIDEO_ID: ${{ inputs.video_id }}
+        run: |
+          {
+            echo "## Native N 完整请求诊断成功"
+            echo
+            printf '%s\n' "- 视频 ID：${VIDEO_ID}"
+            echo '- 已输出：注册请求、ttEncrypt 解密后的设备 JSON、注册响应及 Cookie。'
+            echo '- 已输出：设备身份、Native GET/POST 播放请求、签名 Headers、请求 Body 和响应。'
+            echo '- 已输出：fallback 请求（如触发）、资源解析及最终播放资源。'
+            echo '- 本工作流只调用 main 当前 Native N 生产实现，不修改接口源码、不构建 APK。'
+          } >> "$GITHUB_STEP_SUMMARY"
