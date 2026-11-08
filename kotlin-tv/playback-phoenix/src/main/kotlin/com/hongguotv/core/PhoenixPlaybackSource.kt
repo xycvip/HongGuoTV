@@ -128,7 +128,7 @@ class PhoenixPlaybackSource(
             while (true) {
                 RequestScope.ensureActive()
                 try {
-                    // 使用当前注册会话的设备身份，版本及设备指纹统一取近期实测的 7.1.3.32 配置。
+                    // 使用当前注册会话的设备身份，设备型号、系统与 App 版本统一取注册请求配置。
                     val values = VendorConstants.device.toMutableMap().apply {
                         putAll(identity.values.filterKeys { it in setOf("device_id", "iid", "cdid", "ac") })
                         put("device_id", identity.values["device_id"].orEmpty())
@@ -262,7 +262,7 @@ class PhoenixPlaybackSource(
             }
 
         private const val PHOENIX_APP_UA =
-            "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
+            "com.phoenix.read/69132 (Linux; U; Android 17; zh_CN; WKL-AN20; Build/CP2A.260605.012; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
         internal fun parseResponse(raw: String, maxQuality: Int = 1080): StreamInfo =
             PhoenixMediaResolver.parse(raw, maxQuality)
