@@ -211,6 +211,8 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
             val to = if (from == "phoenix") "native" else "phoenix"
             getSharedPreferences("playback-api-v1", MODE_PRIVATE).edit().putString("source", to).apply()
             PlaybackApiDebugState.select(to)
+            playbackPipelineState.playbackRecoveryPreviousRoute = from
+            playbackPipelineState.playbackRecoveryRouteSwitched = true
             playbackRecoveryRouteLocked = true
             val notice = if (from == "native") "N → P 已自动切换至线路 Phoenix" else "P → N 已自动切换至线路 Native"
             PlaybackApiDebugState.rememberFallbackNotice(episodeId, library.maxQuality, notice)
@@ -219,6 +221,14 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
             return true
         }
         PlaybackRecoveryStep.EXHAUSTED -> {
+            val previousRoute = playbackPipelineState.playbackRecoveryPreviousRoute
+            if (playbackPipelineState.playbackRecoveryRouteSwitched && previousRoute.isNotEmpty()) {
+                getSharedPreferences("playback-api-v1", MODE_PRIVATE).edit().putString("source", previousRoute).apply()
+                PlaybackApiDebugState.select(previousRoute)
+                playbackPipelineState.playbackRecoveryPreviousRoute = ""
+                playbackPipelineState.playbackRecoveryRouteSwitched = false
+                debugLog("播放故障恢复：备用线路也失败，已恢复原优先线路设置=$previousRoute")
+            }
             debugLog("播放故障恢复：本集同线路重试和跨线路切换额度已用完，停止自动切换")
             return false
         }

@@ -130,6 +130,8 @@ import java.util.concurrent.atomic.AtomicLong
             recovery.reset()
             playbackPipelineState.playbackRecoveryPolicy.reset()
             playbackRecoveryRouteLocked=false
+            playbackPipelineState.playbackRecoveryPreviousRoute=""
+            playbackPipelineState.playbackRecoveryRouteSwitched=false
         }
         autoRecovery=false; readySince=0; startPosition=position.coerceAtLeast(0); requestedAutoplay=autoplay
         val skipMark=library.skipMark(data.series.id)
@@ -315,7 +317,11 @@ import java.util.concurrent.atomic.AtomicLong
                         debugFirstFrameAt=android.os.SystemClock.elapsedRealtime()
                         android.util.Log.i("HongguoTV","Playback first frame episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${debugFirstFrameAt-playbackStarted}")
                         debugLog("Playback first frame elapsedMs=${debugFirstFrameAt-playbackStarted}")
-                        playbackRecoveryRouteLocked=false
+                        if (playbackPipelineState.playbackRecoveryRouteSwitched) {
+                            // 备用线路已真正输出首帧，正式确认切换；本集剩余预加载继续锁定该线路。
+                            playbackPipelineState.playbackRecoveryPreviousRoute=""
+                            playbackPipelineState.playbackRecoveryRouteSwitched=false
+                        }
                         PlaybackApiDebugState.consumeFallbackNotice(requestedId,maxQuality)?.let { notice ->
                             Toast.makeText(this@playEpisode,notice,Toast.LENGTH_SHORT).show()
                             debugLog("播放线路提示：$notice（首帧已显示）")

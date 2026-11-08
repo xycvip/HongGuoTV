@@ -16,6 +16,9 @@ internal class PlaybackPipelineState {
     val playbackRecoveryPolicy = PlaybackRecoveryPolicy()
     /** 恢复期间锁定目标线路，禁止自动回退再次跳回旧线路。 */
     var playbackRecoveryRouteLocked: Boolean = false
+    /** 跨线路恢复前的线路；备用线路失败时恢复原优先设置。 */
+    var playbackRecoveryPreviousRoute: String = ""
+    var playbackRecoveryRouteSwitched: Boolean = false
     var randomReplenishing = false
     var randomPlaybackLaunching = false
     var randomLoadingLabel: TextView? = null
