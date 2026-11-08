@@ -477,8 +477,7 @@ jobs:
           # 保留AppDownload中的全部历史正式版Release，不自动删除旧版本。
 
       - name: 更新仓库总说明中的正式版版本与下载链接
-        # README属于辅助说明；即使并发提交导致更新失败，也不能阻断GitCode正式版同步。
-        continue-on-error: true
+        # 正式版信息必须同步成功；失败时停止发布流程，避免分发版本与源码说明不一致。
         shell: bash
         env:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
