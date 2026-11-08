@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "d6e50dc4715b9240ff2f530c8e55a03869d3fd6c",
-  "versionCode": 49,
-  "versionName": "0.0.49",
+  "sourceCommit": "3fb5b95e46e540366e0239574b15206194a2ef5b",
+  "versionCode": 52,
+  "versionName": "0.0.52",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.49",
+  "tag": "hongguotv-bate-v0.0.52",
   "apk": {
-    "name": "HongguoTV-0.0.49.apk",
-    "size": 1986209,
-    "sha256": "c87aa38a71d5317c49b91f6e4bce9b1da74b3782e03241fba30c9306eabc808c",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.49/HongguoTV-0.0.49.apk"
+    "name": "HongguoTV-0.0.52.apk",
+    "size": 1990133,
+    "sha256": "19881b60ffc198f9c55e7e4c3e342756ba11969adbbfbbdd3aa19dd340115dc9",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.52/HongguoTV-0.0.52.apk"
   },
-  "notes": "【播放与播放器】\n- 将 0.0.42 Native 播放实现完整移植到 Phoenix"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }

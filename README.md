@@ -13,10 +13,10 @@
 ### 本仓库测试版
 
 <!-- TEST_RELEASE_INFO_START -->
-- **当前版本：0.0.49**（versionCode：49）
+- **当前版本：0.0.52**（versionCode：52）
 - 应用包名：`com.x.hongguotv.bate`
-- [下载测试版 APK：HongguoTV-0.0.49.apk](https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.49/HongguoTV-0.0.49.apk)
-- [查看测试版 0.0.49 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/hongguotv-bate-v0.0.49)
+- [下载测试版 APK：HongguoTV-0.0.52.apk](https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.52/HongguoTV-0.0.52.apk)
+- [查看测试版 0.0.52 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/hongguotv-bate-v0.0.52)
 <!-- TEST_RELEASE_INFO_END -->
 
 ### 正式版
