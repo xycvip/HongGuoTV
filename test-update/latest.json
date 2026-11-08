@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "f0ef8dfea993c0e81e4aac5aaefc6fa37a011329",
-  "versionCode": 45,
-  "versionName": "0.0.45",
+  "sourceCommit": "097e1587742ea7b90e817a0a9d855b57463181b6",
+  "versionCode": 46,
+  "versionName": "0.0.46",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.45",
+  "tag": "hongguotv-bate-v0.0.46",
   "apk": {
-    "name": "HongguoTV-0.0.45.apk",
-    "size": 1984177,
-    "sha256": "f3dcee492c7619ba0194378f48bbf5b3a2e5ca759962330b44ebc142c61789ed",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.45/HongguoTV-0.0.45.apk"
+    "name": "HongguoTV-0.0.46.apk",
+    "size": 1984453,
+    "sha256": "93688e7a898a0189fd467c3e9d21994d0941d44a143cbec96556a2439de72a78",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.46/HongguoTV-0.0.46.apk"
   },
-  "notes": "【播放与播放器】\n- 按可用内存阈值启用备用播放器"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
