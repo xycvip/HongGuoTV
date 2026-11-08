@@ -2,6 +2,7 @@ package com.hongguotv.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PhoenixPlaybackSourceTest {
@@ -45,10 +46,10 @@ class PhoenixPlaybackSourceTest {
 
         assertEquals("https://media.example/path/720.mp4?signature=secret", result.url)
         assertEquals("720P", result.quality)
-        assert(diagnostics.any { it.contains("unsupported") && it.contains("不兼容编码") })
-        assert(diagnostics.any { it.contains("playable") && it.contains("通过") })
-        assert(diagnostics.any { it.contains("筛选汇总") && it.contains("候选项=2") })
-        assert(diagnostics.none { it.contains("signature=secret") || it.contains("token=secret") })
+        assertTrue(diagnostics.any { it.contains("unsupported") && it.contains("不兼容编码") })
+        assertTrue(diagnostics.any { it.contains("playable") && it.contains("通过") })
+        assertTrue(diagnostics.any { it.contains("筛选汇总") && it.contains("候选项=2") })
+        assertTrue(diagnostics.none { it.contains("signature=secret") || it.contains("token=secret") })
     }
 
     @Test fun `rejects protected media instead of attempting key extraction`() {
