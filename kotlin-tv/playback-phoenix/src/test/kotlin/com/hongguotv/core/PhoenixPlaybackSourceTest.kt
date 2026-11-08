@@ -101,6 +101,32 @@ class PhoenixPlaybackSourceTest {
         }
     }
 
+
+    @Test fun `parses base64 video model and uses vwidth when vheight is absent`() {
+        val model = """{"video_list":[
+          {"main_url":"https://cdn.example/portrait.mp4",
+           "video_meta":{"codec_type":"h264","vwidth":720}}
+        ]}"""
+        val encoded = java.util.Base64.getEncoder().encodeToString(model.toByteArray(Charsets.UTF_8))
+        val raw = """{"code":0,"data":{"video_model":"$encoded"}}"""
+        val stream = PhoenixMediaResolver.parse(raw, 1080)
+        assertEquals("https://cdn.example/portrait.mp4", stream.url)
+        assertEquals("720P", stream.quality)
+    }
+
+    @Test fun `falls back to outer data video list when video model list is empty`() {
+        val raw = """{"code":0,"data":{
+          "video_model":{"video_list":{}},
+          "video_list":[
+            {"main_url":"https://cdn.example/outer.mp4",
+             "video_meta":{"codec_type":"h264","definition":"540P","vheight":540}}
+          ]
+        }}"""
+        val stream = PhoenixMediaResolver.parse(raw, 1080)
+        assertEquals("https://cdn.example/outer.mp4", stream.url)
+        assertEquals("540P", stream.quality)
+    }
+
     @Test fun `rejects empty or unsuccessful response`() {
         assertThrows(java.io.IOException::class.java) {
             PhoenixPlaybackSource.parseResponse("""{"code":0,"data":{}}""")
