@@ -149,7 +149,9 @@ import java.util.concurrent.atomic.AtomicLong
             if(startupAutoplayEnabled()) launchRandomPlayback()
             else {
                 initialCatalogPending=false
-                showCatalog(load=true)
+                // 冷启动进入首页时明确把焦点交给「首页」导航，避免系统按视图树顺序
+                // 默认聚焦第一个快捷入口（四叶状态灯/随便播放）。
+                showCatalog(load=true,focusNav=true)
             }
         }
     }
