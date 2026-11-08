@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "4d1027d77a97fa8ca0df2d8b7c9a894cf7156bcd",
-  "versionCode": 41,
-  "versionName": "0.0.41",
+  "sourceCommit": "3c24627ab34a5b5ec5dec8cd56812845bf9e64f0",
+  "versionCode": 44,
+  "versionName": "0.0.44",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.41",
+  "tag": "hongguotv-bate-v0.0.44",
   "apk": {
-    "name": "HongguoTV-0.0.41.apk",
-    "size": 1988517,
-    "sha256": "1cfb1701636d5bf824dbeeac33decde206db3fae42ee294efa3c61c1a360dc0e",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.41/HongguoTV-0.0.41.apk"
+    "name": "HongguoTV-0.0.44.apk",
+    "size": 1983861,
+    "sha256": "07d8fcf614df05b2ef0a49627e8e64a0410b9af02b3594b9e786ba2b1bae7c6d",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.44/HongguoTV-0.0.44.apk"
   },
-  "notes": "【播放与播放器】\n- 修复播放恢复代码中的 Context 常量引用\n- 完善播放故障恢复：同线路重试后双线路切换\n- 修正首帧提示的 Activity 接收者引用\n- 播放失败时清理未展示的线路切换提示\n- 播放线路切换提示延后到实际首帧\n- 播放线路自动回退成功后等待首帧再提示\n【焦点与遥控器】\n- 修复启动时焦点默认落在四叶状态灯\n【网络与接口】\n- 限制自动恢复仅处理媒体与网络故障\n- 接口诊断请求不触发用户线路提示\n【片源与数据管理】\n- 保留跨线路恢复待显示提示\n- 完善线路恢复确认与失败回滚\n【界面与交互】\n- 修复线路首选左侧说明不显示\n【其他功能与问题修复】\n- 修复自动回退成功回调的默认参数\n- 修正线路回退成功回调参数\n- 补充线路回退提示的单元测试"
+  "notes": "【播放与播放器】\n- 移除播放线路切换通知前缀\n【其他功能与问题修复】\n- Rewrite Phoenix playback flow to match guoapp"
 }
