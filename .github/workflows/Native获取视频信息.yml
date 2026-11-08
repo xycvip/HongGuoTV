@@ -121,7 +121,8 @@ jobs:
                   val expected = unpadded.copyOfRange(0, 64)
                   val compressed = unpadded.copyOfRange(64, unpadded.size)
                   val json = GZIPInputStream(ByteArrayInputStream(compressed)).use { it.readBytes() }
-                  check(MessageDigest.isEqual(expected, MessageDigest.getInstance("SHA-512").digest(json))) {
+                  // DeviceRegister.ttEncrypt(data) 的 data 是 gzip(JSON)，摘要在 gzip 前计算。
+                  check(MessageDigest.isEqual(expected, MessageDigest.getInstance("SHA-512").digest(compressed))) {
                       "Native 注册 JSON SHA-512 校验失败"
                   }
                   return String(json, Charsets.UTF_8)
