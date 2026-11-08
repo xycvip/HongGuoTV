@@ -190,6 +190,9 @@ internal fun MainActivity.hasValidatedInternet(): Boolean {
 /** 播放地址取得后的统一恢复：当前线路重建重试一次，仍失败则切换另一线路。 */
 private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean {
     if (screen != "player" || detail == null || startupAutoPlaybackActive) return false
+    val recoverable = problem is PlaybackException || problem is java.io.IOException ||
+        problem is UnplayableVideoException || problem is UnsupportedVideoFormatException
+    if (!recoverable) return false
     if (Thread.currentThread().isInterrupted) return false
     val message = problem.message.orEmpty().lowercase(java.util.Locale.ROOT)
     if (message.contains("请求已取消") || message == "cancelled" || message == "canceled") return false
