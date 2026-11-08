@@ -93,7 +93,7 @@ jobs:
                   keyField.isAccessible = true
                   val keyIv = keyField.get(instance) as ByteArray
 
-                  // Phoenix 注册体格式：6 字节 magic + 32 字节固定前缀 + AES-CBC(gzip(SHA512||JSON)).
+                  // Phoenix 注册体格式：6 字节 magic + 32 字节固定前缀 + AES-CBC(SHA512(gzip(JSON)) || gzip(JSON))。
                   require(encrypted.size > 38 && (encrypted.size - 38) % 16 == 0) {
                       "注册请求体长度不符合 ttEncrypt 格式"
                   }
@@ -113,7 +113,8 @@ jobs:
                   val expectedDigest = plain.copyOfRange(0, 64)
                   val gzipBytes = plain.copyOfRange(64, plain.size)
                   val jsonBytes = GZIPInputStream(ByteArrayInputStream(gzipBytes)).use { it.readBytes() }
-                  val actualDigest = MessageDigest.getInstance("SHA-512").digest(jsonBytes)
+                  // ttEncrypt 在 gzip 之前计算输入摘要；校验对象必须是解压前的 gzip 字节。
+                  val actualDigest = MessageDigest.getInstance("SHA-512").digest(gzipBytes)
                   check(MessageDigest.isEqual(expectedDigest, actualDigest)) {
                       "注册 JSON 解密后的 SHA-512 校验失败"
                   }
