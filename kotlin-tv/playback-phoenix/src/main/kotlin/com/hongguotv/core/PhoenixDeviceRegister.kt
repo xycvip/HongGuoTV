@@ -126,7 +126,7 @@ object PhoenixDeviceRegister {
         device: Map<String, String>,
         now: Long = System.currentTimeMillis(),
     ): Map<String, String> = linkedMapOf(
-        "User-Agent" to "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)",
+        "User-Agent" to "com.phoenix.read/69132 (Linux; U; Android 17; zh_CN; WKL-AN20; Build/CP2A.260605.012; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)",
         "Accept" to "application/json",
         "log-encode-type" to "gzip",
         "sdk-version" to "2",
