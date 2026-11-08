@@ -13,6 +13,7 @@ internal object PhoenixMediaResolver {
         val data = root.optJSONObject("data") ?: return ""
         val model = modelFrom(data)
         return extractFallbackUrl(model.opt("fallback_api"))
+            .ifBlank { extractFallbackUrl(data.opt("fallback_api")) }
     }
 
     fun parse(raw: String, maxQuality: Int, fallbackRaw: String? = null): StreamInfo {
@@ -38,9 +39,11 @@ internal object PhoenixMediaResolver {
         // 就提前停止回退，否则真实动态视频资源会被误报成“没有清晰度”。
         val listCandidates = listOf(
             source.opt("video_list"),
-            model.opt("video_list"),
             source.optJSONObject("dynamic_video")?.opt("dynamic_video_list"),
-            model.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
+            model.opt("video_list"),
+            model.optJSONObject("dynamic_video")?.opt("dynamic_video_list"),
+            data.opt("video_list"),
+            data.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
         )
         val rows = listCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
         if (rows.isEmpty()) throw IOException("Phoenix 未返回视频清晰度（fallback_api=${!fallbackRaw.isNullOrBlank()}）")
@@ -65,7 +68,10 @@ internal object PhoenixMediaResolver {
             val meta = objectOrString(item.opt("video_meta"))
             val encryption = objectOrString(item.opt("encrypt_info"))
             val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.lowercase(Locale.ROOT)
-            if (codec in setOf("bytevc2", "bvc2")) { unsupportedSkipped++; continue }
+            if (codec in setOf("bytevc2", "bvc2") ||
+                item.str("gear_des_key").contains("bytevc2", ignoreCase = true)) {
+                unsupportedSkipped++; continue
+            }
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
             val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
                 .ifEmpty { meta.str("spade_a") }.ifEmpty { item.str("spade_a") }
@@ -103,11 +109,16 @@ internal object PhoenixMediaResolver {
                 "Phoenix 无可用 MP4：不兼容编码 $unsupportedSkipped 项，未能解密/不支持的加密资源 $encryptedSkipped 项"
             )
         }
-        val h264 = candidates.filter { it.codec in setOf("h264", "avc1") }
-        val pool = if (h264.isNotEmpty()) h264 else candidates
-        val selected = pool.filter { it.quality in 1..maxQuality }.maxByOrNull { it.quality }
-            ?: pool.filter { it.quality > 0 }.minByOrNull { it.quality }
-            ?: pool.first()
+        val withinLimit = candidates.filter { it.quality in 1..maxQuality }
+        val chosenQuality = if (withinLimit.isNotEmpty()) {
+            withinLimit.maxOf { it.quality }
+        } else {
+            candidates.map { it.quality }.filter { it > 0 }.minOrNull() ?: 0
+        }
+        val sameQuality = candidates.filter { it.quality == chosenQuality }
+        val selected = sameQuality.maxByOrNull {
+            if (it.codec in setOf("h264", "avc1")) 1 else 0
+        } ?: candidates.first()
         val quality = if (selected.quality > 0) "${selected.quality}P" else "自动"
         return StreamInfo(selected.url, selected.key, quality, "video/mp4")
     }
@@ -141,7 +152,12 @@ internal object PhoenixMediaResolver {
         val raw = data.opt("video_model")
         return when (raw) {
             is JSONObject -> raw
-            is String -> runCatching { JSONObject(raw) }.getOrElse { throw IOException("Phoenix video_model 格式异常") }
+            is String -> {
+                val text = raw.trim()
+                runCatching { JSONObject(text) }.getOrNull()
+                    ?: runCatching { JSONObject(String(decode64(text), Charsets.UTF_8)) }
+                        .getOrElse { throw IOException("Phoenix video_model 格式异常") }
+            }
             else -> data
         }
     }

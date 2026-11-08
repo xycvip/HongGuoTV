@@ -37,7 +37,6 @@ data class PhoenixPlaybackDiagnostic(
 class PhoenixPlaybackSource(
     private val http: OkHttpClient,
     private val session: PhoenixPlaybackDeviceSession,
-    private val signer: PhoenixRequestSigner,
     private val onDiagnostic: (String) -> Unit = {},
 ) : StreamSource {
     override val name: String = "phoenix-video-model"
@@ -106,21 +105,16 @@ class PhoenixPlaybackSource(
         emitDiagnostic("Phoenix：设备身份已就绪（身份字段已校验，敏感值不记录）")
         val payload = JSONObject()
             .put("video_id", id)
+            .put("content_type", 1)
             .put("biz_param", JSONObject()
-                .put("detail_page_version", 0)
-                .put("device_level", 3)
-                .put("disable_digg_stat", false)
                 .put("need_all_video_definition", true)
-                .put("need_mp4_align", false)
-                .put("use_os_player", false)
-                .put("use_server_dns", false)
-                .put("video_platform", 1024))
+                .put("video_platform", 3))
             .toString()
             .toByteArray(Charsets.UTF_8)
 
         val hosts = listOf(
-            "api5-normal-sinfonlinea.fqnovel.com",
-            "api5-normal-sinfonlineb.fqnovel.com"
+            "api5-normal-sinfonlineb.fqnovel.com",
+            "api5-normal-sinfonlinea.fqnovel.com"
         )
         var last: IOException? = null
         var rotations = 0
@@ -128,32 +122,35 @@ class PhoenixPlaybackSource(
             while (true) {
                 RequestScope.ensureActive()
                 try {
-                    // 使用当前注册会话的设备身份，版本及设备指纹统一取近期实测的 7.1.3.32 配置。
+                    // 使用注册会话下发的设备 ID，并与上游 7.3.5.32 播放请求参数保持一致。
                     val values = VendorConstants.device.toMutableMap().apply {
                         putAll(identity.values.filterKeys { it in setOf("device_id", "iid", "cdid", "ac") })
                         put("device_id", identity.values["device_id"].orEmpty())
                         put("iid", identity.values["iid"].orEmpty())
                         put("cdid", identity.values["cdid"].orEmpty())
                         put("ac", identity.values["ac"]?.ifBlank { "wifi" } ?: "wifi")
+                        put("version_code", "73532")
+                        put("version_name", "7.3.5.32")
+                        put("manifest_version_code", "73532")
+                        put("update_version_code", "73532")
                     }
                     if (values["device_id"].isNullOrBlank() || values["iid"].isNullOrBlank()) {
                         throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
                     }
-                    emitDiagnostic("Phoenix：正在生成播放请求签名，host=" + host)
-                    val signed = signer.signPlayback(
-                        "https://$host/novel/player/video_model/v1/",
-                        values,
-                        payload,
-                        VendorConstants.VIDEO_UA
+                    val now = System.currentTimeMillis()
+                    val query = PhoenixRequestSigner.encode(values + mapOf("_rticket" to now.toString()))
+                    emitDiagnostic("Phoenix：正在生成上游播放器请求签名，host=" + host)
+                    val headers = PhoenixPlayerSigner.headers(
+                        query, payload, values["device_id"].orEmpty(), now, PHOENIX_APP_UA
                     )
-                    emitDiagnostic("Phoenix：请求签名完成，开始发送 video_model/v1 POST")
+                    emitDiagnostic("Phoenix：播放器签名完成，开始发送 video_model/v1 POST")
                     val request = Request.Builder()
-                        .url(signed.url)
+                        .url("https://$host/novel/player/video_model/v1/?$query")
                         .apply {
-                            signed.headers.forEach { (key, value) -> header(key, value) }
+                            headers.forEach { (key, value) -> header(key, value) }
                             if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
                         }
-                        .post(payload.toRequestBody("application/json; charset=UTF-8".toMediaType()))
+                        .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
                         .build()
                     data class ResponseBody(val raw: String, val status: Int, val contentType: String, val size: Int)
                     val result = RequestScope.execute(http.newCall(request)) { response ->
@@ -182,7 +179,7 @@ class PhoenixPlaybackSource(
                         throw IOException("Phoenix 播放接口返回空正文（HTTP ${result.status}，Content-Type=${result.contentType.take(80)}）")
                     }
                     return try {
-                        resolveResponse(result.raw, maxQuality).also { emitDiagnostic("Phoenix：播放模型解析成功，清晰度=" + it.quality + "，MIME=" + it.mimeType) }
+                        resolveResponse(result.raw, maxQuality, identity.cookie).also { emitDiagnostic("Phoenix：播放模型解析成功，清晰度=" + it.quality + "，MIME=" + it.mimeType) }
                     } catch (error: IOException) {
                         val preview = result.raw
                             .replace(Regex("[\\r\\n\\t]+"), " ")
@@ -208,13 +205,14 @@ class PhoenixPlaybackSource(
      * Resolve the optional second-stage fallback_api endpoint before parsing media.
      * This is a plain GET with the reader UA; credentials and signed query data are not logged.
      */
-    private fun resolveResponse(raw: String, maxQuality: Int): StreamInfo {
+    private fun resolveResponse(raw: String, maxQuality: Int, cookie: String): StreamInfo {
         val fallbackUrl = PhoenixMediaResolver.fallbackUrl(raw)
         val fallbackRaw = if (fallbackUrl.startsWith("https://") || fallbackUrl.startsWith("http://")) {
             val request = Request.Builder()
                 .url(fallbackUrl)
-                .header("User-Agent", PHOENIX_UA)
+                .header("User-Agent", PHOENIX_APP_UA)
                 .header("Referer", "https://novel.snssdk.com/")
+                .apply { if (cookie.isNotBlank()) header("Cookie", cookie) }
                 .header("Accept", "application/json, */*")
                 .header("Accept-Encoding", "identity")
                 .get()
@@ -232,87 +230,11 @@ class PhoenixPlaybackSource(
     }
 
     companion object {
-        private const val PHOENIX_UA =
+        private const val PHOENIX_APP_UA =
             "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
-        internal fun parseResponse(raw: String, maxQuality: Int = 1080): StreamInfo {
-            val root = try { JSONObject(raw) } catch (_: Exception) {
-                throw IOException("Phoenix 播放响应不是有效 JSON")
-            }
-            val baseResp = root.optJSONObject("BaseResp")
-            val codeText = root.opt("code")?.toString()
-                ?: root.opt("Code")?.toString()
-                ?: baseResp?.opt("StatusCode")?.toString()
-                ?: "0"
-            val code = codeText.toIntOrNull() ?: -1
-            if (code != 0) {
-                val message = root.optString("message", baseResp?.optString("StatusMessage").orEmpty())
-                throw IOException("Phoenix 播放接口业务错误：$code ${message.take(100)}")
-            }
-            val data = root.optJSONObject("data") ?: throw IOException("Phoenix 播放数据为空")
-            val rawModel = data.opt("video_model")
-            val model = when (rawModel) {
-                is JSONObject -> rawModel
-                is String -> try { JSONObject(rawModel) } catch (_: Exception) {
-                    throw IOException("Phoenix video_model 格式异常")
-                }
-                else -> data
-            }
-            val dynamic = model.optJSONObject("dynamic_video")
-            val variants = asObjects(model.opt("video_list"))
-                .ifEmpty { asObjects(dynamic?.opt("dynamic_video_list")) }
-                .ifEmpty { asObjects(data.opt("video_list")) }
-            if (variants.isEmpty()) throw IOException("Phoenix 未返回视频清晰度")
-
-            data class Candidate(val quality: Int, val codec: String, val url: String)
-            val candidates = mutableListOf<Candidate>()
-            for (item in variants) {
-                val meta = item.optJSONObject("video_meta") ?: JSONObject()
-                val encryption = item.optJSONObject("encrypt_info") ?: JSONObject()
-                val codec = meta.optString("codec_type").ifBlank { item.optString("codec_type") }
-                    .lowercase(Locale.ROOT)
-                if (codec in setOf("bytevc2", "bvc2")) continue
-
-                // CENC/spade_a 等受保护媒体不在本验证通道中解密或尝试绕过。
-                val method = encryption.optString("encryption_method")
-                    .ifBlank { item.optString("encryption_method") }
-                val spade = encryption.optString("spade_a").ifBlank { item.optString("spade_a") }
-                if (encryption.optBoolean("encrypt") || item.optBoolean("encrypt") ||
-                    method.equals("cenc-aes-ctr", true) || spade.isNotBlank()) continue
-
-                val definition = meta.optString("definition").ifBlank { item.optString("definition") }
-                val height = qualityNumber(definition).takeIf { it > 0 }
-                    ?: meta.optInt("vheight", item.optInt("vheight", 0))
-                val urls = (
-                    stringValues(item.opt("main_url")) +
-                    stringValues(item.opt("backup_url")) +
-                    stringValues(item.opt("backup_url_1")) +
-                    stringValues(item.opt("backup_url_2")) +
-                    stringValues(item.opt("backup_urls")) +
-                    stringValues(item.opt("url_list"))
-                ).distinct()
-                for (rawUrl in urls) {
-                    val url = normalizeMediaUrl(rawUrl)
-                    if (!url.startsWith("https://") && !url.startsWith("http://")) continue
-                    val path = runCatching { java.net.URI(url).path.orEmpty().lowercase(Locale.ROOT) }
-                        .getOrDefault("")
-                    if (path.endsWith(".m3u8") || path.endsWith(".mpd") ||
-                        path.endsWith(".ts") || path.endsWith(".mkv") || path.endsWith(".webm")) continue
-                    candidates += Candidate(height, codec, url)
-                }
-            }
-            if (candidates.isEmpty()) {
-                throw UnplayableVideoException("Phoenix 返回的媒体为空、受保护或当前播放链路不支持")
-            }
-            val h264 = candidates.filter { it.codec == "h264" || it.codec == "avc1" }
-            val pool = if (h264.isNotEmpty()) h264 else candidates
-            val selected = pool.filter { it.quality <= maxQuality && it.quality > 0 }
-                .maxByOrNull { it.quality }
-                ?: pool.minByOrNull { if (it.quality > 0) it.quality else Int.MAX_VALUE }
-                ?: throw IOException("Phoenix 没有可选媒体")
-            val quality = if (selected.quality > 0) "${selected.quality}P" else "自动"
-            return StreamInfo(selected.url, null, quality, "video/mp4")
-        }
+        internal fun parseResponse(raw: String, maxQuality: Int = 1080): StreamInfo =
+            PhoenixMediaResolver.parse(raw, maxQuality)
 
         private fun normalizeMediaUrl(value: String): String {
             val trimmed = value.trim()
