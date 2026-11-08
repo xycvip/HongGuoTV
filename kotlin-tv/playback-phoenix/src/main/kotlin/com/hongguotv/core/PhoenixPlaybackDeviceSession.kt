@@ -78,7 +78,7 @@ class PhoenixPlaybackDeviceSession(
     private fun registerPhoenix(http: OkHttpClient, currentCdid: String): PhoenixDeviceRegister.Registered? {
         val now = System.currentTimeMillis()
         val body = PhoenixDeviceRegister.payload(VendorConstants.device + mapOf("cdid" to currentCdid), now)
-        val request = Request.Builder().url(PhoenixDeviceRegister.url(now))
+        val request = Request.Builder().url(PhoenixDeviceRegister.url(now, VendorConstants.device))
         PhoenixDeviceRegister.headers(body, VendorConstants.device, now).forEach { (key, value) ->
             request.header(key, value)
         }
