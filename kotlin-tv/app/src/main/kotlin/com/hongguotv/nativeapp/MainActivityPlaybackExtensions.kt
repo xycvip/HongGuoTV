@@ -312,7 +312,7 @@ import java.util.concurrent.atomic.AtomicLong
                         android.util.Log.i("HongguoTV","Playback first frame episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${debugFirstFrameAt-playbackStarted}")
                         debugLog("Playback first frame elapsedMs=${debugFirstFrameAt-playbackStarted}")
                         PlaybackApiDebugState.consumeFallbackNotice(requestedId,maxQuality)?.let { notice ->
-                            Toast.makeText(this@MainActivity,notice,Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@playEpisode,notice,Toast.LENGTH_SHORT).show()
                             debugLog("播放线路提示：$notice（首帧已显示）")
                         }
                     }
