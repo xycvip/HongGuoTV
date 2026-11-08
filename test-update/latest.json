@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "3c24627ab34a5b5ec5dec8cd56812845bf9e64f0",
-  "versionCode": 44,
-  "versionName": "0.0.44",
+  "sourceCommit": "d6e50dc4715b9240ff2f530c8e55a03869d3fd6c",
+  "versionCode": 49,
+  "versionName": "0.0.49",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.44",
+  "tag": "hongguotv-bate-v0.0.49",
   "apk": {
-    "name": "HongguoTV-0.0.44.apk",
-    "size": 1983861,
-    "sha256": "07d8fcf614df05b2ef0a49627e8e64a0410b9af02b3594b9e786ba2b1bae7c6d",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.44/HongguoTV-0.0.44.apk"
+    "name": "HongguoTV-0.0.49.apk",
+    "size": 1986209,
+    "sha256": "c87aa38a71d5317c49b91f6e4bce9b1da74b3782e03241fba30c9306eabc808c",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.49/HongguoTV-0.0.49.apk"
   },
-  "notes": "【播放与播放器】\n- 移除播放线路切换通知前缀\n【其他功能与问题修复】\n- Rewrite Phoenix playback flow to match guoapp"
+  "notes": "【播放与播放器】\n- 将 0.0.42 Native 播放实现完整移植到 Phoenix"
 }
