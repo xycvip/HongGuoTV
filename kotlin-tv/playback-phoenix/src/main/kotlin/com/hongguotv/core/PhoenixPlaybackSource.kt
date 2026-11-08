@@ -49,7 +49,7 @@ class PhoenixPlaybackSource(
     }
 
     /**
-     * 独立诊断：先获取 Phoenix 播放地址，再用 Range GET 读取最多 1 KiB，
+     * 独立诊断：先获取 Phoenix 播放地址，再用 Range GET 读取媒体头，
      * 验证 CDN 是否实际返回媒体数据。不会记录完整 URL、Cookie 或签名参数。
      */
     fun diagnose(id: String, maxQuality: Int = 1080): PhoenixPlaybackDiagnostic {
@@ -58,7 +58,7 @@ class PhoenixPlaybackSource(
         val started = System.nanoTime()
         val remote = RemoteVideo(http, info)
         return try {
-            // 直接走播放器相同的 MP4 头解析、CENC 准备和解密读取，不再只测 CDN 是否回 1 KiB。
+            // 直接走播放器相同的 MP4 头解析和媒体读取，不再只测 CDN 是否回 1 KiB。
             remote.prepare()
             val sampleLength = minOf(64 * 1024L, remote.total).toInt()
             val firstBytes = if (sampleLength > 0) remote.read(0L, sampleLength) else byteArrayOf()
@@ -187,11 +187,8 @@ class PhoenixPlaybackSource(
                     return try {
                         resolveResponse(result.raw, maxQuality).also { emitDiagnostic("Phoenix：播放模型解析成功，清晰度=" + it.quality + "，MIME=" + it.mimeType) }
                     } catch (error: IOException) {
-                        val preview = result.raw
-                            .replace(Regex("[\\r\\n\\t]+"), " ")
-                            .take(180)
                         throw IOException(
-                            "${error.message}；HTTP=${result.status}，Content-Type=${result.contentType.take(80)}，正文长度=${result.size}，响应摘要=${preview}",
+                            "${error.message}；HTTP=${result.status}，Content-Type=${result.contentType.take(80)}，正文长度=${result.size}",
                             error
                         )
                     }
