@@ -167,9 +167,9 @@ internal fun Context.playbackStreamSource(
             if (this is MainActivity) {
                 if (notifyOnFallback) {
                     val notice = if (primaryApi == "native") {
-                        "已自动切换至线路 Phoenix"
+                        "N → P 已自动切换至线路 Phoenix"
                     } else {
-                        "已自动切换至线路 Native"
+                        "P → N 已自动切换至线路 Native"
                     }
                     PlaybackApiDebugState.rememberFallbackNotice(id, maxQuality, notice)
                 }
