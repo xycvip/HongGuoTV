@@ -15,7 +15,9 @@ internal object PhoenixMediaResolver {
         return extractFallbackUrl(model.opt("fallback_api"))
     }
 
-    fun parse(raw: String, maxQuality: Int, fallbackRaw: String? = null): StreamInfo {
+    fun parse(raw: String, maxQuality: Int, fallbackRaw: String? = null, onDiagnostic: (String) -> Unit = {}): StreamInfo {
+        // 诊断回调不得改变播放行为；只记录字段摘要，不记录完整URL或密钥。
+        fun report(message: String) { runCatching { onDiagnostic(message) } }
         val root = json(raw, "Phoenix 播放响应不是有效 JSON")
         val baseResp = root.optJSONObject("BaseResp")
         val code = (root.opt("code") ?: root.opt("Code") ?: baseResp?.opt("StatusCode") ?: 0)
@@ -44,6 +46,7 @@ internal object PhoenixMediaResolver {
         )
         val rows = listCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
         if (rows.isEmpty()) throw IOException("Phoenix 未返回视频清晰度（fallback_api=${!fallbackRaw.isNullOrBlank()}）")
+        report("Phoenix资源筛选：发现 ${rows.size} 项候选，数据来源=${if (!fallbackRaw.isNullOrBlank()) "fallback" else "video_model"}")
         // key_seed 在不同版本中可能位于 fallback 的顶层、video_info 或 video_info.data。
         // 逐层查找，避免 URL 已经拿到、却因密钥字段层级变化而把加密媒体误当成普通 MP4。
         val seedText = sequenceOf(
@@ -64,8 +67,13 @@ internal object PhoenixMediaResolver {
         for ((name, item) in rows) {
             val meta = objectOrString(item.opt("video_meta"))
             val encryption = objectOrString(item.opt("encrypt_info"))
-            val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.lowercase(Locale.ROOT)
-            if (codec in setOf("bytevc2", "bvc2")) { unsupportedSkipped++; continue }
+            val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.ifEmpty { "unknown" }.lowercase(Locale.ROOT)
+            val definition = meta.str("definition").ifEmpty { item.str("definition") }
+            val height = qualityNumber(definition).takeIf { it > 0 }
+                ?: meta.optInt("vheight", item.optInt("vheight", item.optInt("height", 0)))
+            val mime = meta.str("mime_type").ifEmpty { item.str("mime_type") }.ifEmpty { "unknown" }
+            report("Phoenix资源#$name：开始筛选 codec=$codec，mime=$mime，definition=${definition.ifBlank { "unknown" }}，height=${height.takeIf { it > 0 } ?: "unknown"}")
+            if (codec in setOf("bytevc2", "bvc2")) { unsupportedSkipped++; report("Phoenix资源#$name：拒绝，原因=不兼容编码($codec)"); continue }
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
             val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
                 .ifEmpty { meta.str("spade_a") }.ifEmpty { item.str("spade_a") }
@@ -74,7 +82,7 @@ internal object PhoenixMediaResolver {
             val key = if (spade.isNotBlank()) {
                 try { MediaCrypto.deriveKey(spade) } catch (_: Exception) { null }
             } else null
-            if (encrypted && key == null) { encryptedSkipped++; continue }
+            if (encrypted && key == null) { encryptedSkipped++; report("Phoenix资源#$name：拒绝，原因=加密资源缺少可用密钥；encryption_method=${method.ifBlank { "unknown" }}"); continue }
 
             val definition = meta.str("definition").ifEmpty { item.str("definition") }
             val height = qualityNumber(definition).takeIf { it > 0 }
@@ -88,16 +96,20 @@ internal object PhoenixMediaResolver {
                 val url = if (seed != null) {
                     try { MediaCrypto.decryptUrl(cleaned, seed) } catch (_: Exception) { normalizeUrl(cleaned) }
                 } else normalizeUrl(cleaned)
-                if (!url.startsWith("https://") && !url.startsWith("http://")) continue
+                if (!url.startsWith("https://") && !url.startsWith("http://")) { report("Phoenix资源#$name：拒绝一个URL，原因=无法解码为HTTP(S)"); continue }
                 val path = runCatching { java.net.URI(url).path.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
                 if (path.endsWith(".m3u8") || path.endsWith(".mpd") || path.endsWith(".ts") ||
                     path.endsWith(".mkv") || path.endsWith(".webm") || path.endsWith(".avi")) {
                     unsupportedSkipped++
+                    report("Phoenix资源#$name：拒绝URL，原因=当前链路不支持容器格式(${path.substringAfterLast('.', "unknown")})")
                     continue
                 }
                 candidates += Candidate(height, codec, url, key)
+                val safeHost = runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
+                report("Phoenix资源#$name：URL通过初筛，host=$safeHost，codec=$codec，height=${height.takeIf { it > 0 } ?: "unknown"}")
             }
         }
+        report("Phoenix资源筛选汇总：候选项=${rows.size}，通过媒体URL=${candidates.size}，不兼容编码/容器=$unsupportedSkipped，加密密钥不可用=$encryptedSkipped")
         if (candidates.isEmpty()) {
             throw UnplayableVideoException(
                 "Phoenix 无可用 MP4：不兼容编码 $unsupportedSkipped 项，未能解密/不支持的加密资源 $encryptedSkipped 项"
@@ -109,6 +121,8 @@ internal object PhoenixMediaResolver {
             ?: pool.filter { it.quality > 0 }.minByOrNull { it.quality }
             ?: pool.first()
         val quality = if (selected.quality > 0) "${selected.quality}P" else "自动"
+        val selectedHost = runCatching { java.net.URI(selected.url).host.orEmpty() }.getOrDefault("")
+        report("Phoenix资源筛选结果：选中 codec=${selected.codec}，清晰度=$quality，host=$selectedHost；完整URL及敏感参数已隐藏")
         return StreamInfo(selected.url, selected.key, quality, "video/mp4")
     }
 
