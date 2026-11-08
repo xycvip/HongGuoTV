@@ -81,7 +81,7 @@ class PhoenixPlaybackSource(
         } catch (error: java.io.InterruptedIOException) {
             throw error
         } catch (error: Exception) {
-            if (error is java.io.InterruptedException || Thread.currentThread().isInterrupted) {
+            if (error is java.lang.InterruptedException || Thread.currentThread().isInterrupted) {
                 throw java.io.InterruptedIOException("播放诊断已取消").apply { initCause(error) }
             }
             val elapsed = (System.nanoTime() - started) / 1_000_000
