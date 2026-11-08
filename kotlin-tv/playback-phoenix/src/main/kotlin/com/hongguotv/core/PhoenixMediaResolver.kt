@@ -27,7 +27,7 @@ internal object PhoenixMediaResolver {
             .toString().toIntOrNull() ?: -1
         if (code != 0) {
             val message = root.str("message").ifEmpty { baseResp?.str("StatusMessage").orEmpty() }
-            throw IOException("Phoenix 播放接口业务错误：$code \${message.take(100)}")
+            throw IOException("Phoenix 播放接口业务错误：$code ${message.take(100)}")
         }
         val data = root.optJSONObject("data") ?: throw IOException("Phoenix 播放数据为空")
         val model = modelFrom(data)
@@ -52,7 +52,7 @@ internal object PhoenixMediaResolver {
         )
         val rows = listCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
         if (rows.isEmpty()) {
-            throw IOException("Phoenix 未返回视频清晰度（fallback_api=\${!fallbackRaw.isNullOrBlank()}）")
+            throw IOException("Phoenix 未返回视频清晰度（fallback_api=${!fallbackRaw.isNullOrBlank()}）")
         }
 
         data class Candidate(val quality: Int, val codec: String, val url: String)
@@ -123,7 +123,7 @@ internal object PhoenixMediaResolver {
         val sameQuality = unique.filter { it.quality == chosenQuality }
             .sortedBy { if (it.codec in setOf("h264", "avc1")) 0 else 1 }
         val selected = sameQuality.firstOrNull() ?: unique.first()
-        val qualityLabel = if (selected.quality > 0) "\${selected.quality}P" else "自动"
+        val qualityLabel = if (selected.quality > 0) "${selected.quality}P" else "自动"
 
         // Only same-rendition URLs are safe to swap inside RemoteVideo: different
         // renditions can have different byte lengths and MP4 sample layouts.
