@@ -64,6 +64,9 @@ class RemoteVideo(
             candidateUrls.drop(index)
         }
         var lastError: IOException? = null
+        lastHttpStatus = null
+        lastContentType = ""
+        lastBytesRead = 0
         for (url in urls) {
             if (closed) throw IOException("播放请求已取消")
             val request = Request.Builder()
@@ -81,6 +84,7 @@ class RemoteVideo(
                         RequestScope.execute(call) { response ->
                             lastHttpStatus = response.code
                             lastContentType = response.header("Content-Type").orEmpty()
+                            lastBytesRead = 0
                             if(response.code!=206) throw HttpStatusException(
                                 response.code,response.header("Retry-After"),
                                 "视频服务器不支持分段读取（HTTP ${response.code}）"
