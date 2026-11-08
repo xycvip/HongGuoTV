@@ -54,7 +54,8 @@ jobs:
           test -s kotlin-tv/playback-phoenix/src/main/kotlin/com/hongguotv/core/PhoenixMediaResolver.kt
           test -s kotlin-tv/playback-phoenix/src/main/kotlin/com/hongguotv/core/PhoenixPlaybackSource.kt
           test -s kotlin-tv/playback-phoenix/src/test/kotlin/com/hongguotv/core/PhoenixPlaybackSourceTest.kt
-          echo "Phoenix resolver, playback source, and unit test files exist."
+          test -s kotlin-tv/playback-phoenix/src/test/kotlin/com/hongguotv/core/PhoenixLiveResourceDiagnosticTest.kt
+          echo "Phoenix resolver, playback source, unit tests, and live diagnostic entry exist."
 
       - name: Run Phoenix resource parsing unit tests
         working-directory: kotlin-tv
@@ -95,7 +96,7 @@ jobs:
             echo "- Encryption rejection count: 0"
             echo "- Inspect codec_type, definition/vheight, URL fields, and each rejection reason."
             echo ""
-            echo "> The supplied logs do not contain the raw fields for the five candidates. This workflow runs existing tests and compilation; it does not fabricate candidate details or call the online Phoenix API requiring a registered device identity."
+            echo "> Manual dispatch with phoenix_video_id runs the real device-registration, signed video_model/v1 request, fallback_api resolution, and production resource filter. Without that input, only offline regression tests run."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Phoenix unit-test reports
