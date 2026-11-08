@@ -37,10 +37,16 @@ class PhoenixPlayerSignerTest {
     }
 
     @Test fun phoenixDeviceRegistrationUsesCurrentPhoenixEndpointAndQuery() {
-        val url = PhoenixDeviceRegister.url(1794050000000L)
+        val url = PhoenixDeviceRegister.url(VendorConstants.device, 1794050000000L)
         assertTrue(url.startsWith("https://log5-applog-lq.fqnovel.com/service/2/device_register/"))
-        assertTrue(url.contains("version_code=69132"))
-        assertTrue(url.contains("version_name=6.9.1.32"))
+        assertTrue(url.contains("version_code=71332"))
+        assertTrue(url.contains("version_name=7.1.3.32"))
+        assertTrue(url.contains("device_type=25053RT47C"))
+        assertTrue(url.contains("device_brand=Redmi"))
+        assertTrue(url.contains("os_api=36"))
+        assertTrue(url.contains("os_version=16"))
+        assertTrue(url.contains("resolution=1280%2A2772"))
+        assertTrue(url.contains("dpi=520"))
         assertTrue(url.contains("_rticket=1794050000000"))
         assertFalse(url.contains("cronet_version="))
     }
