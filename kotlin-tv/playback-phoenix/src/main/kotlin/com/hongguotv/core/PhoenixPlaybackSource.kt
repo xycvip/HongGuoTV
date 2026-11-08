@@ -185,7 +185,7 @@ class PhoenixPlaybackSource(
                         throw IOException("Phoenix 播放接口返回空正文（HTTP ${result.status}，Content-Type=${result.contentType.take(80)}）")
                     }
                     return try {
-                        resolveResponse(result.raw, maxQuality).also { emitDiagnostic("Phoenix：播放模型解析成功，清晰度=" + it.quality + "，MIME=" + it.mimeType) }
+                        resolveResponse(result.raw, maxQuality, identity.cookie).also { emitDiagnostic("Phoenix：播放模型解析成功，清晰度=" + it.quality + "，MIME=" + it.mimeType) }
                     } catch (error: IOException) {
                         throw IOException(
                             "${error.message}；HTTP=${result.status}，Content-Type=${result.contentType.take(80)}，正文长度=${result.size}",
@@ -208,7 +208,7 @@ class PhoenixPlaybackSource(
      * Resolve the optional second-stage fallback_api endpoint before parsing media.
      * This is a plain GET with the reader UA; credentials and signed query data are not logged.
      */
-    private fun resolveResponse(raw: String, maxQuality: Int): StreamInfo {
+    private fun resolveResponse(raw: String, maxQuality: Int, cookie: String): StreamInfo {
         val primaryError = try {
             return PhoenixMediaResolver.parse(raw, maxQuality)
         } catch (error: IOException) {
@@ -233,6 +233,7 @@ class PhoenixPlaybackSource(
                 .header("Referer", "https://novel.snssdk.com/")
                 .header("Accept", "application/json, */*")
                 .header("Accept-Encoding", "identity")
+                .apply { if (cookie.isNotBlank()) header("Cookie", cookie) }
                 .get()
                 .build()
             RequestScope.execute(http.newCall(request)) { response ->
