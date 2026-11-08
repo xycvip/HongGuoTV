@@ -82,23 +82,27 @@ object PhoenixDeviceRegister {
         json.put("header", org.json.JSONObject().apply {
             put("display_name", "红果免费短剧")
             put("aid", 8662)
-            put("app_version", "6.9.1.32")
-            put("version_code", 69132)
-            put("manifest_version_code", 69132)
-            put("update_version_code", 69132)
-            put("channel", "update_64")
+            put("app_version", value("version_name", "7.1.3.32"))
+            put("version_code", value("version_code", "71332").toIntOrNull() ?: 71332)
+            put("manifest_version_code", value("manifest_version_code", value("version_code", "71332")).toIntOrNull() ?: 71332)
+            put("update_version_code", value("update_version_code", value("version_code", "71332")).toIntOrNull() ?: 71332)
+            put("channel", value("channel", "update_64"))
             put("package", "com.phoenix.read")
             put("app_language", "zh")
             put("os", "Android")
-            put("os_version", "17")
-            put("os_api", 37)
-            put("device_model", "WKL-AN20")
-            put("device_brand", "HONOR")
-            put("device_manufacturer", "HONOR")
-            put("cpu_abi", "arm64-v8a")
-            put("density_dpi", 360)
-            put("display_density", "xxhdpi")
-            put("resolution", "1320x2868")
+            put("os_version", value("os_version", "16"))
+            put("os_api", value("os_api", "36").toIntOrNull() ?: 36)
+            put("device_model", value("device_type", "25053RT47C"))
+            put("device_brand", value("device_brand", "Redmi"))
+            put("device_manufacturer", value("device_brand", "Redmi"))
+            put("cpu_abi", value("host_abi", "arm64-v8a"))
+            put("density_dpi", value("dpi", "520").toIntOrNull() ?: 520)
+            put("display_density", when {
+                (value("dpi", "520").toIntOrNull() ?: 520) >= 480 -> "xxxhdpi"
+                (value("dpi", "520").toIntOrNull() ?: 520) >= 320 -> "xxhdpi"
+                else -> "xhdpi"
+            })
+            put("resolution", value("resolution", "1280*2772").replace('*', 'x'))
             put("language", "zh")
             put("timezone", 8)
             put("access", "wifi")
@@ -126,7 +130,7 @@ object PhoenixDeviceRegister {
         device: Map<String, String>,
         now: Long = System.currentTimeMillis(),
     ): Map<String, String> = linkedMapOf(
-        "User-Agent" to "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)",
+        "User-Agent" to VendorConstants.VIDEO_UA,
         "Accept" to "application/json",
         "log-encode-type" to "gzip",
         "sdk-version" to "2",
@@ -137,28 +141,32 @@ object PhoenixDeviceRegister {
     )
 
     /** PhoenixReadApi 的注册 query，req_id 和 ticket 每次注册重新生成。 */
-    fun url(now: Long = System.currentTimeMillis()): String {
+    fun url(
+        now: Long = System.currentTimeMillis(),
+        device: Map<String, String> = VendorConstants.device,
+    ): String {
+        fun value(key: String, fallback: String) = device[key]?.takeIf { it.isNotBlank() } ?: fallback
         val values = linkedMapOf(
             "req_id" to UUID.randomUUID().toString(),
             "tt_data" to "a",
-            "aid" to "8662",
-            "app_name" to "novelread",
-            "version_code" to "69132",
-            "version_name" to "6.9.1.32",
-            "manifest_version_code" to "69132",
-            "update_version_code" to "69132",
-            "channel" to "update_64",
-            "device_platform" to "android",
-            "os" to "android",
-            "ssmix" to "a",
-            "device_type" to "WKL-AN20",
-            "device_brand" to "HONOR",
-            "language" to "zh",
-            "os_api" to "37",
-            "os_version" to "17",
-            "resolution" to "1320*2868",
-            "dpi" to "360",
-            "ac" to "wifi",
+            "aid" to value("aid", "8662"),
+            "app_name" to value("app_name", "novelread"),
+            "version_code" to value("version_code", "71332"),
+            "version_name" to value("version_name", "7.1.3.32"),
+            "manifest_version_code" to value("manifest_version_code", value("version_code", "71332")),
+            "update_version_code" to value("update_version_code", value("version_code", "71332")),
+            "channel" to value("channel", "update_64"),
+            "device_platform" to value("device_platform", "android"),
+            "os" to value("os", "android"),
+            "ssmix" to value("ssmix", "a"),
+            "device_type" to value("device_type", "25053RT47C"),
+            "device_brand" to value("device_brand", "Redmi"),
+            "language" to value("language", "zh"),
+            "os_api" to value("os_api", "36"),
+            "os_version" to value("os_version", "16"),
+            "resolution" to value("resolution", "1280*2772"),
+            "dpi" to value("dpi", "520"),
+            "ac" to value("ac", "wifi"),
             "_rticket" to now.toString(),
         )
         val query = values.entries.joinToString("&") { (key, value) ->
