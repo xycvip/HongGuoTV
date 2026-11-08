@@ -70,7 +70,8 @@ internal object PhoenixMediaResolver {
             val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.ifEmpty { "unknown" }.lowercase(Locale.ROOT)
             val definition = meta.str("definition").ifEmpty { item.str("definition") }
             val height = qualityNumber(definition).takeIf { it > 0 }
-                ?: meta.optInt("vheight", item.optInt("vheight", item.optInt("height", 0)))
+                ?: meta.optInt("vheight", item.optInt("vheight",
+                    item.optInt("height", qualityNumber(item.str("quality_desc").ifEmpty { name }))))
             val mime = meta.str("mime_type").ifEmpty { item.str("mime_type") }.ifEmpty { "unknown" }
             report("Phoenix资源#$name：开始筛选 codec=$codec，mime=$mime，definition=${definition.ifBlank { "unknown" }}，height=${height.takeIf { it > 0 } ?: "unknown"}")
             if (codec in setOf("bytevc2", "bvc2")) { unsupportedSkipped++; report("Phoenix资源#$name：拒绝，原因=不兼容编码($codec)"); continue }
@@ -84,10 +85,10 @@ internal object PhoenixMediaResolver {
             } else null
             if (encrypted && key == null) { encryptedSkipped++; report("Phoenix资源#$name：拒绝，原因=加密资源缺少可用密钥；encryption_method=${method.ifBlank { "unknown" }}"); continue }
 
-            if (rawUrls.isEmpty()) report("Phoenix资源#$name：拒绝，原因=没有可识别的媒体URL字段")
             val rawUrls = stringValues(item.opt("main_url")) + stringValues(item.opt("backup_url")) +
                 stringValues(item.opt("backup_url_1")) + stringValues(item.opt("backup_url_2")) +
                 stringValues(item.opt("backup_urls")) + stringValues(item.opt("url_list"))
+            if (rawUrls.isEmpty()) report("Phoenix资源#$name：拒绝，原因=没有可识别的媒体URL字段")
             for (rawUrl in rawUrls.distinct()) {
                 val cleaned = cleanUrl(rawUrl)
                 val url = if (seed != null) {
