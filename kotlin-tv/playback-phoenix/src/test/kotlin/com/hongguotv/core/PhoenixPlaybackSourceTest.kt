@@ -33,6 +33,24 @@ class PhoenixPlaybackSourceTest {
         assertEquals("540P", result.quality)
     }
 
+    @Test fun `actual resolver reports each candidate decision without exposing full URLs`() {
+        val raw = """{"code":0,"data":{"video_model":{"video_list":{
+          "unsupported":{"main_url":"https://cdn.example/private-path/video.mp4?token=secret",
+            "video_meta":{"codec_type":"bytevc2","mime_type":"video/hevc","definition":"1080P","vheight":1080}},
+          "playable":{"main_url":"https://media.example/path/720.mp4?signature=secret",
+            "video_meta":{"codec_type":"h264","mime_type":"video/avc","definition":"720P","vheight":720}}
+        }}}}"""
+        val diagnostics = mutableListOf<String>()
+        val result = PhoenixMediaResolver.parse(raw, 1080, onDiagnostic = diagnostics::add)
+
+        assertEquals("https://media.example/path/720.mp4?signature=secret", result.url)
+        assertEquals("720P", result.quality)
+        assert(diagnostics.any { it.contains("unsupported") && it.contains("不兼容编码") })
+        assert(diagnostics.any { it.contains("playable") && it.contains("通过") })
+        assert(diagnostics.any { it.contains("筛选汇总") && it.contains("候选项=2") })
+        assert(diagnostics.none { it.contains("signature=secret") || it.contains("token=secret") })
+    }
+
     @Test fun `rejects protected media instead of attempting key extraction`() {
         val json = """{"code":0,"data":{"video_model":{"video_list":[
           {"main_url":"https://cdn.example/protected.mp4",
