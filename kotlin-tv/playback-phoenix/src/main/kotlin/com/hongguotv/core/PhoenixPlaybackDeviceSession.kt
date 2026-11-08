@@ -4,6 +4,7 @@ package com.hongguotv.core
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -14,99 +15,112 @@ class PhoenixPlaybackDeviceRegistrationException(cause: Throwable? = null) :
     IOException("播放设备注册失败，请稍后重试", cause)
 
 /**
- * 匿名播放身份：注册一次后在整个进程内保持同一身份，所有 Repository 共用。
- * 平台按「注册过的 device_id + install_id」放行播放接口，未注册设备的播放请求只会拿到空响应。
+ * 按 Xanerix/guoapp 的匿名设备注册机制建立播放身份：
+ * - 普通 JSON POST 到 log.snssdk.com/service/2/device_register/；
+ * - 不使用 ttEncrypt、gzip、注册签名或旧设备 ID；
+ * - 仅使用服务端返回的 device_id_str + install_id_str；
+ * - 成功身份在进程内复用；播放空响应时 renew 重新注册；
+ * - 注册被拒绝后暂停 10 分钟，避免连续请求注册接口。
  */
 class PhoenixPlaybackDeviceSession(
     private val register: ((OkHttpClient) -> PhoenixDeviceRegister.Registered?)? = null
-
 ) {
     companion object {
         val shared = PhoenixPlaybackDeviceSession()
+        private const val REGISTER_PAUSE_MS = 10 * 60 * 1000L
+        private const val REGISTER_TIMEOUT_SECONDS = 20L
     }
 
     data class Profile(val values: Map<String, String>, val cookie: String)
 
-    private var cdid = UUID.randomUUID().toString()
     private var ready: Profile? = null
+    private var registerPausedUntil = 0L
+    private var registerPauseCause: IOException? = null
 
     @Synchronized
     fun profile(http: OkHttpClient): Profile {
         ready?.let { return it }
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
-        val device =
-            try {
-                (register?.invoke(http) ?: if (register == null) registerPhoenix(http, cdid) else null)
-                    ?: throw PhoenixPlaybackDeviceRegistrationException()
-            } catch (error: InterruptedIOException) {
-                throw error
-            } catch (error: IOException) {
-                throw PhoenixPlaybackDeviceRegistrationException(error)
-            }
+        if (System.currentTimeMillis() < registerPausedUntil) {
+            throw PhoenixPlaybackDeviceRegistrationException(registerPauseCause)
+        }
+
+        val registered = try {
+            if (register == null) registerPhoenix(http) else register.invoke(http)
+        } catch (error: InterruptedIOException) {
+            throw error
+        } catch (error: IOException) {
+            pauseRegistration(error)
+            throw PhoenixPlaybackDeviceRegistrationException(error)
+        } ?: run {
+            val error = IOException("红果设备注册未返回有效 device_id/install_id")
+            pauseRegistration(error)
+            throw PhoenixPlaybackDeviceRegistrationException(error)
+        }
+
         val validId = Regex("[1-9][0-9]{0,29}")
-        if (!validId.matches(device.deviceId) || !validId.matches(device.installId))
-            throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册响应缺少有效 device_id/install_id"))
-        if (device.klinkEgdi.isBlank())
-            throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册响应缺少 klink_egdi，已阻止使用过期固定身份继续请求"))
+        if (!validId.matches(registered.deviceId) || !validId.matches(registered.installId)) {
+            val error = IOException("设备注册响应缺少有效 device_id/install_id")
+            pauseRegistration(error)
+            throw PhoenixPlaybackDeviceRegistrationException(error)
+        }
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
+
         return Profile(
-                VendorConstants.device +
-                    mapOf(
-                        "device_id" to device.deviceId,
-                        "iid" to device.installId,
-                        "cdid" to cdid,
-                        "klink_egdi" to device.klinkEgdi,
-                    ),
-                device.cookies
-                    .filterKeys {
-                        it in setOf("install_id", "ttreq", "store-region", "store-region-src")
-                    }
-                    .entries
-                    .joinToString("; ") { (name, value) -> "$name=$value" },
-            )
-            .also { ready = it }
+            VendorConstants.device + mapOf(
+                "device_id" to registered.deviceId,
+                "iid" to registered.installId,
+                "cdid" to UUID.randomUUID().toString(),
+            ),
+            "",
+        ).also {
+            ready = it
+            registerPausedUntil = 0L
+            registerPauseCause = null
+        }
     }
 
-    /** 丢弃进程内匿名播放身份并重新注册；不读写账号登录凭证。 */
+    /** 丢弃进程内匿名身份并重新注册；播放空响应时调用。 */
     @Synchronized
     fun renew(http: OkHttpClient): Profile {
         ready = null
-        cdid = UUID.randomUUID().toString()
+        registerPausedUntil = 0L
+        registerPauseCause = null
         return profile(http)
     }
 
-    private fun registerPhoenix(http: OkHttpClient, currentCdid: String): PhoenixDeviceRegister.Registered? {
-        val now = System.currentTimeMillis()
-        val body = PhoenixDeviceRegister.payload(VendorConstants.device + mapOf("cdid" to currentCdid), now)
-        val request = Request.Builder().url(PhoenixDeviceRegister.url(now))
-        PhoenixDeviceRegister.headers(body, VendorConstants.device, now).forEach { (key, value) ->
-            request.header(key, value)
-        }
-        request.post(body.toRequestBody("application/octet-stream;tt-data=a".toMediaType()))
-        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
-        return RequestScope.execute(transport.newCall(request.build())) { response ->
-            PhoenixDeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
-        }
+    private fun pauseRegistration(error: IOException) {
+        registerPausedUntil = System.currentTimeMillis() + REGISTER_PAUSE_MS
+        registerPauseCause = error
     }
-}
 
-/** 注册响应的有界读取；取消由调用方的工作域负责。 */
-private fun readRegisterBody(response: okhttp3.Response): String {
-    if (!response.isSuccessful) throw IOException("播放设备注册失败（HTTP ${response.code}）")
-    val body = response.body ?: throw IOException("播放设备注册响应为空")
-    val limit = 2L * 1024 * 1024
-    if (body.contentLength() > limit) throw IOException("播放设备注册响应过大")
-    val input = body.byteStream()
-    val out = java.io.ByteArrayOutputStream()
-    val buffer = ByteArray(8192)
-    while (out.size() <= limit) {
-        val n = input.read(buffer)
-        if (n < 0) break
-        out.write(buffer, 0, n)
+    private fun registerPhoenix(http: OkHttpClient): PhoenixDeviceRegister.Registered {
+        val now = System.currentTimeMillis()
+        val body = PhoenixDeviceRegister.payload(now)
+        val request = Request.Builder()
+            .url(PhoenixDeviceRegister.url(now))
+            .apply { PhoenixDeviceRegister.headers().forEach { (key, value) -> header(key, value) } }
+            .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        val transport = http.newBuilder()
+            .cookieJar(CookieJar.NO_COOKIES)
+            .callTimeout(REGISTER_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+
+        return RequestScope.execute(transport.newCall(request)) { response ->
+            if (!response.isSuccessful) {
+                throw IOException("红果设备注册 HTTP ${response.code}")
+            }
+            val responseBody = response.body ?: throw IOException("红果设备注册响应为空")
+            if (responseBody.contentLength() > 64L * 1024) {
+                throw IOException("红果设备注册响应过大")
+            }
+            val bytes = responseBody.bytes()
+            if (bytes.size > 64 * 1024) throw IOException("红果设备注册响应过大")
+            val raw = String(bytes, Charsets.UTF_8)
+            if (raw.isBlank()) throw IOException("红果设备注册返回空响应")
+            PhoenixDeviceRegister.parse(raw)
+                ?: throw IOException("红果设备注册未返回有效设备号")
+        }
     }
-    val bytes = out.toByteArray()
-    if (bytes.size > limit) throw IOException("播放设备注册响应过大")
-    val text = String(bytes, Charsets.UTF_8)
-    if (text.isBlank()) throw IOException("播放设备注册返回空响应")
-    return text
 }
