@@ -80,7 +80,7 @@ internal class AutoFallbackStreamSource(
     private val primary: StreamSource,
     private val fallback: () -> StreamSource,
     private val onFallbackStart: (String) -> Unit = {},
-    private val onFallbackSuccess: (String, String, Int) -> Unit = {},
+    private val onFallbackSuccess: (String, String, Int) -> Unit = { _, _, _ -> },
     private val onFallbackFailure: (String) -> Unit = {}
 ) : StreamSource {
     override val name: String = "auto:${primary.name}"
