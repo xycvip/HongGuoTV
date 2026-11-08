@@ -188,6 +188,9 @@ internal fun MainActivity.hasValidatedInternet(): Boolean {
     }
 
 internal fun MainActivity.playerFailure(problem: Throwable) {
+        detail?.episodes?.getOrNull(episodeIndex)?.let {
+            PlaybackApiDebugState.clearFallbackNotice(it,library.maxQuality)
+        }
         debugLog("播放器故障 type=${problem.javaClass.simpleName} message=${problem.message}")
         debugLogError("播放器故障",problem)
         val startupFailure=startupAutoPlaybackActive
