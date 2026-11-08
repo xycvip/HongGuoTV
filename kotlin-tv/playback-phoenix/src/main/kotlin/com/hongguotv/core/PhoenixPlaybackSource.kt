@@ -149,7 +149,7 @@ class PhoenixPlaybackSource(
                         throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
                     }
                     val now = System.currentTimeMillis()
-                    val query = PhoenixRequestSigner.encode(values + mapOf("_rticket" to now.toString()))
+                    val query = encodeQuery(values + mapOf("_rticket" to now.toString()))
                     emitDiagnostic("Phoenix：正在生成上游播放器请求签名，host=" + host)
                     val headers = PhoenixPlayerSigner.headers(
                         query, payload, values["device_id"].orEmpty(), now, PHOENIX_APP_UA
@@ -260,6 +260,15 @@ class PhoenixPlaybackSource(
     }
 
     companion object {
+        /** Go url.Values.Encode() compatibility: sorted keys and QueryEscape values. */
+        private fun encodeQuery(values: Map<String, String>): String =
+            values.toSortedMap().entries.joinToString("&") { (key, value) ->
+                fun escape(part: String) = java.net.URLEncoder.encode(part, "UTF-8")
+                    .replace("*", "%2A")
+                    .replace("%7E", "~")
+                "${escape(key)}=${escape(value)}"
+            }
+
         private const val PHOENIX_APP_UA =
             "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
