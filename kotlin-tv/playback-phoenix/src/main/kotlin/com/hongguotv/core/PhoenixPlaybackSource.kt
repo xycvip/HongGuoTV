@@ -228,7 +228,7 @@ class PhoenixPlaybackSource(
                 String(bytes, Charsets.UTF_8)
             }
         } else null
-        return PhoenixMediaResolver.parse(raw, maxQuality, fallbackRaw)
+        return PhoenixMediaResolver.parse(raw, maxQuality, fallbackRaw, ::emitDiagnostic)
     }
 
     companion object {
