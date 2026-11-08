@@ -4,6 +4,8 @@ package com.hongguotv.nativeapp
 import android.content.Context
 import com.hongguotv.core.ContentRepository
 import com.hongguotv.core.PhoenixPlaybackSource
+import com.hongguotv.core.PhoenixPlaybackDeviceSession
+import com.hongguotv.core.PhoenixRequestSigner
 import com.hongguotv.core.StreamSource
 import com.hongguotv.core.StreamInfo
 import okhttp3.CookieJar
