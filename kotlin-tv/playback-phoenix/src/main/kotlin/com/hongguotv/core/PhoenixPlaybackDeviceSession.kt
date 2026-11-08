@@ -14,6 +14,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 class PhoenixPlaybackDeviceRegistrationException(cause: Throwable? = null) :
     IOException("播放设备注册失败，请稍后重试", cause)
 
+private class PhoenixDeviceRegistrationRejectedException(message: String) : IOException(message)
+
 /**
  * 按 Xanerix/guoapp 的匿名设备注册机制建立播放身份：
  * - 普通 JSON POST 到 log.snssdk.com/service/2/device_register/；
@@ -49,18 +51,20 @@ class PhoenixPlaybackDeviceSession(
             if (register == null) registerPhoenix(http) else register.invoke(http)
         } catch (error: InterruptedIOException) {
             throw error
-        } catch (error: IOException) {
+        } catch (error: PhoenixDeviceRegistrationRejectedException) {
             pauseRegistration(error)
             throw PhoenixPlaybackDeviceRegistrationException(error)
+        } catch (error: IOException) {
+            throw PhoenixPlaybackDeviceRegistrationException(error)
         } ?: run {
-            val error = IOException("红果设备注册未返回有效 device_id/install_id")
+            val error = PhoenixDeviceRegistrationRejectedException("红果设备注册未返回有效 device_id/install_id")
             pauseRegistration(error)
             throw PhoenixPlaybackDeviceRegistrationException(error)
         }
 
         val validId = Regex("[1-9][0-9]{0,29}")
         if (!validId.matches(registered.deviceId) || !validId.matches(registered.installId)) {
-            val error = IOException("设备注册响应缺少有效 device_id/install_id")
+            val error = PhoenixDeviceRegistrationRejectedException("设备注册响应缺少有效 device_id/install_id")
             pauseRegistration(error)
             throw PhoenixPlaybackDeviceRegistrationException(error)
         }
@@ -109,7 +113,7 @@ class PhoenixPlaybackDeviceSession(
 
         return RequestScope.execute(transport.newCall(request)) { response ->
             if (!response.isSuccessful) {
-                throw IOException("红果设备注册 HTTP ${response.code}")
+                throw PhoenixDeviceRegistrationRejectedException("红果设备注册 HTTP ${response.code}")
             }
             val responseBody = response.body ?: throw IOException("红果设备注册响应为空")
             if (responseBody.contentLength() > 64L * 1024) {
@@ -120,7 +124,7 @@ class PhoenixPlaybackDeviceSession(
             val raw = String(bytes, Charsets.UTF_8)
             if (raw.isBlank()) throw IOException("红果设备注册返回空响应")
             PhoenixDeviceRegister.parse(raw)
-                ?: throw IOException("红果设备注册未返回有效设备号")
+                ?: throw PhoenixDeviceRegistrationRejectedException("红果设备注册未返回有效设备号")
         }
     }
 }
