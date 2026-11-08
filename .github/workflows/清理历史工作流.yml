@@ -1,0 +1,85 @@
+name: 清理历史工作流
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 输入 DELETE 确认清理
+        required: true
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  cleanup:
+    name: 清理非发布工作流历史记录
+    runs-on: ubuntu-latest
+    steps:
+      - name: 批量清理并移除此临时工作流
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const confirm = '${{ inputs.confirm }}';
+            if (confirm !== 'DELETE') {
+              core.setFailed('确认内容不正确。请输入 DELETE 后重新运行。');
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const keepFiles = new Set([
+              '.github/workflows/正式版发布.yml',
+              '.github/workflows/测试版发布.yml'
+            ]);
+            const currentRunId = context.runId;
+            const branch = context.ref.replace('refs/heads/', '');
+
+            core.info('开始分页获取仓库全部工作流运行记录……');
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              { owner, repo, per_page: 100 }
+            );
+
+            const targets = runs.filter(run => {
+              const path = (run.path || '').replace(/^\\//, '');
+              return !keepFiles.has(path);
+            });
+
+            core.info(`共发现 ${runs.length} 条记录；保留发布工作流记录，待清理 ${targets.length} 条。`);
+
+            let deleted = 0;
+            for (const run of targets) {
+              try {
+                await github.rest.actions.deleteWorkflowRun({
+                  owner, repo, run_id: run.id
+                });
+                deleted++;
+                core.info(`已删除：${run.name} | ${run.id} | ${run.path}`);
+              } catch (error) {
+                core.warning(`删除失败：${run.id} | ${error.message}`);
+              }
+            }
+
+            core.info(`历史记录清理完成：成功删除 ${deleted}/${targets.length} 条。`);
+
+            const workflowPath = '.github/workflows/清理历史工作流.yml';
+            const file = await github.rest.repos.getContent({
+              owner, repo, path: workflowPath, ref: branch
+            });
+            await github.rest.repos.deleteFile({
+              owner, repo, path: workflowPath,
+              message: '清理完成：移除一次性历史工作流清理工具',
+              sha: file.data.sha,
+              branch
+            });
+            core.info('临时清理工作流文件已移除。');
+
+            try {
+              await github.rest.actions.deleteWorkflowRun({
+                owner, repo, run_id: currentRunId
+              });
+            } catch (error) {
+              core.warning(`本次运行记录暂未能自删除：${error.message}`);
+            }
