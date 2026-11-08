@@ -1,0 +1,139 @@
+name: Phoenix 获取指定视频播放信息
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: 视频 ID
+        required: true
+        type: string
+        default: "7703473857260162073"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phoenix-video-id-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  fetch-video:
+    name: 使用 main 当前 Phoenix P 接口获取视频信息
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出 main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: 配置 Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: kotlin-tv/**/*.gradle*
+
+      - name: 校验视频 ID
+        shell: bash
+        env:
+          VIDEO_ID: ${{ inputs.video_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VIDEO_ID" =~ ^[0-9]{1,30}$ ]]; then
+            echo "::error::视频 ID 必须为 1 到 30 位数字"
+            exit 1
+          fi
+          echo "待查询视频 ID：$VIDEO_ID"
+
+      - name: 通过当前 Phoenix P 实现请求视频信息
+        working-directory: kotlin-tv
+        shell: bash
+        env:
+          PHOENIX_VIDEO_ID: ${{ inputs.video_id }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+
+          # 临时生成一次性 JUnit 执行入口，直接调用 main 中的生产代码；
+          # 不复制或重写注册、签名、video_model 请求逻辑，也不提交该临时文件。
+          TEST_DIR="playback-phoenix/src/test/kotlin/com/hongguotv/core"
+          TEST_FILE="$TEST_DIR/PhoenixLiveVideoIdWorkflowTest.kt"
+          mkdir -p "$TEST_DIR"
+          trap 'rm -f "$TEST_FILE"' EXIT
+
+          cat > "$TEST_FILE" <<'KOTLIN'
+          package com.hongguotv.core
+
+          import okhttp3.OkHttpClient
+          import org.junit.Test
+          import java.util.concurrent.TimeUnit
+
+          class PhoenixLiveVideoIdWorkflowTest {
+              @Test
+              fun fetchVideoInfoUsingProductionPhoenixSource() {
+                  val videoId = System.getenv("PHOENIX_VIDEO_ID")
+                      ?: error("缺少 PHOENIX_VIDEO_ID")
+                  require(Regex("[0-9]{1,30}").matches(videoId)) {
+                      "视频 ID 格式错误"
+                  }
+
+                  val http = OkHttpClient.Builder()
+                      .connectTimeout(20, TimeUnit.SECONDS)
+                      .readTimeout(45, TimeUnit.SECONDS)
+                      .callTimeout(90, TimeUnit.SECONDS)
+                      .build()
+
+                  try {
+                      val source = PhoenixPlaybackSource(
+                          http = http,
+                          session = PhoenixPlaybackDeviceSession(),
+                          signer = PhoenixRequestSigner(),
+                          onDiagnostic = { println("[Phoenix] $it") }
+                      )
+                      val stream = source.resolve(videoId, 1080)
+                      val host = runCatching {
+                          java.net.URI(stream.url).host.orEmpty()
+                      }.getOrDefault("")
+
+                      check(stream.url.startsWith("https://") || stream.url.startsWith("http://")) {
+                          "Phoenix 返回的播放地址无效"
+                      }
+
+                      val result = org.json.JSONObject()
+                          .put("video_id", videoId)
+                          .put("result", "success")
+                          .put("quality", stream.quality)
+                          .put("mime_type", stream.mimeType)
+                          .put("media_host", host)
+                      println("PHOENIX_VIDEO_RESULT=$result")
+                      println("Phoenix 已通过 main 当前 P 接口取得该视频的播放信息。")
+                  } finally {
+                      http.dispatcher.executorService.shutdown()
+                      http.connectionPool.evictAll()
+                  }
+              }
+          }
+          KOTLIN
+
+          ./gradlew --no-daemon --stacktrace \
+            :playback-phoenix:test \
+            --tests com.hongguotv.core.PhoenixLiveVideoIdWorkflowTest
+
+      - name: 输出查询结果
+        if: success()
+        shell: bash
+        env:
+          VIDEO_ID: ${{ inputs.video_id }}
+        run: |
+          {
+            echo "## Phoenix 视频查询成功"
+            echo
+            echo "- 视频 ID：`$VIDEO_ID`"
+            echo "- 调用方式：main 当前 `PhoenixPlaybackSource.resolve()`"
+            echo "- 流程：设备注册/会话获取 → P 请求签名 → `video_model/v1` → 播放信息解析"
+            echo "- 说明：不会输出 Cookie、Token、签名值或完整播放 URL。"
+          } >> "$GITHUB_STEP_SUMMARY"
