@@ -65,7 +65,7 @@ import java.util.concurrent.atomic.AtomicLong
         library.setWatched(data.series.id,false)
         val isStartupPreview=bootAutoPlaybackPending && autoplay && !recovering
         val prefetched=if(promoteStandby) standbyRemote else if(position==0L && !recovering && !forceRebuild) preparedNext.take(standbyKey) else null
-        if(prefetched==null && !promoteStandby) {
+        if(prefetched==null && !promoteStandby && !recovering) {
             PlaybackApiDebugState.clearFallbackNotice(data.episodes[selectedIndex],library.maxQuality)
         }
         val prefetchedSource=if(prefetched!=null && !promoteStandby) preloadManager?.getMediaSource(videoItem(data.episodes[selectedIndex])) else null
