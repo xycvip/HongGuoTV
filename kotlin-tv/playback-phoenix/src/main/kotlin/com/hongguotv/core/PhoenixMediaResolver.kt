@@ -6,7 +6,12 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.Locale
 
-/** Phoenix two-stage response parser, sharing the existing RemoteVideo CENC contract. */
+/**
+ * Phoenix response parser.
+ *
+ * This module only accepts directly playable, unencrypted MP4 resources. Protected
+ * CENC/key-seed material is deliberately not derived or decrypted here.
+ */
 internal object PhoenixMediaResolver {
     fun fallbackUrl(raw: String): String {
         val root = json(raw, "Phoenix 播放响应不是有效 JSON")
@@ -22,7 +27,7 @@ internal object PhoenixMediaResolver {
             .toString().toIntOrNull() ?: -1
         if (code != 0) {
             val message = root.str("message").ifEmpty { baseResp?.str("StatusMessage").orEmpty() }
-            throw IOException("Phoenix 播放接口业务错误：$code ${message.take(100)}")
+            throw IOException("Phoenix 播放接口业务错误：$code \${message.take(100)}")
         }
         val data = root.optJSONObject("data") ?: throw IOException("Phoenix 播放数据为空")
         val model = modelFrom(data)
@@ -34,82 +39,102 @@ internal object PhoenixMediaResolver {
             ?: fallbackRoot?.optJSONObject("data")
             ?: fallbackVideoInfo
         val source = fallbackData ?: fallbackRoot ?: model
-        // 空的 video_list 经常与 dynamic_video 同时出现；不能因为字段存在但为空，
-        // 就提前停止回退，否则真实动态视频资源会被误报成“没有清晰度”。
+
+        // The service has returned video_list at multiple levels across app versions.
+        // Empty arrays/maps must not mask a populated list at another level.
         val listCandidates = listOf(
             source.opt("video_list"),
-            model.opt("video_list"),
             source.optJSONObject("dynamic_video")?.opt("dynamic_video_list"),
-            model.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
+            model.opt("video_list"),
+            model.optJSONObject("dynamic_video")?.opt("dynamic_video_list"),
+            data.opt("video_list"),
+            data.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
         )
         val rows = listCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
-        if (rows.isEmpty()) throw IOException("Phoenix 未返回视频清晰度（fallback_api=${!fallbackRaw.isNullOrBlank()}）")
-        // key_seed 在不同版本中可能位于 fallback 的顶层、video_info 或 video_info.data。
-        // 逐层查找，避免 URL 已经拿到、却因密钥字段层级变化而把加密媒体误当成普通 MP4。
-        val seedText = sequenceOf(
-            source.str("key_seed"),
-            fallbackVideoInfo?.str("key_seed").orEmpty(),
-            fallbackRoot?.str("key_seed").orEmpty(),
-            model.str("key_seed"),
-            data.str("key_seed")
-        ).firstOrNull { it.isNotBlank() }.orEmpty()
-        val seed = if (seedText.isNotBlank()) {
-            try { decode64(seedText) } catch (_: Exception) { throw IOException("Phoenix key_seed 格式异常") }
-        } else null
+        if (rows.isEmpty()) {
+            throw IOException("Phoenix 未返回视频清晰度（fallback_api=\${!fallbackRaw.isNullOrBlank()}）")
+        }
 
-        data class Candidate(val quality: Int, val codec: String, val url: String, val key: ByteArray?)
+        data class Candidate(val quality: Int, val codec: String, val url: String)
         val candidates = mutableListOf<Candidate>()
         var encryptedSkipped = 0
         var unsupportedSkipped = 0
+
         for ((name, item) in rows) {
             val meta = objectOrString(item.opt("video_meta"))
             val encryption = objectOrString(item.opt("encrypt_info"))
             val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.lowercase(Locale.ROOT)
-            if (codec in setOf("bytevc2", "bvc2")) { unsupportedSkipped++; continue }
+            if (codec in setOf("bytevc2", "bvc2")) {
+                unsupportedSkipped++
+                continue
+            }
+
+            // Do not derive spade_a, key_seed, or decrypt protected media URLs.
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
-            val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
-                .ifEmpty { meta.str("spade_a") }.ifEmpty { item.str("spade_a") }
-            val encrypted = encryption.optBoolean("encrypt") || item.optBoolean("encrypt") ||
-                method.equals("cenc-aes-ctr", true) || spade.isNotBlank()
-            val key = if (spade.isNotBlank()) {
-                try { MediaCrypto.deriveKey(spade) } catch (_: Exception) { null }
-            } else null
-            if (encrypted && key == null) { encryptedSkipped++; continue }
+            val protected = encryption.optBoolean("encrypt") || item.optBoolean("encrypt") ||
+                method.isNotBlank() || encryption.str("spade_a").isNotBlank() ||
+                item.str("spade_a").isNotBlank() || meta.str("spade_a").isNotBlank()
+            if (protected) {
+                encryptedSkipped++
+                continue
+            }
 
             val definition = meta.str("definition").ifEmpty { item.str("definition") }
-            val height = qualityNumber(definition).takeIf { it > 0 }
+            val quality = qualityNumber(definition).takeIf { it > 0 }
                 ?: meta.optInt("vheight", item.optInt("vheight",
                     item.optInt("height", qualityNumber(item.str("quality_desc").ifEmpty { name }))))
-            val rawUrls = stringValues(item.opt("main_url")) + stringValues(item.opt("backup_url")) +
-                stringValues(item.opt("backup_url_1")) + stringValues(item.opt("backup_url_2")) +
-                stringValues(item.opt("backup_urls")) + stringValues(item.opt("url_list"))
+            val rawUrls = stringValues(item.opt("main_url")) +
+                stringValues(item.opt("backup_url")) +
+                stringValues(item.opt("backup_url_1")) +
+                stringValues(item.opt("backup_url_2")) +
+                stringValues(item.opt("backup_urls")) +
+                stringValues(item.opt("url_list"))
+
             for (rawUrl in rawUrls.distinct()) {
-                val cleaned = cleanUrl(rawUrl)
-                val url = if (seed != null) {
-                    try { MediaCrypto.decryptUrl(cleaned, seed) } catch (_: Exception) { normalizeUrl(cleaned) }
-                } else normalizeUrl(cleaned)
+                val url = normalizeUrl(rawUrl)
                 if (!url.startsWith("https://") && !url.startsWith("http://")) continue
-                val path = runCatching { java.net.URI(url).path.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+                val path = runCatching { java.net.URI(url).path.orEmpty().lowercase(Locale.ROOT) }
+                    .getOrDefault("")
                 if (path.endsWith(".m3u8") || path.endsWith(".mpd") || path.endsWith(".ts") ||
                     path.endsWith(".mkv") || path.endsWith(".webm") || path.endsWith(".avi")) {
                     unsupportedSkipped++
                     continue
                 }
-                candidates += Candidate(height, codec, url, key)
+                candidates += Candidate(quality, codec, url)
             }
         }
-        if (candidates.isEmpty()) {
+
+        val unique = candidates.distinctBy { Triple(it.quality, it.codec, it.url) }
+        if (unique.isEmpty()) {
             throw UnplayableVideoException(
-                "Phoenix 无可用 MP4：不兼容编码 $unsupportedSkipped 项，未能解密/不支持的加密资源 $encryptedSkipped 项"
+                "Phoenix 无可用 MP4：不兼容编码 $unsupportedSkipped 项，受保护媒体 $encryptedSkipped 项"
             )
         }
-        val h264 = candidates.filter { it.codec in setOf("h264", "avc1") }
-        val pool = if (h264.isNotEmpty()) h264 else candidates
-        val selected = pool.filter { it.quality in 1..maxQuality }.maxByOrNull { it.quality }
-            ?: pool.filter { it.quality > 0 }.minByOrNull { it.quality }
-            ?: pool.first()
-        val quality = if (selected.quality > 0) "${selected.quality}P" else "自动"
-        return StreamInfo(selected.url, selected.key, quality, "video/mp4")
+
+        // Choose the best quality within the user's cap. Codec preference is only
+        // a tie-breaker, so an available 1080p rendition is not discarded merely
+        // because a lower-quality H.264 rendition also exists.
+        val withinLimit = unique.filter { it.quality in 1..maxQuality }
+        val chosenQuality = if (withinLimit.isNotEmpty()) {
+            withinLimit.maxOf { it.quality }
+        } else {
+            unique.map { it.quality }.filter { it > 0 }.minOrNull() ?: 0
+        }
+        val sameQuality = unique.filter { it.quality == chosenQuality }
+            .sortedBy { if (it.codec in setOf("h264", "avc1")) 0 else 1 }
+        val selected = sameQuality.firstOrNull() ?: unique.first()
+        val qualityLabel = if (selected.quality > 0) "\${selected.quality}P" else "自动"
+
+        // Only same-rendition URLs are safe to swap inside RemoteVideo: different
+        // renditions can have different byte lengths and MP4 sample layouts.
+        val sameRenditionFallbacks = sameQuality.drop(1).map { it.url }.distinct()
+        return StreamInfo(
+            url = selected.url,
+            key = null,
+            quality = qualityLabel,
+            mimeType = "video/mp4",
+            fallbackUrls = sameRenditionFallbacks
+        )
     }
 
     private fun extractFallbackUrl(value: Any?): String = when (value) {
@@ -128,7 +153,9 @@ internal object PhoenixMediaResolver {
             preferred.firstNotNullOfOrNull { key ->
                 if (value.has(key)) extractFallbackUrl(value.opt(key)).takeIf { it.isNotBlank() } else null
             } ?: value.keys().asSequence().mapNotNull { key ->
-                extractFallbackUrl(value.opt(key)).takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                extractFallbackUrl(value.opt(key)).takeIf {
+                    it.startsWith("https://") || it.startsWith("http://")
+                }
             }.firstOrNull().orEmpty()
         }
         is JSONArray -> (0 until value.length()).asSequence()
@@ -141,7 +168,13 @@ internal object PhoenixMediaResolver {
         val raw = data.opt("video_model")
         return when (raw) {
             is JSONObject -> raw
-            is String -> runCatching { JSONObject(raw) }.getOrElse { throw IOException("Phoenix video_model 格式异常") }
+            is String -> {
+                val text = raw.trim()
+                runCatching { JSONObject(text) }.getOrNull()
+                    ?: runCatching { JSONObject(String(decode64(text), Charsets.UTF_8)) }.getOrElse {
+                        throw IOException("Phoenix video_model 格式异常")
+                    }
+            }
             else -> data
         }
     }
@@ -156,14 +189,17 @@ internal object PhoenixMediaResolver {
     }
 
     private fun rows(value: Any?): List<Pair<String, JSONObject>> = when (value) {
-        is JSONObject -> value.keys().asSequence().mapNotNull { key -> value.optJSONObject(key)?.let { key to it } }.toList()
-        is JSONArray -> (0 until value.length()).mapNotNull { i -> value.optJSONObject(i)?.let { i.toString() to it } }
+        is JSONObject -> value.keys().asSequence()
+            .mapNotNull { key -> value.optJSONObject(key)?.let { key to it } }.toList()
+        is JSONArray -> (0 until value.length())
+            .mapNotNull { i -> value.optJSONObject(i)?.let { i.toString() to it } }
         else -> emptyList()
     }
 
     private fun stringValues(value: Any?): List<String> = when (value) {
         is String -> listOf(value)
-        is JSONArray -> (0 until value.length()).mapNotNull { value.optString(it).takeIf(String::isNotBlank) }
+        is JSONArray -> (0 until value.length())
+            .mapNotNull { value.optString(it).takeIf(String::isNotBlank) }
         else -> emptyList()
     }
 
