@@ -81,37 +81,37 @@ object DeviceRegister {
             "header",
             org.json.JSONObject().apply {
                 put("display_name", "红果免费短剧")
-                put("update_version_code", 73932)
-                put("manifest_version_code", 73932)
-                put("app_version_minor", "7.3.9.32")
+                put("update_version_code", value("update_version_code", "71332").toInt())
+                put("manifest_version_code", value("manifest_version_code", "71332").toInt())
+                put("app_version_minor", value("version_name", "7.1.3.32"))
                 put("aid", 8662)
-                put("channel", value("channel", "69310258a"))
+                put("channel", value("channel", "update_64"))
                 put("package", "com.phoenix.read")
-                put("app_version", "7.3.9.32")
-                put("version_code", 73932)
+                put("app_version", value("version_name", "7.1.3.32"))
+                put("version_code", value("version_code", "71332").toInt())
                 put("sdk_version", "3.7.0-rc.34-fanqie-xiaoshuo")
                 put("sdk_target_version", 29)
                 put("git_hash", "3a88f4e")
                 // `os_version` 必须是字符串：写成数字服务端直接回 device_id=0。
                 put("os", "Android")
-                put("os_version", value("os_version", "12"))
-                put("os_api", value("os_api", "32").toIntOrNull() ?: 32)
-                put("device_model", value("device_type", "AOSP on Intel Platform"))
-                put("device_brand", value("device_brand", "SAMSUNG"))
-                put("device_manufacturer", value("device_brand", "Intel"))
+                put("os_version", value("os_version", "16"))
+                put("os_api", value("os_api", "36").toIntOrNull() ?: 36)
+                put("device_model", value("device_type", "25053RT47C"))
+                put("device_brand", value("device_brand", "Redmi"))
+                put("device_manufacturer", value("device_manufacturer", "Redmi"))
                 put("cpu_abi", value("host_abi", "arm64-v8a"))
                 put("release_build", "b5e187f")
-                put("density_dpi", value("dpi", "360").toIntOrNull() ?: 360)
-                put("display_density", "mdpi")
-                put("resolution", value("resolution", "1440x2560").replace("*", "x"))
+                put("density_dpi", value("dpi", "520").toIntOrNull() ?: 520)
+                // display_density omitted: the 520-DPI device uses a nonstandard density bucket.
+                put("resolution", value("resolution", "1280*2772").replace("*", "x"))
                 put("language", "zh")
                 put("timezone", 8)
                 put("access", "wifi")
                 put("not_request_sender", 0)
                 put("carrier", "CHINA MOBILE")
                 put("mcc_mnc", "46000")
-                put("rom", "eng.root.20231116.160340")
-                put("rom_version", value("rom_version", "W528JS release-keys"))
+                put("rom", value("rom", "Android16"))
+                put("rom_version", value("rom_version", "BP2A.250605.031.A3"))
                 put("cdid", value("cdid", UUID.randomUUID().toString()))
                 // sig_hash 是安装包签名指纹；平台不校验与真实包一致，但缺了会拒。
                 put("sig_hash", "56a962410c494bbaf0b58dba20cae56f")
@@ -135,7 +135,7 @@ object DeviceRegister {
                         put("account_region_src", "fallback")
                         put("host_bit", 64)
                         put("account_region", "cn")
-                        put("dragon_device_type", value("dragon_device_type", "pad"))
+                        put("dragon_device_type", value("dragon_device_type", "phone"))
                     },
                 )
                 put("pre_installed_channel", "")
@@ -157,7 +157,7 @@ object DeviceRegister {
     ): Map<String, String> =
         linkedMapOf(
             "User-Agent" to
-                (device["user_agent"]?.takeIf { it.isNotBlank() } ?: VendorConstants.APP_UA),
+                VendorConstants.VIDEO_UA,
             "Content-Type" to "application/octet-stream;tt-data=a",
             "log-encode-type" to "gzip",
             "x-ss-dp" to "8662",
