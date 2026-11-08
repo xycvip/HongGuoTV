@@ -84,10 +84,7 @@ internal object PhoenixMediaResolver {
             } else null
             if (encrypted && key == null) { encryptedSkipped++; report("Phoenix资源#$name：拒绝，原因=加密资源缺少可用密钥；encryption_method=${method.ifBlank { "unknown" }}"); continue }
 
-            val definition = meta.str("definition").ifEmpty { item.str("definition") }
-            val height = qualityNumber(definition).takeIf { it > 0 }
-                ?: meta.optInt("vheight", item.optInt("vheight",
-                    item.optInt("height", qualityNumber(item.str("quality_desc").ifEmpty { name }))))
+            if (rawUrls.isEmpty()) report("Phoenix资源#$name：拒绝，原因=没有可识别的媒体URL字段")
             val rawUrls = stringValues(item.opt("main_url")) + stringValues(item.opt("backup_url")) +
                 stringValues(item.opt("backup_url_1")) + stringValues(item.opt("backup_url_2")) +
                 stringValues(item.opt("backup_urls")) + stringValues(item.opt("url_list"))
