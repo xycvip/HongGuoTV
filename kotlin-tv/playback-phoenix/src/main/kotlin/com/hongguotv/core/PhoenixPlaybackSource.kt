@@ -176,7 +176,7 @@ class PhoenixPlaybackSource(
                         )
                     }
                     emitDiagnostic("Phoenix：播放接口响应 HTTP " + result.status + "，Content-Type=" + result.contentType.take(60) + "，正文=" + result.size + " bytes")
-                    if ((result.size == 0 || result.status == 403) && rotations < 2) {
+                    if ((result.size == 0 || result.status == 403) && rotations < 3) {
                         rotations++
                         emitDiagnostic("Phoenix：响应为空或 403，执行第 " + rotations + " 次设备会话轮换")
                         identity = session.renew(http)
