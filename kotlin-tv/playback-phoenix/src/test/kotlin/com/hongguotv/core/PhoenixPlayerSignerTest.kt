@@ -45,7 +45,7 @@ class PhoenixPlayerSignerTest {
         assertTrue(url.contains("device_brand=Redmi"))
         assertTrue(url.contains("os_api=36"))
         assertTrue(url.contains("os_version=16"))
-        assertTrue(url.contains("resolution=1280%2A2772"))
+        assertTrue(url.contains("resolution=1280*2772"))
         assertTrue(url.contains("dpi=520"))
         assertTrue(url.contains("_rticket=1794050000000"))
         assertFalse(url.contains("cronet_version="))
