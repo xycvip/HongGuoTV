@@ -37,6 +37,7 @@ data class PhoenixPlaybackDiagnostic(
 class PhoenixPlaybackSource(
     private val http: OkHttpClient,
     private val session: PhoenixPlaybackDeviceSession,
+    private val signer: PhoenixRequestSigner,
     private val onDiagnostic: (String) -> Unit = {},
 ) : StreamSource {
     override val name: String = "phoenix-video-model"
@@ -118,8 +119,8 @@ class PhoenixPlaybackSource(
             .toByteArray(Charsets.UTF_8)
 
         val hosts = listOf(
-            "api5-normal-sinfonlineb.fqnovel.com",
-            "api5-normal-sinfonlinea.fqnovel.com"
+            "api5-normal-sinfonlinea.fqnovel.com",
+            "api5-normal-sinfonlineb.fqnovel.com"
         )
         var last: IOException? = null
         var rotations = 0
@@ -127,46 +128,32 @@ class PhoenixPlaybackSource(
             while (true) {
                 RequestScope.ensureActive()
                 try {
-                    // 使用注册会话下发的设备 ID，并与上游 7.3.5.32 播放请求参数保持一致。
-                    val values = linkedMapOf(
-                        "aid" to "8662",
-                        "app_name" to "novelread",
-                        "version_code" to "73532",
-                        "version_name" to "7.3.5.32",
-                        "manifest_version_code" to "73532",
-                        "update_version_code" to "73532",
-                        "channel" to "update_64",
-                        "device_platform" to "android",
-                        "os" to "android",
-                        "ssmix" to "a",
-                        "device_type" to "25053RT47C",
-                        "device_brand" to "Redmi",
-                        "language" to "zh",
-                        "os_api" to "36",
-                        "os_version" to "16",
-                        "resolution" to "1280*2772",
-                        "dpi" to "520",
-                        "ac" to (identity.values["ac"]?.ifBlank { "wifi" } ?: "wifi"),
-                        "device_id" to identity.values["device_id"].orEmpty(),
-                        "iid" to identity.values["iid"].orEmpty()
-                    )
+                    // 使用当前注册会话的设备身份，版本及设备指纹统一取近期实测的 7.1.3.32 配置。
+                    val values = VendorConstants.device.toMutableMap().apply {
+                        putAll(identity.values.filterKeys { it in setOf("device_id", "iid", "cdid", "ac") })
+                        put("device_id", identity.values["device_id"].orEmpty())
+                        put("iid", identity.values["iid"].orEmpty())
+                        put("cdid", identity.values["cdid"].orEmpty())
+                        put("ac", identity.values["ac"]?.ifBlank { "wifi" } ?: "wifi")
+                    }
                     if (values["device_id"].isNullOrBlank() || values["iid"].isNullOrBlank()) {
                         throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
                     }
-                    val now = System.currentTimeMillis()
-                    val query = encodeQuery(values + mapOf("_rticket" to now.toString()))
-                    emitDiagnostic("Phoenix：正在生成上游播放器请求签名，host=" + host)
-                    val headers = PhoenixPlayerSigner.headers(
-                        query, payload, values["device_id"].orEmpty(), now, PHOENIX_APP_UA
+                    emitDiagnostic("Phoenix：正在生成播放请求签名，host=" + host)
+                    val signed = signer.signPlayback(
+                        "https://$host/novel/player/video_model/v1/",
+                        values,
+                        payload,
+                        VendorConstants.VIDEO_UA
                     )
-                    emitDiagnostic("Phoenix：播放器签名完成，开始发送 video_model/v1 POST")
+                    emitDiagnostic("Phoenix：请求签名完成，开始发送 video_model/v1 POST")
                     val request = Request.Builder()
-                        .url("https://$host/novel/player/video_model/v1/?$query")
+                        .url(signed.url)
                         .apply {
-                            headers.forEach { (key, value) -> header(key, value) }
+                            signed.headers.forEach { (key, value) -> header(key, value) }
                             if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
                         }
-                        .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                        .post(payload.toRequestBody("application/json; charset=UTF-8".toMediaType()))
                         .build()
                     data class ResponseBody(val raw: String, val status: Int, val contentType: String, val size: Int)
                     val result = RequestScope.execute(http.newCall(request)) { response ->
@@ -181,7 +168,7 @@ class PhoenixPlaybackSource(
                         )
                     }
                     emitDiagnostic("Phoenix：播放接口响应 HTTP " + result.status + "，Content-Type=" + result.contentType.take(60) + "，正文=" + result.size + " bytes")
-                    if ((result.size == 0 || result.status == 403) && rotations < 3) {
+                    if ((result.size == 0 || result.status == 403) && rotations < 2) {
                         rotations++
                         emitDiagnostic("Phoenix：响应为空或 403，执行第 " + rotations + " 次设备会话轮换")
                         identity = session.renew(http)
