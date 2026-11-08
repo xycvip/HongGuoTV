@@ -154,7 +154,7 @@ internal fun Context.playbackStreamSource(http: OkHttpClient, notifyOnFallback: 
             PlaybackApiDebugState.record(api, "首选接口失败，自动尝试备用接口")
             if (this is MainActivity) debugLog("播放接口自动切换：$primaryApi 失败，开始尝试 $api")
         },
-        onFallbackSuccess = { api ->
+        onFallbackSuccess = { id, api, maxQuality ->
             getSharedPreferences(PLAYBACK_API_PREFS, Context.MODE_PRIVATE)
                 .edit().putString(PLAYBACK_API_KEY, api).apply()
             PlaybackApiDebugState.select(api)
