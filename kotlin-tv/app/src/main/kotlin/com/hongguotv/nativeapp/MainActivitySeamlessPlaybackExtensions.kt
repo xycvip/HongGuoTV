@@ -64,12 +64,16 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     if (standbyEpisodeId == key && (standbyReady || standbyJob?.isDone == false)) return
 
     val manager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-    if (manager.isLowRamDevice || manager.memoryClass <= 128) {
+    val memoryInfo = android.app.ActivityManager.MemoryInfo()
+    manager.getMemoryInfo(memoryInfo)
+    val availableMemoryMb = memoryInfo.availMem / (1024L * 1024L)
+    if (availableMemoryMb < 300L) {
         standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
-        debugLog("无感连播：设备内存等级较低，回退单播放器预加载")
+        debugLog("无感连播：可用内存不足，当前可用=${availableMemoryMb}MB，低于300MB，回退单播放器预加载")
         maybePrefetch(force = true)
         return
     }
+    debugLog("无感连播：内存检查通过，可用=${availableMemoryMb}MB，允许创建备用播放器（系统低内存标记=${manager.isLowRamDevice}）")
 
     // 接管成功后，备用资源已经转为当前播放器；此时不能再调用清理函数，
     // 否则会把当前播放器尚未完成的画面交接状态一并清零，造成缓冲转圈闪现。
