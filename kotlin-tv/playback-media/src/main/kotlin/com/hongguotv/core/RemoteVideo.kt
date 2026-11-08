@@ -83,7 +83,7 @@ class RemoteVideo(
                             lastContentType = response.header("Content-Type").orEmpty()
                             if(response.code!=206) throw HttpStatusException(
                                 response.code,response.header("Retry-After"),
-                                "视频服务器不支持分段读取（HTTP \${response.code}）"
+                                "视频服务器不支持分段读取（HTTP ${response.code}）"
                             )
                             val match=Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(response.header("Content-Range").orEmpty()) ?: throw IOException("视频分段响应异常")
                             val (begin,finish,size)=match.destructured
@@ -95,7 +95,7 @@ class RemoteVideo(
                             val body=response.body ?: throw IOException("视频分段为空")
                             val bytes=body.source().readByteArray(n.toLong())
                             lastBytesRead=bytes.size
-                            if(bytes.size!=n) throw java.io.EOFException("视频分段长度不完整：期望 \${n} 字节，实际 \${bytes.size} 字节")
+                            if(bytes.size!=n) throw java.io.EOFException("视频分段长度不完整：期望 ${n} 字节，实际 ${bytes.size} 字节")
                             Range(bytes,full)
                         }
                     } finally { synchronized(calls) { calls-=call } }
