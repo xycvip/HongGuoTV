@@ -76,6 +76,7 @@ class MainActivity: Activity() {
     internal val apiStatusUiState = ApiStatusUiState()
     internal val danmakuUiState = DanmakuUiState()
     internal val playbackPipelineState = PlaybackPipelineState()
+    internal var playbackRecoveryRouteLocked by playbackPipelineState::playbackRecoveryRouteLocked
     internal val asyncWorkState = AsyncWorkState()
     // Read the active theme dynamically so the settings page can redraw without recreating the Activity.
     internal val isTelevisionDevice: Boolean by lazy {

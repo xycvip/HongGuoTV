@@ -99,7 +99,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
         .callTimeout(25, TimeUnit.SECONDS)
         .build()
     standbyHttp = http
-    val source = playbackStreamSource(http)
+    val source = playbackStreamSource(http, allowFallback = !playbackRecoveryRouteLocked)
     val requestGeneration = generation
     val requestSeries = data.series.id
     standbyJob = prefetchWorker.submit {

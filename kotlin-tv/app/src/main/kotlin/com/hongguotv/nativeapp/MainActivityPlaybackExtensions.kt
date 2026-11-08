@@ -126,7 +126,11 @@ import java.util.concurrent.atomic.AtomicLong
         artwork.cancelPage(clearMemory=true)
         playbackHttp=claimedHttp; video=prefetched
         var firstReady=true; var firstFrame=true
-        if(!recovering) recovery.reset()
+        if(!recovering) {
+            recovery.reset()
+            playbackPipelineState.playbackRecoveryPolicy.reset()
+            playbackRecoveryRouteLocked=false
+        }
         autoRecovery=false; readySince=0; startPosition=position.coerceAtLeast(0); requestedAutoplay=autoplay
         val skipMark=library.skipMark(data.series.id)
         outroSkipSeconds=skipMark?.outroSeconds ?: 0; outroTriggered=false; ffActive=false
@@ -311,6 +315,7 @@ import java.util.concurrent.atomic.AtomicLong
                         debugFirstFrameAt=android.os.SystemClock.elapsedRealtime()
                         android.util.Log.i("HongguoTV","Playback first frame episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${debugFirstFrameAt-playbackStarted}")
                         debugLog("Playback first frame elapsedMs=${debugFirstFrameAt-playbackStarted}")
+                        playbackRecoveryRouteLocked=false
                         PlaybackApiDebugState.consumeFallbackNotice(requestedId,maxQuality)?.let { notice ->
                             Toast.makeText(this@playEpisode,notice,Toast.LENGTH_SHORT).show()
                             debugLog("播放线路提示：$notice（首帧已显示）")
@@ -391,7 +396,7 @@ import java.util.concurrent.atomic.AtomicLong
             attachPrepared(prefetched!!)
         } else {
             // 普通播放与两种预加载共用同一线路工厂，避免 Phoenix 设置被原生直连绕过。
-            val source = playbackStreamSource(repository.http)
+            val source = playbackStreamSource(repository.http, allowFallback = !playbackRecoveryRouteLocked)
             work({ prefetched ?: RemoteVideo(repository.http,source.stream(requestedId,maxQuality)).prepare() }, attachPrepared, { problem -> playerFailure(problem) })
         }
     }

@@ -109,7 +109,7 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
             .readTimeout(15,java.util.concurrent.TimeUnit.SECONDS)
             .callTimeout(20,java.util.concurrent.TimeUnit.SECONDS)
             .build()
-        val source=playbackStreamSource(http); prefetchHttp=http
+        val source=playbackStreamSource(http, allowFallback = !playbackRecoveryRouteLocked); prefetchHttp=http
         val scope=RequestScope(); prefetchScope=scope
         prefetchJob=prefetchWorker.submit {
             var remote: RemoteVideo?=null
@@ -187,11 +187,49 @@ internal fun MainActivity.hasValidatedInternet(): Boolean {
         showCatalog(load=true)
     }
 
+/** 播放地址取得后的统一恢复：当前线路重建重试一次，仍失败则切换另一线路。 */
+private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean {
+    if (screen != "player" || detail == null || startupAutoPlaybackActive) return false
+    if (Thread.currentThread().isInterrupted) return false
+    val message = problem.message.orEmpty().lowercase(java.util.Locale.ROOT)
+    if (message.contains("请求已取消") || message == "cancelled" || message == "canceled") return false
+    val data = detail ?: return false
+    val episodeId = data.episodes.getOrNull(episodeIndex) ?: return false
+    val key = "${data.series.id}:$episodeId:${library.maxQuality}"
+    val step = playbackPipelineState.playbackRecoveryPolicy.next(key)
+    val position = currentPosition().coerceAtLeast(0L)
+    val autoplay = requestedAutoplay && !sleepStopped
+    when (step) {
+        PlaybackRecoveryStep.RETRY_CURRENT_ROUTE -> {
+            playbackRecoveryRouteLocked = true
+            debugLog("播放故障恢复：当前线路重建播放器并重试一次；线路=${playbackApiSelection()}；位置=${position}ms；原因=${problem.javaClass.simpleName}")
+            playEpisode(episodeIndex, position, autoplay, recovering = true, forceRebuild = true)
+            return true
+        }
+        PlaybackRecoveryStep.SWITCH_ROUTE -> {
+            val from = playbackApiSelection()
+            val to = if (from == "phoenix") "native" else "phoenix"
+            getSharedPreferences("playback-api-v1", MODE_PRIVATE).edit().putString("source", to).apply()
+            PlaybackApiDebugState.select(to)
+            playbackRecoveryRouteLocked = true
+            val notice = if (from == "native") "N → P 已自动切换至线路 Phoenix" else "P → N 已自动切换至线路 Native"
+            PlaybackApiDebugState.rememberFallbackNotice(episodeId, library.maxQuality, notice)
+            debugLog("播放故障恢复：当前线路重试仍失败，切换线路 $from → $to；重新获取播放地址并重建播放器；保留位置=${position}ms")
+            playEpisode(episodeIndex, position, autoplay, recovering = true, forceRebuild = true)
+            return true
+        }
+        PlaybackRecoveryStep.EXHAUSTED -> {
+            debugLog("播放故障恢复：本集同线路重试和跨线路切换额度已用完，停止自动切换")
+            return false
+        }
+    }
+}
 internal fun MainActivity.playerFailure(problem: Throwable) {
         detail?.episodes?.getOrNull(episodeIndex)?.let {
             PlaybackApiDebugState.clearFallbackNotice(it,library.maxQuality)
         }
         debugLog("播放器故障 type=${problem.javaClass.simpleName} message=${problem.message}")
+        if (tryRecoverPlaybackFailure(problem)) return
         debugLogError("播放器故障",problem)
         val startupFailure=startupAutoPlaybackActive
         retryPosition=currentPosition().coerceAtLeast(0); retryAutoplay=requestedAutoplay && !sleepStopped
@@ -231,7 +269,9 @@ internal fun MainActivity.playerFailure(problem: Throwable) {
             addButton(actions,"尝试 720P") { library.maxQuality=720; playEpisode(episodeIndex,retryPosition,retryAutoplay) }
             addButton(actions,"返回选集") { returnToDetail(true) }
         }
-        if(retryable && !sleepStopped) {
+        val recoveryKey = detail?.let { data -> data.episodes.getOrNull(episodeIndex)?.let { "${data.series.id}:$it:${library.maxQuality}" } }.orEmpty()
+        val routeRecoveryExhausted = recoveryKey.isNotEmpty() && playbackPipelineState.playbackRecoveryPolicy.isExhaustedFor(recoveryKey)
+        if(retryable && !sleepStopped && !routeRecoveryExhausted) {
             addButton(controls,"停止自动重试") { cancelRecovery(); playbackText.text="自动重试已停止，观看位置已保留。" }
             autoRecovery=true; scheduleRecovery()
         }

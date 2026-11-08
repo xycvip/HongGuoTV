@@ -113,7 +113,11 @@ internal class AutoFallbackStreamSource(
     }
 }
 
-internal fun Context.playbackStreamSource(http: OkHttpClient, notifyOnFallback: Boolean = true): StreamSource {
+internal fun Context.playbackStreamSource(
+    http: OkHttpClient,
+    notifyOnFallback: Boolean = true,
+    allowFallback: Boolean = true
+): StreamSource {
     val primaryApi = playbackApiSelection()
     val fallbackApi = if (primaryApi == "phoenix") "native" else "phoenix"
 
@@ -146,6 +150,7 @@ internal fun Context.playbackStreamSource(http: OkHttpClient, notifyOnFallback: 
     }
 
     val preferred = createSource(primaryApi)
+    if (!allowFallback) return preferred
     return AutoFallbackStreamSource(
         primary = preferred,
         fallback = { createSource(fallbackApi) },
