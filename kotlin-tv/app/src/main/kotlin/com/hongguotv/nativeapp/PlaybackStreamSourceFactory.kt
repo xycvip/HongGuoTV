@@ -33,6 +33,20 @@ internal object PlaybackApiDebugState {
     @Volatile var selected: String = "native"
         private set
     private val events = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val pendingFallbackNotices = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private fun noticeKey(id: String, quality: Int): String = "$id:$quality"
+
+    fun rememberFallbackNotice(id: String, quality: Int, message: String) {
+        pendingFallbackNotices[noticeKey(id, quality)] = message
+    }
+
+    fun consumeFallbackNotice(id: String, quality: Int): String? =
+        pendingFallbackNotices.remove(noticeKey(id, quality))
+
+    fun clearFallbackNotice(id: String, quality: Int) {
+        pendingFallbackNotices.remove(noticeKey(id, quality))
+    }
 
     @Synchronized
     fun select(api: String) {
@@ -66,7 +80,7 @@ internal class AutoFallbackStreamSource(
     private val primary: StreamSource,
     private val fallback: () -> StreamSource,
     private val onFallbackStart: (String) -> Unit = {},
-    private val onFallbackSuccess: (String) -> Unit = {},
+    private val onFallbackSuccess: (String, String, Int) -> Unit = {},
     private val onFallbackFailure: (String) -> Unit = {}
 ) : StreamSource {
     override val name: String = "auto:${primary.name}"
@@ -79,7 +93,7 @@ internal class AutoFallbackStreamSource(
             val backup = fallback()
             runCatching { onFallbackStart(backup.name) }
             try {
-                return backup.stream(id, maxQuality).also { runCatching { onFallbackSuccess(backup.name) } }
+                return backup.stream(id, maxQuality).also { runCatching { onFallbackSuccess(id, backup.name, maxQuality) } }
             } catch (fallbackError: IOException) {
                 runCatching { onFallbackFailure(primary.name) }
                 if (isPlaybackRequestCancelled(fallbackError)) throw fallbackError
@@ -99,7 +113,7 @@ internal class AutoFallbackStreamSource(
     }
 }
 
-internal fun Context.playbackStreamSource(http: OkHttpClient): StreamSource {
+internal fun Context.playbackStreamSource(http: OkHttpClient, notifyOnFallback: Boolean = true): StreamSource {
     val primaryApi = playbackApiSelection()
     val fallbackApi = if (primaryApi == "phoenix") "native" else "phoenix"
 
@@ -145,7 +159,17 @@ internal fun Context.playbackStreamSource(http: OkHttpClient): StreamSource {
                 .edit().putString(PLAYBACK_API_KEY, api).apply()
             PlaybackApiDebugState.select(api)
             PlaybackApiDebugState.record(api, "备用接口获取播放资源成功，已记为下次优先线路")
-            if (this is MainActivity) debugLog("播放接口自动切换成功：后续优先使用 $api")
+            if (this is MainActivity) {
+                if (notifyOnFallback) {
+                    val notice = if (primaryApi == "native") {
+                        "N → P 已自动切换至线路 Phoenix"
+                    } else {
+                        "P → N 已自动切换至线路 Native"
+                    }
+                    PlaybackApiDebugState.rememberFallbackNotice(id, maxQuality, notice)
+                }
+                debugLog("播放接口自动切换成功：后续优先使用 $api")
+            }
         },
         onFallbackFailure = { api ->
             PlaybackApiDebugState.select(api)
