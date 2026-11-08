@@ -5,8 +5,8 @@ import java.util.Base64
 import kotlin.random.Random
 
 object VendorConstants {
-    const val VIDEO_UA = "com.phoenix.read/69132 (Linux; U; Android 17; zh_CN; WKL-AN20; Build/CP2A.260605.012; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
-    const val APP_UA = "com.phoenix.read/69132 (Linux; U; Android 17; zh_CN; WKL-AN20; Build/CP2A.260605.012)"
+    const val VIDEO_UA = "com.phoenix.read/71332 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
+    const val APP_UA = "com.phoenix.read/72232 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3)"
     // 设备身份与进程指纹：原硬编码值来自公开抓包样本，已被平台封禁。
     // 现每次 API 调用前由 ContentRepository 调用 regenerate() 刷新，避免同一身份被连坐。
     // var 以便测试固定身份、复现确定性签名。
@@ -25,23 +25,23 @@ object VendorConstants {
         "channel" to "update_64",
         "aid" to "8662",
         "app_name" to "novelread",
-        "version_code" to "69132",
-        "version_name" to "6.9.1.32",
+        "version_code" to "71332",
+        "version_name" to "7.1.3.32",
         "device_platform" to "android",
         "os" to "android",
         "ssmix" to "a",
-        "device_type" to "WKL-AN20",
-        "device_brand" to "HONOR",
+        "device_type" to "25053RT47C",
+        "device_brand" to "Redmi",
         "language" to "zh",
-        "os_api" to "37",
-        "os_version" to "17",
-        "manifest_version_code" to "69132",
-        "resolution" to "1320*2868",
-        "dpi" to "360",
-        "update_version_code" to "69132",
+        "os_api" to "36",
+        "os_version" to "16",
+        "manifest_version_code" to "71332",
+        "resolution" to "1280*2772",
+        "dpi" to "520",
+        "update_version_code" to "71332",
         "host_abi" to "arm64-v8a",
         "dragon_device_type" to "phone",
-        "pv_player" to "69132",
+        "pv_player" to "71332",
         "compliance_status" to "0",
         "need_personal_recommend" to "1",
         "player_so_load" to "1",
