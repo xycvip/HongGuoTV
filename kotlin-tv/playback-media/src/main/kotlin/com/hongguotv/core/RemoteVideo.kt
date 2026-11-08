@@ -20,6 +20,18 @@ class RemoteVideo(
 ): Closeable {
     @Volatile private var closed=false
     private val calls=mutableSetOf<Call>()
+    private val candidateUrls = (listOf(info.url) + info.fallbackUrls)
+        .map(String::trim)
+        .filter { it.startsWith("https://") || it.startsWith("http://") }
+        .distinct()
+    private val urlLock = Any()
+    @Volatile private var activeUrl: String = info.url
+    @Volatile var lastHttpStatus: Int? = null
+        private set
+    @Volatile var lastContentType: String = ""
+        private set
+    @Volatile var lastBytesRead: Int = 0
+        private set
     data class Range(val bytes: ByteArray,val total: Long)
     var total: Long=0; private set
     private lateinit var prepared: MediaCrypto.Prepared
@@ -47,28 +59,64 @@ class RemoteVideo(
     private fun range(start: Long,end: Long): Range {
         if(closed) throw IOException("播放请求已取消")
         require(start>=0 && end>=start && end-start<8*1024*1024)
-        val request=Request.Builder().url(info.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Referer","https://novel.snssdk.com/").header("Range","bytes=$start-$end").header("Accept-Encoding","identity").build()
-        return NetworkRetry.execute(request) {
-            val call=http.newCall(request)
-            synchronized(calls) { if(closed) throw IOException("播放请求已取消"); calls+=call }
-            try {
-                RequestScope.execute(call) { response ->
-                    if(response.code!=206) throw HttpStatusException(
-                        response.code,response.header("Retry-After"),
-                        "视频服务器不支持分段读取（HTTP ${response.code}）"
-                    )
-                    val match=Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(response.header("Content-Range").orEmpty()) ?: throw IOException("视频分段响应异常")
-                    val (begin,finish,size)=match.destructured
-                    val full=size.toLong(); val last=minOf(end,full-1)
-                    if(begin.toLong()!=start || finish.toLong()!=last || full<=0) throw IOException("视频分段范围不匹配")
-                    if(total!=0L && full!=total) throw IOException("视频资源已变化，请重试")
-                    val n=(last-start+1).toInt(); val body=response.body ?: throw IOException("视频分段为空")
-                    val bytes=body.source().readByteArray(n.toLong())
-                    if(bytes.size!=n) throw java.io.EOFException("视频分段长度不完整：期望 ${n} 字节，实际 ${bytes.size} 字节")
-                    Range(bytes,full)
-                }
-            } finally { synchronized(calls) { calls-=call } }
+        val urls = synchronized(urlLock) {
+            val index = candidateUrls.indexOf(activeUrl).takeIf { it >= 0 } ?: 0
+            candidateUrls.drop(index)
         }
+        var lastError: IOException? = null
+        for (url in urls) {
+            if (closed) throw IOException("播放请求已取消")
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent",VendorConstants.VIDEO_UA)
+                .header("Referer","https://novel.snssdk.com/")
+                .header("Range","bytes=$start-$end")
+                .header("Accept-Encoding","identity")
+                .build()
+            try {
+                val result = NetworkRetry.execute(request) {
+                    val call=http.newCall(request)
+                    synchronized(calls) { if(closed) throw IOException("播放请求已取消"); calls+=call }
+                    try {
+                        RequestScope.execute(call) { response ->
+                            lastHttpStatus = response.code
+                            lastContentType = response.header("Content-Type").orEmpty()
+                            if(response.code!=206) throw HttpStatusException(
+                                response.code,response.header("Retry-After"),
+                                "视频服务器不支持分段读取（HTTP \${response.code}）"
+                            )
+                            val match=Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(response.header("Content-Range").orEmpty()) ?: throw IOException("视频分段响应异常")
+                            val (begin,finish,size)=match.destructured
+                            val full=size.toLong()
+                            val last=minOf(end,full-1)
+                            if(begin.toLong()!=start || finish.toLong()!=last || full<=0) throw IOException("视频分段范围不匹配")
+                            if(total!=0L && full!=total) throw IOException("视频资源已变化，请重试")
+                            val n=(last-start+1).toInt()
+                            val body=response.body ?: throw IOException("视频分段为空")
+                            val bytes=body.source().readByteArray(n.toLong())
+                            lastBytesRead=bytes.size
+                            if(bytes.size!=n) throw java.io.EOFException("视频分段长度不完整：期望 \${n} 字节，实际 \${bytes.size} 字节")
+                            Range(bytes,full)
+                        }
+                    } finally { synchronized(calls) { calls-=call } }
+                }
+                synchronized(urlLock) { activeUrl = url }
+                return result
+            } catch (error: java.io.InterruptedIOException) {
+                throw error
+            } catch (error: IOException) {
+                lastError = error
+                synchronized(urlLock) {
+                    if (activeUrl == url) {
+                        val index = candidateUrls.indexOf(url)
+                        if (index >= 0 && index + 1 < candidateUrls.size) {
+                            activeUrl = candidateUrls[index + 1]
+                        }
+                    }
+                }
+            }
+        }
+        throw lastError ?: IOException("没有可用的视频地址")
     }
     private fun fetchChunk(start: Long): Range {
         val requestedEnd=if(start>Long.MAX_VALUE-chunkBytes.toLong()) Long.MAX_VALUE else start+chunkBytes.toLong()
