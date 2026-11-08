@@ -7,3 +7,11 @@ dependencies {
     implementation("org.json:json:20240303")
     testImplementation("junit:junit:4.13.2")
 }
+
+// Keep live Phoenix candidate-by-candidate diagnostics visible in Actions logs.
+tasks.test {
+    testLogging {
+        showStandardStreams = true
+        events("passed", "skipped", "failed")
+    }
+}
