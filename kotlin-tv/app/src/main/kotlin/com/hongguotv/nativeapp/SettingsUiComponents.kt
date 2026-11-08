@@ -89,7 +89,9 @@ internal class SettingsCategoryController(
     fun showSettingDescription(category: Int, label: String) {
         if(category !in categoryHeadingSubtitles.indices) return
         val key=label.substringBefore("·").trim()
-        val description=SETTINGS_DESCRIPTIONS[key] ?: return
+        // 播放线路选项标签为“线路首选 · Native/Phoenix”，文案表登记名为“播放线路”。
+        val descriptionKey=if(key=="线路首选") "播放线路" else key
+        val description=SETTINGS_DESCRIPTIONS[descriptionKey] ?: return
         categoryHeadingSubtitles.indices.filter { it!=category }.forEach { restoreCategoryDescription(it) }
         categoryHeadingSubtitles[category].text=description.second
         setCategoryDetailMode(category,true)
