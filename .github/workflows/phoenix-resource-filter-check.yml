@@ -16,10 +16,10 @@ on:
         type: boolean
         default: true
       phoenix_video_id:
-        description: "Real Phoenix episode/video ID for live resource diagnosis"
+        description: "Real Phoenix episode/video ID (defaults to the previously diagnosed episode 14)"
         required: false
         type: string
-        default: ""
+        default: "7700959082370305049"
 
 permissions:
   contents: read
