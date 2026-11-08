@@ -3,11 +3,9 @@ package com.hongguotv.nativeapp
 
 import android.content.Context
 import com.hongguotv.core.ContentRepository
-import com.hongguotv.core.PhoenixPlaybackDeviceSession
 import com.hongguotv.core.PhoenixPlaybackSource
 import com.hongguotv.core.StreamSource
 import com.hongguotv.core.StreamInfo
-import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 import java.io.IOException
 
@@ -123,7 +121,7 @@ internal fun Context.playbackStreamSource(
     fun createSource(api: String): StreamSource {
         return if (api == "phoenix") {
             PlaybackApiDebugState.record(api, "选择 Phoenix 播放接口")
-            PhoenixPlaybackSource(http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build(), PhoenixPlaybackDeviceSession.shared) { event ->
+            PhoenixPlaybackSource(http) { event ->
                 if (PlaybackApiDebugState.record(api, event) && this is MainActivity) {
                     debugLog("播放接口诊断：[$api] $event")
                 }
