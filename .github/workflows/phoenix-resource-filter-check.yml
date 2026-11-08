@@ -1,6 +1,13 @@
 name: Phoenix Resource Filter Check
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "kotlin-tv/playback-phoenix/**"
+      - "kotlin-tv/app/**"
+      - ".github/workflows/phoenix-resource-filter-check.yml"
   workflow_dispatch:
     inputs:
       run_app_regression:
