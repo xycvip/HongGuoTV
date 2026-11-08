@@ -17,7 +17,7 @@ internal object PhoenixMediaResolver {
         val root = json(raw, "Phoenix 播放响应不是有效 JSON")
         val data = root.optJSONObject("data") ?: return ""
         val model = modelFrom(data)
-        return extractFallbackUrl(model.opt("fallback_api"))
+        return extractFallbackUrl(model.opt("fallback_api")).ifBlank { extractFallbackUrl(data.opt("fallback_api")) }
     }
 
     fun parse(raw: String, maxQuality: Int, fallbackRaw: String? = null): StreamInfo {
@@ -127,7 +127,7 @@ internal object PhoenixMediaResolver {
 
         // Only same-rendition URLs are safe to swap inside RemoteVideo: different
         // renditions can have different byte lengths and MP4 sample layouts.
-        val sameRenditionFallbacks = sameQuality.drop(1).map { it.url }.distinct()
+        val sameRenditionFallbacks = sameQuality.filter { it.codec == selected.codec && it.url != selected.url }.map { it.url }.distinct()
         return StreamInfo(
             url = selected.url,
             key = null,
