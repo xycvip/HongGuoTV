@@ -72,7 +72,8 @@ internal object PhoenixMediaResolver {
             // Do not derive spade_a, key_seed, or decrypt protected media URLs.
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
             val protected = encryption.optBoolean("encrypt") || item.optBoolean("encrypt") ||
-                method.isNotBlank() || encryption.str("spade_a").isNotBlank() ||
+                (method.isNotBlank() && !method.equals("none", true) && method != "0") ||
+                encryption.str("spade_a").isNotBlank() ||
                 item.str("spade_a").isNotBlank() || meta.str("spade_a").isNotBlank()
             if (protected) {
                 encryptedSkipped++
