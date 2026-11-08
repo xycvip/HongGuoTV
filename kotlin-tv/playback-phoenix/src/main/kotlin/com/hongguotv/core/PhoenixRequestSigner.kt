@@ -247,8 +247,9 @@ class PhoenixRequestSigner(private val clock: () -> Long = System::currentTimeMi
         val now = clock(); val ts = (now / 1000).toInt()
         var ticket = now; var query: String
         for (offset in 0..127) {
-            ticket = now + offset; query = PhoenixRequestSigner.encode(values + mapOf("_rticket" to ticket.toString()))
-            if (branch(query, body, ts) != 1) {
+            ticket = now + offset
+            query = PhoenixRequestSigner.encode(values + mapOf("ts" to ts.toString(), "_rticket" to ticket.toString()))
+            if (branch(query, body, ts) == 0) {
                 val url = "$base?$query"
                 val random = (random()*65536).toInt()
                 // medusa must bind the SAME device id / version as the query string

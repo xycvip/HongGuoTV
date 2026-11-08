@@ -18,19 +18,8 @@ class PhoenixPlaybackDeviceRegistrationException(cause: Throwable? = null) :
  * 平台按「注册过的 device_id + install_id」放行播放接口，未注册设备的播放请求只会拿到空响应。
  */
 class PhoenixPlaybackDeviceSession(
-    private val register: (OkHttpClient) -> PhoenixDeviceRegister.Registered? = { http ->
-        val body = PhoenixDeviceRegister.payload(VendorConstants.device)
-        val request = Request.Builder().url(PhoenixDeviceRegister.url())
-        PhoenixDeviceRegister.headers(body, VendorConstants.device).forEach { (key, value) ->
-            request.header(key, value)
-        }
-        request.post(body.toRequestBody("application/octet-stream".toMediaType()))
-        // 注册请求不带账号 Cookie；取消由调用方的工作域负责。
-        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
-        RequestScope.execute(transport.newCall(request.build())) { response ->
-            PhoenixDeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
-        }
-    }
+    private val register: ((OkHttpClient) -> PhoenixDeviceRegister.Registered?)? = null
+
 ) {
     companion object {
         val shared = PhoenixPlaybackDeviceSession()
@@ -38,7 +27,7 @@ class PhoenixPlaybackDeviceSession(
 
     data class Profile(val values: Map<String, String>, val cookie: String)
 
-    private val cdid = UUID.randomUUID().toString()
+    private var cdid = UUID.randomUUID().toString()
     private var ready: Profile? = null
 
     @Synchronized
@@ -47,7 +36,8 @@ class PhoenixPlaybackDeviceSession(
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
         val device =
             try {
-                register(http) ?: throw PhoenixPlaybackDeviceRegistrationException()
+                (register?.invoke(http) ?: if (register == null) registerPhoenix(http, cdid) else null)
+                    ?: throw PhoenixPlaybackDeviceRegistrationException()
             } catch (error: InterruptedIOException) {
                 throw error
             } catch (error: IOException) {
@@ -55,7 +45,9 @@ class PhoenixPlaybackDeviceSession(
             }
         val validId = Regex("[1-9][0-9]{0,29}")
         if (!validId.matches(device.deviceId) || !validId.matches(device.installId))
-            throw PhoenixPlaybackDeviceRegistrationException()
+            throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册响应缺少有效 device_id/install_id"))
+        if (device.klinkEgdi.isBlank())
+            throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册响应缺少 klink_egdi，已阻止使用过期固定身份继续请求"))
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
         return Profile(
                 VendorConstants.device +
@@ -63,6 +55,7 @@ class PhoenixPlaybackDeviceSession(
                         "device_id" to device.deviceId,
                         "iid" to device.installId,
                         "cdid" to cdid,
+                        "klink_egdi" to device.klinkEgdi,
                     ),
                 device.cookies
                     .filterKeys {
@@ -78,7 +71,22 @@ class PhoenixPlaybackDeviceSession(
     @Synchronized
     fun renew(http: OkHttpClient): Profile {
         ready = null
+        cdid = UUID.randomUUID().toString()
         return profile(http)
+    }
+
+    private fun registerPhoenix(http: OkHttpClient, currentCdid: String): PhoenixDeviceRegister.Registered? {
+        val now = System.currentTimeMillis()
+        val body = PhoenixDeviceRegister.payload(VendorConstants.device + mapOf("cdid" to currentCdid), now)
+        val request = Request.Builder().url(PhoenixDeviceRegister.url(now))
+        PhoenixDeviceRegister.headers(body, VendorConstants.device, now).forEach { (key, value) ->
+            request.header(key, value)
+        }
+        request.post(body.toRequestBody("application/octet-stream;tt-data=a".toMediaType()))
+        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
+        return RequestScope.execute(transport.newCall(request.build())) { response ->
+            PhoenixDeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
+        }
     }
 }
 
