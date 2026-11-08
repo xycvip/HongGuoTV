@@ -6,7 +6,10 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.Locale
 
-/** Phoenix two-stage response parser, sharing the existing RemoteVideo CENC contract. */
+/**
+ * Phoenix two-stage response parser.
+ * Response-shape compatibility is adapted in part from Xanerix/guoapp (GPL-3.0).
+ */
 internal object PhoenixMediaResolver {
     fun fallbackUrl(raw: String): String {
         val root = json(raw, "Phoenix 播放响应不是有效 JSON")
@@ -41,8 +44,10 @@ internal object PhoenixMediaResolver {
         val listCandidates = listOf(
             source.opt("video_list"),
             model.opt("video_list"),
+            data.opt("video_list"),
             source.optJSONObject("dynamic_video")?.opt("dynamic_video_list"),
-            model.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
+            model.optJSONObject("dynamic_video")?.opt("dynamic_video_list"),
+            data.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
         )
         val rows = listCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
         if (rows.isEmpty()) throw IOException("Phoenix 未返回视频清晰度（fallback_api=${!fallbackRaw.isNullOrBlank()}）")
@@ -70,9 +75,14 @@ internal object PhoenixMediaResolver {
             val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.ifEmpty { "unknown" }.lowercase(Locale.ROOT)
             val gearKey = item.str("gear_des_key").lowercase(Locale.ROOT)
             val definition = meta.str("definition").ifEmpty { item.str("definition") }
+            val reportedHeight = meta.optInt("vheight", item.optInt("vheight", item.optInt("height", 0)))
+            val reportedWidth = meta.optInt("vwidth", item.optInt("vwidth", 0))
+            // Match GuoAPP's portrait-video fallback: when only width is reliable,
+            // use the shorter edge as the effective quality label.
             val height = qualityNumber(definition).takeIf { it > 0 }
-                ?: meta.optInt("vheight", item.optInt("vheight",
-                    item.optInt("height", qualityNumber(item.str("quality_desc").ifEmpty { name }))))
+                ?: reportedHeight.takeIf { it > 0 }
+                ?: reportedWidth.takeIf { it > 0 && (reportedHeight == 0 || it < reportedHeight) }
+                ?: qualityNumber(item.str("quality_desc").ifEmpty { name })
             val mime = meta.str("mime_type").ifEmpty { item.str("mime_type") }.ifEmpty { "unknown" }
             report("Phoenix资源#$name：开始筛选 codec=$codec，mime=$mime，definition=${definition.ifBlank { "unknown" }}，height=${height.takeIf { it > 0 } ?: "unknown"}")
             if (codec in setOf("bytevc2", "bvc2") || gearKey.contains("bytevc2")) {
@@ -188,7 +198,9 @@ internal object PhoenixMediaResolver {
     }
 
     private fun rows(value: Any?): List<Pair<String, JSONObject>> = when (value) {
-        is JSONObject -> value.keys().asSequence().mapNotNull { key -> value.optJSONObject(key)?.let { key to it } }.toList()
+        // Go's source sorts object keys before iterating; keep selection and diagnostics deterministic.
+        is JSONObject -> value.keys().asSequence().toList().sorted()
+            .mapNotNull { key -> value.optJSONObject(key)?.let { key to it } }
         is JSONArray -> (0 until value.length()).mapNotNull { i -> value.optJSONObject(i)?.let { i.toString() to it } }
         else -> emptyList()
     }
