@@ -212,7 +212,7 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
         PlaybackRecoveryStep.SWITCH_ROUTE -> {
             val from = playbackApiSelection()
             val to = if (from == "phoenix") "native" else "phoenix"
-            getSharedPreferences("playback-api-v1", MODE_PRIVATE).edit().putString("source", to).apply()
+            getSharedPreferences("playback-api-v1", android.content.Context.MODE_PRIVATE).edit().putString("source", to).apply()
             PlaybackApiDebugState.select(to)
             playbackPipelineState.playbackRecoveryPreviousRoute = from
             playbackPipelineState.playbackRecoveryRouteSwitched = true
@@ -226,7 +226,7 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
         PlaybackRecoveryStep.EXHAUSTED -> {
             val previousRoute = playbackPipelineState.playbackRecoveryPreviousRoute
             if (playbackPipelineState.playbackRecoveryRouteSwitched && previousRoute.isNotEmpty()) {
-                getSharedPreferences("playback-api-v1", MODE_PRIVATE).edit().putString("source", previousRoute).apply()
+                getSharedPreferences("playback-api-v1", android.content.Context.MODE_PRIVATE).edit().putString("source", previousRoute).apply()
                 PlaybackApiDebugState.select(previousRoute)
                 playbackPipelineState.playbackRecoveryPreviousRoute = ""
                 playbackPipelineState.playbackRecoveryRouteSwitched = false
