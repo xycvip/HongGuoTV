@@ -68,13 +68,18 @@ internal object PhoenixMediaResolver {
             val meta = objectOrString(item.opt("video_meta"))
             val encryption = objectOrString(item.opt("encrypt_info"))
             val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.ifEmpty { "unknown" }.lowercase(Locale.ROOT)
+            val gearKey = item.str("gear_des_key").lowercase(Locale.ROOT)
             val definition = meta.str("definition").ifEmpty { item.str("definition") }
             val height = qualityNumber(definition).takeIf { it > 0 }
                 ?: meta.optInt("vheight", item.optInt("vheight",
                     item.optInt("height", qualityNumber(item.str("quality_desc").ifEmpty { name }))))
             val mime = meta.str("mime_type").ifEmpty { item.str("mime_type") }.ifEmpty { "unknown" }
             report("Phoenix资源#$name：开始筛选 codec=$codec，mime=$mime，definition=${definition.ifBlank { "unknown" }}，height=${height.takeIf { it > 0 } ?: "unknown"}")
-            if (codec in setOf("bytevc2", "bvc2")) { unsupportedSkipped++; report("Phoenix资源#$name：拒绝，原因=不兼容编码($codec)"); continue }
+            if (codec in setOf("bytevc2", "bvc2") || gearKey.contains("bytevc2")) {
+                unsupportedSkipped++
+                report("Phoenix资源#$name：拒绝，原因=不兼容编码(ByteVC2)")
+                continue
+            }
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
             val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
                 .ifEmpty { meta.str("spade_a") }.ifEmpty { item.str("spade_a") }
@@ -153,7 +158,22 @@ internal object PhoenixMediaResolver {
         val raw = data.opt("video_model")
         return when (raw) {
             is JSONObject -> raw
-            is String -> runCatching { JSONObject(raw) }.getOrElse { throw IOException("Phoenix video_model 格式异常") }
+            is String -> {
+                val text = raw.trim()
+                val direct = runCatching { JSONObject(text) }.getOrNull()
+                if (direct != null) direct else {
+                    // 部分响应把 video_model 本体编码为 Base64 JSON。
+                    val decoded = runCatching {
+                        val bytes = try {
+                            java.util.Base64.getDecoder().decode(text)
+                        } catch (_: IllegalArgumentException) {
+                            java.util.Base64.getUrlDecoder().decode(text)
+                        }
+                        JSONObject(String(bytes, Charsets.UTF_8))
+                    }.getOrNull()
+                    decoded ?: throw IOException("Phoenix video_model 格式异常")
+                }
+            }
             else -> data
         }
     }

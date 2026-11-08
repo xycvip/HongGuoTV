@@ -104,17 +104,14 @@ class PhoenixPlaybackSource(
             throw error
         }
         emitDiagnostic("Phoenix：设备身份已就绪（身份字段已校验，敏感值不记录）")
+        // 与 GuoAPP 的 video_model/v1 请求结构保持一致；不混入 PhoenixReadApi
+        // 旧接口专属的 biz_param 字段。
         val payload = JSONObject()
             .put("video_id", id)
+            .put("content_type", 1)
             .put("biz_param", JSONObject()
-                .put("detail_page_version", 0)
-                .put("device_level", 3)
-                .put("disable_digg_stat", false)
                 .put("need_all_video_definition", true)
-                .put("need_mp4_align", false)
-                .put("use_os_player", false)
-                .put("use_server_dns", false)
-                .put("video_platform", 1024))
+                .put("video_platform", 3))
             .toString()
             .toByteArray(Charsets.UTF_8)
 
