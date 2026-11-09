@@ -109,6 +109,8 @@ class WatchingTest {
     }
     @Test fun `legacy global defaults stay valid and invalid values have safe defaults`() {
         assertEquals(720,PlaybackQuality.normalize(720)); assertEquals(1080,PlaybackQuality.normalize(1080))
+        assertEquals(PlaybackQuality.AUTO_COMPAT,PlaybackQuality.normalize(999))
+        assertEquals(PlaybackQuality.AUTO_COMPAT,BackupSettings().quality)
         assertEquals(PlaybackQuality.AUTO_HIGH,PlaybackQuality.normalize(PlaybackQuality.AUTO_HIGH))
         assertEquals(PlaybackQuality.AUTO_COMPAT,PlaybackQuality.normalize(PlaybackQuality.AUTO_COMPAT))
         assertEquals("自动（高清优先）",PlaybackQuality.label(PlaybackQuality.AUTO_HIGH))
