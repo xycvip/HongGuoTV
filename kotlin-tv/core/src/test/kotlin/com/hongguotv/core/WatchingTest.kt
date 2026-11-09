@@ -113,6 +113,10 @@ class WatchingTest {
         assertEquals(PlaybackQuality.AUTO_COMPAT,PlaybackQuality.normalize(PlaybackQuality.AUTO_COMPAT))
         assertEquals("自动（高清优先）",PlaybackQuality.label(PlaybackQuality.AUTO_HIGH))
         assertEquals("自动（兼容优先）",PlaybackQuality.label(PlaybackQuality.AUTO_COMPAT))
+        assertEquals(1080,PlaybackQualityMode.limit(PlaybackQuality.AUTO_HIGH,true))
+        assertEquals(1080,PlaybackQualityMode.limit(PlaybackQuality.AUTO_COMPAT,false))
+        assertEquals(720,PlaybackQualityMode.limit(PlaybackQuality.AUTO_COMPAT,true))
+        assertEquals(720,PlaybackQualityMode.limit(PlaybackQuality.AUTO_COMPAT,null))
         assertEquals(480,PlaybackQuality.normalize(480))
         assertEquals(1.5f,PlaybackSpeed.normalize(1.5f)); assertEquals(1f,PlaybackSpeed.normalize(Float.NaN))
     }
