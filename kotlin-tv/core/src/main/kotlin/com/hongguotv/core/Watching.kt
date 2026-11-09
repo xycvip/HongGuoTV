@@ -7,7 +7,7 @@ object PlaybackQuality {
     const val AUTO_HIGH = PlaybackQualityMode.AUTO_HIGH
     const val AUTO_COMPAT = PlaybackQualityMode.AUTO_COMPAT
     val options=listOf(480,720,1080,AUTO_HIGH,AUTO_COMPAT)
-    fun normalize(value: Int)=value.takeIf { it in options } ?: 1080
+    fun normalize(value: Int)=value.takeIf { it in options } ?: AUTO_COMPAT
     fun label(value: Int)=when(normalize(value)) {
         AUTO_HIGH -> "自动（高清优先）"
         AUTO_COMPAT -> "自动（兼容优先）"
