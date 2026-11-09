@@ -98,6 +98,14 @@ internal object PlaybackApiDebugState {
         return true
     }
 
+    /** Records the route actually used by A/B even when it differs from the global preference. */
+    @Synchronized
+    fun recordActual(api: String, event: String): Boolean {
+        val normalized = if (api == "phoenix") "phoenix" else "native"
+        append(normalized, event)
+        return true
+    }
+
     private fun append(api: String, event: String) {
         val stamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
         val label = if (api == "phoenix") "Phoenix" else "Native"
@@ -182,25 +190,25 @@ internal fun Context.playbackStreamSource(
 ): StreamSource {
     fun createSource(api: String): StreamSource {
         return if (api == "phoenix") {
-            PlaybackApiDebugState.record(api, "选择 Phoenix 播放接口")
+            PlaybackApiDebugState.recordActual(api, "选择 Phoenix 播放接口")
             PhoenixPlaybackSource(http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build(), PhoenixPlaybackDeviceSession.shared, PhoenixRequestSigner()) { event ->
-                if (PlaybackApiDebugState.record(api, event) && this is MainActivity) {
+                if (PlaybackApiDebugState.recordActual(api, event) && this is MainActivity) {
                     debugLog("播放接口诊断：[$api] $event")
                 }
             }
         } else {
-            PlaybackApiDebugState.record(api, "选择 Native 播放接口")
+            PlaybackApiDebugState.recordActual(api, "选择 Native 播放接口")
             val repository = ContentRepository(http)
             object : StreamSource {
                 override val name: String = "native"
                 override fun stream(id: String, maxQuality: Int): StreamInfo {
-                    PlaybackApiDebugState.record(api, "Native：开始获取播放地址")
+                    PlaybackApiDebugState.recordActual(api, "Native：开始获取播放地址")
                     return try {
                         repository.stream(id, maxQuality).also {
-                            PlaybackApiDebugState.record(api, "Native：播放地址获取成功，清晰度=${it.quality}")
+                            PlaybackApiDebugState.recordActual(api, "Native：播放地址获取成功，清晰度=${it.quality}")
                         }
                     } catch (error: Exception) {
-                        PlaybackApiDebugState.record(api, "Native：播放地址获取失败，异常类型=${error.javaClass.simpleName}")
+                        PlaybackApiDebugState.recordActual(api, "Native：播放地址获取失败，异常类型=${error.javaClass.simpleName}")
                         throw error
                     }
                 }
@@ -216,13 +224,13 @@ internal fun Context.playbackStreamSource(
         primary = primary,
         fallback = { createSource(fallbackApi) },
         onFallbackStart = { api ->
-            PlaybackApiDebugState.record(routeSnapshot.api, "首选接口失败，自动尝试备用接口 $api")
+            PlaybackApiDebugState.recordActual(routeSnapshot.api, "首选接口失败，自动尝试备用接口 $api")
             if (this is MainActivity) debugLog("播放接口自动切换：${routeSnapshot.api} 失败，开始尝试 $api")
         },
         onFallbackSuccess = { id, api, maxQuality ->
             val committed = PlaybackRouteSelection.commitFallback(this, routeSnapshot, api)
             if (committed) {
-                PlaybackApiDebugState.record(api, "备用接口获取播放资源成功，已记为下次优先线路")
+                PlaybackApiDebugState.recordActual(api, "备用接口获取播放资源成功，已记为下次优先线路")
                 if (this is MainActivity) {
                     if (notifyOnFallback) {
                         val notice = if (routeSnapshot.api == "native") "已自动切换至线路 Phoenix"
@@ -236,7 +244,7 @@ internal fun Context.playbackStreamSource(
             }
         },
         onFallbackFailure = { api ->
-            PlaybackApiDebugState.record(routeSnapshot.api, "备用接口 $api 也失败，保留当前优先线路")
+            PlaybackApiDebugState.recordActual(routeSnapshot.api, "备用接口 $api 也失败，保留当前优先线路")
         }
     )
 }
