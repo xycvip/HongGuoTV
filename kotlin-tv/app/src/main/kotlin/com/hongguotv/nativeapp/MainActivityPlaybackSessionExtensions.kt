@@ -201,8 +201,8 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
     // IOException from stream-address acquisition (including no-compatible-resource or
     // unsupported-container responses) may be solved by the other API. Media3 PlaybackException
     // is a player/decoder failure and is deliberately limited to same-route reconstruction.
-    val routeSwitchEligible = problem is java.io.IOException
-    val recoverable = problem is PlaybackException || routeSwitchEligible
+    val routeSwitchEligible = problem is PlaybackApiRequestException
+    val recoverable = problem is PlaybackException || problem is java.io.IOException
     if (!recoverable) return false
     if (Thread.currentThread().isInterrupted) return false
     val message = problem.message.orEmpty().lowercase(java.util.Locale.ROOT)
@@ -269,10 +269,11 @@ internal fun MainActivity.playerFailure(problem: Throwable) {
             return
         }
         playError=true; player?.pause(); progressBar.visibility=View.GONE; hud.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.VISIBLE; panel=true
-        val incompatible=problem is UnplayableVideoException
-        val unsupportedFormat=problem is UnsupportedVideoFormatException
-        val decoding=problem is PlaybackException && problem.errorCode in 3000..4999
-        val retryable=!incompatible && !unsupportedFormat && !decoding && (if(problem is PlaybackException) problem.errorCode in 2000..2999 || problem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else problem is java.io.IOException)
+        val reportedProblem = (problem as? PlaybackApiRequestException)?.cause ?: problem
+        val incompatible=reportedProblem is UnplayableVideoException
+        val unsupportedFormat=reportedProblem is UnsupportedVideoFormatException
+        val decoding=reportedProblem is PlaybackException && reportedProblem.errorCode in 3000..4999
+        val retryable=!incompatible && !unsupportedFormat && !decoding && (if(reportedProblem is PlaybackException) reportedProblem.errorCode in 2000..2999 || reportedProblem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else reportedProblem is java.io.IOException)
         playbackText.text=when {
             unsupportedFormat -> "当前片源格式暂不支持，现有播放链路需要 MP4 资源。"
             incompatible -> "本集片源暂不兼容：平台未提供电视可解码的清晰度，可播放下一集。"
