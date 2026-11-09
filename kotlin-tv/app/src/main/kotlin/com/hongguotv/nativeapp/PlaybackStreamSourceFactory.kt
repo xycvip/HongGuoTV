@@ -14,17 +14,49 @@ import java.io.IOException
 
 private const val PLAYBACK_API_PREFS = "playback-api-v1"
 private const val PLAYBACK_API_KEY = "source"
+private const val PLAYBACK_API_REVISION_KEY = "revision"
 
-internal fun Context.playbackApiSelection(): String {
-    val selected = getSharedPreferences(PLAYBACK_API_PREFS, Context.MODE_PRIVATE)
-        .getString(PLAYBACK_API_KEY, "native")
-        .let { if (it == "phoenix") "phoenix" else "native" }
-    PlaybackApiDebugState.select(selected)
-    return selected
+internal data class PlaybackRouteSnapshot(val api: String, val revision: Long)
+
+internal object PlaybackRouteSelection {
+    @Synchronized
+    fun snapshot(context: Context): PlaybackRouteSnapshot {
+        val prefs = context.getSharedPreferences(PLAYBACK_API_PREFS, Context.MODE_PRIVATE)
+        val api = prefs.getString(PLAYBACK_API_KEY, "native")
+            .let { if (it == "phoenix") "phoenix" else "native" }
+        PlaybackApiDebugState.select(api)
+        return PlaybackRouteSnapshot(api, prefs.getLong(PLAYBACK_API_REVISION_KEY, 0L))
+    }
+
+    @Synchronized
+    fun set(context: Context, api: String) {
+        val normalized = if (api == "phoenix") "phoenix" else "native"
+        val prefs = context.getSharedPreferences(PLAYBACK_API_PREFS, Context.MODE_PRIVATE)
+        val revision = prefs.getLong(PLAYBACK_API_REVISION_KEY, 0L)
+        prefs.edit().putString(PLAYBACK_API_KEY, normalized)
+            .putLong(PLAYBACK_API_REVISION_KEY, revision + 1L).apply()
+        PlaybackApiDebugState.select(normalized)
+    }
+
+    @Synchronized
+    fun commitFallback(context: Context, expected: PlaybackRouteSnapshot, api: String): Boolean {
+        val normalized = if (api == "phoenix") "phoenix" else "native"
+        val prefs = context.getSharedPreferences(PLAYBACK_API_PREFS, Context.MODE_PRIVATE)
+        val currentApi = prefs.getString(PLAYBACK_API_KEY, "native")
+            .let { if (it == "phoenix") "phoenix" else "native" }
+        val currentRevision = prefs.getLong(PLAYBACK_API_REVISION_KEY, 0L)
+        if (currentApi != expected.api || currentRevision != expected.revision) return false
+        prefs.edit().putString(PLAYBACK_API_KEY, normalized)
+            .putLong(PLAYBACK_API_REVISION_KEY, currentRevision + 1L).apply()
+        PlaybackApiDebugState.select(normalized)
+        return true
+    }
 }
 
-internal fun Context.playbackResourceKey(id: String, quality: Int): String =
-    "$id:$quality:${playbackApiSelection()}"
+internal fun Context.playbackApiSelection(): String = PlaybackRouteSelection.snapshot(this).api
+
+// Route-independent identity lets a successfully prepared standby player survive N/P fallback.
+internal fun Context.playbackResourceKey(id: String, quality: Int): String = "$id:$quality"
 
 internal fun Context.playbackApiLabel(value: String = playbackApiSelection()): String =
     if (value == "phoenix") "线路首选 · Phoenix" else "线路首选 · Native"
@@ -76,27 +108,58 @@ internal object PlaybackApiDebugState {
     fun snapshot(): List<String> = events.toList()
 }
 
+internal interface PlaybackRouteAware {
+    val resolvedApi: String
+}
+
+internal class RoutedStreamSource(
+    override val resolvedApi: String,
+    private val delegate: StreamSource
+) : StreamSource, PlaybackRouteAware {
+    override val name: String get() = delegate.name
+    override fun stream(id: String, maxQuality: Int): StreamInfo = delegate.stream(id, maxQuality)
+}
+
+internal fun StreamSource.resolvedPlaybackApi(): String =
+    (this as? PlaybackRouteAware)?.resolvedApi ?: name.let {
+        if (it.contains("phoenix", true)) "phoenix" else "native"
+    }
+
 internal class AutoFallbackStreamSource(
     private val primary: StreamSource,
     private val fallback: () -> StreamSource,
     private val onFallbackStart: (String) -> Unit = {},
     private val onFallbackSuccess: (String, String, Int) -> Unit = { _, _, _ -> },
     private val onFallbackFailure: (String) -> Unit = {}
-) : StreamSource {
+) : StreamSource, PlaybackRouteAware {
+    @Volatile
+    override var resolvedApi: String = primary.resolvedPlaybackApi()
+        private set
+
     override val name: String = "auto:${primary.name}"
 
     override fun stream(id: String, maxQuality: Int): StreamInfo {
+        resolvedApi = primary.resolvedPlaybackApi()
         try {
             return primary.stream(id, maxQuality)
         } catch (primaryError: IOException) {
-            if (isPlaybackRequestCancelled(primaryError)) throw primaryError
+            if (isPlaybackRequestCancelled(primaryError) ||
+                primaryError is UnplayableVideoException ||
+                primaryError is UnsupportedVideoFormatException
+            ) throw primaryError
             val backup = fallback()
             runCatching { onFallbackStart(backup.name) }
             try {
-                return backup.stream(id, maxQuality).also { runCatching { onFallbackSuccess(id, backup.name, maxQuality) } }
+                val result = backup.stream(id, maxQuality)
+                resolvedApi = backup.resolvedPlaybackApi()
+                runCatching { onFallbackSuccess(id, resolvedApi, maxQuality) }
+                return result
             } catch (fallbackError: IOException) {
                 runCatching { onFallbackFailure(primary.name) }
-                if (isPlaybackRequestCancelled(fallbackError)) throw fallbackError
+                if (isPlaybackRequestCancelled(fallbackError) ||
+                    fallbackError is UnplayableVideoException ||
+                    fallbackError is UnsupportedVideoFormatException
+                ) throw fallbackError
                 fallbackError.addSuppressed(primaryError)
                 throw IOException(
                     "首选播放接口 ${primary.name} 失败，备用接口 ${backup.name} 也失败：${fallbackError.message}",
@@ -112,7 +175,6 @@ internal class AutoFallbackStreamSource(
         return message.contains("请求已取消") || message == "canceled" || message == "cancelled"
     }
 }
-
 internal fun Context.playbackStreamSource(
     http: OkHttpClient,
     notifyOnFallback: Boolean = true,
@@ -149,36 +211,35 @@ internal fun Context.playbackStreamSource(
         }
     }
 
-    val preferred = createSource(primaryApi)
-    if (!allowFallback) return preferred
+    val routeSnapshot = PlaybackRouteSelection.snapshot(this)
+    val primary = createSource(routeSnapshot.api)
+    if (!allowFallback) return primary
+    val fallbackApi = if (routeSnapshot.api == "phoenix") "native" else "phoenix"
     return AutoFallbackStreamSource(
-        primary = preferred,
+        primary = primary,
         fallback = { createSource(fallbackApi) },
         onFallbackStart = { api ->
-            PlaybackApiDebugState.select(api)
-            PlaybackApiDebugState.record(api, "首选接口失败，自动尝试备用接口")
-            if (this is MainActivity) debugLog("播放接口自动切换：$primaryApi 失败，开始尝试 $api")
+            PlaybackApiDebugState.record(routeSnapshot.api, "首选接口失败，自动尝试备用接口 $api")
+            if (this is MainActivity) debugLog("播放接口自动切换：${routeSnapshot.api} 失败，开始尝试 $api")
         },
         onFallbackSuccess = { id, api, maxQuality ->
-            getSharedPreferences(PLAYBACK_API_PREFS, Context.MODE_PRIVATE)
-                .edit().putString(PLAYBACK_API_KEY, api).apply()
-            PlaybackApiDebugState.select(api)
-            PlaybackApiDebugState.record(api, "备用接口获取播放资源成功，已记为下次优先线路")
-            if (this is MainActivity) {
-                if (notifyOnFallback) {
-                    val notice = if (primaryApi == "native") {
-                        "已自动切换至线路 Phoenix"
-                    } else {
-                        "已自动切换至线路 Native"
+            val committed = PlaybackRouteSelection.commitFallback(this, routeSnapshot, api)
+            if (committed) {
+                PlaybackApiDebugState.record(api, "备用接口获取播放资源成功，已记为下次优先线路")
+                if (this is MainActivity) {
+                    if (notifyOnFallback) {
+                        val notice = if (routeSnapshot.api == "native") "已自动切换至线路 Phoenix"
+                            else "已自动切换至线路 Native"
+                        PlaybackApiDebugState.rememberFallbackNotice(id, maxQuality, notice)
                     }
-                    PlaybackApiDebugState.rememberFallbackNotice(id, maxQuality, notice)
+                    debugLog("播放接口自动切换成功：后续优先使用 $api")
                 }
-                debugLog("播放接口自动切换成功：后续优先使用 $api")
+            } else if (this is MainActivity) {
+                debugLog("备用线路 $api 已成功，但优先线路已被更新，忽略旧请求的线路写入与提示")
             }
         },
         onFallbackFailure = { api ->
-            PlaybackApiDebugState.select(api)
-            PlaybackApiDebugState.record(api, "备用接口也失败，保留原优先线路")
+            PlaybackApiDebugState.record(routeSnapshot.api, "备用接口 $api 也失败，保留当前优先线路")
         }
     )
 }
