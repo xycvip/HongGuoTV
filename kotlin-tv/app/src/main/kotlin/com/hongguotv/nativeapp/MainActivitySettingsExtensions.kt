@@ -271,7 +271,7 @@ import java.util.concurrent.atomic.AtomicLong
             getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit().putInt("sleep_action_mode",next).apply()
             sleepActionButton.text="定时关闭·${sleepActionLabel(next)}"
         }
-        qualityButton=setting(playback,0,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
+        qualityButton=setting(playback,0,"默认清晰度  ·  ${PlaybackQuality.label(library.maxQuality)}") { showQualityPicker(qualityButton,false) }
         playbackApiButton=setting(playback,0,playbackApiLabel()) {
             val next=if(playbackApiSelection()=="native") "phoenix" else "native"
             PlaybackRouteSelection.set(this@settings,next)
