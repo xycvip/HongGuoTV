@@ -333,6 +333,9 @@ import java.util.concurrent.atomic.AtomicLong
             autoSeasonButton.text="系列剧连播  ·  ${if(library.autoSeason) "开启" else "关闭"}"
         }
 
+        lateinit var interfaceStatusButton:TextView
+        interfaceStatusButton=setting(playback,0,"接口状态详情") { showInterfaceCheck(interfaceStatusButton) }
+
         danmakuButton=setting(danmaku,1,"官方弹幕  ·  ${if(library.danmaku) "开启" else "关闭"}") {
             library.danmaku=!library.danmaku
             danmakuButton.text="官方弹幕  ·  ${if(library.danmaku) "开启" else "关闭"}"
@@ -418,8 +421,6 @@ import java.util.concurrent.atomic.AtomicLong
                 ensureBackupStoragePermission()
             }
         }
-        lateinit var interfaceStatusButton:TextView
-        interfaceStatusButton=setting(debug,6,"接口状态详情") { showInterfaceCheck(interfaceStatusButton) }
         setting(debug,6,"查看运行诊断") {
             TvDialog.textViewer(this,"运行诊断信息",debugEnvironmentSnapshot()).show()
         }
