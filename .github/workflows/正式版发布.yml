@@ -198,13 +198,13 @@ jobs:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
           APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
+          RELEASE_NOTES_INPUT: ${{ inputs.release_notes }}
         run: |
           set -euo pipefail
           APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
           SOURCE_COMMIT="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
 
           # 正式版发布说明由手动触发工作流时填写，不再自动分析提交记录。
-          RELEASE_NOTES_INPUT="${{ inputs.release_notes }}"
           if [ -z "$(printf '%s' "$RELEASE_NOTES_INPUT" | tr -d '[:space:]')" ]; then
             echo "::error::请在运行工作流时填写本次正式版更新说明"
             exit 1
