@@ -76,7 +76,7 @@ internal object LibraryBackupDecoder {
         val watchedIds=(0 until watched.length()).map { id(watched.getString(it)) }.toSet()
         val searches=o.rows("searches",20).map { row -> RecentSearch(row.string("query",80).also { require(it.isNotBlank()) },ContentType.entries.firstOrNull { it.storedValue==row.getString("type") } ?: error("搜索类型无效")) }
         val settings=o.getJSONObject("settings")
-        val quality=settings.number("quality",1080).toInt(); require(quality in PlaybackQuality.options)
+        val quality=settings.number("quality",PlaybackQuality.AUTO_COMPAT).toInt(); require(quality in PlaybackQuality.options)
         val speed=settings.get("speed"); require(speed is Number && speed.toFloat() in PlaybackSpeed.options)
         val autoNext=settings.get("autoNext"); require(autoNext is Boolean)
         val type=ContentType.entries.firstOrNull { it.storedValue==settings.getString("type") } ?: error("内容类型无效")
