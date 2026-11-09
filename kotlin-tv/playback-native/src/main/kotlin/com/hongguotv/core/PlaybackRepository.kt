@@ -207,7 +207,14 @@ class PlaybackRepository(
         val playable=rows.filter { it.second !in setOf("bytevc2","bvc2") }
         val h264=playable.filter { it.second=="h264" || it.second=="avc1" }
         val pool=if(h264.isNotEmpty()) h264 else playable
-        val selected=pool.firstOrNull { it.first in 1..maxQuality }
+        val portrait=rows.firstNotNullOfOrNull { row ->
+            val meta=row.third.optJSONObject("video_meta") ?: JSONObject()
+            val width=meta.str("vwidth").ifEmpty { row.third.str("vwidth") }.toIntOrNull() ?: 0
+            val height=meta.str("vheight").ifEmpty { row.third.str("vheight") }.toIntOrNull() ?: 0
+            if(width>0 && height>0) height>width else null
+        }
+        val selectionLimit=PlaybackQualityMode.limit(maxQuality,portrait)
+        val selected=pool.firstOrNull { it.first in 1..selectionLimit }
             ?: pool.lastOrNull()
             ?: throw UnplayableVideoException("本集片源暂不兼容，请播放下一集")
         val item=selected.third
