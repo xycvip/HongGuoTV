@@ -274,9 +274,7 @@ import java.util.concurrent.atomic.AtomicLong
         qualityButton=setting(playback,0,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
         playbackApiButton=setting(playback,0,playbackApiLabel()) {
             val next=if(playbackApiSelection()=="native") "phoenix" else "native"
-            getSharedPreferences("playback-api-v1",Context.MODE_PRIVATE)
-                .edit().putString("source",next).apply()
-            PlaybackApiDebugState.select(next)
+            PlaybackRouteSelection.set(this@settings,next)
             // 线路切换时丢弃旧线路的请求、单播放器预加载和隐藏备用播放器。
             cancelPrefetch()
             clearStandbyPlayer("播放线路切换")
