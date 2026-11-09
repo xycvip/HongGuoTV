@@ -22,10 +22,10 @@
 ### 正式版
 
 <!-- OFFICIAL_RELEASE_INFO_START -->
-- **当前版本：1.1.37**（versionCode：2026110707）
+- **当前版本：1.1.39**（versionCode：2026110901）
 - 应用包名：`com.x.hongguotv`
-- [下载正式版 APK：HongguoTV-1.1.37.apk](https://github.com/xycvip/AppDownload/releases/download/hongguotv-v1.1.37/HongguoTV-1.1.37.apk)
-- [查看正式版 1.1.37 发布说明](https://github.com/xycvip/AppDownload/releases/tag/hongguotv-v1.1.37)
+- [下载正式版 APK：HongguoTV-1.1.39.apk](https://github.com/xycvip/AppDownload/releases/download/hongguotv-v1.1.39/HongguoTV-1.1.39.apk)
+- [查看正式版 1.1.39 发布说明](https://github.com/xycvip/AppDownload/releases/tag/hongguotv-v1.1.39)
 <!-- OFFICIAL_RELEASE_INFO_END -->
 
 > 测试版与正式版使用不同的应用包名，可并行安装；两者版本号独立维护。
