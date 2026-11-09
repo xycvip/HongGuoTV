@@ -195,9 +195,9 @@ internal fun MainActivity.hasValidatedInternet(): Boolean {
 /** 播放地址取得后的统一恢复：当前线路重建重试一次，仍失败则切换另一线路。 */
 private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean {
     if (screen != "player" || detail == null || startupAutoPlaybackActive) return false
-    // The source factory has already tried the alternate API before these terminal
-    // source-format results reach playerFailure. Do not start a second route-switch cycle.
-    if (problem is UnplayableVideoException || problem is UnsupportedVideoFormatException) return false
+    // IOException from stream-address acquisition (including no-compatible-resource or
+    // unsupported-container responses) may be solved by the other API. Media3 PlaybackException
+    // is a player/decoder failure and is deliberately limited to same-route reconstruction.
     val routeSwitchEligible = problem is java.io.IOException
     val recoverable = problem is PlaybackException || routeSwitchEligible
     if (!recoverable) return false
