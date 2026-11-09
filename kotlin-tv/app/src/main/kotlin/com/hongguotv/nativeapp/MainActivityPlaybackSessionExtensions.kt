@@ -236,10 +236,16 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
         PlaybackRecoveryStep.EXHAUSTED -> {
             val previousRoute = playbackPipelineState.playbackRecoveryPreviousRoute
             if (playbackPipelineState.playbackRecoveryRouteSwitched && previousRoute.isNotEmpty()) {
-                PlaybackRouteSelection.set(this, previousRoute)
+                if (routeSwitchEligible) {
+                    PlaybackRouteSelection.set(this, previousRoute)
+                    debugLog("播放故障恢复：备用线路取流也失败，已恢复原优先线路设置=$previousRoute")
+                } else {
+                    // The alternate API supplied the stream; a decoder/player failure must not
+                    // silently reset the global preference and cause N→P on every next episode.
+                    debugLog("播放故障恢复：备用线路已取得资源，但播放器/解码失败；保留当前优先线路=${playbackApiSelection()}")
+                }
                 playbackPipelineState.playbackRecoveryPreviousRoute = ""
                 playbackPipelineState.playbackRecoveryRouteSwitched = false
-                debugLog("播放故障恢复：备用线路也失败，已恢复原优先线路设置=$previousRoute")
             }
             playbackRecoveryRouteLocked = false
             debugLog("播放故障恢复：本集同线路重试和符合条件的接口切换额度已用完，停止自动切换")
