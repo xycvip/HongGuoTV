@@ -210,7 +210,7 @@ jobs:
             exit 1
           fi
           RELEASE_NOTES="$RELEASE_NOTES_INPUT"
-          printf '%s\\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes-final.txt"
+          printf '%s\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes-final.txt"
           echo "本次正式版更新说明："
           cat "$RUNNER_TEMP/release-notes-final.txt"
 
