@@ -420,7 +420,11 @@ import java.util.concurrent.atomic.AtomicLong
             val source = playbackStreamSource(repository.http, allowFallback = !playbackRecoveryRouteLocked)
             work({
                 if(prefetched != null) prefetched else {
-                    val streamInfo = source.stream(requestedId,maxQuality)
+                    val streamInfo = try {
+                        source.stream(requestedId,maxQuality)
+                    } catch (error: java.io.IOException) {
+                        throw PlaybackApiRequestException(error)
+                    }
                     resolvedPlaybackApi = source.resolvedPlaybackApi()
                     RemoteVideo(repository.http,streamInfo).prepare()
                 }
