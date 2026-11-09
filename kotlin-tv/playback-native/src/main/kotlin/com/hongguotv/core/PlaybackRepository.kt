@@ -245,7 +245,7 @@ class PlaybackRepository(
             ?: JSONObject()
         val spade=item.str("spade_a").ifEmpty { encryption.str("spade_a") }.ifEmpty { itemMeta.str("spade_a") }
         val key=spade.takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-        val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>maxQuality) "（兼容资源）" else "") else "自动"
+        val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>selectionLimit) "（兼容资源）" else "") else "自动"
         return StreamInfo(url,key,quality,mimeType)
     }
     private fun playerRequest(id: String,payload: ByteArray,identity: PlaybackDeviceSession.Profile,host: String): Request {
