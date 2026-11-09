@@ -106,6 +106,7 @@ import java.util.concurrent.atomic.AtomicLong
             standbyRemote=null
             standbyByteCounterEnabled=null
             standbyEpisodeId=""
+            standbyActualApi=""
             standbyReady=false
             standbyFallbackEpisodeId=""
             standbyJob=null
@@ -235,7 +236,16 @@ import java.util.concurrent.atomic.AtomicLong
         controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
         syncMediaSession()
         val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
+        var resolvedPlaybackApi = playbackApiSelection()
         val attachPrepared: (RemoteVideo) -> Unit = { remote ->
+            activePlaybackApi = when {
+                promoteStandby -> standbyActualApi.ifBlank { playbackApiSelection() }
+                prefetched != null -> prefetchedPlaybackApi.ifBlank { playbackApiSelection() }
+                else -> resolvedPlaybackApi
+            }
+            debugLog("当前集实际播放线路=${activePlaybackApi}；全局优先线路=${playbackApiSelection()}")
+            if(promoteStandby) standbyActualApi = ""
+            if(prefetched != null) prefetchedPlaybackApi = ""
             video=remote; quality=remote.info.quality
             val p=player ?: run {
                 val renderers=androidx.media3.exoplayer.DefaultRenderersFactory(this).setEnableDecoderFallback(true)
@@ -403,7 +413,13 @@ import java.util.concurrent.atomic.AtomicLong
         } else {
             // 普通播放与两种预加载共用同一线路工厂，避免 Phoenix 设置被原生直连绕过。
             val source = playbackStreamSource(repository.http, allowFallback = !playbackRecoveryRouteLocked)
-            work({ prefetched ?: RemoteVideo(repository.http,source.stream(requestedId,maxQuality)).prepare() }, attachPrepared, { problem -> playerFailure(problem) })
+            work({
+                if(prefetched != null) prefetched else {
+                    val streamInfo = source.stream(requestedId,maxQuality)
+                    resolvedPlaybackApi = source.resolvedPlaybackApi()
+                    RemoteVideo(repository.http,streamInfo).prepare()
+                }
+            }, attachPrepared, { problem -> playerFailure(problem) })
         }
     }
 
