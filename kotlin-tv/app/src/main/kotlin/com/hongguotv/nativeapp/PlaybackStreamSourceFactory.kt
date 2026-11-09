@@ -28,7 +28,7 @@ internal object PlaybackRouteSelection {
     @Synchronized
     fun snapshot(context: Context): PlaybackRouteSnapshot {
         val prefs = context.getSharedPreferences(PLAYBACK_API_PREFS, Context.MODE_PRIVATE)
-        val api = prefs.getString(PLAYBACK_API_KEY, "native")
+        val api = prefs.getString(PLAYBACK_API_KEY, "phoenix")
             .let { if (it == "phoenix") "phoenix" else "native" }
         PlaybackApiDebugState.select(api)
         return PlaybackRouteSnapshot(api, prefs.getLong(PLAYBACK_API_REVISION_KEY, 0L))
@@ -48,7 +48,7 @@ internal object PlaybackRouteSelection {
     fun commitFallback(context: Context, expected: PlaybackRouteSnapshot, api: String): Boolean {
         val normalized = if (api == "phoenix") "phoenix" else "native"
         val prefs = context.getSharedPreferences(PLAYBACK_API_PREFS, Context.MODE_PRIVATE)
-        val currentApi = prefs.getString(PLAYBACK_API_KEY, "native")
+        val currentApi = prefs.getString(PLAYBACK_API_KEY, "phoenix")
             .let { if (it == "phoenix") "phoenix" else "native" }
         val currentRevision = prefs.getLong(PLAYBACK_API_REVISION_KEY, 0L)
         if (currentApi != expected.api || currentRevision != expected.revision) return false
@@ -68,7 +68,7 @@ internal fun Context.playbackApiLabel(value: String = playbackApiSelection()): S
     if (value == "phoenix") "线路首选 · Phoenix" else "线路首选 · Native"
 
 internal object PlaybackApiDebugState {
-    @Volatile var selected: String = "native"
+    @Volatile var selected: String = "phoenix"
         private set
     private val events = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val pendingFallbackNotices = java.util.concurrent.ConcurrentHashMap<String, String>()
