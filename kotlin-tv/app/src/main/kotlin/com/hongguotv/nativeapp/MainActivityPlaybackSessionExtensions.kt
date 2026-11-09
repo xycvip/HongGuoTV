@@ -68,7 +68,7 @@ internal fun MainActivity.cancelPrefetch(keepMediaSource: Boolean=false) {
         if(!keepMediaSource) preloadManager?.reset()
         prefetchScope?.cancel(); prefetchScope=null
         preparedNext.clear(); prefetchJob?.cancel(true); prefetchJob=null
-        closeTransport(prefetchHttp); prefetchHttp=null; prefetchedFor=""
+        closeTransport(prefetchHttp); prefetchHttp=null; prefetchedFor=""; prefetchedPlaybackApi=""
     }
 
 internal fun MainActivity.maybePrefetch(force: Boolean=false) {
@@ -89,11 +89,11 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
             clearStandbyPlayer("临近片尾备用首帧尚未就绪，切换单播放器预加载兜底")
             debugLog("无感连播：下一集未完成首帧预备，已启用单播放器兜底")
         }
-        if(!PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
+        if(!force && !PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
         val id=data.episodes[episodeIndex+1]; val quality=library.maxQuality; val key=playbackResourceKey(id,quality)
         if(preparedNext.isFresh(key) || prefetchJob?.isDone==false) return
         val now=android.os.SystemClock.elapsedRealtime()
-        if(readySince==0L || now-readySince<3000 || p.bufferedPosition-p.currentPosition<5000) return
+        if(!force && (readySince==0L || now-readySince<3000 || p.bufferedPosition-p.currentPosition<5000)) return
         if(prefetchAttempts>=3 || (prefetchAttempts>0 && now-prefetchAttemptAt<15_000) || connectivity.isActiveNetworkMetered || !networkAvailable()) return
         cancelPrefetch(); prefetchedFor=key; prefetchAttemptAt=now; prefetchAttempts++
         val ticket=preparedNext.begin(key)
@@ -117,14 +117,18 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
                 val prepared=scope.run {
                     RemoteVideo(http,source.stream(id,quality)).also { remote=it; it.warm() }
                 }
-                if(preparedNext.complete(ticket,key,prepared)) main.post {
+                if(preparedNext.complete(ticket,key,prepared)) {
+                    prefetchedPlaybackApi = source.resolvedPlaybackApi()
+                    main.post {
                     if(foreground && generation==playbackGeneration && player===p && prefetchedFor==key && preparedNext.isFresh(key)) {
                         preloadManager?.apply {
                             add(videoSource(prepared,id),episodeIndex+1)
                             setCurrentPlayingIndex(episodeIndex)
                             invalidate()
                         }
+                        debugLog("单播放器预加载完成：下一集实际线路=${prefetchedPlaybackApi}；全局优先线路=${playbackApiSelection()}")
                         android.util.Log.i("HongguoTV","Next episode prepared; Media3 sample preload started")
+                    }
                     }
                 }
             } catch(_: Exception) { remote?.close() }
