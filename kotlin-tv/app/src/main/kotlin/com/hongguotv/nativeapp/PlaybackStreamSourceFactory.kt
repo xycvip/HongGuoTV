@@ -151,10 +151,9 @@ internal class AutoFallbackStreamSource(
         try {
             return primary.stream(id, maxQuality)
         } catch (primaryError: IOException) {
-            if (isPlaybackRequestCancelled(primaryError) ||
-                primaryError is UnplayableVideoException ||
-                primaryError is UnsupportedVideoFormatException
-            ) throw primaryError
+            // These are source-specific results, not proof the other API is unusable.
+            // Let the other API try once; if it returns the same terminal result, surface it.
+            if (isPlaybackRequestCancelled(primaryError)) throw primaryError
             val backup = fallback()
             runCatching { onFallbackStart(backup.name) }
             try {
