@@ -40,6 +40,7 @@ internal fun MainActivity.clearStandbyPlayer(reason: String) {
     closeTransport(standbyHttp)
     standbyHttp = null
     standbyEpisodeId = ""
+    standbyActualApi = ""
     standbyReady = false
     // 先清空所有双播放器状态，再恢复普通缓冲提示；否则旧目标 ID 会让隐藏条件仍成立。
     updatePlaybackBufferingIndicator()
@@ -67,13 +68,15 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     val memoryInfo = android.app.ActivityManager.MemoryInfo()
     manager.getMemoryInfo(memoryInfo)
     val availableMemoryMb = memoryInfo.availMem / (1024L * 1024L)
-    if (availableMemoryMb < 300L) {
+    val lowRamDevice = manager.isLowRamDevice
+    val memoryClassMb = manager.memoryClass
+    if (availableMemoryMb < 300L || lowRamDevice || memoryClassMb <= 128) {
         standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
-        debugLog("无感连播：可用内存不足，当前可用=${availableMemoryMb}MB，低于300MB，回退单播放器预加载")
+        debugLog("无感连播：内存条件不满足，available=${availableMemoryMb}MB memoryClass=${memoryClassMb}MB lowRam=${lowRamDevice}，回退单播放器预加载")
         maybePrefetch(force = true)
         return
     }
-    debugLog("无感连播：内存检查通过，可用=${availableMemoryMb}MB，允许创建备用播放器（系统低内存标记=${manager.isLowRamDevice}）")
+    debugLog("无感连播：内存检查通过，available=${availableMemoryMb}MB memoryClass=${memoryClassMb}MB lowRam=${lowRamDevice}，允许创建备用播放器")
 
     // 接管成功后，备用资源已经转为当前播放器；此时不能再调用清理函数，
     // 否则会把当前播放器尚未完成的画面交接状态一并清零，造成缓冲转圈闪现。
@@ -86,6 +89,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
         standbyEpisodeId.isNotEmpty()
     if (hasOldStandbyResources) clearStandbyPlayer("准备新的下一集")
     standbyFallbackEpisodeId = ""
+    standbyActualApi = ""
     standbyEpisodeId = key
     // 从解析下一集地址开始就视为双播放器准备中，不等 ExoPlayer 创建完成。
     updatePlaybackBufferingIndicator()
@@ -109,7 +113,9 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     standbyJob = prefetchWorker.submit {
         var remote: RemoteVideo? = null
         try {
-            val prepared = RemoteVideo(http, source.stream(id, quality)).also {
+            val streamInfo = source.stream(id, quality)
+            val actualApi = source.resolvedPlaybackApi()
+            val prepared = RemoteVideo(http, streamInfo).also {
                 remote = it
                 it.prepare()
             }
@@ -134,6 +140,8 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     }
                     return@post
                 }
+                standbyActualApi = actualApi
+                debugLog("无感连播：下一集播放资源已取得，实际线路=${actualApi}；全局优先线路=${playbackApiSelection()}")
                 var secondaryPlayer: ExoPlayer? = null
                 try {
                     val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
