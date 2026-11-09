@@ -209,7 +209,9 @@ jobs:
             echo "::error::请在运行工作流时填写本次正式版更新说明"
             exit 1
           fi
-          RELEASE_NOTES="$RELEASE_NOTES_INPUT"
+          # GitHub workflow_dispatch 的 string 输入框是单行控件；若粘贴后换行被压平，
+          # 将连续的“ - ”列表分隔符恢复为 Markdown 项目符号换行。
+          RELEASE_NOTES="$(printf '%s' "$RELEASE_NOTES_INPUT" | python3 -c 'import re,sys; s=sys.stdin.read().replace("\\r\\n", "\\n").replace("\\r", "\\n"); s=re.sub(r"\\s+-\\s+", "\\n- ", s) if "\\n" not in s else s; sys.stdout.write(s.strip())')"
           printf '%s\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes-final.txt"
           echo "本次正式版更新说明："
           cat "$RUNNER_TEMP/release-notes-final.txt"
