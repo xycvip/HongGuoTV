@@ -70,13 +70,16 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
     val availableMemoryMb = memoryInfo.availMem / (1024L * 1024L)
     val lowRamDevice = manager.isLowRamDevice
     val memoryClassMb = manager.memoryClass
-    if (availableMemoryMb < 300L || lowRamDevice || memoryClassMb <= 128) {
+    // 用户设定的双播放器硬门槛是系统当前可用内存 >= 300MB。
+    // memoryClass 是应用堆内存等级，lowRam 是系统设备分类，二者都不等于当前可用物理内存；
+    // 仅记录为风险诊断，不单独阻止尝试创建备用播放器。实际创建/解码失败时由下方异常处理降级。
+    if (availableMemoryMb < 300L) {
         standbyFallbackEpisodeId = data.episodes.getOrNull(episodeIndex).orEmpty()
-        debugLog("无感连播：内存条件不满足，available=${availableMemoryMb}MB memoryClass=${memoryClassMb}MB lowRam=${lowRamDevice}，回退单播放器预加载")
+        debugLog("无感连播：可用内存不足，available=${availableMemoryMb}MB（要求≥300MB），memoryClass=${memoryClassMb}MB lowRam=${lowRamDevice}，回退单播放器预加载")
         maybePrefetch(force = true)
         return
     }
-    debugLog("无感连播：内存检查通过，available=${availableMemoryMb}MB memoryClass=${memoryClassMb}MB lowRam=${lowRamDevice}，允许创建备用播放器")
+    debugLog("无感连播：可用内存检查通过，available=${availableMemoryMb}MB（要求≥300MB），memoryClass=${memoryClassMb}MB lowRam=${lowRamDevice}（仅作风险记录），尝试创建备用播放器")
 
     // 接管成功后，备用资源已经转为当前播放器；此时不能再调用清理函数，
     // 否则会把当前播放器尚未完成的画面交接状态一并清零，造成缓冲转圈闪现。
