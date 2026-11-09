@@ -65,7 +65,7 @@ internal object PhoenixMediaResolver {
             try { decode64(seedText) } catch (_: Exception) { throw IOException("Phoenix key_seed 格式异常") }
         } else null
 
-        data class Candidate(val quality: Int, val codec: String, val url: String, val key: ByteArray?)
+        data class Candidate(val quality: Int, val codec: String, val url: String, val key: ByteArray?, val width: Int, val height: Int)
         val candidates = mutableListOf<Candidate>()
         var encryptedSkipped = 0
         var unsupportedSkipped = 0
@@ -117,7 +117,7 @@ internal object PhoenixMediaResolver {
                     report("Phoenix资源#$name：拒绝URL，原因=当前链路不支持容器格式(${path.substringAfterLast('.', "unknown")})")
                     continue
                 }
-                candidates += Candidate(height, codec, url, key)
+                candidates += Candidate(height, codec, url, key, reportedWidth, reportedHeight)
                 val safeHost = runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
                 report("Phoenix资源#$name：URL通过初筛，host=$safeHost，codec=$codec，height=${height.takeIf { it > 0 } ?: "unknown"}")
             }
@@ -130,7 +130,11 @@ internal object PhoenixMediaResolver {
         }
         val h264 = candidates.filter { it.codec in setOf("h264", "avc1") }
         val pool = if (h264.isNotEmpty()) h264 else candidates
-        val selected = pool.filter { it.quality in 1..maxQuality }.maxByOrNull { it.quality }
+        val portrait = candidates.firstNotNullOfOrNull { candidate ->
+            if (candidate.width > 0 && candidate.height > 0) candidate.height > candidate.width else null
+        }
+        val selectionLimit = PlaybackQualityMode.limit(maxQuality, portrait)
+        val selected = pool.filter { it.quality in 1..selectionLimit }.maxByOrNull { it.quality }
             ?: pool.filter { it.quality > 0 }.minByOrNull { it.quality }
             ?: pool.first()
         val quality = if (selected.quality > 0) "${selected.quality}P" else "自动"
