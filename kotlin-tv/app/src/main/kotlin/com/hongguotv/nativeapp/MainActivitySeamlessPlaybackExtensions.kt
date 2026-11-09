@@ -132,6 +132,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                     }
                     if (standbyEpisodeId == key) {
                         standbyEpisodeId = ""
+                        standbyActualApi = ""
                         standbyReady = false
                         updatePlaybackBufferingIndicator()
                         standbyPrepareStartedAt = 0L
@@ -275,6 +276,7 @@ internal fun MainActivity.prepareStandbyEpisode(index: Int) {
                 }
                 if (standbyEpisodeId == key) {
                     standbyEpisodeId = ""
+                    standbyActualApi = ""
                     standbyReady = false
                     updatePlaybackBufferingIndicator()
                     standbyPrepareStartedAt = 0L
