@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "ff49e5c68eabecfb19b23f2be2844bb93c3d3960",
-  "versionCode": 54,
-  "versionName": "0.0.54",
+  "sourceCommit": "b213246f223eff941a9f150e8e5b757d58c047a0",
+  "versionCode": 55,
+  "versionName": "0.0.55",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.54",
+  "tag": "hongguotv-bate-v0.0.55",
   "apk": {
-    "name": "HongguoTV-0.0.54.apk",
+    "name": "HongguoTV-0.0.55.apk",
     "size": 1991429,
-    "sha256": "a71f15d4d1b87a19fa2d056dcca6f9d9191a241595313d1cc788f6ef85f3bfe1",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.54/HongguoTV-0.0.54.apk"
+    "sha256": "72a637d69c811021c5539565dc3fcfff403e09f1a7b4ff3775827d7403afdcf0",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.55/HongguoTV-0.0.55.apk"
   },
-  "notes": "【其他功能与问题修复】\n- 修复 P/N 自动切换与无感连播逻辑"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
