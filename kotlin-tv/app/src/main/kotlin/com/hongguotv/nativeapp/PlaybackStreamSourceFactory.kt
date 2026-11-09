@@ -8,6 +8,8 @@ import com.hongguotv.core.PhoenixPlaybackDeviceSession
 import com.hongguotv.core.PhoenixRequestSigner
 import com.hongguotv.core.StreamSource
 import com.hongguotv.core.StreamInfo
+import com.hongguotv.core.UnplayableVideoException
+import com.hongguotv.core.UnsupportedVideoFormatException
 import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 import java.io.IOException
