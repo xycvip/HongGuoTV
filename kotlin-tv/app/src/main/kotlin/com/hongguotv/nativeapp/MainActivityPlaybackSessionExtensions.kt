@@ -118,8 +118,9 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
                 val prepared=scope.run {
                     RemoteVideo(http,source.stream(id,quality)).also { remote=it; it.warm() }
                 }
+                val actualApi = source.resolvedPlaybackApi()
+                prefetchedPlaybackApi = actualApi
                 if(preparedNext.complete(ticket,key,prepared)) {
-                    prefetchedPlaybackApi = source.resolvedPlaybackApi()
                     main.post {
                     if(foreground && generation==playbackGeneration && player===p && prefetchedFor==key && preparedNext.isFresh(key)) {
                         preloadManager?.apply {
@@ -131,6 +132,8 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
                         android.util.Log.i("HongguoTV","Next episode prepared; Media3 sample preload started")
                     }
                     }
+                } else if(prefetchedFor==key) {
+                    prefetchedPlaybackApi = ""
                 }
             } catch(_: Exception) { remote?.close() }
         }
