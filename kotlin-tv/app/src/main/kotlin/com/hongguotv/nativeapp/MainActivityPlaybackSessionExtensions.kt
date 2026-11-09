@@ -195,8 +195,8 @@ internal fun MainActivity.hasValidatedInternet(): Boolean {
 /** 播放地址取得后的统一恢复：当前线路重建重试一次，仍失败则切换另一线路。 */
 private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean {
     if (screen != "player" || detail == null || startupAutoPlaybackActive) return false
-    // Known codec/container incompatibility is not an interface outage.
-    // Decoder/player failures may retry the same route once, but must never flip N/P.
+    // The source factory has already tried the alternate API before these terminal
+    // source-format results reach playerFailure. Do not start a second route-switch cycle.
     if (problem is UnplayableVideoException || problem is UnsupportedVideoFormatException) return false
     val routeSwitchEligible = problem is java.io.IOException
     val recoverable = problem is PlaybackException || routeSwitchEligible
