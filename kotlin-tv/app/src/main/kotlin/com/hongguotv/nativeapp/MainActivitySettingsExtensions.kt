@@ -334,7 +334,7 @@ import java.util.concurrent.atomic.AtomicLong
         }
 
         lateinit var interfaceStatusButton:TextView
-        interfaceStatusButton=setting(playback,0,"接口状态详情") { showInterfaceCheck(interfaceStatusButton) }
+        interfaceStatusButton=setting(playback,0,"接口状态") { showInterfaceCheck(interfaceStatusButton) }
 
         danmakuButton=setting(danmaku,1,"官方弹幕  ·  ${if(library.danmaku) "开启" else "关闭"}") {
             library.danmaku=!library.danmaku
