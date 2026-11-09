@@ -180,9 +180,6 @@ internal fun Context.playbackStreamSource(
     notifyOnFallback: Boolean = true,
     allowFallback: Boolean = true
 ): StreamSource {
-    val primaryApi = playbackApiSelection()
-    val fallbackApi = if (primaryApi == "phoenix") "native" else "phoenix"
-
     fun createSource(api: String): StreamSource {
         return if (api == "phoenix") {
             PlaybackApiDebugState.record(api, "选择 Phoenix 播放接口")
