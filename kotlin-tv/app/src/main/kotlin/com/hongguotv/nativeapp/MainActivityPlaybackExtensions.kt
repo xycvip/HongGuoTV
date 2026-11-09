@@ -65,6 +65,8 @@ import java.util.concurrent.atomic.AtomicLong
         library.setWatched(data.series.id,false)
         val isStartupPreview=bootAutoPlaybackPending && autoplay && !recovering
         val prefetched=if(promoteStandby) standbyRemote else if(position==0L && !recovering && !forceRebuild) preparedNext.take(standbyKey) else null
+        val promotedStandbyApi=if(promoteStandby) standbyActualApi else ""
+        val claimedPrefetchedApi=if(prefetched!=null && !promoteStandby) prefetchedPlaybackApi else ""
         if(prefetched==null && !promoteStandby && !recovering) {
             PlaybackApiDebugState.clearFallbackNotice(data.episodes[selectedIndex],library.maxQuality)
         }
@@ -239,8 +241,8 @@ import java.util.concurrent.atomic.AtomicLong
         var resolvedPlaybackApi = playbackApiSelection()
         val attachPrepared: (RemoteVideo) -> Unit = { remote ->
             activePlaybackApi = when {
-                promoteStandby -> standbyActualApi.ifBlank { playbackApiSelection() }
-                prefetched != null -> prefetchedPlaybackApi.ifBlank { playbackApiSelection() }
+                promoteStandby -> promotedStandbyApi.ifBlank { playbackApiSelection() }
+                prefetched != null -> claimedPrefetchedApi.ifBlank { playbackApiSelection() }
                 else -> resolvedPlaybackApi
             }
             debugLog("当前集实际播放线路=${activePlaybackApi}；全局优先线路=${playbackApiSelection()}")
