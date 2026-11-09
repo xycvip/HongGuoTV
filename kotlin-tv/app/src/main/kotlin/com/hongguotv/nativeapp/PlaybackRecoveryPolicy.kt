@@ -14,7 +14,7 @@ internal class PlaybackRecoveryPolicy {
     private var routeSwitchUsed = false
 
     @Synchronized
-    fun next(key: String): PlaybackRecoveryStep {
+    fun next(key: String, allowRouteSwitch: Boolean = true): PlaybackRecoveryStep {
         if (episodeKey != key) {
             episodeKey = key
             currentRouteRetryUsed = false
@@ -24,7 +24,7 @@ internal class PlaybackRecoveryPolicy {
             currentRouteRetryUsed = true
             return PlaybackRecoveryStep.RETRY_CURRENT_ROUTE
         }
-        if (!routeSwitchUsed) {
+        if (!routeSwitchUsed && allowRouteSwitch) {
             routeSwitchUsed = true
             return PlaybackRecoveryStep.SWITCH_ROUTE
         }
