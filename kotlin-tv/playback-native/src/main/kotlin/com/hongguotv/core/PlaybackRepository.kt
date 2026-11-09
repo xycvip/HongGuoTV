@@ -206,7 +206,11 @@ class PlaybackRepository(
             }.sortedByDescending { it.first }.toList()
         val playable=rows.filter { it.second !in setOf("bytevc2","bvc2") }
         val h264=playable.filter { it.second=="h264" || it.second=="avc1" }
-        val pool=if(h264.isNotEmpty()) h264 else playable
+        // 高清优先按分辨率排序，编码仅用于同清晰度时的优先级；兼容优先继续优先 H.264。
+        val pool=if(maxQuality==PlaybackQualityMode.AUTO_HIGH) {
+            playable.sortedWith(compareByDescending<Triple<Int,String,JSONObject>> { it.first }
+                .thenBy { if(it.second=="h264" || it.second=="avc1") 0 else 1 })
+        } else if(h264.isNotEmpty()) h264 else playable
         val portrait=rows.firstNotNullOfOrNull { row ->
             val meta=row.third.optJSONObject("video_meta") ?: JSONObject()
             val width=meta.str("vwidth").ifEmpty { row.third.str("vwidth") }.toIntOrNull() ?: 0
