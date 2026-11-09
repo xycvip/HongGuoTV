@@ -190,8 +190,11 @@ internal fun MainActivity.hasValidatedInternet(): Boolean {
 /** 播放地址取得后的统一恢复：当前线路重建重试一次，仍失败则切换另一线路。 */
 private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean {
     if (screen != "player" || detail == null || startupAutoPlaybackActive) return false
-    val recoverable = problem is PlaybackException || problem is java.io.IOException ||
-        problem is UnplayableVideoException || problem is UnsupportedVideoFormatException
+    // Known codec/container incompatibility is not an interface outage.
+    // Decoder/player failures may retry the same route once, but must never flip N/P.
+    if (problem is UnplayableVideoException || problem is UnsupportedVideoFormatException) return false
+    val routeSwitchEligible = problem is java.io.IOException
+    val recoverable = problem is PlaybackException || routeSwitchEligible
     if (!recoverable) return false
     if (Thread.currentThread().isInterrupted) return false
     val message = problem.message.orEmpty().lowercase(java.util.Locale.ROOT)
@@ -199,7 +202,7 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
     val data = detail ?: return false
     val episodeId = data.episodes.getOrNull(episodeIndex) ?: return false
     val key = "${data.series.id}:$episodeId:${library.maxQuality}"
-    val step = playbackPipelineState.playbackRecoveryPolicy.next(key)
+    val step = playbackPipelineState.playbackRecoveryPolicy.next(key, allowRouteSwitch = routeSwitchEligible)
     val position = currentPosition().coerceAtLeast(0L)
     val autoplay = requestedAutoplay && !sleepStopped
     when (step) {
@@ -212,8 +215,7 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
         PlaybackRecoveryStep.SWITCH_ROUTE -> {
             val from = playbackApiSelection()
             val to = if (from == "phoenix") "native" else "phoenix"
-            getSharedPreferences("playback-api-v1", android.content.Context.MODE_PRIVATE).edit().putString("source", to).apply()
-            PlaybackApiDebugState.select(to)
+            PlaybackRouteSelection.set(this, to)
             playbackPipelineState.playbackRecoveryPreviousRoute = from
             playbackPipelineState.playbackRecoveryRouteSwitched = true
             playbackRecoveryRouteLocked = true
@@ -226,13 +228,13 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
         PlaybackRecoveryStep.EXHAUSTED -> {
             val previousRoute = playbackPipelineState.playbackRecoveryPreviousRoute
             if (playbackPipelineState.playbackRecoveryRouteSwitched && previousRoute.isNotEmpty()) {
-                getSharedPreferences("playback-api-v1", android.content.Context.MODE_PRIVATE).edit().putString("source", previousRoute).apply()
-                PlaybackApiDebugState.select(previousRoute)
+                PlaybackRouteSelection.set(this, previousRoute)
                 playbackPipelineState.playbackRecoveryPreviousRoute = ""
                 playbackPipelineState.playbackRecoveryRouteSwitched = false
                 debugLog("播放故障恢复：备用线路也失败，已恢复原优先线路设置=$previousRoute")
             }
-            debugLog("播放故障恢复：本集同线路重试和跨线路切换额度已用完，停止自动切换")
+            playbackRecoveryRouteLocked = false
+            debugLog("播放故障恢复：本集同线路重试和符合条件的接口切换额度已用完，停止自动切换")
             return false
         }
     }
