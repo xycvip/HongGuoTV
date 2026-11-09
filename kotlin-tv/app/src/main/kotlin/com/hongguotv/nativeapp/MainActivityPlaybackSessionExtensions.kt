@@ -41,7 +41,7 @@ internal fun MainActivity.closeActiveVideo() {
         videoInfoView?.let { root.removeView(it) }; videoInfoView=null
         networkSpeedView?.let { root.removeView(it) }; networkSpeedView=null
         activeVideoFormat=null; activeDecoderName=""
-        closeActiveVideo(); playerView?.player=null; playerView=null; player?.release(); player=null; playbackReady=false; transportPlay=null; sleepButton=null
+        closeActiveVideo(); playerView?.player=null; playerView=null; player?.release(); player=null; playbackReady=false; activePlaybackApi=""; transportPlay=null; sleepButton=null
         stopDanmaku(); danmakuView=null
         closeTransport(playbackHttp); playbackHttp=null
         phonePlayerOriginalWindowBrightness?.let { originalBrightness ->
@@ -69,6 +69,7 @@ internal fun MainActivity.cancelPrefetch(keepMediaSource: Boolean=false) {
         prefetchScope?.cancel(); prefetchScope=null
         preparedNext.clear(); prefetchJob?.cancel(true); prefetchJob=null
         closeTransport(prefetchHttp); prefetchHttp=null; prefetchedFor=""
+        if(!keepMediaSource) prefetchedPlaybackApi=""
     }
 
 internal fun MainActivity.maybePrefetch(force: Boolean=false) {
@@ -89,11 +90,11 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
             clearStandbyPlayer("临近片尾备用首帧尚未就绪，切换单播放器预加载兜底")
             debugLog("无感连播：下一集未完成首帧预备，已启用单播放器兜底")
         }
-        if(!PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
+        if(!force && !PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
         val id=data.episodes[episodeIndex+1]; val quality=library.maxQuality; val key=playbackResourceKey(id,quality)
         if(preparedNext.isFresh(key) || prefetchJob?.isDone==false) return
         val now=android.os.SystemClock.elapsedRealtime()
-        if(readySince==0L || now-readySince<3000 || p.bufferedPosition-p.currentPosition<5000) return
+        if(!force && (readySince==0L || now-readySince<3000 || p.bufferedPosition-p.currentPosition<5000)) return
         if(prefetchAttempts>=3 || (prefetchAttempts>0 && now-prefetchAttemptAt<15_000) || connectivity.isActiveNetworkMetered || !networkAvailable()) return
         cancelPrefetch(); prefetchedFor=key; prefetchAttemptAt=now; prefetchAttempts++
         val ticket=preparedNext.begin(key)
@@ -117,15 +118,22 @@ internal fun MainActivity.maybePrefetch(force: Boolean=false) {
                 val prepared=scope.run {
                     RemoteVideo(http,source.stream(id,quality)).also { remote=it; it.warm() }
                 }
-                if(preparedNext.complete(ticket,key,prepared)) main.post {
+                val actualApi = source.resolvedPlaybackApi()
+                prefetchedPlaybackApi = actualApi
+                if(preparedNext.complete(ticket,key,prepared)) {
+                    main.post {
                     if(foreground && generation==playbackGeneration && player===p && prefetchedFor==key && preparedNext.isFresh(key)) {
                         preloadManager?.apply {
                             add(videoSource(prepared,id),episodeIndex+1)
                             setCurrentPlayingIndex(episodeIndex)
                             invalidate()
                         }
+                        debugLog("单播放器预加载完成：下一集实际线路=${prefetchedPlaybackApi}；全局优先线路=${playbackApiSelection()}")
                         android.util.Log.i("HongguoTV","Next episode prepared; Media3 sample preload started")
                     }
+                    }
+                } else if(prefetchedFor==key) {
+                    prefetchedPlaybackApi = ""
                 }
             } catch(_: Exception) { remote?.close() }
         }
@@ -190,8 +198,11 @@ internal fun MainActivity.hasValidatedInternet(): Boolean {
 /** 播放地址取得后的统一恢复：当前线路重建重试一次，仍失败则切换另一线路。 */
 private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean {
     if (screen != "player" || detail == null || startupAutoPlaybackActive) return false
-    val recoverable = problem is PlaybackException || problem is java.io.IOException ||
-        problem is UnplayableVideoException || problem is UnsupportedVideoFormatException
+    // IOException from stream-address acquisition (including no-compatible-resource or
+    // unsupported-container responses) may be solved by the other API. Media3 PlaybackException
+    // is a player/decoder failure and is deliberately limited to same-route reconstruction.
+    val routeSwitchEligible = problem is PlaybackApiRequestException
+    val recoverable = problem is PlaybackException || problem is java.io.IOException
     if (!recoverable) return false
     if (Thread.currentThread().isInterrupted) return false
     val message = problem.message.orEmpty().lowercase(java.util.Locale.ROOT)
@@ -199,7 +210,7 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
     val data = detail ?: return false
     val episodeId = data.episodes.getOrNull(episodeIndex) ?: return false
     val key = "${data.series.id}:$episodeId:${library.maxQuality}"
-    val step = playbackPipelineState.playbackRecoveryPolicy.next(key)
+    val step = playbackPipelineState.playbackRecoveryPolicy.next(key, allowRouteSwitch = routeSwitchEligible)
     val position = currentPosition().coerceAtLeast(0L)
     val autoplay = requestedAutoplay && !sleepStopped
     when (step) {
@@ -212,8 +223,7 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
         PlaybackRecoveryStep.SWITCH_ROUTE -> {
             val from = playbackApiSelection()
             val to = if (from == "phoenix") "native" else "phoenix"
-            getSharedPreferences("playback-api-v1", android.content.Context.MODE_PRIVATE).edit().putString("source", to).apply()
-            PlaybackApiDebugState.select(to)
+            PlaybackRouteSelection.set(this, to)
             playbackPipelineState.playbackRecoveryPreviousRoute = from
             playbackPipelineState.playbackRecoveryRouteSwitched = true
             playbackRecoveryRouteLocked = true
@@ -226,13 +236,19 @@ private fun MainActivity.tryRecoverPlaybackFailure(problem: Throwable): Boolean 
         PlaybackRecoveryStep.EXHAUSTED -> {
             val previousRoute = playbackPipelineState.playbackRecoveryPreviousRoute
             if (playbackPipelineState.playbackRecoveryRouteSwitched && previousRoute.isNotEmpty()) {
-                getSharedPreferences("playback-api-v1", android.content.Context.MODE_PRIVATE).edit().putString("source", previousRoute).apply()
-                PlaybackApiDebugState.select(previousRoute)
+                if (routeSwitchEligible) {
+                    PlaybackRouteSelection.set(this, previousRoute)
+                    debugLog("播放故障恢复：备用线路取流也失败，已恢复原优先线路设置=$previousRoute")
+                } else {
+                    // The alternate API supplied the stream; a decoder/player failure must not
+                    // silently reset the global preference and cause N→P on every next episode.
+                    debugLog("播放故障恢复：备用线路已取得资源，但播放器/解码失败；保留当前优先线路=${playbackApiSelection()}")
+                }
                 playbackPipelineState.playbackRecoveryPreviousRoute = ""
                 playbackPipelineState.playbackRecoveryRouteSwitched = false
-                debugLog("播放故障恢复：备用线路也失败，已恢复原优先线路设置=$previousRoute")
             }
-            debugLog("播放故障恢复：本集同线路重试和跨线路切换额度已用完，停止自动切换")
+            playbackRecoveryRouteLocked = false
+            debugLog("播放故障恢复：本集同线路重试和符合条件的接口切换额度已用完，停止自动切换")
             return false
         }
     }
@@ -253,10 +269,11 @@ internal fun MainActivity.playerFailure(problem: Throwable) {
             return
         }
         playError=true; player?.pause(); progressBar.visibility=View.GONE; hud.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.VISIBLE; panel=true
-        val incompatible=problem is UnplayableVideoException
-        val unsupportedFormat=problem is UnsupportedVideoFormatException
-        val decoding=problem is PlaybackException && problem.errorCode in 3000..4999
-        val retryable=!incompatible && !unsupportedFormat && !decoding && (if(problem is PlaybackException) problem.errorCode in 2000..2999 || problem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else problem is java.io.IOException)
+        val reportedProblem = (problem as? PlaybackApiRequestException)?.cause ?: problem
+        val incompatible=reportedProblem is UnplayableVideoException
+        val unsupportedFormat=reportedProblem is UnsupportedVideoFormatException
+        val decoding=reportedProblem is PlaybackException && reportedProblem.errorCode in 3000..4999
+        val retryable=!incompatible && !unsupportedFormat && !decoding && (if(reportedProblem is PlaybackException) reportedProblem.errorCode in 2000..2999 || reportedProblem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else reportedProblem is java.io.IOException)
         playbackText.text=when {
             unsupportedFormat -> "当前片源格式暂不支持，现有播放链路需要 MP4 资源。"
             incompatible -> "本集片源暂不兼容：平台未提供电视可解码的清晰度，可播放下一集。"

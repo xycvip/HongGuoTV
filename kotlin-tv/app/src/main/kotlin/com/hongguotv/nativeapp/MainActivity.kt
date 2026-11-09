@@ -117,6 +117,7 @@ class MainActivity: Activity() {
     internal var standbyRemote by playbackPipelineState::standbyRemote
     internal var standbyHttp by playbackPipelineState::standbyHttp
     internal var standbyEpisodeId by playbackPipelineState::standbyEpisodeId
+    internal var standbyActualApi by playbackPipelineState::standbyActualApi
     internal var standbyReady by playbackPipelineState::standbyReady
     internal var seamlessHandoffInProgress by playbackPipelineState::seamlessHandoffInProgress
     internal var standbyFallbackEpisodeId by playbackPipelineState::standbyFallbackEpisodeId
@@ -134,6 +135,8 @@ class MainActivity: Activity() {
     internal var prefetchJob by playbackPipelineState::prefetchJob
     internal var prefetchScope by playbackPipelineState::prefetchScope
     internal var prefetchedFor by playbackPipelineState::prefetchedFor
+    internal var prefetchedPlaybackApi by playbackPipelineState::prefetchedPlaybackApi
+    internal var activePlaybackApi by playbackPipelineState::activePlaybackApi
     internal var readySince by playbackPipelineState::readySince
     internal lateinit var artwork: ArtworkLoader
     internal var deferredWork by asyncWorkState::deferredWork
