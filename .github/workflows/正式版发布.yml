@@ -9,6 +9,10 @@ on:
         required: true
         type: boolean
         default: false
+      release_notes:
+        description: 本次正式版更新说明（支持多行，将原样用于各发布页面）
+        required: true
+        type: string
       skip_file_check:
         description: 跳过APK文件存在性检查（签名校验始终执行）
         required: true
@@ -199,100 +203,14 @@ jobs:
           APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
           SOURCE_COMMIT="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
 
-          # 自动整理本次正式版相对上一正式版的功能变化。
-          # 比较基准不可用或比较失败时，使用约定兜底文案，不阻断发布。
-          RELEASE_NOTES="优化使用体验"
-          LATEST_URL="https://raw.githubusercontent.com/xycvip/AppDownload/main/hongguoTV/latest.json"
-          if curl --fail --silent --show-error --location "$LATEST_URL" -o "$RUNNER_TEMP/previous-official.json"; then
-            PREVIOUS_COMMIT="$(jq -r '.sourceCommit // empty' "$RUNNER_TEMP/previous-official.json" 2>/dev/null || true)"
-            if [ -n "$PREVIOUS_COMMIT" ] && git -C "$GITHUB_WORKSPACE" cat-file -e "$PREVIOUS_COMMIT^{commit}" 2>/dev/null; then
-              if git -C "$GITHUB_WORKSPACE" diff --quiet "$PREVIOUS_COMMIT" "$SOURCE_COMMIT" --; then
-                RELEASE_NOTES="优化使用体验"
-              else
-                if git -C "$GITHUB_WORKSPACE" log --no-merges --format='%s' "$PREVIOUS_COMMIT..$SOURCE_COMMIT" > "$RUNNER_TEMP/release-commit-subjects.txt"; then
-                  python3 - "$RUNNER_TEMP/release-commit-subjects.txt" "$RUNNER_TEMP/release-notes.txt" <<'PY'
-          import re
-          import sys
-          from collections import OrderedDict
-
-          source, target = sys.argv[1:3]
-          groups = OrderedDict()
-          seen = set()
-
-          # 只把面向用户的变化写进发布说明；发布、同步和维护记录一律过滤。
-          internal = re.compile(
-              r"(更新正式版.*下载信息|更新.*下载信息|版本号|latest\.json|README|"
-              r"工作流|workflow|同步.*仓库|发布.*(测试|正式)版|测试版|测试包|"
-              r"测试构建|测试发布|测试版本|bate|beta|test-version|test-update|"
-              r"合并分支|Merge pull request|更新依赖锁文件|格式整理|代码格式|"
-              r"重命名变量|拆分.*文件|模块化拆分|补充.*说明文档)",
-              re.I,
-          )
-
-          def clean(subject):
-              subject = subject.strip()
-              subject = re.sub(r"^(feat|feature|fix|bugfix|ui|perf|refactor|docs?|test|chore|style)(\([^)]*\))?\s*[:：]\s*", "", subject, flags=re.I)
-              subject = re.sub(r"^(新增功能|功能新增|修复问题|界面调整|性能优化)\s*[:：]\s*", "", subject)
-              subject = subject.strip(" -：:，,。")
-              if not subject:
-                  return ""
-              subject = subject[0].upper() + subject[1:]
-              if subject[-1] not in "。！？":
-                  subject += "。"
-              return subject
-
-          def category(raw, subject):
-              s = (raw + " " + subject).lower()
-              if re.search(r"下载|更新源|镜像|代理|安装包|下载地址|回退|备用线路", s):
-                  return "下载体验优化"
-              if re.search(r"排行榜|榜单|综合榜|热播榜", s):
-                  return "排行榜优化"
-              if re.search(r"焦点|遥控|导航|按键|点击|交互", s):
-                  return "操作体验优化"
-              if re.search(r"播放|播放器|解码|缓冲|卡顿|清晰度|音频|视频", s):
-                  return "播放体验优化"
-              if re.search(r"修复|异常|错误|失败|崩溃|兼容", s):
-                  return "问题修复"
-              if re.match(r"^(feat|feature)", raw, re.I):
-                  return "功能升级"
-              if re.match(r"^(ui|perf)", raw, re.I):
-                  return "界面与体验优化"
-              return "体验优化"
-
-          with open(source, encoding="utf-8") as f:
-              for raw in f:
-                  raw = raw.strip()
-                  if not raw or raw in seen or internal.search(raw):
-                      continue
-                  seen.add(raw)
-                  subject = clean(raw)
-                  if not subject:
-                      continue
-                  group = category(raw, subject)
-                  groups.setdefault(group, [])
-                  if subject not in groups[group]:
-                      groups[group].append(subject)
-
-          # 按主题归纳，同类修改合并成一条，避免把提交记录原样堆给用户。
-          output = []
-          for group, items in groups.items():
-              if len(items) == 1:
-                  detail = items[0]
-              else:
-                  detail = "；".join(x.rstrip("。！？") for x in items) + "。"
-              output.append(f"- **{group}**：{detail}")
-
-          with open(target, "w", encoding="utf-8") as f:
-              f.write("\n".join(output) + ("\n" if output else ""))
-          PY
-                  if [ -s "$RUNNER_TEMP/release-notes.txt" ]; then
-                    RELEASE_NOTES="$(cat "$RUNNER_TEMP/release-notes.txt")"
-                  fi
-                fi
-              fi
-            fi
+          # 正式版发布说明由手动触发工作流时填写，不再自动分析提交记录。
+          RELEASE_NOTES_INPUT="${{ inputs.release_notes }}"
+          if [ -z "$(printf '%s' "$RELEASE_NOTES_INPUT" | tr -d '[:space:]')" ]; then
+            echo "::error::请在运行工作流时填写本次正式版更新说明"
+            exit 1
           fi
-          printf '%s\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes-final.txt"
+          RELEASE_NOTES="$RELEASE_NOTES_INPUT"
+          printf '%s\\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes-final.txt"
           echo "本次正式版更新说明："
           cat "$RUNNER_TEMP/release-notes-final.txt"
 
