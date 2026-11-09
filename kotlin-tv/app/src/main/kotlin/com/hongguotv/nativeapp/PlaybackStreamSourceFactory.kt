@@ -20,6 +20,10 @@ private const val PLAYBACK_API_REVISION_KEY = "revision"
 
 internal data class PlaybackRouteSnapshot(val api: String, val revision: Long)
 
+/** Marks failures thrown while obtaining a stream URL, distinct from later media/decode IO. */
+internal class PlaybackApiRequestException(cause: IOException) :
+    IOException(cause.message ?: "播放接口请求失败", cause)
+
 internal object PlaybackRouteSelection {
     @Synchronized
     fun snapshot(context: Context): PlaybackRouteSnapshot {
