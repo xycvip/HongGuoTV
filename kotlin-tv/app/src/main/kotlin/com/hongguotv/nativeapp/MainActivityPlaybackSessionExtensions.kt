@@ -68,7 +68,8 @@ internal fun MainActivity.cancelPrefetch(keepMediaSource: Boolean=false) {
         if(!keepMediaSource) preloadManager?.reset()
         prefetchScope?.cancel(); prefetchScope=null
         preparedNext.clear(); prefetchJob?.cancel(true); prefetchJob=null
-        closeTransport(prefetchHttp); prefetchHttp=null; prefetchedFor=""; prefetchedPlaybackApi=""
+        closeTransport(prefetchHttp); prefetchHttp=null; prefetchedFor=""
+        if(!keepMediaSource) prefetchedPlaybackApi=""
     }
 
 internal fun MainActivity.maybePrefetch(force: Boolean=false) {
