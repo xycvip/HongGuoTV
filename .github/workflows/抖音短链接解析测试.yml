@@ -214,7 +214,7 @@ jobs:
                   # 第二阶段：用手机端 UA 测试抖音分享页 SSR 数据
                   # 桌面页可能只有 CSR 空壳；重点检查 iesdouyin.com 的 _ROUTER_DATA。
                   mobile_tests = []
-                  id_match = re.search(r"/(?:video|note|share/video|aweme/detail)/(\\d+)", page.url)
+                  id_match = re.search(r"/(?:video|note|share/video|aweme/detail)/(\d+)", page.url)
                   aweme_id = id_match.group(1) if id_match else ""
                   if aweme_id:
                       mobile_targets = [
@@ -292,7 +292,7 @@ jobs:
                                                       for j, ch in enumerate(snippet[start:], start):
                                                           if quoted:
                                                               if escaped: escaped = False
-                                                              elif ch == "\\\\": escaped = True
+                                                              elif ch == "\\": escaped = True
                                                               elif ch == '"': quoted = False
                                                           else:
                                                               if ch == '"': quoted = True
