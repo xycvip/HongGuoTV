@@ -58,6 +58,7 @@ jobs:
               "twitter_title": "",
               "jsonld_names": [],
               "candidate_title": "",
+              "body_title_candidates": [],
               "body_excerpt": "",
               "error": ""
           }
@@ -98,7 +99,11 @@ jobs:
                   }""")
                   report["og_title"] = clean(data.get("og"))
                   report["twitter_title"] = clean(data.get("twitter"))
-                  report["body_excerpt"] = re.sub(r"\s+", " ", data.get("body", ""))[:1800]
+                  body_text = data.get("body", "")
+                  report["body_excerpt"] = re.sub(r"\s+", " ", body_text)[:1800]
+                  ignored = ("抖音", "记录美好生活", "短视频", "登录", "下载", "评论", "分享", "关注", "打开", "复制")
+                  body_lines = [clean(x) for x in body_text.splitlines()]
+                  report["body_title_candidates"] = [x for x in body_lines if 3 <= len(x) <= 100 and not any(k in x for k in ignored)][:30]
 
                   names = []
                   for raw in data.get("jsonld", []):
@@ -114,11 +119,11 @@ jobs:
 
                   candidates = [
                       report["og_title"], report["twitter_title"],
-                      *report["jsonld_names"], report["page_title"]
+                      *report["jsonld_names"], *report["body_title_candidates"], report["page_title"]
                   ]
-                  junk = ("抖音", "记录美好生活", "短视频", "登录", "下载")
+                  junk = ("记录美好生活", "短视频", "登录", "下载")
                   for candidate in candidates:
-                      if candidate and not all(x in candidate for x in junk):
+                      if candidate and not any(x in candidate for x in junk):
                           report["candidate_title"] = candidate
                           break
                   browser.close()
