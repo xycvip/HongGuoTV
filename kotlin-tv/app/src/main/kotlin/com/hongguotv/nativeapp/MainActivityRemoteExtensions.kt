@@ -174,11 +174,20 @@ import java.util.concurrent.atomic.AtomicLong
         when(screen) {
             "player" -> if(player?.playbackState==Player.STATE_ENDED) returnToDetail() else if(hud.visibility==View.VISIBLE && !playError) hidePlaybackOverlay() else returnToDetail()
             "detail" -> {
-                showCatalog()
                 if(pushPlaybackReturnFocus) {
                     pushPlaybackReturnFocus=false
-                    root.post { nav.firstOrNull { it.tag=="nav:push-playback" }?.takeIf { it.isAttachedToWindow }?.requestFocus() }
-                } else if(tab==6) navForTab()?.requestFocus()
+                    // 推送播放进入的视频退出后，恢复完整二维码页面，而不只是把焦点送回导航栏。
+                    pushPlaybackPageActive=true
+                    showCatalog()
+                    root.post {
+                        (pushPlaybackQrView?.parent as? View)
+                            ?.takeIf { it.isAttachedToWindow }
+                            ?.requestFocus()
+                    }
+                } else {
+                    showCatalog()
+                    if(tab==6) navForTab()?.requestFocus()
+                }
             }
             "account" -> { showCatalog(); if(tab==6) navForTab()?.requestFocus() }
             else -> {
