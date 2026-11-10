@@ -400,7 +400,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     val cardTitle=pushText("手机扫码 · 粘贴分享 · 电视即刻播放",20f,TvStyle.text).apply {
         gravity=Gravity.START
         typeface=Typeface.DEFAULT_BOLD
-        setPadding(0,0,0,0)
+        setPadding(0,0,0,dp(38))
         maxLines=1
     }
     hero.addView(cardTitle,LinearLayout.LayoutParams(-1,-2))
@@ -446,8 +446,8 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     pushPlaybackUrlView=urlLabel
     info.addView(urlLabel)
     contentRow.addView(info,LinearLayout.LayoutParams(0,-2,1f))
-    hero.addView(contentRow,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(20) })
-    hero.minimumHeight=dp(442)
+    hero.addView(contentRow,LinearLayout.LayoutParams(-1,-2))
+    hero.minimumHeight=dp(447)
     page.addView(hero,LinearLayout.LayoutParams(-2,-2).apply { gravity=Gravity.CENTER })
     pushPlaybackStatusView=status
     pushPlaybackQrView=qr
