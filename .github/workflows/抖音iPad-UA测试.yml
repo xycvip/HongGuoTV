@@ -57,7 +57,7 @@ jobs:
               raise SystemExit("只允许输入抖音官方 HTTPS 链接或纯数字视频 ID")
 
           report = {
-              "input": raw, "start_url": start_url, "resolved_url": "",
+              "input": urlparse(raw if "://" in raw else "https://" + raw).scheme + "://" + urlparse(raw if "://" in raw else "https://" + raw).netloc + urlparse(raw if "://" in raw else "https://" + raw).path, "start_url": urlparse(start_url).scheme + "://" + urlparse(start_url).netloc + urlparse(start_url).path, "resolved_url": "",
               "video_id": "", "page_title": "", "page_text": "",
               "dom_candidates": {}, "meta": {}, "network_detail_responses": [],
               "redirects": [], "observed_video_ids": [], "iesdouyin_page": {},
@@ -145,7 +145,7 @@ jobs:
                   resolved = page.url
                   if not is_douyin(resolved):
                       raise RuntimeError("短链接跳转到了非抖音官方域名，停止访问")
-                  report["resolved_url"] = resolved
+                  report["resolved_url"] = safe_url(resolved)
                   add_video_id(resolved)
                   video_id = report["observed_video_ids"][0] if report["observed_video_ids"] else ""
                   report["video_id"] = video_id
