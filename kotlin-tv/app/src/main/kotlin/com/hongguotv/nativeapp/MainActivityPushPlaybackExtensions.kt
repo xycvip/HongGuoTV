@@ -395,9 +395,19 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     scroll.addView(page,ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
     container.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
     val hero=LinearLayout(this).apply {
-        orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+        orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
         setPadding(dp(26),dp(20),dp(26),dp(20))
         background=GradientDrawable().apply { setColor(TvStyle.surface);cornerRadius=dp(20).toFloat();setStroke(dp(1),TvStyle.outline) }
+    }
+    val cardTitle=oneLine("手机扫码 · 粘贴分享 · 电视即刻播放",20f,TvStyle.text).apply {
+        gravity=Gravity.CENTER
+        typeface=Typeface.DEFAULT_BOLD
+        setPadding(0,0,0,dp(18))
+        maxLines=1
+    }
+    hero.addView(cardTitle,LinearLayout.LayoutParams(-1,-2))
+    val contentRow=LinearLayout(this).apply {
+        orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
     }
     val qrCard=LinearLayout(this).apply {
         gravity=Gravity.CENTER;setPadding(dp(8),dp(8),dp(8),dp(8))
@@ -405,7 +415,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     }
     val qr=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="手机扫码打开推送播放网页" }
     qrCard.addView(qr,LinearLayout.LayoutParams(dp(240),dp(240)))
-    hero.addView(qrCard,LinearLayout.LayoutParams(-2,-2))
+    contentRow.addView(qrCard,LinearLayout.LayoutParams(-2,-2))
     val info=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(30),0,dp(4),0) }
     fun oneLine(value:String,size:Float,color:Int)=pushText(value,size,color).apply {
         setSingleLine(false);maxLines=4;ellipsize=null
@@ -427,7 +437,8 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     val urlLabel=oneLine("访问地址：等待服务启动",16f,TvStyle.accent).apply { setPadding(0,dp(14),0,0) }
     pushPlaybackUrlView=urlLabel
     info.addView(urlLabel)
-    hero.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+    contentRow.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+    hero.addView(contentRow,LinearLayout.LayoutParams(-1,-2))
     hero.minimumHeight=dp(442)
     page.addView(hero,LinearLayout.LayoutParams(-2,-2).apply { gravity=Gravity.CENTER })
     pushPlaybackStatusView=status
