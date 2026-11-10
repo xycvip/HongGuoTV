@@ -37,7 +37,7 @@ private object PushShareParser {
     private val bracketTitle=Regex("[《【〖]([^》】〗]{1,100})[》】〗]")
     private fun clean(v:String)=v.replace(Regex("#[^\\n]*"),"").replace(Regex("\\s+")," ").trim().trimEnd('！','!','。','，',',','…')
     private fun classifyUrl(rawUrl:String):String? {
-        val candidate=rawUrl.trim().trimEnd('！','!','。','，',',','；',';','）',')','】',']','>','"','\\'')
+        val candidate=rawUrl.trim().trimEnd('！','!','。','，',',','；',';','）',')','】',']','>','"','\'')
         val uri=runCatching { URI(candidate) }.getOrNull() ?: return null
         if(!uri.scheme.equals("https",true) || uri.rawUserInfo!=null || uri.port !in listOf(-1,443)) return null
         val host=uri.host?.lowercase(Locale.ROOT)?.trimEnd('.') ?: return null
@@ -53,7 +53,7 @@ private object PushShareParser {
         val result=mutableListOf<PushShareItem>()
         val redTitles=redTitle.findAll(raw).map { it.groupValues[1].trim() }.toList()
         val classified=urlToken.findAll(raw).mapNotNull { match ->
-            val url=match.value.trimEnd('！','!','。','，',',','；',';','）',')','】',']','>','"','\\'')
+            val url=match.value.trimEnd('！','!','。','，',',','；',';','）',')','】',']','>','"','\'')
             classifyUrl(url)?.let { Triple(match.range.first,url,it) }
         }.toList()
         val redLinks=classified.filter { it.third=="红果" }
