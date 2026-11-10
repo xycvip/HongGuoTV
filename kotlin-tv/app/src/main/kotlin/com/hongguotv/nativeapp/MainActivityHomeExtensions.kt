@@ -74,10 +74,10 @@ import com.hongguotv.core.*
         val comicItems=(if(library.contentType==ContentType.COMIC) catalog else library.cachedHome(ContentType.COMIC)?.items.orEmpty()).filterNot { it.id in hidden }
         val aiItems=library.cachedHome(ContentType.AI)?.items.orEmpty().filterNot { it.id in hidden }
         return listOf(
-            HomeScreen.Shelf("resume","接着看",recent.take(8).map { p -> HomeScreen.Entry(p.series,
+            // 首页「接着看」只展示最近两部；完整观看记录统一在「追剧 - 最近观看」查看。
+            HomeScreen.Shelf("resume","接着看",recent.take(2).map { p -> HomeScreen.Entry(p.series,
                 "第 ${p.episodeIndex+1} 集 · ${if(p.completed) "接着看下一集" else formatTime(p.position)}",true,
-                if(p.duration>0) (p.position*100/p.duration).toInt().coerceIn(0,100) else null) },
-                if(recent.size>8) { { showCollection("resume") } } else null),
+                if(p.duration>0) (p.position*100/p.duration).toInt().coerceIn(0,100) else null) }),
             HomeScreen.Shelf("updates","收藏有更新",updates.take(8).map { HomeScreen.Entry(it,library.favoriteLabel(it.id),true) },
                 if(updates.size>8) { { showCollection("updates") } } else null),
             HomeScreen.Shelf("later","稍后看",later.take(10).map { HomeScreen.Entry(it,"稍后看 · 长按管理") },
