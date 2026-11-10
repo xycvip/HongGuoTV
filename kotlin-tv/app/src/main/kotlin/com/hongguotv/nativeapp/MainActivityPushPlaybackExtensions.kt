@@ -584,7 +584,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
     },LinearLayout.LayoutParams(0,-2,1f))
     heading.addView(TextView(this).apply {
         text="${candidates.size} 个匹配结果"
-        textSize=13f
+        textSize=15f
         setTextColor(TvStyle.muted)
     })
     panel.addView(heading,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) })
@@ -632,14 +632,14 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
             maxLines=2
             setPadding(0,dp(7),0,0)
             typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-        },LinearLayout.LayoutParams(-1,dp(42)))
+        },LinearLayout.LayoutParams(-1,dp(48)))
         card.addView(TextView(this).apply {
             text=series.badge.ifBlank { series.tags.ifBlank { "剧集" } }
-            textSize=10f
+            textSize=12f
             setTextColor(TvStyle.muted)
             gravity=Gravity.CENTER
             maxLines=1
-        },LinearLayout.LayoutParams(-1,dp(20)))
+        },LinearLayout.LayoutParams(-1,dp(24)))
         line.addView(card,LinearLayout.LayoutParams(0,-2,1f).apply {
             setMargins(dp(5),dp(5),dp(5),dp(5))
         })
