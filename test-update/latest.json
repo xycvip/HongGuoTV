@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "eedf822e1c13b5cf25d0c9ee325bf0094cb15f45",
-  "versionCode": 66,
-  "versionName": "0.0.66",
+  "sourceCommit": "3d7378205d723b31089360425382bdfa4681d2ca",
+  "versionCode": 67,
+  "versionName": "0.0.67",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.66",
+  "tag": "hongguotv-bate-v0.0.67",
   "apk": {
-    "name": "HongguoTV-0.0.66.apk",
-    "size": 2003649,
-    "sha256": "d379b3938d57a7bdb79d1d7aafbd0d8de2f096cee3b099a29f398beffa88f5e5",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.66/HongguoTV-0.0.66.apk"
+    "name": "HongguoTV-0.0.67.apk",
+    "size": 2003633,
+    "sha256": "5493578d3beae30135a5b6020af0b74b1605187ec73d1ddf1e2ddf7d66250fd1",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.67/HongguoTV-0.0.67.apk"
   },
-  "notes": "【播放与播放器】\n- 修复推送播放页面 ScrollView 布局参数编译错误\n- 优化推送播放二维码卡片尺寸与居中布局"
+  "notes": "【播放与播放器】\n- 优化推送播放二维码卡片布局\n【界面与交互】\n- 将默认清晰度设置名称简化为画质\n【其他功能与问题修复】\n- 对齐推送与账户二维码卡片顶部位置"
 }
