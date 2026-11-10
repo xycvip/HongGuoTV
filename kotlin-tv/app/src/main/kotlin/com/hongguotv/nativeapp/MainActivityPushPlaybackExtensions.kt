@@ -93,7 +93,7 @@ private fun MainActivity.acceptPushShare(raw:String) {
                 if(isDestroyed || revision!=pushPlaybackRevision) return@post
                 pushPlaybackTask=null
                 when {
-                    exact.size==1 -> openDetail(exact.first().second,resume=true)
+                    shares.size==1 && exact.size==1 -> openDetail(exact.first().second,resume=true)
                     ranked.isNotEmpty() -> showPushCandidates(ranked.map { it.second },shares.joinToString("、") { it.title })
                     else -> tvTools.info("推送播放 · 匹配失败",
                         if(failures.isNotEmpty()) "已识别分享内容，但片名搜索暂不可用。\n" + failures.take(2).joinToString("\n") else "已识别分享链接，但没有找到可确认的剧集。为避免误播，未开始播放。",nav.lastOrNull())
