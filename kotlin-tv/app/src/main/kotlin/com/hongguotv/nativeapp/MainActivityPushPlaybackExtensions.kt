@@ -133,7 +133,7 @@ private object DouyinShareResolver {
             val author=text(aweme.optJSONObject("author"),"nickname")
             return DouyinShareInfo(
                 awemeId,title,author,
-                text(series,"series_id").ifBlank { text(mix,"mix_id") }.ifBlank { null },
+                (text(series,"series_id").ifBlank { text(mix,"mix_id") }).takeIf { it.isNotBlank() },
                 stats?.optInt("total_episode")?.takeIf { it>0 },
                 stats?.optInt("updated_to_episode")?.takeIf { it>0 }
             )
