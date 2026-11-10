@@ -32,7 +32,7 @@ private object PushShareParser {
     private val redTitle=Regex("(?:漫剧|短剧)《([^》]{1,80})》")
     private val redUrl=Regex("https?://(?:www\\.)?novelquickapp\\.com/s/[A-Za-z0-9_-]+/?",RegexOption.IGNORE_CASE)
     private val douyinUrl=Regex("https?://v\\.douyin\\.com/[A-Za-z0-9_/-]+/?",RegexOption.IGNORE_CASE)
-    private val bracketTitle=Regex("《([^》]{1,80})》")
+    private val bracketTitle=Regex("[《【〖]([^》】〗]{1,100})[》】〗]")
     private fun clean(v:String)=v.replace(Regex("#[^\\n]*"),"").replace(Regex("\\s+")," ").trim().trimEnd('！','!','。','，',',','…')
     fun parse(raw:String):List<PushShareItem> {
         val result=mutableListOf<PushShareItem>()
@@ -43,8 +43,9 @@ private object PushShareParser {
         douyinUrl.findAll(raw).forEach { match ->
             val marker=raw.lastIndexOf("复制打开抖音",match.range.first)
             val lineStart=if(marker<0) 0 else (raw.lastIndexOf('\n',marker).takeIf { it>=0 }?.plus(1) ?: 0)
-            val block=raw.substring(lineStart,match.range.first).substringAfter("】",raw.substring(lineStart,match.range.first))
-            val title=bracketTitle.find(block)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() } ?: clean(block)
+            // 抖音分享标题常用【作者的作品】或〖作者的作品〗；不能先截掉右括号前的内容。
+            val block=raw.substring(lineStart,match.range.first)
+            val title=bracketTitle.find(block)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() } ?: clean(block).removePrefix(Regex("^\\d+(?:\\.\\d+)?\\s*").find(clean(block))?.value.orEmpty()).removePrefix("复制打开抖音").removePrefix("看看").trim()
             if(title.isNotBlank()) result+=PushShareItem(title,match.value,"抖音")
         }
         return result.distinctBy { it.source+"|"+it.url+"|"+it.title }
