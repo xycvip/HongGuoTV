@@ -121,7 +121,7 @@ internal fun MainActivity.closePushPlaybackService() {
     pushPlaybackServer=null
     pushPlaybackQrView?.setImageDrawable(null)
     pushPlaybackUrlView?.text="访问地址：服务未开启"
-    pushPlaybackStatusView?.text="服务已关闭。需要推送时，点击「开启服务」即可重新启动。"
+    pushPlaybackStatusView?.text="推送服务已停止。"
 }
 private fun MainActivity.pushForm()=PhoneForm(
     heading="推送播放",
