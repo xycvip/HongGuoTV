@@ -304,7 +304,7 @@ private fun MainActivity.acceptPushShare(raw:String) {
                         pushPlaybackStatusView?.text="已找到唯一匹配：${exact.first().second.title}，正在打开剧集…"
                         openDetail(exact.first().second,resume=true)
                     }
-                    ranked.isNotEmpty() -> { pushPlaybackStatusView?.text="找到 ${ranked.size} 个可能匹配的剧集，请在下方选择。";showPushCandidates(ranked.map { it.second }) }
+                    ranked.isNotEmpty() -> { pushPlaybackStatusView?.text="找到 ${ranked.size} 个可能匹配的剧集，请在弹窗中选择。";showPushCandidates(ranked.map { it.second }) }
                     else -> pushPlaybackStatusView?.text=if(failures.isNotEmpty()) failures.take(2).joinToString("；") else "没有找到匹配剧集。为避免误播，未开始播放。"
                 }
             }
@@ -429,7 +429,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
     dialog.window?.let { window ->
         val metrics=resources.displayMetrics
         window.setBackgroundDrawableResource(android.R.color.transparent)
-        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.setDimAmount(0.58f)
         window.setLayout((metrics.widthPixels*0.82f).toInt(),(metrics.heightPixels*0.76f).toInt())
     }
