@@ -176,11 +176,11 @@ import java.util.concurrent.atomic.AtomicLong
             "detail" -> {
                 if(pushPlaybackReturnFocus) {
                     pushPlaybackReturnFocus=false
-                    // 推送播放进入的视频退出后，恢复完整二维码页面，而不只是把焦点送回导航栏。
+                    // 推送播放进入的视频退出后，恢复推送播放导航项焦点。
                     pushPlaybackPageActive=true
                     showCatalog()
                     root.post {
-                        (pushPlaybackQrView?.parent as? View)
+                        nav.firstOrNull { it.tag=="nav:push-playback" }
                             ?.takeIf { it.isAttachedToWindow }
                             ?.requestFocus()
                     }
