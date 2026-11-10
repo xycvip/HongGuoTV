@@ -187,7 +187,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER
         setPadding(dp(28),dp(24),dp(28),dp(24))
     }
-    scroll.addView(page,ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
+    scroll.addView(page,ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
     container.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
     val hero=LinearLayout(this).apply {
         orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
