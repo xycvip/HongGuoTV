@@ -66,7 +66,7 @@ jobs:
           network_json = []
 
           def clean(value):
-              return re.sub(r"\\s+", " ", str(value or "")).strip()[:500]
+              return re.sub(r"\s+", " ", str(value or "")).strip()[:500]
 
           def walk_json(obj, path="$", depth=0):
               if depth > 12 or len(report["title_field_hits"]) >= 300:
@@ -235,14 +235,14 @@ jobs:
           except Exception as exc:
               report["error"] = f"{type(exc).__name__}: {exc}"
 
-          print("\\n========== 抖音 HTML / JSON 解析报告 ==========")
+          print("\n========== 抖音 HTML / JSON 解析报告 ==========")
           print(json.dumps(report, ensure_ascii=False, indent=2))
           with open("douyin-parse-report.json", "w", encoding="utf-8") as f:
               json.dump(report, f, ensure_ascii=False, indent=2)
           with open("douyin-parse-report.md", "w", encoding="utf-8") as f:
-              f.write("# 抖音 HTML / JSON 解析报告\\n\\n")
+              f.write("# 抖音 HTML / JSON 解析报告\n\n")
               for key, value in report.items():
-                  f.write(f"## {key}\\n\\n{json.dumps(value, ensure_ascii=False, indent=2) if isinstance(value, (dict, list)) else value or '（空）'}\\n\\n")
+                  f.write(f"## {key}\\n\\n{json.dumps(value, ensure_ascii=False, indent=2) if isinstance(value, (dict, list)) else value or '（空）'}\n\n")
 
           if not report["final_url"] and report["error"]:
               sys.exit(1)
