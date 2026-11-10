@@ -14,6 +14,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
+import com.hongguotv.core.Detail
 import com.hongguotv.core.PhoneField
 import com.hongguotv.core.PhoneForm
 import com.hongguotv.core.PhoneInputServer
@@ -51,8 +52,8 @@ private object PushShareParser {
 
 /** 红果短链专用解析器：只跟随红果 /s/ 短链，不处理抖音链接。 */
 private object RedShareResolver {
-    private val seriesPattern=Regex("""(?:video_series_id|series_id|seriesId|series_id_str)\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
-    private val videoPattern=Regex("""(?:video_id|vid|episode_id|episodeId)\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
+    private val seriesPattern=Regex("""["']?(?:video_series_id|series_id|seriesId|series_id_str)["']?\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
+    private val videoPattern=Regex("""["']?(?:video_id|vid|episode_id|episodeId)["']?\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
     private val playerPath=Regex("""/player/(\d{1,30})/(\d{1,30})""",RegexOption.IGNORE_CASE)
     private fun decoded(value:String):String {
         var current=value
@@ -239,7 +240,7 @@ private fun MainActivity.acceptPushShare(raw:String) {
     if(shares.isEmpty()) { pushPlaybackStatusView?.text="没有识别到红果或抖音分享格式。请粘贴完整分享文案或分享链接后重试。";return }
     val revision=++pushPlaybackRevision
     pushPlaybackTask?.cancel(true)
-    pushPlaybackStatusView?.text="已收到 \${shares.size} 条分享，正在分别识别来源…"
+    pushPlaybackStatusView?.text="已收到 ${shares.size} 条分享，正在分别识别来源…"
     pushPlaybackCandidateHost?.removeAllViews()
     pushPlaybackTask=io.submit {
         try {
@@ -291,20 +292,20 @@ private fun MainActivity.acceptPushShare(raw:String) {
                     readyDetail!=null && shares.size==1 -> {
                         pushPlaybackPageActive=false;closePushPlaybackService()
                         val episodeLabel=if(forceFirst) "第 1 集" else "分享指定集"
-                        pushPlaybackStatusView?.text="红果链接解析成功：\${readyDetail.series.title}，\${episodeLabel}，正在播放…"
+                        pushPlaybackStatusView?.text="红果链接解析成功：${readyDetail.series.title}，${episodeLabel}，正在播放…"
                         openDetail(readyDetail.series,resume=true,startEpisodeId=readyVideoId,forceFirstEpisode=forceFirst,resolvedDetail=readyDetail)
                     }
                     ranked.size==1 && exact.size==1 && shares.size==1 -> {
                         pushPlaybackPageActive=false;closePushPlaybackService()
-                        pushPlaybackStatusView?.text="已找到唯一匹配：\${exact.first().second.title}，正在打开剧集…"
+                        pushPlaybackStatusView?.text="已找到唯一匹配：${exact.first().second.title}，正在打开剧集…"
                         openDetail(exact.first().second,resume=true)
                     }
-                    ranked.isNotEmpty() -> { pushPlaybackStatusView?.text="找到 \${ranked.size} 个可能匹配的剧集，请在下方选择。";showPushCandidates(ranked.map { it.second }) }
+                    ranked.isNotEmpty() -> { pushPlaybackStatusView?.text="找到 ${ranked.size} 个可能匹配的剧集，请在下方选择。";showPushCandidates(ranked.map { it.second }) }
                     else -> pushPlaybackStatusView?.text=if(failures.isNotEmpty()) failures.take(2).joinToString("；") else "没有找到匹配剧集。为避免误播，未开始播放。"
                 }
             }
         } catch(problem:Exception) {
-            main.post { if(!isDestroyed && pushPlaybackPageActive && revision==pushPlaybackRevision) pushPlaybackStatusView?.text="识别失败：\${problem.message ?: "未知错误"}。没有开始播放。" }
+            main.post { if(!isDestroyed && pushPlaybackPageActive && revision==pushPlaybackRevision) pushPlaybackStatusView?.text="识别失败：${problem.message ?: "未知错误"}。没有开始播放。" }
         }
     }
 }
