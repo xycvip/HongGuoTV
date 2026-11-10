@@ -112,6 +112,9 @@ private object RedShareResolver {
 private fun MainActivity.pushPlaybackAnchor():View?=nav.firstOrNull { it.tag=="nav:push-playback" } ?: nav.lastOrNull()
 internal fun MainActivity.showPushPlayback() {
     if(pushPlaybackPageActive) return
+    // 先让旧导航项收到失焦回调，再重建导航栏，避免旧焦点样式残留在页面上。
+    root.findFocus()?.clearFocus()
+    nav.forEach { it.clearFocus() }
     pushPlaybackPageActive=true
     showCatalog()
     root.post { pushPlaybackAnchor()?.takeIf { it.isAttachedToWindow }?.requestFocus() }
