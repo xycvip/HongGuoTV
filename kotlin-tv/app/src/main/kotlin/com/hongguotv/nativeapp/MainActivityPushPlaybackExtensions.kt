@@ -201,38 +201,37 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     val qr=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="手机扫码打开推送播放网页" }
     qrCard.addView(qr,LinearLayout.LayoutParams(dp(120),dp(120)))
     hero.addView(qrCard,LinearLayout.LayoutParams(-2,-2))
-    val info=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(16),0,0,0) }
+    val info=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(30),0,dp(8),0) }
     fun oneLine(value:String,size:Float,color:Int)=pushText(value,size,color).apply {
         setSingleLine(true);ellipsize=android.text.TextUtils.TruncateAt.END
     }
-    val status=oneLine("服务运行中 · 端口 3309",14f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD }
+    val status=oneLine("服务运行中 · 端口 3309",17f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD }
     info.addView(status)
-    info.addView(oneLine("手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。",11f,TvStyle.muted).apply { setPadding(0,dp(7),0,0) })
+    info.addView(oneLine("手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。",14f,TvStyle.muted).apply { setPadding(0,dp(8),0,0) })
     val divider=View(this).apply { setBackgroundColor(TvStyle.outline) }
-    info.addView(divider,LinearLayout.LayoutParams(-1,dp(1)).apply { topMargin=dp(10);bottomMargin=dp(9) })
-    info.addView(oneLine("手机操作步骤",12f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD })
+    info.addView(divider,LinearLayout.LayoutParams(-1,dp(1)).apply { topMargin=dp(12);bottomMargin=dp(11) })
+    info.addView(oneLine("手机操作步骤",15f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD })
     listOf(
         "01  手机与电视连接同一 Wi-Fi",
         "02  扫码打开推送网页",
         "03  复制红果 / 抖音分享文案并粘贴",
         "04  点击发送，电视自动搜索并显示结果"
     ).forEach { step ->
-        info.addView(oneLine(step,10f,TvStyle.muted).apply { setPadding(0,dp(7),0,0) })
+        info.addView(oneLine(step,13f,TvStyle.muted).apply { setPadding(0,dp(6),0,0) })
     }
-    val urlLabel=oneLine("访问地址：等待服务启动",11f,TvStyle.accent).apply { setPadding(0,dp(12),0,0) }
+    val urlLabel=oneLine("访问地址：等待服务启动",13f,TvStyle.accent).apply { setPadding(0,dp(10),0,0) }
     pushPlaybackUrlView=urlLabel
     info.addView(urlLabel)
     hero.addView(info,LinearLayout.LayoutParams(0,-2,1f))
     page.addView(hero,LinearLayout.LayoutParams(-2,-2))
     pushPlaybackStatusView=status
     pushPlaybackQrView=qr
-    // 按当前可用宽高计算正方形卡片，二维码与右侧说明作为一个整体居中。
+    // 改为横向长方形卡片：适度增加二维码与说明区间距，减少上下空白。
     page.post {
         val availableWidth=page.width-page.paddingLeft-page.paddingRight
-        val availableHeight=scroll.height-page.paddingTop-page.paddingBottom
-        val side=minOf(availableWidth,availableHeight-dp(12),dp(460)).coerceAtLeast(dp(220))
-        hero.layoutParams=hero.layoutParams.apply { width=side;height=side }
-        val qrSize=(side*0.34f).toInt().coerceAtLeast(dp(96))
+        val cardWidth=minOf(availableWidth,dp(760))
+        hero.layoutParams=hero.layoutParams.apply { width=cardWidth;height=dp(210) }
+        val qrSize=dp(132)
         qr.layoutParams=qr.layoutParams.apply { width=qrSize;height=qrSize }
         hero.requestLayout()
     }
