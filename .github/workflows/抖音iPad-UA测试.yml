@@ -341,6 +341,54 @@ jobs:
               finally:
                   browser.close()
 
+          # 短剧名不能简单等同于作者名或“某某的作品”页面标题。
+          # 汇总作品详情、页面标题、Meta、DOM 和路由 JSON 中的标题线索，
+          # 并给出保守判定；没有可靠线索时明确标记待识别。
+          title_candidates = []
+          def add_title_candidate(source, value):
+              if not isinstance(value, str):
+                  return
+              value = re.sub(r"\s+", " ", value).strip(" \t\r\n|·-—")
+              if not value or len(value) > 120:
+                  return
+              if value not in ("抖音", "短视频", "作品", "分享"):
+                  title_candidates.append({"source": source, "value": value})
+
+          detail = report.get("detail") or {}
+          add_title_candidate("作品文案 desc", detail.get("desc", ""))
+          add_title_candidate("页面标题", report.get("page_title", ""))
+          add_title_candidate("分享页标题", (report.get("iesdouyin_page") or {}).get("title", ""))
+          for key in ("og:title", "twitter:title", "title", "description", "og:description"):
+              add_title_candidate("Meta:" + key, report.get("meta", {}).get(key, ""))
+          for selector, values in (report.get("dom_candidates") or {}).items():
+              for value in values if isinstance(values, list) else []:
+                  add_title_candidate("DOM:" + selector, value)
+          for response in report.get("network_detail_responses", []):
+              for field in response.get("json_fields_sample", []):
+                  if field.get("path", "").lower().endswith((".title", ".desc", ".description")):
+                      add_title_candidate("接口JSON:" + field.get("path", ""), field.get("value", ""))
+          author_name = str(detail.get("author") or "")
+          filtered = []
+          seen = set()
+          for item in title_candidates:
+              value = item["value"]
+              compact = value.replace(" ", "")
+              if author_name and (compact == author_name or compact in (author_name + "的作品", author_name + "的短视频")):
+                  continue
+              if any(x in compact for x in ("复制打开抖音", "看看【", "的作品", "抖音短视频")):
+                  continue
+              if compact not in seen:
+                  seen.add(compact)
+                  filtered.append(item)
+          report["title_candidates"] = filtered[:50]
+          report["drama_title"] = ""
+          report["drama_title_status"] = "待识别"
+          if detail.get("desc", "").strip() and not any(x in detail["desc"] for x in ("http://", "https://")):
+              report["drama_title"] = detail["desc"].strip()[:120]
+              report["drama_title_status"] = "已取得作品文案，尚需确认是否为剧名"
+          elif filtered:
+              report["drama_title_status"] = "发现标题线索，需人工/后续规则确认"
+
           print("========== 抖音真实浏览器识别结果 ==========")
           print(json.dumps(report, ensure_ascii=False, indent=2)[:30000])
           with open("douyin-browser-report.json", "w", encoding="utf-8") as f:
