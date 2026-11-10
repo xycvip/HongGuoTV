@@ -48,6 +48,8 @@ private object PushShareParser {
     }
 }
 
+private fun MainActivity.pushPlaybackAnchor(): View? = nav.firstOrNull { it.tag=="nav:push-playback" } ?: pushPlaybackAnchor()
+
 internal fun MainActivity.showPushPlayback() {
     val form=PhoneForm(
         heading="推送播放",
@@ -58,7 +60,7 @@ internal fun MainActivity.showPushPlayback() {
         doneHint="电视正在识别分享内容，请回到电视查看。",
         invalidMessage="请粘贴有效的分享文案或链接"
     )
-    tvTools.phoneForm(nav.lastOrNull(),form) { values ->
+    tvTools.phoneForm(pushPlaybackAnchor(),form) { values ->
         val raw=values["share"].orEmpty()
         if(raw.isNotBlank()) acceptPushShare(raw)
     }
@@ -67,7 +69,7 @@ internal fun MainActivity.showPushPlayback() {
 private fun MainActivity.acceptPushShare(raw:String) {
     val shares=PushShareParser.parse(raw)
     if(shares.isEmpty()) {
-        tvTools.info("推送播放","没有识别到受支持的红果或抖音分享格式。请复制完整分享文案后重试。",nav.lastOrNull())
+        tvTools.info("推送播放","没有识别到受支持的红果或抖音分享格式。请复制完整分享文案后重试。",pushPlaybackAnchor())
         return
     }
     val revision=++pushPlaybackRevision
@@ -121,7 +123,7 @@ private fun MainActivity.acceptPushShare(raw:String) {
                     shares.size==1 && ranked.size==1 && exact.size==1 -> openDetail(exact.first().second,resume=true)
                     ranked.isNotEmpty() -> showPushCandidates(ranked.map { it.second },shares.joinToString("、") { it.title })
                     else -> tvTools.info("推送播放 · 匹配失败",
-                        if(failures.isNotEmpty()) "已识别分享内容，但片名搜索暂不可用。\n" + failures.take(2).joinToString("\n") else "已识别分享链接，但没有找到可确认的剧集。为避免误播，未开始播放。",nav.lastOrNull())
+                        if(failures.isNotEmpty()) "已识别分享内容，但片名搜索暂不可用。\n" + failures.take(2).joinToString("\n") else "已识别分享链接，但没有找到可确认的剧集。为避免误播，未开始播放。",pushPlaybackAnchor())
                 }
             }
         } catch(problem:Exception) {
@@ -129,7 +131,7 @@ private fun MainActivity.acceptPushShare(raw:String) {
                 if(!isDestroyed && revision==pushPlaybackRevision) {
                     pushPlaybackTask=null
                     pushPlaybackProgressDialog?.dismiss(); pushPlaybackProgressDialog=null
-                    tvTools.info("推送播放 · 匹配失败","识别或搜索失败：" + (problem.message ?: "未知错误") + "\n没有开始播放。",nav.lastOrNull())
+                    tvTools.info("推送播放 · 匹配失败","识别或搜索失败：" + (problem.message ?: "未知错误") + "\n没有开始播放。",pushPlaybackAnchor())
                 }
             }
         }
@@ -213,7 +215,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>,query:String
     content.addView(scroll,LinearLayout.LayoutParams(-1,dp(360)))
     picker=AlertDialog.Builder(this).setTitle("请选择要播放的剧集").setView(content).setNegativeButton("取消",null).create()
     TvDialog.styleWindow(this,picker)
-    picker.setOnDismissListener { if(revision==pushPlaybackRevision) nav.lastOrNull()?.requestFocus() }
+    picker.setOnDismissListener { if(revision==pushPlaybackRevision) pushPlaybackAnchor()?.requestFocus() }
     picker.show()
     cards.forEachIndexed { index,view ->
         view.nextFocusLeftId=cards.getOrNull(index-1)?.id ?: view.id
