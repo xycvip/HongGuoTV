@@ -33,7 +33,7 @@ jobs:
 
       - name: 桌面浏览器访问并提取作品信息
         env:
-          SHARE_URL: \${{ inputs.share_url }}
+          SHARE_URL: ${{ inputs.share_url }}
         run: |
           python - <<'PY'
           import json
