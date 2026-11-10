@@ -122,13 +122,13 @@ internal fun MainActivity.loadSameNameInBackground(snapshot: Detail) {
         main.removeCallbacks(startupRecommendationTimeout)
         sleepTimer.cancel(); sleepStopped=false; startupAutoPlaybackActive=false; saveProgress(); bootAutoPlaybackPending=false; hideBootSplash(); library.flush(); invalidatePage(); releasePlayer()
         if(pushPlaybackReturnFocus && !forceDetail) {
-            // 推送播放来源的视频退出时，直接回到二维码页；页面重建时重新启动扫码服务。
+            // 推送播放来源的视频退出时，恢复推送播放导航项焦点。
             pushPlaybackReturnFocus=false
             directPlayback=false
             pushPlaybackPageActive=true
             showCatalog()
             root.post {
-                (pushPlaybackQrView?.parent as? View)
+                nav.firstOrNull { it.tag=="nav:push-playback" }
                     ?.takeIf { it.isAttachedToWindow }
                     ?.requestFocus()
             }
