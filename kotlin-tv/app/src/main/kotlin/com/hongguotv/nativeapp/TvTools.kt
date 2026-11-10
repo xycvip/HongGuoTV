@@ -242,7 +242,7 @@ class TvTools(private val activity: Activity) {
 
         worker.execute {
             try {
-                val folder=java.io.File(android.os.Environment.getExternalStorageDirectory(),"HongGuoTV")
+                val folder=android.os.Environment.getExternalStorageDirectory()
                 val session=LibraryTransferServer(address,folder,onExpired = {
                     main.post {
                         if(this@TvTools.dialog===dialog) {
@@ -271,11 +271,12 @@ class TvTools(private val activity: Activity) {
                             setStroke(dp(1),TvStyle.outline)
                         }
                     }
-                    qrCard.addView(qr(session.url),LinearLayout.LayoutParams(dp(220),dp(220)))
+                    qrCard.addView(qr("${session.url}?path=HongGuoTV"),LinearLayout.LayoutParams(dp(220),dp(220)))
                     content.addView(qrCard,LinearLayout.LayoutParams(-2,-2).apply {
                         topMargin=dp(16); bottomMargin=dp(14)
                     })
-                    val addressLabel=label(session.url,17f).apply {
+                    val entryUrl="${session.url}?path=HongGuoTV"
+                    val addressLabel=label(entryUrl,17f).apply {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.text)
                         setPadding(dp(14),dp(12),dp(14),dp(12))
@@ -287,7 +288,7 @@ class TvTools(private val activity: Activity) {
                         isClickable=true
                         setOnClickListener {
                             val clipboard=activity.getSystemService(android.content.ClipboardManager::class.java)
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("电视文件管理地址",session.url))
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("电视文件管理地址",entryUrl))
                             Toast.makeText(activity,"地址已复制",Toast.LENGTH_SHORT).show()
                         }
                     }
