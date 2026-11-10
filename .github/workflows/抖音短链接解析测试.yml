@@ -237,17 +237,29 @@ jobs:
                           "AppleWebKit/605.1.15 (KHTML, like Gecko) "
                           "Version/17.0 Mobile/15E148 Safari/604.1"
                       )
+                      # 必须使用独立的真实移动端浏览器上下文；仅修改请求头不会改变 navigator.userAgent。
+                      mobile_context = browser.new_context(
+                          viewport={"width": 390, "height": 844},
+                          screen={"width": 390, "height": 844},
+                          device_scale_factor=3,
+                          is_mobile=True,
+                          has_touch=True,
+                          user_agent=mobile_ua,
+                          locale="zh-CN"
+                      )
+                      mobile_context.set_extra_http_headers({
+                          "Referer": "https://www.douyin.com/"
+                      })
+                      mobile_context.on("page", lambda p: p.on("response", on_response))
                       for label, mobile_url in mobile_targets:
-                          mobile_page = context.new_page()
-                          mobile_page.set_extra_http_headers({
-                              "User-Agent": mobile_ua,
-                              "Referer": "https://www.douyin.com/"
-                          })
+                          mobile_page = mobile_context.new_page()
                           mobile_page.on("response", on_response)
                           test = {"name": label, "url": mobile_url, "status": None,
                                   "final_url": "", "title": "", "html_bytes": 0,
                                   "body_excerpt": "", "inline_json_count": 0,
-                                  "matched_aweme_id": aweme_id}
+                                  "matched_aweme_id": aweme_id,
+                                  "browser_user_agent": "", "is_mobile": None,
+                                  "has_touch": None}
                           try:
                               mobile_response = mobile_page.goto(
                                   mobile_url, wait_until="domcontentloaded", timeout=45000
@@ -256,6 +268,9 @@ jobs:
                               mobile_page.wait_for_timeout(5000)
                               test["final_url"] = mobile_page.url
                               test["title"] = clean(mobile_page.title())
+                              test["browser_user_agent"] = mobile_page.evaluate("navigator.userAgent")
+                              test["is_mobile"] = mobile_page.evaluate("'ontouchstart' in window || navigator.maxTouchPoints > 0")
+                              test["has_touch"] = mobile_page.evaluate("navigator.maxTouchPoints")
                               mobile_data = mobile_page.evaluate("""() => ({
                                 html: document.documentElement?.outerHTML || '',
                                 body: document.body?.innerText || '',
@@ -332,6 +347,7 @@ jobs:
                               test["error"] = f"{type(mobile_exc).__name__}: {mobile_exc}"
                           mobile_tests.append(test)
                           mobile_page.close()
+                      mobile_context.close()
                   else:
                       mobile_tests.append({"error": "未能从最终 URL 提取作品 ID，跳过手机端测试"})
                   report["mobile_page_tests"] = mobile_tests
