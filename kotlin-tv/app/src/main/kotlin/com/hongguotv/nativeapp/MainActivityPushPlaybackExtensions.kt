@@ -31,6 +31,51 @@ import org.json.JSONObject
 
 private data class PushShareItem(val title:String,val url:String,val source:String)
 private data class RedShareIds(val seriesId:String?,val videoId:String?)
+
+/** 抖音短剧分享页使用 playlet_id/series_id，不是 aweme_id；单独请求短剧详情接口取剧名。 */
+private object DouyinPlayletResolver {
+    private fun text(obj:JSONObject?,key:String):String =
+        obj?.opt(key)?.takeUnless { it==JSONObject.NULL }?.toString()?.trim().orEmpty().takeUnless { it=="null" }.orEmpty()
+    private fun findDetail(value:Any?,playletId:String,depth:Int=0):JSONObject? {
+        if(depth>24) return null
+        when(value) {
+            is JSONObject -> {
+                val id=listOf("playlet_id","series_id","seriesId","id").map { text(value,it) }.firstOrNull { it.isNotBlank() }
+                val hasTitle=listOf("playlet_name","series_name","title","name","mix_name").any { text(value,it).isNotBlank() }
+                if(id==playletId && hasTitle) return value
+                val keys=value.keys()
+                while(keys.hasNext()) findDetail(value.opt(keys.next()),playletId,depth+1)?.let { return it }
+                if(depth<=2 && hasTitle) return value
+            }
+            is JSONArray -> for(i in 0 until value.length()) findDetail(value.opt(i),playletId,depth+1)?.let { return it }
+        }
+        return null
+    }
+    fun resolveTitle(playletId:String):String {
+        require(Regex("^\\d{8,25}$").matches(playletId)) { "抖音短剧 ID 格式不正确" }
+        val endpoint="https://www.iesdouyin.com/web/api/playlet/detail/?playlet_id=$playletId"
+        val connection=(URL(endpoint).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects=true
+            connectTimeout=8000
+            readTimeout=10000
+            requestMethod="GET"
+            setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36")
+            setRequestProperty("Accept","application/json, text/plain, */*")
+            setRequestProperty("Referer","https://www.iesdouyin.com/")
+        }
+        try {
+            val status=connection.responseCode
+            if(status !in 200..299) throw java.io.IOException("抖音短剧详情 HTTP $status")
+            val body=connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(2*1024*1024) }
+            val root=JSONObject(body)
+            val detail=findDetail(root,playletId) ?: root.optJSONObject("data") ?: root
+            val title=listOf("playlet_name","series_name","title","name","mix_name")
+                .map { text(detail,it) }.firstOrNull { it.isNotBlank() }.orEmpty()
+            if(title.isBlank()) throw java.io.IOException("短剧详情接口未返回可识别的剧名")
+            return title
+        } finally { connection.disconnect() }
+    }
+}
 private object PushShareParser {
     private val redTitle=Regex("(?:漫剧|短剧)《([^》]{1,80})》")
     private val urlToken=Regex("""https?://[^\s<>\"'，。]+""",RegexOption.IGNORE_CASE)
@@ -48,7 +93,8 @@ private object PushShareParser {
             (host=="hongguoduanju.com" || host=="www.hongguoduanju.com") &&
                 Regex("^/player/\\d{1,30}(?:/\\d{1,30})?/?$").matches(path) -> "红果"
             host=="v.douyin.com" && Regex("^/[A-Za-z0-9_-]+/?$").matches(path) -> "抖音"
-            host=="www.douyin.com" && Regex("^/(?:video|share/video)/\\d{8,25}/?$").matches(path) -> "抖音"
+            (host=="www.douyin.com" || host=="www.iesdouyin.com") && Regex("^/(?:video|share/video)/\\d{8,25}/?$").matches(path) -> "抖音"
+            host=="www.iesdouyin.com" && Regex("^/share/playlet/detail/\\d{8,25}/?$").matches(path) -> "抖音短剧"
             else -> null
         }
     }
@@ -62,13 +108,13 @@ private object PushShareParser {
         val redLinks=classified.filter { it.third=="红果" }
         redLinks.forEachIndexed { i,item -> result+=PushShareItem(redTitles.getOrNull(i).orEmpty(),item.second,"红果") }
         if(redLinks.isEmpty()) redTitles.forEach { result+=PushShareItem(it,"","红果") }
-        classified.filter { it.third=="抖音" }.forEach { item ->
+        classified.filter { it.third=="抖音" || it.third=="抖音短剧" }.forEach { item ->
             val marker=raw.lastIndexOf("复制打开抖音",item.first)
             val lineStart=if(marker<0) 0 else (raw.lastIndexOf('\n',marker).takeIf { it>=0 }?.plus(1) ?: 0)
             val block=raw.substring(lineStart,item.first)
             val title=bracketTitle.find(block)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
                 ?: clean(block).removePrefix(Regex("^\\d+(?:\\.\\d+)?\\s*").find(clean(block))?.value.orEmpty()).removePrefix("复制打开抖音").removePrefix("看看").trim()
-            if(title.isNotBlank()) result+=PushShareItem(title,item.second,"抖音")
+            if(title.isNotBlank() || item.third=="抖音短剧") result+=PushShareItem(title,item.second,item.third)
         }
         return result.distinctBy { it.source+"|"+it.url+"|"+it.title }
     }
@@ -166,11 +212,11 @@ private object DouyinShareResolver {
         require(parsed.scheme.equals("https",true) && parsed.rawUserInfo==null &&
             parsed.port in listOf(-1,443) &&
             ((host=="v.douyin.com" && Regex("^/[A-Za-z0-9_-]+/?$").matches(path)) ||
-             (host=="www.douyin.com" && Regex("^/(?:video|share/video)/\\d{8,25}/?$").matches(path)))) {
+             ((host=="www.douyin.com" || host=="www.iesdouyin.com") && Regex("^/(?:video|share/video)/\\d{8,25}/?$").matches(path)))) {
             "不是受支持的抖音分享链接"
         }
         // www.douyin.com 的作品页 URL 已包含 aweme_id，直接提取；v.douyin.com 才需要跟随短链跳转。
-        val awemeId=if(host=="www.douyin.com") {
+        val awemeId=if(host=="www.douyin.com" || host=="www.iesdouyin.com") {
             videoIdPattern.find(path)?.groupValues?.getOrNull(1)
                 ?: throw java.io.IOException("抖音作品页地址中没有 aweme_id")
         } else {
@@ -427,10 +473,21 @@ private fun MainActivity.acceptPushShare(raw:String) {
                         verifiedTitles+=info.title
                         debugLog("推送播放：抖音作品匹配成功 aweme_id=${info.awemeId}，短剧《${info.title}》，作者=${info.author.ifBlank { "未知" }}，集数=${info.updatedEpisodes ?: info.totalEpisodes ?: "未知"}，series_id=${info.seriesId ?: "未知"}")
                     } catch(problem:Exception) {
-                        failures+="抖音短链接识别失败："+(problem.message ?: "未知错误")
+                        failures+="抖音作品链接识别失败："+(problem.message ?: "未知错误")
                         debugLog("推送播放：抖音 Feed 识别失败："+(problem.message ?: "未知错误"))
                         // “某某的作品”只是分享卡片作者描述，不是短剧名，禁止拿它去搜索误播。
                         if(searchTitle.contains("的作品") || searchTitle=="作品") searchTitle=""
+                    }
+                } else if(share.source=="抖音短剧" && share.url.isNotBlank()) {
+                    try {
+                        val playletId=Regex("/share/playlet/detail/(\\d{8,25})").find(URI(share.url).path.orEmpty())?.groupValues?.getOrNull(1)
+                            ?: throw java.io.IOException("抖音短剧分享地址中没有 playlet_id")
+                        searchTitle=DouyinPlayletResolver.resolveTitle(playletId)
+                        verifiedTitles+=searchTitle
+                        debugLog("推送播放：抖音短剧详情匹配成功 playlet_id=$playletId，短剧《$searchTitle》")
+                    } catch(problem:Exception) {
+                        failures+="抖音短剧链接识别失败："+(problem.message ?: "未知错误")
+                        debugLog("推送播放：抖音短剧详情识别失败："+(problem.message ?: "未知错误"))
                     }
                 } else if(share.title.isNotBlank()) verifiedTitles+=share.title
                 if(share.source=="红果" && share.url.isNotBlank()) {
