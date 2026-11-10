@@ -231,9 +231,8 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         qr.layoutParams=qr.layoutParams.apply { width=qrSize;height=qrSize }
         hero.requestLayout()
     }
-    val candidates=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-    pushPlaybackCandidateHost=candidates
-    page.addView(candidates,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(18) })
+    // 搜索结果改为独立弹窗，二维码卡片始终保持原位和原尺寸。
+    pushPlaybackCandidateHost=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
     if(pushPlaybackServer==null) startPushPlaybackService() else {
         qr.setImageBitmap(pushQr(pushPlaybackServer!!.url))
         urlLabel.text="访问地址："+pushPlaybackServer!!.url
@@ -323,37 +322,116 @@ private fun pushTitleScore(title:String,queries:List<String>):Int {
     } ?: 0
 }
 private fun MainActivity.showPushCandidates(candidates:List<Series>) {
-    val activity = this
-    val host=pushPlaybackCandidateHost ?: return
-    host.removeAllViews()
+    if(candidates.isEmpty() || isFinishing || isDestroyed) return
+    pushPlaybackCandidateDialog?.dismiss()
+    val dialog=android.app.Dialog(this)
+    pushPlaybackCandidateDialog=dialog
+    val panel=LinearLayout(this).apply {
+        orientation=LinearLayout.VERTICAL
+        setPadding(dp(22),dp(18),dp(22),dp(18))
+        background=GradientDrawable().apply {
+            setColor(TvStyle.surface)
+            cornerRadius=dp(20).toFloat()
+            setStroke(dp(1),TvStyle.outline)
+        }
+    }
+    val heading=LinearLayout(this).apply {
+        orientation=LinearLayout.HORIZONTAL
+        gravity=Gravity.CENTER_VERTICAL
+    }
+    heading.addView(TextView(this).apply {
+        text="搜索结果"
+        textSize=20f
+        setTextColor(TvStyle.text)
+        typeface=Typeface.DEFAULT_BOLD
+    },LinearLayout.LayoutParams(0,-2,1f))
+    heading.addView(TextView(this).apply {
+        text="\${candidates.size} 个匹配结果"
+        textSize=13f
+        setTextColor(TvStyle.muted)
+    })
+    panel.addView(heading,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) })
+    val grid=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
     val columns=4
     val cards=mutableListOf<View>()
     candidates.forEachIndexed { index,series ->
-        if(index%columns==0) host.addView(LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL;gravity=Gravity.START })
-        val line=host.getChildAt(host.childCount-1) as LinearLayout
+        if(index%columns==0) grid.addView(LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL
+            gravity=Gravity.START
+        })
+        val line=grid.getChildAt(grid.childCount-1) as LinearLayout
         val card=LinearLayout(this).apply {
-            id=View.generateViewId();orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
-            isFocusable=true;isClickable=true;setPadding(dp(8),dp(8),dp(8),dp(9))
-            background=TvStyle.card(activity,false)
-            contentDescription="选择剧集：${series.title}"
-            setOnFocusChangeListener { v,focused -> v.background=TvStyle.card(activity,focused) }
+            id=View.generateViewId()
+            orientation=LinearLayout.VERTICAL
+            gravity=Gravity.CENTER_HORIZONTAL
+            isFocusable=true
+            isClickable=true
+            setPadding(dp(8),dp(8),dp(8),dp(9))
+            background=TvStyle.card(this@showPushCandidates,false)
+            contentDescription="选择剧集：\${series.title}"
+            setOnFocusChangeListener { v,focused -> v.background=TvStyle.card(this@showPushCandidates,focused) }
             setOnClickListener {
-                pushPlaybackRevision++;pushPlaybackTask?.cancel(true);pushPlaybackPageActive=false;closePushPlaybackService();openDetail(series,resume=true)
+                pushPlaybackCandidateDialog?.dismiss()
+                pushPlaybackCandidateDialog=null
+                pushPlaybackRevision++
+                pushPlaybackTask?.cancel(true)
+                pushPlaybackPageActive=false
+                closePushPlaybackService()
+                openDetail(series,resume=true)
             }
         }
-        val poster=ImageView(this).apply { scaleType=ImageView.ScaleType.CENTER_CROP;setBackgroundColor(TvStyle.badgeSurface) }
+        val poster=ImageView(this).apply {
+            scaleType=ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(TvStyle.badgeSurface)
+        }
         card.addView(poster,LinearLayout.LayoutParams(dp(112),(dp(112)/TvStyle.POSTER_ASPECT).toInt()))
         loadCover(poster,series.cover)
-        card.addView(TextView(this).apply { text=series.title;textSize=13f;setTextColor(TvStyle.text);gravity=Gravity.CENTER;maxLines=2;setPadding(0,dp(7),0,0);typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) },LinearLayout.LayoutParams(-1,dp(42)))
-        card.addView(TextView(this).apply { text=series.badge.ifBlank { series.tags.ifBlank { "剧集" } };textSize=10f;setTextColor(TvStyle.muted);gravity=Gravity.CENTER;maxLines=1 },LinearLayout.LayoutParams(-1,dp(20)))
-        line.addView(card,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(5),dp(5),dp(5),dp(5)) })
+        card.addView(TextView(this).apply {
+            text=series.title
+            textSize=13f
+            setTextColor(TvStyle.text)
+            gravity=Gravity.CENTER
+            maxLines=2
+            setPadding(0,dp(7),0,0)
+            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+        },LinearLayout.LayoutParams(-1,dp(42)))
+        card.addView(TextView(this).apply {
+            text=series.badge.ifBlank { series.tags.ifBlank { "剧集" } }
+            textSize=10f
+            setTextColor(TvStyle.muted)
+            gravity=Gravity.CENTER
+            maxLines=1
+        },LinearLayout.LayoutParams(-1,dp(20)))
+        line.addView(card,LinearLayout.LayoutParams(0,-2,1f).apply {
+            setMargins(dp(5),dp(5),dp(5),dp(5))
+        })
         cards+=card
     }
     cards.forEachIndexed { i,v ->
-        v.nextFocusLeftId=cards.getOrNull(i-1)?.id ?: v.id;v.nextFocusRightId=cards.getOrNull(i+1)?.id ?: v.id
-        // 第一排向上交给系统焦点搜索，避免焦点被锁在海报卡片内。
+        v.nextFocusLeftId=cards.getOrNull(i-1)?.id ?: v.id
+        v.nextFocusRightId=cards.getOrNull(i+1)?.id ?: v.id
         v.nextFocusUpId=cards.getOrNull(i-columns)?.id ?: View.NO_ID
         v.nextFocusDownId=cards.getOrNull(i+columns)?.id ?: View.NO_ID
+    }
+    val scroll=ScrollView(this).apply {
+        isVerticalScrollBarEnabled=false
+        addView(grid,ScrollView.LayoutParams(-1,-2))
+    }
+    panel.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
+    panel.minimumHeight=dp(180)
+    dialog.setContentView(panel)
+    dialog.setCancelable(true)
+    dialog.setCanceledOnTouchOutside(false)
+    dialog.setOnDismissListener {
+        if(pushPlaybackCandidateDialog===dialog) pushPlaybackCandidateDialog=null
+    }
+    dialog.show()
+    dialog.window?.let { window ->
+        val metrics=resources.displayMetrics
+        window.setBackgroundDrawableResource(android.R.color.transparent)
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window.setDimAmount(0.58f)
+        window.setLayout((metrics.widthPixels*0.82f).toInt(),(metrics.heightPixels*0.76f).toInt())
     }
     cards.firstOrNull()?.requestFocus()
 }
