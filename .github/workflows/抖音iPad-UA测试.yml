@@ -293,13 +293,6 @@ jobs:
                       report["feed_api_attempts"].append(attempt)
 
           def safe_url(url):
-                      else:
-                          attempt["body_preview"] = re.sub(r"\\s+", " ", response.text)[:500]
-                  except Exception as exc:
-                      attempt["error"] = f"{type(exc).__name__}: {exc}"[:500]
-                  report["feed_api_attempts"].append(attempt)
-
-          def safe_url(url):
               try:
                   parsed = urlparse(url)
                   return parsed.scheme + "://" + parsed.netloc + parsed.path
