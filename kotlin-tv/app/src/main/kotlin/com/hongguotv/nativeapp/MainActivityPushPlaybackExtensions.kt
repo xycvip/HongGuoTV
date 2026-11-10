@@ -148,7 +148,7 @@ private fun MainActivity.startPushPlaybackService() {
         pushPlaybackServer=session
         pushPlaybackQrView?.setImageBitmap(pushQr(session.url))
         pushPlaybackUrlView?.text="访问地址："+session.url
-        pushPlaybackStatusView?.text="服务运行中 · 端口 3309\n手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。"
+        pushPlaybackStatusView?.text="服务运行中 · 端口 3309"
     } catch(problem:Exception) {
         pushPlaybackServer=null
         pushPlaybackQrView?.setImageDrawable(null)
