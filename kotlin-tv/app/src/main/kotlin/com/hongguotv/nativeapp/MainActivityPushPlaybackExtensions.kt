@@ -161,7 +161,7 @@ private object DouyinShareResolver {
         require(parsed.scheme.equals("https",true) && parsed.host.equals("v.douyin.com",true) &&
             parsed.rawUserInfo==null && parsed.port in listOf(-1,443) &&
             Regex("^/[A-Za-z0-9_-]+/?$").matches(parsed.path.orEmpty())) { "不是受支持的抖音短链接" }
-        val redirect=(parsed.openConnection() as HttpURLConnection).apply {
+        val redirect=(parsed.toURL().openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects=true
             connectTimeout=8000
             readTimeout=10000
