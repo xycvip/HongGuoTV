@@ -127,10 +127,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             paint(false)
             item.setOnFocusChangeListener { _,focused ->
                 paint(focused)
-                if(focused) {
-                    revealCatalogNavForFocus()
-                    if(tabId==-1 && !pushPlaybackPageActive) showPushPlayback()
-                }
+                if(focused) revealCatalogNavForFocus()
             }
             nav+=item
             if(tabId!=-1) navByTab[tabId]=item
