@@ -165,13 +165,27 @@ class HomeScreen(
             horizontal.addView(line, if(shelf.key=="random") LayoutParams(-1,-2) else LayoutParams(-2,-2)); block.addView(horizontal)
             val rowCards=mutableListOf<Card>()
             fun addCard(entry: Entry?,moreAction: (() -> Unit)?=null) {
-                val width=if(shelf.key=="random") dp(320)
-                    else ((resources.displayMetrics.widthPixels*.9f-dp(70))/6).toInt().coerceAtLeast(dp(100))
+                val recentGap=dp(14)
+                val recentAvailable=(resources.displayMetrics.widthPixels-dp(44)).coerceAtLeast(dp(320))
+                val width=when(shelf.key) {
+                    "random" -> dp(320)
+                    "resume" -> ((recentAvailable-recentGap)/2).coerceAtLeast(dp(150))
+                    else -> ((resources.displayMetrics.widthPixels*.9f-dp(70))/6).toInt().coerceAtLeast(dp(100))
+                }
                 val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
                 val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),if(shelf.key=="random") dp(4) else dp(8)); background=shape(false) }
                 val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
-                val posterHeight=if(shelf.key=="random") dp(76) else ((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()
-                if(image!=null) {
+                val posterWidth=if(shelf.key=="resume") (width*.31f).toInt().coerceAtLeast(dp(58)) else width-dp(8)
+                val posterHeight=if(shelf.key=="random") dp(76) else ((posterWidth)/TvStyle.POSTER_ASPECT).toInt()
+                val details=if(shelf.key=="resume") LinearLayout(context).apply {
+                    orientation=VERTICAL
+                    gravity=Gravity.CENTER_VERTICAL
+                    setPadding(dp(12),dp(6),dp(8),dp(6))
+                } else view
+                if(shelf.key=="resume") {
+                    view.orientation=HORIZONTAL
+                    if(image!=null) view.addView(image,LayoutParams(posterWidth,posterHeight))
+                } else if(image!=null) {
                     view.addView(image,LayoutParams(-1,posterHeight))
                 } else {
                     // “查看全部”使用完整的探索卡片，不再是空白海报框里孤零零的箭头。
@@ -219,7 +233,13 @@ class HomeScreen(
                 val tags=label(entry?.series?.tags.orEmpty().split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3).joinToString("  ·  "),10.5f,0xFFFF8C00.toInt()).apply { minLines=1; maxLines=1; minHeight=dp(17); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0); visibility=if(text.isNullOrBlank()) INVISIBLE else VISIBLE }
                 val badge=label(entry?.label ?: shelf.title,12f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(2),0,0) }
                 val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }
-                if(shelf.key!="random") { view.addView(title); view.addView(tags); view.addView(badge); view.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(4) }) }
+                if(shelf.key!="random") {
+                    details.addView(title)
+                    details.addView(tags)
+                    details.addView(badge)
+                    details.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(4) })
+                    if(shelf.key=="resume") view.addView(details,LayoutParams(0,posterHeight,1f))
+                }
                 val card=Card(key,view,image,title,tags,badge,progress,entry)
                 view.contentDescription=entry?.let { "${shelf.title}，${it.series.title}，${it.label}" } ?: "查看全部${shelf.title}"
                 view.setOnClickListener { lastFocus=key; remember(key); card.entry?.let { open(it.series,it.resume) } ?: moreAction?.invoke() }
@@ -238,7 +258,9 @@ class HomeScreen(
                         lastRow=shelf.key
                     }
                 }
-                line.addView(view,LayoutParams(width,if(shelf.key=="random") dp(104) else -1).apply { rightMargin=dp(14) }); rowCards+=card; cards[key]=card
+                line.addView(view,LayoutParams(width,if(shelf.key=="random") dp(104) else if(shelf.key=="resume") posterHeight+dp(8) else -1).apply {
+                    rightMargin=if(shelf.key=="resume") recentGap else dp(14)
+                }); rowCards+=card; cards[key]=card
             }
             // 所有片单先展示内容，“查看全部”统一放在对应栏目末尾。
             shelf.entries.forEach { addCard(it) }
@@ -341,8 +363,8 @@ class HomeScreen(
     private fun fitArtwork() {
         if(height<=0) return
         rows.forEach { row ->
-            // 随机推荐操作卡片使用独立固定尺寸，不参与海报高度自适应，避免被按海报宽高比拉成方形。
-            if(row.key=="random") return@forEach
+            // 最近观看采用横向信息卡，海报按完整比例显示，不参与普通海报货架的高度压缩。
+            if(row.key=="random" || row.key=="resume") return@forEach
             val textHeight=row.cards.maxOf { item -> item.view.paddingTop+item.view.paddingBottom+(1 until item.view.childCount).sumOf { child ->
                 val view=item.view.getChildAt(child); val params=view.layoutParams as LayoutParams
                 view.measuredHeight+params.topMargin+params.bottomMargin
