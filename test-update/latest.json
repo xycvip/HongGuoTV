@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "fae24ee5c9935a0901ae1300b7935367f0e812bf",
-  "versionCode": 65,
-  "versionName": "0.0.65",
+  "sourceCommit": "eedf822e1c13b5cf25d0c9ee325bf0094cb15f45",
+  "versionCode": 66,
+  "versionName": "0.0.66",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.65",
+  "tag": "hongguotv-bate-v0.0.66",
   "apk": {
-    "name": "HongguoTV-0.0.65.apk",
-    "size": 2003613,
-    "sha256": "dd204f77c41f6c9d52d9a629bddcf6e1ad48763867438db44c7dfb8207500309",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.65/HongguoTV-0.0.65.apk"
+    "name": "HongguoTV-0.0.66.apk",
+    "size": 2003649,
+    "sha256": "d379b3938d57a7bdb79d1d7aafbd0d8de2f096cee3b099a29f398beffa88f5e5",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.66/HongguoTV-0.0.66.apk"
   },
-  "notes": "【播放与播放器】\n- 让推送播放卡片高度按内容自适应\n- 优化推送播放二维码卡片尺寸与文字完整显示"
+  "notes": "【播放与播放器】\n- 修复推送播放页面 ScrollView 布局参数编译错误\n- 优化推送播放二维码卡片尺寸与居中布局"
 }
