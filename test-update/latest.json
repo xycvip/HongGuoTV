@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "3984d19d0f99bd8b0faf82f1567c4354041e92a6",
-  "versionCode": 63,
-  "versionName": "0.0.63",
+  "sourceCommit": "4009a5a8ccc2fa4b7ca10bfdfd1037935f95a2dc",
+  "versionCode": 64,
+  "versionName": "0.0.64",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.63",
+  "tag": "hongguotv-bate-v0.0.64",
   "apk": {
-    "name": "HongguoTV-0.0.63.apk",
-    "size": 2003569,
-    "sha256": "2a1ac928ea09280318eed742737641f04d0542260784ad3fcbfb07fd1d6addc2",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.63/HongguoTV-0.0.63.apk"
+    "name": "HongguoTV-0.0.64.apk",
+    "size": 2003605,
+    "sha256": "bd08a096dfe388a47447286a96e8382337fecc8277acdfc5ee0f4fb3bb331a26",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.64/HongguoTV-0.0.64.apk"
   },
-  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
+  "notes": "【其他功能与问题修复】\n- Refine push playback QR card layout\n- Fix stale selected navigation highlight on push playback page"
 }
