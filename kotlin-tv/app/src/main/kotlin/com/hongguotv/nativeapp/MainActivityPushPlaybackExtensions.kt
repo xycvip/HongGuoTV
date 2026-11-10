@@ -550,6 +550,7 @@ private fun MainActivity.acceptPushShare(raw:String) {
                     readyDetail!=null && shares.size==1 -> {
                         pushPlaybackReturnFocus=true
                         pushPlaybackPageActive=false
+                        closePushPlaybackService()
                         val episodeLabel=if(forceFirst) "第 1 集" else "分享指定集"
                         pushPlaybackStatusView?.text="红果链接解析成功：${readyDetail.series.title}，${episodeLabel}，正在播放…"
                         openDetail(readyDetail.series,resume=true,startEpisodeId=readyVideoId,forceFirstEpisode=forceFirst,resolvedDetail=readyDetail)
@@ -557,6 +558,7 @@ private fun MainActivity.acceptPushShare(raw:String) {
                     ranked.size==1 && exact.size==1 && shares.size==1 -> {
                         pushPlaybackReturnFocus=true
                         pushPlaybackPageActive=false
+                        closePushPlaybackService()
                         pushPlaybackStatusView?.text="已找到唯一匹配：${exact.first().second.title}，正在打开剧集…"
                         openDetail(exact.first().second,resume=true)
                     }
@@ -632,6 +634,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
                 pushPlaybackTask?.cancel(true)
                 pushPlaybackReturnFocus=true
                 pushPlaybackPageActive=false
+                closePushPlaybackService()
                 openDetail(series,resume=true)
             }
         }
