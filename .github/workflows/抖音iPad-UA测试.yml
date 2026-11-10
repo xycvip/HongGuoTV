@@ -267,29 +267,29 @@ jobs:
 
               page.on("request", lambda request: add_video_id(request.url))
 
-          def find_matching_aweme(obj, video_id, path="$", depth=0):
-              """在接口 JSON 中递归寻找与分享链接 ID 完全一致的作品对象。"""
-              if depth > 20:
+              def find_matching_aweme(obj, video_id, path="$", depth=0):
+                  """在接口 JSON 中递归寻找与分享链接 ID 完全一致的作品对象。"""
+                  if depth > 20:
+                      return None
+                  if isinstance(obj, dict):
+                      item_id = str(obj.get("aweme_id") or obj.get("item_id") or "")
+                      if item_id == str(video_id) and ("video" in obj or "author" in obj or "desc" in obj or "statistics" in obj):
+                          return obj, path
+                      for key, value in obj.items():
+                          if isinstance(value, (dict, list)):
+                              found = find_matching_aweme(value, video_id, f"{path}.{key}", depth + 1)
+                              if found:
+                                  return found
+                  elif isinstance(obj, list):
+                      for i, value in enumerate(obj[:2000]):
+                          if isinstance(value, (dict, list)):
+                              found = find_matching_aweme(value, video_id, f"{path}[{i}]", depth + 1)
+                              if found:
+                                  return found
                   return None
-              if isinstance(obj, dict):
-                  item_id = str(obj.get("aweme_id") or obj.get("item_id") or "")
-                  if item_id == str(video_id) and ("video" in obj or "author" in obj or "desc" in obj or "statistics" in obj):
-                      return obj, path
-                  for key, value in obj.items():
-                      if isinstance(value, (dict, list)):
-                          found = find_matching_aweme(value, video_id, f"{path}.{key}", depth + 1)
-                          if found:
-                              return found
-              elif isinstance(obj, list):
-                  for i, value in enumerate(obj[:2000]):
-                      if isinstance(value, (dict, list)):
-                          found = find_matching_aweme(value, video_id, f"{path}[{i}]", depth + 1)
-                          if found:
-                              return found
-              return None
 
-          def on_response(response):
-              low = response.url.lower()
+              def on_response(response):
+                  low = response.url.lower()
                   add_video_id(response.url)
                   location = response.headers.get("location", "")
                   if 300 <= response.status < 400:
