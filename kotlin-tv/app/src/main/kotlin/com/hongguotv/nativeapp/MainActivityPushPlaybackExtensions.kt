@@ -418,7 +418,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
     }
     val scroll=ScrollView(this).apply {
         isVerticalScrollBarEnabled=false
-        addView(grid,ScrollView.LayoutParams(-1,-2))
+        addView(grid,ViewGroup.LayoutParams(-1,-2))
     }
     panel.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
     panel.minimumHeight=dp(180)
