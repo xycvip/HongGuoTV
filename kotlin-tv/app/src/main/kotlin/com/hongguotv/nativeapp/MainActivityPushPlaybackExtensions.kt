@@ -19,19 +19,25 @@ import com.hongguotv.core.PhoneForm
 import com.hongguotv.core.PhoneInputServer
 import com.hongguotv.core.Series
 import java.net.Inet4Address
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLDecoder
 import java.util.Locale
 
 private data class PushShareItem(val title:String,val url:String,val source:String)
+private data class RedShareIds(val seriesId:String?,val videoId:String?)
 private object PushShareParser {
     private val redTitle=Regex("(?:漫剧|短剧)《([^》]{1,80})》")
-    private val redUrl=Regex("https?://(?:www\\.)?novelquickapp\\.com/s/[A-Za-z0-9_-]+",RegexOption.IGNORE_CASE)
+    private val redUrl=Regex("https?://(?:www\\.)?novelquickapp\\.com/s/[A-Za-z0-9_-]+/?",RegexOption.IGNORE_CASE)
     private val douyinUrl=Regex("https?://v\\.douyin\\.com/[A-Za-z0-9_/-]+/?",RegexOption.IGNORE_CASE)
     private val bracketTitle=Regex("《([^》]{1,80})》")
     private fun clean(v:String)=v.replace(Regex("#[^\\n]*"),"").replace(Regex("\\s+")," ").trim().trimEnd('！','!','。','，',',','…')
     fun parse(raw:String):List<PushShareItem> {
         val result=mutableListOf<PushShareItem>()
-        val titles=redTitle.findAll(raw).map { it.groupValues[1].trim() }.toList()
-        redUrl.findAll(raw).forEachIndexed { i,m -> titles.getOrNull(i)?.takeIf { it.isNotBlank() }?.let { result+=PushShareItem(it,m.value,"红果") } }
+        val redTitles=redTitle.findAll(raw).map { it.groupValues[1].trim() }.toList()
+        val redLinks=redUrl.findAll(raw).toList()
+        redLinks.forEachIndexed { i,m -> result+=PushShareItem(redTitles.getOrNull(i).orEmpty(),m.value,"红果") }
+        if(redLinks.isEmpty()) redTitles.forEach { result+=PushShareItem(it,"","红果") }
         douyinUrl.findAll(raw).forEach { match ->
             val marker=raw.lastIndexOf("复制打开抖音",match.range.first)
             val lineStart=if(marker<0) 0 else (raw.lastIndexOf('\n',marker).takeIf { it>=0 }?.plus(1) ?: 0)
@@ -39,9 +45,63 @@ private object PushShareParser {
             val title=bracketTitle.find(block)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() } ?: clean(block)
             if(title.isNotBlank()) result+=PushShareItem(title,match.value,"抖音")
         }
-        return result.distinctBy { it.url }
+        return result.distinctBy { it.source+"|"+it.url+"|"+it.title }
     }
 }
+
+/** 红果短链专用解析器：只跟随红果 /s/ 短链，不处理抖音链接。 */
+private object RedShareResolver {
+    private val seriesPattern=Regex("""(?:video_series_id|series_id|seriesId|series_id_str)\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
+    private val videoPattern=Regex("""(?:video_id|vid|episode_id|episodeId)\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
+    private val playerPath=Regex("""/player/(\d{1,30})/(\d{1,30})""",RegexOption.IGNORE_CASE)
+    private fun decoded(value:String):String {
+        var current=value
+        repeat(2) { current=runCatching { URLDecoder.decode(current,"UTF-8") }.getOrDefault(current) }
+        return current
+    }
+    fun resolve(shortUrl:String):RedShareIds {
+        require(shortUrl.startsWith("https://novelquickapp.com/s/",true) || shortUrl.startsWith("https://www.novelquickapp.com/s/",true)) { "不是红果短链" }
+        val connection=(URL(shortUrl).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects=true
+            connectTimeout=8000
+            readTimeout=10000
+            requestMethod="GET"
+            setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36")
+            setRequestProperty("Accept","text/html,application/xhtml+xml")
+        }
+        try {
+            val status=connection.responseCode
+            val finalUrl=connection.url.toString()
+            val stream=if(status in 200..299) connection.inputStream else connection.errorStream
+            val body=stream?.use { input ->
+                val out=java.io.ByteArrayOutputStream()
+                val buffer=ByteArray(8192)
+                while(out.size()<512*1024) {
+                    val n=input.read(buffer,0,minOf(buffer.size,512*1024-out.size()))
+                    if(n<=0) break
+                    out.write(buffer,0,n)
+                }
+                String(out.toByteArray(),Charsets.UTF_8)
+            }.orEmpty()
+            val sources=listOf(finalUrl,decoded(finalUrl),body,decoded(body))
+            var seriesId:String?=null
+            var videoId:String?=null
+            for(source in sources) {
+                if(seriesId==null) seriesId=seriesPattern.find(source)?.groupValues?.getOrNull(1)
+                if(videoId==null) videoId=videoPattern.find(source)?.groupValues?.getOrNull(1)
+                val path=playerPath.find(source)
+                if(path!=null) {
+                    if(seriesId==null) seriesId=path.groupValues[1]
+                    if(videoId==null) videoId=path.groupValues[2]
+                }
+            }
+            return RedShareIds(seriesId,videoId)
+        } finally {
+            connection.disconnect()
+        }
+    }
+}
+
 private fun MainActivity.pushPlaybackAnchor():View?=nav.firstOrNull { it.tag=="nav:push-playback" } ?: nav.lastOrNull()
 internal fun MainActivity.showPushPlayback() {
     if(pushPlaybackPageActive) return
@@ -176,33 +236,75 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
 }
 private fun MainActivity.acceptPushShare(raw:String) {
     val shares=PushShareParser.parse(raw)
-    if(shares.isEmpty()) { pushPlaybackStatusView?.text="没有识别到红果或抖音分享格式。请粘贴完整分享文案（包含分享链接）后重试。";return }
+    if(shares.isEmpty()) { pushPlaybackStatusView?.text="没有识别到红果或抖音分享格式。请粘贴完整分享文案或分享链接后重试。";return }
     val revision=++pushPlaybackRevision
     pushPlaybackTask?.cancel(true)
-    pushPlaybackStatusView?.text="已收到 ${shares.size} 条分享，正在搜索剧名…"
+    pushPlaybackStatusView?.text="已收到 \${shares.size} 条分享，正在分别识别来源…"
     pushPlaybackCandidateHost?.removeAllViews()
     pushPlaybackTask=io.submit {
         try {
             val candidates=mutableListOf<Pair<PushShareItem,Series>>()
             val failures=mutableListOf<String>()
+            var directDetail:Detail?=null
+            var directVideoId:String?=null
+            var directForceFirst=false
             shares.take(4).forEach { share ->
                 if(Thread.currentThread().isInterrupted) return@submit
-                try { repository.searchCombined(share.title,1).items.take(12).forEach { series -> if(candidates.none { it.second.id==series.id }) candidates+=share to series } }
-                catch(problem:Exception) { failures+=share.title+"："+(problem.message ?: "搜索失败") }
+                var resolved=false
+                if(share.source=="红果" && share.url.isNotBlank()) {
+                    try {
+                        val ids=RedShareResolver.resolve(share.url)
+                        if(!ids.seriesId.isNullOrBlank()) {
+                            val detail=repository.detail(ids.seriesId)
+                            val episodeIndex=ids.videoId?.let { detail.episodes.indexOf(it) } ?: -1
+                            if(ids.videoId.isNullOrBlank() || episodeIndex>=0) {
+                                if(directDetail==null) {
+                                    directDetail=detail
+                                    directVideoId=ids.videoId
+                                    directForceFirst=ids.videoId.isNullOrBlank()
+                                }
+                                resolved=true
+                            } else failures+="红果链接已解析剧目 ID，但集数 ID 不在该剧分集列表中"
+                        }
+                    } catch(problem:Exception) {
+                        failures+="红果链接解析/剧目读取失败："+(problem.message ?: "未知错误")
+                    }
+                }
+                // 红果解析失败才使用红果文案兜底；抖音始终只走抖音文案搜索，不调用红果解析器。
+                if(!resolved && share.title.isNotBlank()) {
+                    try {
+                        repository.searchCombined(share.title,1).items.take(12).forEach { series ->
+                            if(candidates.none { it.second.id==series.id }) candidates+=share to series
+                        }
+                    } catch(problem:Exception) { failures+=share.source+"《"+share.title+"》："+(problem.message ?: "搜索失败") }
+                }
             }
-            val ranked=candidates.distinctBy { it.second.id }.sortedByDescending { (_,series) -> pushTitleScore(series.title,shares.map { it.title }) }.take(12)
-            val exact=ranked.filter { (_,series) -> shares.any { normalizePushTitle(series.title)==normalizePushTitle(it.title) } }
+            val ranked=candidates.distinctBy { it.second.id }.sortedByDescending { (_,series) -> pushTitleScore(series.title,shares.map { it.title }.filter { it.isNotBlank() }) }.take(12)
+            val exact=ranked.filter { (_,series) -> shares.any { it.title.isNotBlank() && normalizePushTitle(series.title)==normalizePushTitle(it.title) } }
+            val readyDetail=directDetail
+            val readyVideoId=directVideoId
+            val forceFirst=directForceFirst
             main.post {
                 if(isDestroyed || !pushPlaybackPageActive || revision!=pushPlaybackRevision) return@post
                 pushPlaybackTask=null
                 when {
-                    shares.size==1 && ranked.size==1 && exact.size==1 -> { pushPlaybackPageActive=false;closePushPlaybackService();pushPlaybackStatusView?.text="已找到唯一匹配：${exact.first().second.title}，正在打开剧集…";openDetail(exact.first().second,resume=true) }
-                    ranked.isNotEmpty() -> { pushPlaybackStatusView?.text="找到 ${ranked.size} 个可能匹配的剧集，请在下方选择。";showPushCandidates(ranked.map { it.second }) }
-                    else -> pushPlaybackStatusView?.text=if(failures.isNotEmpty()) "搜索暂时失败："+failures.take(2).joinToString("；") else "没有找到匹配剧集。为避免误播，未开始播放。"
+                    readyDetail!=null && shares.size==1 -> {
+                        pushPlaybackPageActive=false;closePushPlaybackService()
+                        val episodeLabel=if(forceFirst) "第 1 集" else "分享指定集"
+                        pushPlaybackStatusView?.text="红果链接解析成功：\${readyDetail.series.title}，\${episodeLabel}，正在播放…"
+                        openDetail(readyDetail.series,resume=true,startEpisodeId=readyVideoId,forceFirstEpisode=forceFirst,resolvedDetail=readyDetail)
+                    }
+                    ranked.size==1 && exact.size==1 && shares.size==1 -> {
+                        pushPlaybackPageActive=false;closePushPlaybackService()
+                        pushPlaybackStatusView?.text="已找到唯一匹配：\${exact.first().second.title}，正在打开剧集…"
+                        openDetail(exact.first().second,resume=true)
+                    }
+                    ranked.isNotEmpty() -> { pushPlaybackStatusView?.text="找到 \${ranked.size} 个可能匹配的剧集，请在下方选择。";showPushCandidates(ranked.map { it.second }) }
+                    else -> pushPlaybackStatusView?.text=if(failures.isNotEmpty()) failures.take(2).joinToString("；") else "没有找到匹配剧集。为避免误播，未开始播放。"
                 }
             }
         } catch(problem:Exception) {
-            main.post { if(!isDestroyed && pushPlaybackPageActive && revision==pushPlaybackRevision) pushPlaybackStatusView?.text="搜索失败：${problem.message ?: "未知错误"}。没有开始播放。" }
+            main.post { if(!isDestroyed && pushPlaybackPageActive && revision==pushPlaybackRevision) pushPlaybackStatusView?.text="识别失败：\${problem.message ?: "未知错误"}。没有开始播放。" }
         }
     }
 }
