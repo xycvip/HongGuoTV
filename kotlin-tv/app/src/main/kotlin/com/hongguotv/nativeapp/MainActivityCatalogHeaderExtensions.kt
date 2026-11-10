@@ -108,14 +108,14 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         }
         val pageNavItems=mutableListOf<View>()
         listOf(0 to "首页",7 to "剧场",2 to "排行榜",9 to "追剧",5 to "设置",-1 to "推送播放",6 to "红果账户").forEach { (tabId,label) ->
-            val active=when(tabId) { -1 -> pushPlaybackPageActive; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
+            val active=if(pushPlaybackPageActive) tabId==-1 else when(tabId) { -1 -> false; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
             val item=addButton(pageNav,label,active) { if(tabId==-1) showPushPlayback() else switchTab(tabId) }
             if(tabId==-1) item.tag="nav:push-playback"
             item.textSize=if(compactHeader) 13.5f else 14f
             item.minHeight=dp(40)
             item.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
             fun paint(focused:Boolean) {
-                val active=when(tabId) { -1 -> pushPlaybackPageActive; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
+                val active=if(pushPlaybackPageActive) tabId==-1 else when(tabId) { -1 -> false; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
                 item.setTextColor(if(focused) bg else if(active) accent else muted)
                 item.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
                 item.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
@@ -143,7 +143,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             sourceItem.minHeight=dp(40)
             sourceItem.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
             fun paintSource(focused:Boolean) {
-                val active=screen=="third_source"
+                val active=!pushPlaybackPageActive && screen=="third_source"
                 sourceItem.setTextColor(if(focused) bg else if(active) accent else muted)
                 sourceItem.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
                 sourceItem.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
