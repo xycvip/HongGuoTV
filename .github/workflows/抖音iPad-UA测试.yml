@@ -186,13 +186,12 @@ jobs:
               }
 
           def try_mobile_feed(video_id):
-              """先走抖音 App Feed 接口；按 aweme_id 精确匹配，不能误拿推荐视频。"""
+              """优先请求用户验证过的最简 Feed URL，再尝试带 App 参数的形式。"""
               import requests
               endpoints = (
                   "https://aweme.snssdk.com/aweme/v1/feed/",
                   "https://api5-normal-c-hl.amemv.com/aweme/v1/feed/",
               )
-              # 先按用户手机浏览器验证过的最简 URL 请求；失败后再尝试带 App 参数的请求。
               request_variants = [
                   {"aweme_id": video_id},
                   {
@@ -210,76 +209,88 @@ jobs:
                   "Connection": "close",
               }
               for endpoint in endpoints:
-                for variant_index, params in enumerate(request_variants, start=1):
-                  attempt = {"url": endpoint, "request_variant": "aweme_id_only" if variant_index == 1 else "app_params", "status": None, "matched": False}
-                  try:
-                      response = requests.get(endpoint, params=params, headers=headers, timeout=20)
-                      attempt["status"] = response.status_code
-                      attempt["content_type"] = response.headers.get("content-type", "")[:160]
-                      attempt["final_url"] = safe_url(response.url)
-                      attempt["response_bytes"] = len(response.content)
-                      if response.ok:
-                          payload = response.json()
-                          attempt["top_keys"] = list(payload.keys())[:40] if isinstance(payload, dict) else []
-                          attempt["status_code"] = payload.get("status_code") if isinstance(payload, dict) else None
-                          attempt["message"] = str((payload.get("message") or payload.get("msg") or ""))[:240] if isinstance(payload, dict) else ""
-                          candidates = []
-                          if isinstance(payload, dict):
-                              for key in ("aweme_list", "items", "data"):
-                                  value = payload.get(key)
-                                  if isinstance(value, list):
-                                      candidates.extend(x for x in value if isinstance(x, dict))
-                                  elif isinstance(value, dict):
-                                      nested = value.get("aweme_list") or value.get("items") or []
-                                      candidates.extend(x for x in nested if isinstance(x, dict))
-                              direct = payload.get("aweme_detail")
-                              if isinstance(direct, dict):
-                                  candidates.append(direct)
-                          # 某些 Feed 响应会把目标作品嵌套在更深层，递归按 ID 精确查找。
-                          def find_target(node, depth=0):
-                              if depth > 20:
+                  for variant_index, params in enumerate(request_variants, start=1):
+                      attempt = {
+                          "url": endpoint,
+                          "request_variant": "aweme_id_only" if variant_index == 1 else "app_params",
+                          "status": None,
+                          "matched": False,
+                      }
+                      try:
+                          response = requests.get(endpoint, params=params, headers=headers, timeout=20)
+                          attempt["status"] = response.status_code
+                          attempt["content_type"] = response.headers.get("content-type", "")[:160]
+                          attempt["final_url"] = safe_url(response.url)
+                          attempt["response_bytes"] = len(response.content)
+                          if response.ok:
+                              payload = response.json()
+                              attempt["top_keys"] = list(payload.keys())[:40] if isinstance(payload, dict) else []
+                              attempt["status_code"] = payload.get("status_code") if isinstance(payload, dict) else None
+                              attempt["message"] = str((payload.get("message") or payload.get("msg") or ""))[:240] if isinstance(payload, dict) else ""
+                              candidates = []
+                              if isinstance(payload, dict):
+                                  for key in ("aweme_list", "items", "data"):
+                                      value = payload.get(key)
+                                      if isinstance(value, list):
+                                          candidates.extend(x for x in value if isinstance(x, dict))
+                                      elif isinstance(value, dict):
+                                          nested = value.get("aweme_list") or value.get("items") or []
+                                          candidates.extend(x for x in nested if isinstance(x, dict))
+                                  direct = payload.get("aweme_detail")
+                                  if isinstance(direct, dict):
+                                      candidates.append(direct)
+
+                              # Feed 响应可能把目标作品放在多层嵌套结构中，递归按 ID 精确匹配。
+                              def find_target(node, depth=0):
+                                  if depth > 20:
+                                      return None
+                                  if isinstance(node, dict):
+                                      if str(node.get("aweme_id") or node.get("item_id") or "") == str(video_id):
+                                          return node
+                                      for child in node.values():
+                                          if isinstance(child, (dict, list)):
+                                              found = find_target(child, depth + 1)
+                                              if found:
+                                                  return found
+                                  elif isinstance(node, list):
+                                      for child in node[:2000]:
+                                          if isinstance(child, (dict, list)):
+                                              found = find_target(child, depth + 1)
+                                              if found:
+                                                  return found
                                   return None
-                              if isinstance(node, dict):
-                                  if str(node.get("aweme_id") or node.get("item_id") or "") == str(video_id):
-                                      return node
-                                  for child in node.values():
-                                      if isinstance(child, (dict, list)):
-                                          found = find_target(child, depth + 1)
-                                          if found:
-                                              return found
-                              elif isinstance(node, list):
-                                  for child in node[:2000]:
-                                      if isinstance(child, (dict, list)):
-                                          found = find_target(child, depth + 1)
-                                          if found:
-                                              return found
-                              return None
-                          target = find_target(payload)
-                          attempt["candidate_count"] = len(candidates)
-                          attempt["candidate_ids"] = [str(x.get("aweme_id") or x.get("item_id") or "") for x in candidates[:12]]
-                          if target:
-                              attempt["matched"] = True
-                              attempt["matched_desc"] = str(target.get("desc") or "")[:500]
-                              attempt["matched_author"] = str(((target.get("author") or {}).get("nickname")) or "")[:120]
-                              attempt["matched_keys"] = list(target.keys())[:60]
-                              attempt["matched_series_name"] = str(((target.get("series_info") or {}).get("series_name")) or "")[:200] if isinstance(target.get("series_info"), dict) else ""
-                              attempt["matched_mix_name"] = str(((target.get("series_info") or {}).get("mix_name")) or "")[:200] if isinstance(target.get("series_info"), dict) else ""
-                              report["feed_api_result"] = normalize_item(target, "抖音 App Feed API")
-                              report["feed_api_result"]["source"] = endpoint
-                              report["feed_api_result"]["response_status"] = response.status_code
-                              report["feed_api_result"]["response_top_keys"] = attempt["top_keys"]
-                              report["feed_api_result"]["candidate_count"] = len(candidates)
-                              report["feed_api_result"]["exact_aweme_id_match"] = True
-                              report["detail"] = report["feed_api_result"]
-                              report["detail"]["source"] = "抖音 App Feed API"
-                              report["feed_api_attempts"].append(attempt)
-                              return
-                          attempt["error"] = "响应成功，但没有找到 aweme_id 完全匹配的作品"
-                      else:
-                          attempt["body_preview"] = re.sub(r"\\s+", " ", response.text)[:500]
-                  except Exception as exc:
-                      attempt["error"] = f"{type(exc).__name__}: {exc}"[:500]
-                  report["feed_api_attempts"].append(attempt)
+
+                              target = find_target(payload)
+                              attempt["candidate_count"] = len(candidates)
+                              attempt["candidate_ids"] = [
+                                  str(x.get("aweme_id") or x.get("item_id") or "")
+                                  for x in candidates[:12]
+                              ]
+                              if target:
+                                  attempt["matched"] = True
+                                  attempt["matched_desc"] = str(target.get("desc") or "")[:500]
+                                  attempt["matched_author"] = str(((target.get("author") or {}).get("nickname")) or "")[:120]
+                                  attempt["matched_keys"] = list(target.keys())[:80]
+                                  series = target.get("series_info") or target.get("mix_info") or {}
+                                  if isinstance(series, dict):
+                                      attempt["matched_series_name"] = str(series.get("series_name") or "")[:200]
+                                      attempt["matched_mix_name"] = str(series.get("mix_name") or "")[:200]
+                                  report["feed_api_result"] = normalize_item(target, "抖音 App Feed API")
+                                  report["feed_api_result"]["source"] = endpoint
+                                  report["feed_api_result"]["response_status"] = response.status_code
+                                  report["feed_api_result"]["response_top_keys"] = attempt["top_keys"]
+                                  report["feed_api_result"]["candidate_count"] = len(candidates)
+                                  report["feed_api_result"]["exact_aweme_id_match"] = True
+                                  report["detail"] = report["feed_api_result"]
+                                  report["detail"]["source"] = "抖音 App Feed API"
+                                  report["feed_api_attempts"].append(attempt)
+                                  return
+                              attempt["error"] = "响应成功，但没有找到 aweme_id 完全匹配的作品"
+                          else:
+                              attempt["body_preview"] = re.sub(r"\\s+", " ", response.text)[:500]
+                      except Exception as exc:
+                          attempt["error"] = f"{type(exc).__name__}: {exc}"[:500]
+                      report["feed_api_attempts"].append(attempt)
 
           def safe_url(url):
                       else:
