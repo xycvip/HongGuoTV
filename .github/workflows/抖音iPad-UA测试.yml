@@ -51,7 +51,10 @@ jobs:
           def is_douyin(url):
               p = urlparse(url)
               host = (p.hostname or "").lower()
-              return p.scheme == "https" and (host == "douyin.com" or host.endswith(".douyin.com"))
+              # 抖音分享短链会正常跳转到 iesdouyin.com，
+              # 它与 douyin.com 是两个独立根域名，必须分别加入白名单。
+              roots = ("douyin.com", "iesdouyin.com")
+              return p.scheme == "https" and any(host == root or host.endswith("." + root) for root in roots)
 
           if not is_douyin(start_url):
               raise SystemExit("只允许输入抖音官方 HTTPS 链接或纯数字视频 ID")
