@@ -230,7 +230,7 @@ class HomeScreen(
                     view.addView(moreTile,LayoutParams(-1,if(shelf.key=="random") dp(96) else posterHeight))
                 }
                 val title=label(entry?.series?.title ?: "查看全部",14f).apply { minLines=2; maxLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) }
-                val tags=label(entry?.series?.tags.orEmpty().split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3).joinToString("  ·  "),10.5f,0xFFFF8C00.toInt()).apply { minLines=1; maxLines=1; minHeight=dp(17); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0); visibility=if(text.isNullOrBlank()) INVISIBLE else VISIBLE }
+                val tags=label(entry?.series?.tags.orEmpty().split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3).joinToString("  ·  "),10.5f,TvStyle.accent).apply { minLines=1; maxLines=1; minHeight=dp(17); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0); visibility=if(text.isNullOrBlank()) INVISIBLE else VISIBLE }
                 val badge=label(entry?.label ?: shelf.title,12f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(2),0,0) }
                 val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }
                 if(shelf.key!="random") {
