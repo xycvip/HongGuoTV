@@ -203,7 +203,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     hero.addView(qrCard,LinearLayout.LayoutParams(-2,-2))
     val info=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(42),0,dp(8),0) }
     fun oneLine(value:String,size:Float,color:Int)=pushText(value,size,color).apply {
-        setSingleLine(true);ellipsize=android.text.TextUtils.TruncateAt.END
+        setSingleLine(false);maxLines=4;ellipsize=null
     }
     val status=oneLine("服务运行中 · 端口 3309",18f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD }
     info.addView(status)
@@ -222,7 +222,8 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     val urlLabel=oneLine("访问地址：等待服务启动",14f,TvStyle.accent).apply { setPadding(0,dp(10),0,0) }
     pushPlaybackUrlView=urlLabel
     info.addView(urlLabel)
-    hero.addView(info,LinearLayout.LayoutParams(0,-2,1f))\n    hero.minimumHeight=dp(270)
+    hero.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+    hero.minimumHeight=dp(270)
     page.addView(hero,LinearLayout.LayoutParams(-2,-2))
     pushPlaybackStatusView=status
     pushPlaybackQrView=qr
