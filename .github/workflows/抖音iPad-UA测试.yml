@@ -60,6 +60,7 @@ jobs:
               "input": raw, "start_url": start_url, "resolved_url": "",
               "video_id": "", "page_title": "", "page_text": "",
               "dom_candidates": {}, "meta": {}, "network_detail_responses": [],
+              "redirects": [], "observed_video_ids": [], "iesdouyin_page": {},
               "console_errors": [], "page_errors": [], "blocked_indicators": [],
               "error": ""
           }
@@ -78,6 +79,20 @@ jobs:
                       if isinstance(value, (dict, list)):
                           scan_json(value, found, f"{path}[{i}]", depth + 1)
 
+          def safe_url(url):
+              try:
+                  parsed = urlparse(url)
+                  return parsed.scheme + "://" + parsed.netloc + parsed.path
+              except Exception:
+                  return url[:500]
+
+          def add_video_id(url):
+              if not url:
+                  return
+              match = re.search(r"/(?:share/video|video|note)/(\\d+)", url)
+              if match and match.group(1) not in report["observed_video_ids"]:
+                  report["observed_video_ids"].append(match.group(1))
+
           with sync_playwright() as p:
               browser = p.chromium.launch(headless=True)
               context = browser.new_context(
@@ -91,11 +106,22 @@ jobs:
               page.on("pageerror", lambda exc: report["page_errors"].append(str(exc)[:1000])
                       if len(report["page_errors"]) < 30 else None)
 
+              page.on("request", lambda request: add_video_id(request.url))
+
               def on_response(response):
                   low = response.url.lower()
-                  if any(k in low for k in ("aweme", "video/detail", "iteminfo", "detail")):
+                  add_video_id(response.url)
+                  location = response.headers.get("location", "")
+                  if 300 <= response.status < 400:
+                      add_video_id(location)
+                      report["redirects"].append({
+                          "url": safe_url(response.url),
+                          "status": response.status,
+                          "location": safe_url(location) if location else ""
+                      })
+                  if any(k in low for k in ("aweme", "video/detail", "iteminfo", "detail", "share/video")):
                       item = {
-                          "url": response.url[:1500], "status": response.status,
+                          "url": safe_url(response.url), "status": response.status,
                           "content_type": response.headers.get("content-type", "")[:200]
                       }
                       try:
@@ -128,7 +154,7 @@ jobs:
                       report["detail_http_status"] = response.status if response else None
 
                   page.wait_for_timeout(15000)
-                  report["resolved_url"] = page.url
+                  report["resolved_url"] = safe_url(page.url)
                   report["page_title"] = page.title()
                   body = page.locator("body").inner_text() if page.locator("body").count() else ""
                   report["page_text"] = re.sub(r"\s+", " ", body)[:5000]
@@ -152,7 +178,7 @@ jobs:
                   report["meta"] = report["dom_candidates"].pop("meta", {})
                   for marker in ("验证码", "访问过于频繁", "登录后", "安全验证", "网络异常"):
                       if marker in report["page_text"]:
-                          report["blocked_indicators"].append(marker)
+                          report["blocked_indicators"].append("douyin:" + marker)
                   with open("douyin-rendered.html", "w", encoding="utf-8") as f:
                       f.write(page.content()[:10000000])
               except Exception as exc:
