@@ -622,7 +622,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
             scaleType=ImageView.ScaleType.CENTER_CROP
             setBackgroundColor(TvStyle.badgeSurface)
         }
-        card.addView(poster,LinearLayout.LayoutParams(dp(112),(dp(112)/TvStyle.POSTER_ASPECT).toInt()))
+        card.addView(poster,LinearLayout.LayoutParams(dp(140),(dp(140)/TvStyle.POSTER_ASPECT).toInt()))
         loadCover(poster,series.cover)
         card.addView(TextView(this).apply {
             text=series.title
