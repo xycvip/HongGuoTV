@@ -159,7 +159,7 @@ jobs:
                   next_info.get("name") or ""
               )
               if isinstance(series_name, str):
-                  series_name = re.sub(r"^短剧\\s*[·・]\\s*", "", series_name).strip()
+                  series_name = re.sub(r"^短剧\s*[·・]\s*", "", series_name).strip()
               return {
                   "source_path": source_path,
                   "aweme_id": str(item.get("aweme_id") or item.get("item_id") or ""),
