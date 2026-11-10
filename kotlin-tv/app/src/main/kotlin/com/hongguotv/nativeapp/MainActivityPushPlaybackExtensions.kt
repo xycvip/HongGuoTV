@@ -181,8 +181,6 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     val page=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(28),dp(22),dp(28),dp(30)) }
     scroll.addView(page)
     container.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
-    page.addView(pushText("推送播放",27f).apply { typeface=Typeface.create("sans-serif-medium",Typeface.BOLD) })
-    page.addView(pushText("手机扫码 · 粘贴分享 · 电视即刻播放",14f,TvStyle.muted).apply { setPadding(0,dp(5),0,dp(18)) })
     val hero=LinearLayout(this).apply {
         orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(dp(20),dp(18),dp(20),dp(18))
         background=GradientDrawable().apply { setColor(TvStyle.surface);cornerRadius=dp(20).toFloat();setStroke(dp(1),TvStyle.outline) }
@@ -195,35 +193,23 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     qrCard.addView(qr,LinearLayout.LayoutParams(dp(208),dp(208)))
     hero.addView(qrCard,LinearLayout.LayoutParams(-2,-2))
     val info=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(26),0,0,0) }
-    info.addView(pushText("手机操作步骤",19f).apply { typeface=Typeface.DEFAULT_BOLD })
-    listOf("01  手机连接与电视相同的 Wi-Fi","02  扫描二维码，打开推送网页","03  复制红果 / 抖音分享文案并粘贴","04  点击发送，电视自动搜索并显示结果").forEach {
-        info.addView(pushText(it,14f,TvStyle.muted).apply { setPadding(0,dp(12),0,0) })
-    }
-    val urlLabel=pushText("访问地址：等待服务启动",13f,TvStyle.accent).apply { setPadding(0,dp(16),0,0) }
+    val status=pushText("服务运行中 · 端口 3309",16f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD }
+    info.addView(status)
+    info.addView(pushText("手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。",14f,TvStyle.muted).apply { setPadding(0,dp(10),0,0) })
+    val urlLabel=pushText("访问地址：等待服务启动",13f,TvStyle.accent).apply { setPadding(0,dp(14),0,0) }
     pushPlaybackUrlView=urlLabel
     info.addView(urlLabel)
     hero.addView(info,LinearLayout.LayoutParams(0,-2,1f))
     page.addView(hero,LinearLayout.LayoutParams(-1,-2))
-    val serviceRow=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL;orientation=LinearLayout.HORIZONTAL }
-    val status=pushText("正在开启推送服务…",14f,TvStyle.muted)
     pushPlaybackStatusView=status
-    serviceRow.addView(status,LinearLayout.LayoutParams(-1,-2))
-    page.addView(serviceRow,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(14) })
     pushPlaybackQrView=qr
-    val result=LinearLayout(this).apply {
-        orientation=LinearLayout.VERTICAL;setPadding(dp(18),dp(16),dp(18),dp(18))
-        background=GradientDrawable().apply { setColor(TvStyle.surface);cornerRadius=dp(18).toFloat();setStroke(dp(1),TvStyle.outline) }
-    }
-    result.addView(pushText("推送识别结果",18f).apply { typeface=Typeface.DEFAULT_BOLD })
-    result.addView(pushText("发送分享文案后，匹配状态和候选剧集会显示在这里。",13f,TvStyle.muted).apply { setPadding(0,dp(6),0,dp(12)) })
     val candidates=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
     pushPlaybackCandidateHost=candidates
-    result.addView(candidates,LinearLayout.LayoutParams(-1,-2))
-    page.addView(result,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(18) })
+    page.addView(candidates,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(18) })
     if(pushPlaybackServer==null) startPushPlaybackService() else {
         qr.setImageBitmap(pushQr(pushPlaybackServer!!.url))
         urlLabel.text="访问地址："+pushPlaybackServer!!.url
-        status.text="服务运行中 · 端口 3309\n手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。"
+        status.text="服务运行中 · 端口 3309"
     }
 }
 private fun MainActivity.acceptPushShare(raw:String) {
@@ -319,11 +305,9 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
         val card=LinearLayout(this).apply {
             id=View.generateViewId();orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
             isFocusable=true;isClickable=true;setPadding(dp(8),dp(8),dp(8),dp(9))
-            background=GradientDrawable().apply { setColor(TvStyle.background);cornerRadius=dp(12).toFloat();setStroke(dp(1),TvStyle.outline) }
+            background=TvStyle.card(this,false)
             contentDescription="选择剧集：${series.title}"
-            setOnFocusChangeListener { v,focused ->
-                v.background=GradientDrawable().apply { setColor(if(focused) TvStyle.selectedSurface else TvStyle.background);cornerRadius=dp(12).toFloat();setStroke(dp(if(focused) 2 else 1),if(focused) TvStyle.accent else TvStyle.outline) }
-            }
+            setOnFocusChangeListener { v,focused -> v.background=TvStyle.card(this,focused) }
             setOnClickListener {
                 pushPlaybackRevision++;pushPlaybackTask?.cancel(true);pushPlaybackPageActive=false;closePushPlaybackService();openDetail(series,resume=true)
             }
