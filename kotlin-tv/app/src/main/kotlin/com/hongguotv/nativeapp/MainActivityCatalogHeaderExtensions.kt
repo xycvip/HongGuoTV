@@ -108,14 +108,14 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         }
         val pageNavItems=mutableListOf<View>()
         listOf(0 to "首页",7 to "剧场",2 to "排行榜",9 to "追剧",5 to "设置",-1 to "推送播放",6 to "红果账户").forEach { (tabId,label) ->
-            val active=when(tabId) { -1 -> false; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
+            val active=when(tabId) { -1 -> pushPlaybackPageActive; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
             val item=addButton(pageNav,label,active) { if(tabId==-1) showPushPlayback() else switchTab(tabId) }
             if(tabId==-1) item.tag="nav:push-playback"
             item.textSize=if(compactHeader) 13.5f else 14f
             item.minHeight=dp(40)
             item.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
             fun paint(focused:Boolean) {
-                val active=when(tabId) { -1 -> false; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
+                val active=when(tabId) { -1 -> pushPlaybackPageActive; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
                 item.setTextColor(if(focused) bg else if(active) accent else muted)
                 item.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
                 item.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
@@ -141,7 +141,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         val showThirdSource=getSharedPreferences("appearance-settings-v1",android.content.Context.MODE_PRIVATE)
             .getBoolean("show_third_source",false)
         if(showThirdSource) {
-            val sourceItem=addButton(pageNav,"片源",screen=="third_source") { openThirdSource() }
+            val sourceItem=addButton(pageNav,"片源",screen=="third_source") { pushPlaybackPageActive=false; closePushPlaybackService(); openThirdSource() }
             sourceItem.textSize=if(compactHeader) 13.5f else 14f
             sourceItem.minHeight=dp(40)
             sourceItem.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
