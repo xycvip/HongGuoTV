@@ -224,6 +224,8 @@ class MainActivity: Activity() {
     internal lateinit var cloudAccount: AccountController
     internal lateinit var library: Library
     internal lateinit var tvTools: TvTools
+    internal var pushPlaybackRevision: Long = 0L
+    internal var pushPlaybackTask: java.util.concurrent.Future<*>? = null
     internal lateinit var extras: PlaybackExtras
     internal lateinit var updater: AppUpdater
     internal lateinit var mediaSession: TvMediaSession

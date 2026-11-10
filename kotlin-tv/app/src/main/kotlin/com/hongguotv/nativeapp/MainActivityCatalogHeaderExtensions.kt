@@ -107,14 +107,14 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             background=null
         }
         val pageNavItems=mutableListOf<View>()
-        listOf(0 to "首页",7 to "剧场",2 to "排行榜",9 to "追剧",5 to "设置",6 to "红果账户").forEach { (tabId,label) ->
-            val active=when(tabId) { 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
-            val item=addButton(pageNav,label,active) { switchTab(tabId) }
+        listOf(0 to "首页",7 to "剧场",2 to "排行榜",9 to "追剧",5 to "设置",-1 to "推送播放",6 to "红果账户").forEach { (tabId,label) ->
+            val active=when(tabId) { -1 -> false; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
+            val item=addButton(pageNav,label,active) { if(tabId==-1) showPushPlayback() else switchTab(tabId) }
             item.textSize=if(compactHeader) 13.5f else 14f
             item.minHeight=dp(40)
             item.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
             fun paint(focused:Boolean) {
-                val active=when(tabId) { 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
+                val active=when(tabId) { -1 -> false; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
                 item.setTextColor(if(focused) bg else if(active) accent else muted)
                 item.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
                 item.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
@@ -126,7 +126,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             paint(false)
             item.setOnFocusChangeListener { _,focused -> paint(focused); if(focused) revealCatalogNavForFocus() }
             nav+=item
-            navByTab[tabId]=item
+            if(tabId!=-1) navByTab[tabId]=item
             if(tabId==9) { navByTab[3]=item; navByTab[4]=item }
             pageNavItems+=item
         }

@@ -28,7 +28,8 @@ data class PhoneField(
     val label: String,
     val hint: String,
     val maxLength: Int = 80,
-    val required: Boolean = true
+    val required: Boolean = true,
+    val multiline: Boolean = false
 )
 
 /** 手机填写页表单定义：搜索剧名、添加三方片源、导入配置等扫码场景共用同一套服务，只替换表单与文案。 */
@@ -121,7 +122,7 @@ class PhoneInputServer(
         if(request[0]!="POST" || request[1]!="/$token/submit") return respond(socket,405,"不支持的操作")
         if(foreignOrigin(headers["origin"], localAddress)) return respond(socket,403,"来源不匹配")
         if(headers.containsKey("transfer-encoding") || headers["content-type"]?.substringBefore(';')!="application/x-www-form-urlencoded") return respond(socket,400,"请求格式错误")
-        val length=headers["content-length"]?.toIntOrNull()?.takeIf { it in 1..4096 } ?: return respond(socket,413,"输入内容过长")
+        val length=headers["content-length"]?.toIntOrNull()?.takeIf { it in 1..65536 } ?: return respond(socket,413,"输入内容过长")
         val body=ByteArray(length); var offset=0
         while(offset<body.size) { val n=input.read(body,offset,body.size-offset); if(n<0) return; offset+=n }
         val values=parseFields(String(body,Charsets.UTF_8)) ?: return respond(socket,400,form.invalidMessage)
@@ -156,13 +157,21 @@ class PhoneInputServer(
         append("<form method=\"post\" action=\"/").append(token).append("/submit\">")
         form.fields.forEachIndexed { index, field ->
             append("<label for=\"field").append(index).append("\">").append(escapeHtml(field.label)).append("</label>")
-            append("<input id=\"field").append(index).append("\" name=\"").append(field.key).append('"')
-            append(" maxlength=\"").append(field.maxLength.coerceIn(1,400)).append('"')
-            append(" placeholder=\"").append(escapeHtml(field.hint)).append('"')
-            if(field.required) append(" required")
-            append(" autocomplete=\"off\"")
-            if(index==0) append(" autofocus")
-            append('>')
+            if(field.multiline) {
+                append("<textarea id=\"field").append(index).append("\" name=\"").append(field.key).append('"')
+                append(" maxlength=\"").append(field.maxLength.coerceIn(1,10000)).append('"')
+                append(" placeholder=\"").append(escapeHtml(field.hint)).append('"')
+                if(field.required) append(" required")
+                append(" rows=\"8\" autocomplete=\"off\"></textarea>")
+            } else {
+                append("<input id=\"field").append(index).append("\" name=\"").append(field.key).append('"')
+                append(" maxlength=\"").append(field.maxLength.coerceIn(1,10000)).append('"')
+                append(" placeholder=\"").append(escapeHtml(field.hint)).append('"')
+                if(field.required) append(" required")
+                append(" autocomplete=\"off\"")
+                append('>')
+            }
+            if(index==0) append("<script>document.getElementById('field0').focus()</script>")
         }
         append("<button>").append(escapeHtml(form.submitLabel)).append("</button></form>")
         append("<p>页面仅在电视的填写窗口打开期间有效，最长 5 分钟。</p>")
