@@ -612,6 +612,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
                 pushPlaybackCandidateDialog=null
                 pushPlaybackRevision++
                 pushPlaybackTask?.cancel(true)
+                pushPlaybackReturnFocus=true
                 pushPlaybackPageActive=false
                 closePushPlaybackService()
                 openDetail(series,resume=true)
