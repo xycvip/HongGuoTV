@@ -214,8 +214,19 @@ jobs:
                   # 第二阶段：用手机端 UA 测试抖音分享页 SSR 数据
                   # 桌面页可能只有 CSR 空壳；重点检查 iesdouyin.com 的 _ROUTER_DATA。
                   mobile_tests = []
-                  id_match = re.search(r"/(?:video|note|share/video|aweme/detail)/(\d+)", page.url)
-                  aweme_id = id_match.group(1) if id_match else ""
+                  # 抖音可能把视频页改成精选页，但仍在 query 的 modal_id 中保留作品 ID。
+                  final_parsed = urlparse(page.url)
+                  from urllib.parse import parse_qs
+                  final_query = parse_qs(final_parsed.query)
+                  id_match = re.search(
+                      r"/(?:video|note|share/(?:video|note|slides)|slides|aweme/detail)/(\d+)",
+                      final_parsed.path
+                  )
+                  aweme_id = (
+                      final_query.get("modal_id", [""])[0]
+                      or final_query.get("aweme_id", [""])[0]
+                      or (id_match.group(1) if id_match else "")
+                  )
                   if aweme_id:
                       mobile_targets = [
                           ("m_douyin", f"https://m.douyin.com/share/video/{aweme_id}/"),
