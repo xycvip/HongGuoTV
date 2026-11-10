@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "03266d745f12a5792bf97034e4dd78b0aeef85e1",
-  "versionCode": 61,
-  "versionName": "0.0.61",
+  "sourceCommit": "f32f9928a8fe910f54f9bcf273c496990a7a5ff9",
+  "versionCode": 62,
+  "versionName": "0.0.62",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.61",
+  "tag": "hongguotv-bate-v0.0.62",
   "apk": {
-    "name": "HongguoTV-0.0.61.apk",
-    "size": 2002861,
-    "sha256": "0a41b9eb2a541fecc4e9c39e0c2c149f951fefcbd2f976106d72170ed4571873",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.61/HongguoTV-0.0.61.apk"
+    "name": "HongguoTV-0.0.62.apk",
+    "size": 2003573,
+    "sha256": "665f70f5e12909b7d9b69896e38b71b494b0f96eeb0076638bf80f5ed7b61ec1",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.62/HongguoTV-0.0.62.apk"
   },
-  "notes": "【播放与播放器】\n- 调整推送播放页布局与搜索结果卡片样式\n- 移除推送播放页多余操作按钮\n- 修复推送播放导航焦点误触发页面\n- 支持推送播放按分享集数直达\n- 修复推送播放红果短链解析并隔离抖音流程\n【焦点与遥控器】\n- 修复推送候选海报向上焦点导航\n【其他功能与问题修复】\n- 修复推送搜索卡片 Context 编译错误\n- 清理推送服务停止后的旧按钮提示\n- 完善红果短链 ID 优先级判断\n- 兼容红果分享 schemeParams 的整剧与单集 ID 字段\n- 修正红果短链 ID JSON 提取与字符串插值"
+  "notes": "【播放与播放器】\n- 修复进入推送播放时旧导航焦点残留\n- 增加推送播放搜索结果弹窗状态管理\n- 优化推送播放二维码卡片布局\n【片源与数据管理】\n- 补充推送候选弹窗 ViewGroup 导入\n【界面与交互】\n- 修复推送候选弹窗 ScrollView 布局参数编译错误\n- 完善推送搜索弹窗提示与窗口配置\n- 将推送搜索候选结果改为居中弹窗\n- 修正推送服务状态单行显示"
 }
