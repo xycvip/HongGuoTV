@@ -157,11 +157,11 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
 
     internal fun MainActivity.showQualityPicker(anchor: TextView,inPlayer: Boolean) {
         val options=PlaybackQuality.options
-        tvTools.choose("全局默认清晰度",options.map(PlaybackQuality::label),anchor,{ index ->
+        tvTools.choose("全局画质",options.map(PlaybackQuality::label),anchor,{ index ->
             val target=options[index]
             val changed=library.maxQuality!=target
             library.maxQuality=target
-            if(anchor.tag!="playback-settings") anchor.text=if(inPlayer) "画质" else "默认清晰度  ·  ${PlaybackQuality.label(target)}"
+            if(anchor.tag!="playback-settings") anchor.text=if(inPlayer) "画质" else "画质  ·  ${PlaybackQuality.label(target)}"
             if(inPlayer && changed) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
         })
     }
