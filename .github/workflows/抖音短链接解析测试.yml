@@ -1,0 +1,145 @@
+name: 抖音短链接片名解析测试
+
+on:
+  workflow_dispatch:
+    inputs:
+      share_url:
+        description: 抖音分享短链接
+        required: true
+        type: string
+        default: https://v.douyin.com/z_xefff5id4/
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Python 与 Chromium
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 安装浏览器依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright beautifulsoup4
+          python -m playwright install --with-deps chromium
+
+      - name: 桌面浏览器访问并提取作品信息
+        env:
+          SHARE_URL: ${{ inputs.share_url }}
+        run: |
+          python - <<'PY'
+          import json, os, re, sys
+          from urllib.parse import urlparse
+          from bs4 import BeautifulSoup
+          from playwright.sync_api import sync_playwright
+
+          share_url = os.environ["SHARE_URL"].strip()
+          parsed = urlparse(share_url)
+          allowed = {"v.douyin.com", "www.douyin.com", "douyin.com"}
+          if parsed.scheme != "https" or parsed.hostname not in allowed:
+              raise SystemExit("拒绝访问：只允许 https://v.douyin.com 或 douyin.com 链接")
+
+          report = {
+              "input_url": share_url,
+              "final_url": "",
+              "http_status": None,
+              "page_title": "",
+              "og_title": "",
+              "twitter_title": "",
+              "jsonld_names": [],
+              "candidate_title": "",
+              "body_excerpt": "",
+              "error": ""
+          }
+
+          def clean(value):
+              value = re.sub(r"\\s+", " ", str(value or "")).strip()
+              value = re.sub(r"^抖音[-_：: ]*", "", value)
+              value = re.sub(r"[-_|｜]抖音.*$", "", value).strip()
+              return value[:300]
+
+          try:
+              with sync_playwright() as p:
+                  browser = p.chromium.launch(headless=True)
+                  context = browser.new_context(
+                      viewport={"width": 1440, "height": 1000},
+                      user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  "Chrome/131.0.0.0 Safari/537.36"),
+                      locale="zh-CN"
+                  )
+                  page = context.new_page()
+                  response = page.goto(share_url, wait_until="domcontentloaded", timeout=60000)
+                  report["http_status"] = response.status if response else None
+                  page.wait_for_timeout(7000)
+                  report["final_url"] = page.url
+                  report["page_title"] = clean(page.title())
+                  data = page.evaluate("""() => {
+                    const meta = (s) => document.querySelector(s)?.content || '';
+                    const jsonld = [...document.querySelectorAll('script[type="application/ld+json"]')]
+                      .map(x => x.textContent || '').slice(0, 10);
+                    return {
+                      og: meta('meta[property="og:title"]'),
+                      twitter: meta('meta[name="twitter:title"]'),
+                      description: meta('meta[name="description"]'),
+                      jsonld,
+                      body: document.body ? document.body.innerText : ''
+                    };
+                  }""")
+                  report["og_title"] = clean(data.get("og"))
+                  report["twitter_title"] = clean(data.get("twitter"))
+                  report["body_excerpt"] = re.sub(r"\\s+", " ", data.get("body", ""))[:1800]
+                  names = []
+                  for raw in data.get("jsonld", []):
+                      try:
+                          obj = json.loads(raw)
+                          items = obj if isinstance(obj, list) else [obj]
+                          for item in items:
+                              if isinstance(item, dict) and item.get("name"):
+                                  names.append(clean(item["name"]))
+                      except Exception:
+                          pass
+                  report["jsonld_names"] = list(dict.fromkeys(names))[:10]
+
+                  candidates = [
+                      report["og_title"], report["twitter_title"],
+                      *report["jsonld_names"], report["page_title"]
+                  ]
+                  junk = ("抖音", "记录美好生活", "短视频", "登录", "下载")
+                  for candidate in candidates:
+                      if candidate and not all(x in candidate for x in junk):
+                          report["candidate_title"] = candidate
+                          break
+                  browser.close()
+          except Exception as exc:
+              report["error"] = f"{type(exc).__name__}: {exc}"
+
+          print("\\n========== 抖音短链接解析报告 ==========")
+          print(json.dumps(report, ensure_ascii=False, indent=2))
+          with open("douyin-parse-report.json", "w", encoding="utf-8") as f:
+              json.dump(report, f, ensure_ascii=False, indent=2)
+          with open("douyin-parse-report.md", "w", encoding="utf-8") as f:
+              f.write("# 抖音短链接解析报告\\n\\n")
+              for key, value in report.items():
+                  f.write(f"## {key}\\n\\n{value or '（空）'}\\n\\n")
+          if not report["final_url"] and report["error"]:
+              sys.exit(1)
+          PY
+
+      - name: 保存解析报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: douyin-parse-report
+          path: |
+            douyin-parse-report.json
+            douyin-parse-report.md
+          if-no-files-found: ignore
+          retention-days: 7
