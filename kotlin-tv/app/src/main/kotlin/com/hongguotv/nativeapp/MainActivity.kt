@@ -226,6 +226,7 @@ class MainActivity: Activity() {
     internal lateinit var tvTools: TvTools
     internal var pushPlaybackRevision: Long = 0L
     internal var pushPlaybackTask: java.util.concurrent.Future<*>? = null
+    internal var pushPlaybackProgressDialog: AlertDialog? = null
     internal lateinit var extras: PlaybackExtras
     internal lateinit var updater: AppUpdater
     internal lateinit var mediaSession: TvMediaSession
@@ -966,6 +967,9 @@ class MainActivity: Activity() {
         if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) { cancelPrefetch(); standbyFallbackEpisodeId=detail?.episodes?.getOrNull(episodeIndex).orEmpty(); clearStandbyPlayer("系统内存压力") }
     }
     override fun onDestroy() {
+        pushPlaybackRevision++
+        pushPlaybackTask?.cancel(true); pushPlaybackTask=null
+        pushPlaybackProgressDialog?.dismiss(); pushPlaybackProgressDialog=null
         debugLog("生命周期：onDestroy；页面=$screen；正在销毁 Activity")
         apiStatusUiState.checkBatchId++
         stopApiStatusAnimations()

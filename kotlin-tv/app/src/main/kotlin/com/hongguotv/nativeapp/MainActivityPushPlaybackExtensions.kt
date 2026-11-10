@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -71,7 +72,29 @@ private fun MainActivity.acceptPushShare(raw:String) {
     }
     val revision=++pushPlaybackRevision
     pushPlaybackTask?.cancel(true)
-    Toast.makeText(this,"已收到推送，正在搜索：" + shares.joinToString("、") { it.title }.take(80),Toast.LENGTH_SHORT).show()
+    pushPlaybackProgressDialog?.dismiss()
+    val progressContent=LinearLayout(this).apply {
+        orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL
+        setPadding(dp(24),dp(18),dp(24),dp(18))
+        addView(ProgressBar(this@acceptPushShare).apply { isIndeterminate=true },LinearLayout.LayoutParams(dp(34),dp(34)))
+        addView(TextView(this@acceptPushShare).apply {
+            text="正在识别分享内容并搜索剧集…"; textSize=15f; setTextColor(TvStyle.text)
+            setPadding(dp(16),0,0,0)
+        },LinearLayout.LayoutParams(0,-2,1f))
+    }
+    val progressDialog=AlertDialog.Builder(this).setTitle("推送播放")
+        .setView(progressContent)
+        .setNegativeButton("取消") { _,_ ->
+            if(revision==pushPlaybackRevision) {
+                pushPlaybackRevision++
+                pushPlaybackTask?.cancel(true); pushPlaybackTask=null
+                pushPlaybackProgressDialog=null
+                Toast.makeText(this,"已取消本次推送",Toast.LENGTH_SHORT).show()
+            }
+        }.create()
+    pushPlaybackProgressDialog=progressDialog
+    TvDialog.styleWindow(this,progressDialog)
+    progressDialog.show()
     pushPlaybackTask=io.submit {
         try {
             val candidates=mutableListOf<Pair<PushShareItem,Series>>()
@@ -92,6 +115,7 @@ private fun MainActivity.acceptPushShare(raw:String) {
             main.post {
                 if(isDestroyed || revision!=pushPlaybackRevision) return@post
                 pushPlaybackTask=null
+                pushPlaybackProgressDialog?.dismiss(); pushPlaybackProgressDialog=null
                 when {
                     shares.size==1 && exact.size==1 -> openDetail(exact.first().second,resume=true)
                     ranked.isNotEmpty() -> showPushCandidates(ranked.map { it.second },shares.joinToString("、") { it.title })
@@ -103,6 +127,7 @@ private fun MainActivity.acceptPushShare(raw:String) {
             main.post {
                 if(!isDestroyed && revision==pushPlaybackRevision) {
                     pushPlaybackTask=null
+                    pushPlaybackProgressDialog?.dismiss(); pushPlaybackProgressDialog=null
                     tvTools.info("推送播放 · 匹配失败","识别或搜索失败：" + (problem.message ?: "未知错误") + "\n没有开始播放。",nav.lastOrNull())
                 }
             }
@@ -163,6 +188,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>,query:String
                 if(revision!=pushPlaybackRevision) return@setOnClickListener
                 pushPlaybackRevision++
                 pushPlaybackTask?.cancel(true); pushPlaybackTask=null
+                pushPlaybackProgressDialog?.dismiss(); pushPlaybackProgressDialog=null
                 picker.dismiss()
                 openDetail(series,resume=true)
             }
