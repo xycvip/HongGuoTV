@@ -28,7 +28,7 @@ jobs:
       - name: 安装 Playwright Chromium
         run: |
           python -m pip install --upgrade pip
-          python -m pip install playwright
+          python -m pip install playwright requests
           python -m playwright install --with-deps chromium
 
       - name: 使用真实 Chromium 解析抖音分享链接并监听详情接口
@@ -65,7 +65,8 @@ jobs:
               "dom_candidates": {}, "meta": {}, "network_detail_responses": [],
               "redirects": [], "observed_video_ids": [], "iesdouyin_page": {},
               "console_errors": [], "page_errors": [], "blocked_indicators": [],
-              "error": "", "detail": {}, "detail_attempts": [], "raw_api_samples": []
+              "error": "", "detail": {}, "detail_attempts": [], "raw_api_samples": [],
+          "feed_api_attempts": [], "feed_api_result": {}
           }
 
           def scan_json(obj, found, path="$", depth=0):
@@ -159,6 +160,81 @@ jobs:
                   "item_type": item.get("aweme_type")
               }
 
+          def try_mobile_feed(video_id):
+              """先走抖音 App Feed 接口；按 aweme_id 精确匹配，不能误拿推荐视频。"""
+              import requests
+              endpoints = (
+                  "https://api5-normal-c-hl.amemv.com/aweme/v1/feed/",
+                  "https://aweme.snssdk.com/aweme/v1/feed/",
+              )
+              params = {
+                  "aweme_id": video_id,
+                  "aid": "1128",
+                  "device_platform": "android",
+                  "app_name": "aweme",
+                  "version_code": "350102",
+                  "version_name": "35.1.2",
+                  "channel": "googleplay",
+                  "device_type": "Pixel 7",
+                  "os_version": "13",
+                  "language": "zh",
+              }
+              headers = {
+                  "User-Agent": "com.ss.android.ugc.aweme/350102 (Linux; U; Android 13; zh_CN; Pixel 7; Build/TP1A.221005.002; Cronet/TTNetVersion:)",
+                  "Accept": "application/json",
+                  "Accept-Encoding": "gzip, deflate",
+                  "Connection": "close",
+              }
+              for endpoint in endpoints:
+                  attempt = {"url": endpoint, "status": None, "matched": False}
+                  try:
+                      response = requests.get(endpoint, params=params, headers=headers, timeout=20)
+                      attempt["status"] = response.status_code
+                      attempt["content_type"] = response.headers.get("content-type", "")[:160]
+                      attempt["final_url"] = safe_url(response.url)
+                      attempt["response_bytes"] = len(response.content)
+                      if response.ok:
+                          payload = response.json()
+                          attempt["top_keys"] = list(payload.keys())[:40] if isinstance(payload, dict) else []
+                          attempt["status_code"] = payload.get("status_code") if isinstance(payload, dict) else None
+                          attempt["message"] = str((payload.get("message") or payload.get("msg") or ""))[:240] if isinstance(payload, dict) else ""
+                          candidates = []
+                          if isinstance(payload, dict):
+                              for key in ("aweme_list", "items", "data"):
+                                  value = payload.get(key)
+                                  if isinstance(value, list):
+                                      candidates.extend(x for x in value if isinstance(x, dict))
+                                  elif isinstance(value, dict):
+                                      nested = value.get("aweme_list") or value.get("items") or []
+                                      candidates.extend(x for x in nested if isinstance(x, dict))
+                              direct = payload.get("aweme_detail")
+                              if isinstance(direct, dict):
+                                  candidates.append(direct)
+                          target = next((x for x in candidates if str(x.get("aweme_id") or x.get("item_id") or "") == str(video_id)), None)
+                          attempt["candidate_count"] = len(candidates)
+                          attempt["candidate_ids"] = [str(x.get("aweme_id") or x.get("item_id") or "") for x in candidates[:12]]
+                          if target:
+                              attempt["matched"] = True
+                              attempt["matched_desc"] = str(target.get("desc") or "")[:500]
+                              attempt["matched_author"] = str(((target.get("author") or {}).get("nickname")) or "")[:120]
+                              attempt["matched_keys"] = list(target.keys())[:60]
+                              report["feed_api_result"] = normalize_item(target, "抖音 App Feed API")
+                              report["feed_api_result"]["source"] = endpoint
+                              report["feed_api_result"]["response_status"] = response.status_code
+                              report["feed_api_result"]["response_top_keys"] = attempt["top_keys"]
+                              report["feed_api_result"]["candidate_count"] = len(candidates)
+                              report["feed_api_result"]["exact_aweme_id_match"] = True
+                              report["detail"] = report["feed_api_result"]
+                              report["detail"]["source"] = "抖音 App Feed API"
+                              report["feed_api_attempts"].append(attempt)
+                              return
+                          attempt["error"] = "响应成功，但没有找到 aweme_id 完全匹配的作品"
+                      else:
+                          attempt["body_preview"] = re.sub(r"\\s+", " ", response.text)[:500]
+                  except Exception as exc:
+                      attempt["error"] = f"{type(exc).__name__}: {exc}"[:500]
+                  report["feed_api_attempts"].append(attempt)
+
           def safe_url(url):
               try:
                   parsed = urlparse(url)
@@ -244,6 +320,10 @@ jobs:
                   video_id = report["observed_video_ids"][0] if report["observed_video_ids"] else ""
                   report["video_id"] = video_id
 
+                  # 第一级：抖音 App Feed API。若精确命中目标作品，优先采用其完整详情。
+                  if video_id:
+                      try_mobile_feed(video_id)
+
                   # 分享短链可能先经过 iesdouyin.com/share/video/{id}，
                   # 最终却跳到精选首页；因此使用捕获到的中间 URL ID 继续检查。
                   if video_id:
@@ -269,8 +349,9 @@ jobs:
                           report["iesdouyin_page"]["router_data_keys"] = list(router_data.keys())[:40]
                           found_item = find_video_item(router_data)
                           if found_item:
-                              report["detail"] = normalize_item(found_item[0], found_item[1])
-                              report["detail"]["source"] = "iesdouyin _ROUTER_DATA"
+                              if not report["detail"]:
+                                  report["detail"] = normalize_item(found_item[0], found_item[1])
+                                  report["detail"]["source"] = "iesdouyin _ROUTER_DATA"
                       for marker in ("验证码", "访问过于频繁", "登录后", "安全验证", "网络异常"):
                           if marker in report["iesdouyin_page"]["text"]:
                               report["blocked_indicators"].append("iesdouyin:" + marker)
