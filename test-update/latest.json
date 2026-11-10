@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "4009a5a8ccc2fa4b7ca10bfdfd1037935f95a2dc",
-  "versionCode": 64,
-  "versionName": "0.0.64",
+  "sourceCommit": "fae24ee5c9935a0901ae1300b7935367f0e812bf",
+  "versionCode": 65,
+  "versionName": "0.0.65",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.64",
+  "tag": "hongguotv-bate-v0.0.65",
   "apk": {
-    "name": "HongguoTV-0.0.64.apk",
-    "size": 2003605,
-    "sha256": "bd08a096dfe388a47447286a96e8382337fecc8277acdfc5ee0f4fb3bb331a26",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.64/HongguoTV-0.0.64.apk"
+    "name": "HongguoTV-0.0.65.apk",
+    "size": 2003613,
+    "sha256": "dd204f77c41f6c9d52d9a629bddcf6e1ad48763867438db44c7dfb8207500309",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.65/HongguoTV-0.0.65.apk"
   },
-  "notes": "【其他功能与问题修复】\n- Refine push playback QR card layout\n- Fix stale selected navigation highlight on push playback page"
+  "notes": "【播放与播放器】\n- 让推送播放卡片高度按内容自适应\n- 优化推送播放二维码卡片尺寸与文字完整显示"
 }
