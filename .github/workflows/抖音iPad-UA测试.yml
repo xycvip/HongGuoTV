@@ -144,11 +144,35 @@ jobs:
               stats = item.get("statistics") or {}
               cover = video.get("cover") or video.get("origin_cover") or {}
               play = video.get("play_addr") or {}
+              # 微短剧名称不在普通视频 desc 中，而在作品关联的 series_info 中。
+              series = item.get("series_info") or item.get("mix_info") or {}
+              if isinstance(series, str):
+                  try:
+                      series = json.loads(series)
+                  except Exception:
+                      series = {}
+              next_info = series.get("next_info") or {}
+              series_share = series.get("share_info") or {}
+              series_stats = series.get("stats") or {}
+              series_name = (
+                  series.get("series_name") or series.get("mix_name") or
+                  next_info.get("name") or ""
+              )
+              if isinstance(series_name, str):
+                  series_name = re.sub(r"^短剧\\s*[·・]\\s*", "", series_name).strip()
               return {
                   "source_path": source_path,
                   "aweme_id": str(item.get("aweme_id") or item.get("item_id") or ""),
                   "desc": item.get("desc") or "",
                   "author": author.get("nickname") or author.get("unique_id") or "",
+                  "drama_title": series_name,
+                  "series_name": series.get("series_name") or "",
+                  "mix_name": series.get("mix_name") or "",
+                  "series_next_name": next_info.get("name") or "",
+                  "series_share_desc": series_share.get("share_desc") or "",
+                  "series_share_weibo_desc": series_share.get("share_weibo_desc") or "",
+                  "total_episode": series_stats.get("total_episode") or series.get("total_episode"),
+                  "updated_to_episode": series_stats.get("updated_to_episode"),
                   "digg_count": stats.get("digg_count"),
                   "comment_count": stats.get("comment_count"),
                   "share_count": stats.get("share_count"),
@@ -165,21 +189,20 @@ jobs:
               """先走抖音 App Feed 接口；按 aweme_id 精确匹配，不能误拿推荐视频。"""
               import requests
               endpoints = (
-                  "https://api5-normal-c-hl.amemv.com/aweme/v1/feed/",
                   "https://aweme.snssdk.com/aweme/v1/feed/",
+                  "https://api5-normal-c-hl.amemv.com/aweme/v1/feed/",
               )
-              params = {
-                  "aweme_id": video_id,
-                  "aid": "1128",
-                  "device_platform": "android",
-                  "app_name": "aweme",
-                  "version_code": "350102",
-                  "version_name": "35.1.2",
-                  "channel": "googleplay",
-                  "device_type": "Pixel 7",
-                  "os_version": "13",
-                  "language": "zh",
-              }
+              # 先按用户手机浏览器验证过的最简 URL 请求；失败后再尝试带 App 参数的请求。
+              request_variants = [
+                  {"aweme_id": video_id},
+                  {
+                      "aweme_id": video_id, "aid": "1128",
+                      "device_platform": "android", "app_name": "aweme",
+                      "version_code": "350102", "version_name": "35.1.2",
+                      "channel": "googleplay", "device_type": "Pixel 7",
+                      "os_version": "13", "language": "zh",
+                  },
+              ]
               headers = {
                   "User-Agent": "com.ss.android.ugc.aweme/350102 (Linux; U; Android 13; zh_CN; Pixel 7; Build/TP1A.221005.002; Cronet/TTNetVersion:)",
                   "Accept": "application/json",
@@ -187,7 +210,8 @@ jobs:
                   "Connection": "close",
               }
               for endpoint in endpoints:
-                  attempt = {"url": endpoint, "status": None, "matched": False}
+                for variant_index, params in enumerate(request_variants, start=1):
+                  attempt = {"url": endpoint, "request_variant": "aweme_id_only" if variant_index == 1 else "app_params", "status": None, "matched": False}
                   try:
                       response = requests.get(endpoint, params=params, headers=headers, timeout=20)
                       attempt["status"] = response.status_code
@@ -211,7 +235,26 @@ jobs:
                               direct = payload.get("aweme_detail")
                               if isinstance(direct, dict):
                                   candidates.append(direct)
-                          target = next((x for x in candidates if str(x.get("aweme_id") or x.get("item_id") or "") == str(video_id)), None)
+                          # 某些 Feed 响应会把目标作品嵌套在更深层，递归按 ID 精确查找。
+                          def find_target(node, depth=0):
+                              if depth > 20:
+                                  return None
+                              if isinstance(node, dict):
+                                  if str(node.get("aweme_id") or node.get("item_id") or "") == str(video_id):
+                                      return node
+                                  for child in node.values():
+                                      if isinstance(child, (dict, list)):
+                                          found = find_target(child, depth + 1)
+                                          if found:
+                                              return found
+                              elif isinstance(node, list):
+                                  for child in node[:2000]:
+                                      if isinstance(child, (dict, list)):
+                                          found = find_target(child, depth + 1)
+                                          if found:
+                                              return found
+                              return None
+                          target = find_target(payload)
                           attempt["candidate_count"] = len(candidates)
                           attempt["candidate_ids"] = [str(x.get("aweme_id") or x.get("item_id") or "") for x in candidates[:12]]
                           if target:
@@ -219,6 +262,8 @@ jobs:
                               attempt["matched_desc"] = str(target.get("desc") or "")[:500]
                               attempt["matched_author"] = str(((target.get("author") or {}).get("nickname")) or "")[:120]
                               attempt["matched_keys"] = list(target.keys())[:60]
+                              attempt["matched_series_name"] = str(((target.get("series_info") or {}).get("series_name")) or "")[:200] if isinstance(target.get("series_info"), dict) else ""
+                              attempt["matched_mix_name"] = str(((target.get("series_info") or {}).get("mix_name")) or "")[:200] if isinstance(target.get("series_info"), dict) else ""
                               report["feed_api_result"] = normalize_item(target, "抖音 App Feed API")
                               report["feed_api_result"]["source"] = endpoint
                               report["feed_api_result"]["response_status"] = response.status_code
@@ -230,6 +275,13 @@ jobs:
                               report["feed_api_attempts"].append(attempt)
                               return
                           attempt["error"] = "响应成功，但没有找到 aweme_id 完全匹配的作品"
+                      else:
+                          attempt["body_preview"] = re.sub(r"\\s+", " ", response.text)[:500]
+                  except Exception as exc:
+                      attempt["error"] = f"{type(exc).__name__}: {exc}"[:500]
+                  report["feed_api_attempts"].append(attempt)
+
+          def safe_url(url):
                       else:
                           attempt["body_preview"] = re.sub(r"\\s+", " ", response.text)[:500]
                   except Exception as exc:
@@ -481,6 +533,10 @@ jobs:
                   title_candidates.append({"source": source, "value": value})
 
           detail = report.get("detail") or {}
+          add_title_candidate("作品关联短剧名", detail.get("drama_title", ""))
+          add_title_candidate("series_info.series_name", detail.get("series_name", ""))
+          add_title_candidate("series_info.mix_name", detail.get("mix_name", ""))
+          add_title_candidate("series_info.next_info.name", detail.get("series_next_name", ""))
           add_title_candidate("作品文案 desc", detail.get("desc", ""))
           add_title_candidate("页面标题", report.get("page_title", ""))
           add_title_candidate("分享页标题", (report.get("iesdouyin_page") or {}).get("title", ""))
@@ -513,7 +569,10 @@ jobs:
           report["title_candidates"] = filtered[:50]
           report["drama_title"] = ""
           report["drama_title_status"] = "待识别"
-          if detail.get("desc", "").strip() and not any(x in detail["desc"] for x in ("http://", "https://")):
+          if detail.get("drama_title", "").strip():
+              report["drama_title"] = detail["drama_title"].strip()[:120]
+              report["drama_title_status"] = "已从目标作品 series_info 精确识别短剧名"
+          elif detail.get("desc", "").strip() and not any(x in detail["desc"] for x in ("http://", "https://")):
               report["drama_title"] = detail["desc"].strip()[:120]
               report["drama_title_status"] = "已取得作品文案，尚需确认是否为剧名"
           elif filtered:
