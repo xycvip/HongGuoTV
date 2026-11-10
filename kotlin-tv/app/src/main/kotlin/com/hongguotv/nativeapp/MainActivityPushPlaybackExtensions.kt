@@ -48,7 +48,7 @@ private object PushShareParser {
     }
 }
 
-private fun MainActivity.pushPlaybackAnchor(): View? = nav.firstOrNull { it.tag=="nav:push-playback" } ?: pushPlaybackAnchor()
+private fun MainActivity.pushPlaybackAnchor(): View? = nav.firstOrNull { it.tag=="nav:push-playback" } ?: nav.lastOrNull()
 
 internal fun MainActivity.showPushPlayback() {
     val form=PhoneForm(
