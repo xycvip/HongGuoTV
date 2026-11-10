@@ -45,6 +45,8 @@ private object PushShareParser {
         return when {
             (host=="novelquickapp.com" || host=="www.novelquickapp.com") &&
                 Regex("^/s/[A-Za-z0-9_-]+/?$").matches(path) -> "红果"
+            (host=="hongguoduanju.com" || host=="www.hongguoduanju.com") &&
+                Regex("^/player/\\d{1,30}(?:/\\d{1,30})?/?$").matches(path) -> "红果"
             host=="v.douyin.com" && Regex("^/[A-Za-z0-9_-]+/?$").matches(path) -> "抖音"
             else -> null
         }
@@ -200,9 +202,13 @@ private object RedShareResolver {
     fun resolve(shortUrl:String):RedShareIds {
         val parsed=URI(shortUrl)
         val host=parsed.host?.lowercase(Locale.ROOT)?.trimEnd('.')
-        require(parsed.scheme.equals("https",true) && host in setOf("novelquickapp.com","www.novelquickapp.com") &&
-            parsed.rawUserInfo==null && parsed.port in listOf(-1,443) &&
-            Regex("^/s/[A-Za-z0-9_-]+/?$").matches(parsed.path.orEmpty())) { "不是受支持的红果短链接" }
+        val path=parsed.path.orEmpty()
+        val novelQuickShare=(host in setOf("novelquickapp.com","www.novelquickapp.com") &&
+            Regex("^/s/[A-Za-z0-9_-]+/?$").matches(path))
+        val hongguoWebShare=(host in setOf("hongguoduanju.com","www.hongguoduanju.com") &&
+            Regex("^/player/\\d{1,30}(?:/\\d{1,30})?/?$").matches(path))
+        require(parsed.scheme.equals("https",true) && (novelQuickShare || hongguoWebShare) &&
+            parsed.rawUserInfo==null && parsed.port in listOf(-1,443)) { "不是受支持的红果分享链接" }
         val connection=(URL(shortUrl).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects=true
             connectTimeout=8000
@@ -233,11 +239,13 @@ private object RedShareResolver {
                 if(seriesId==null) seriesId=seriesPattern.find(source)?.groupValues?.getOrNull(1)
                 if(episodeId==null) episodeId=episodePattern.find(source)?.groupValues?.getOrNull(1)
                 if(genericVideoId==null) genericVideoId=genericVideoPattern.find(source)?.groupValues?.getOrNull(1)
-                val path=playerPath.find(source)
-                if(path!=null) {
-                    if(seriesId==null) seriesId=path.groupValues[1]
-                    if(episodeId==null) episodeId=path.groupValues[2]
+                val episodePath=playerPath.find(source)
+                if(episodePath!=null) {
+                    if(seriesId==null) seriesId=episodePath.groupValues[1]
+                    if(episodeId==null) episodeId=episodePath.groupValues[2]
                 }
+                val seriesPath=playerSeriesPath.find(source)
+                if(seriesPath!=null && seriesId==null) seriesId=seriesPath.groupValues[1]
             }
             // 部分红果整剧分享把 series ID 放在 schemeParams.video_id；独立 vid / share_toast_vid 才优先视为单集 ID。
             if(seriesId==null) seriesId=genericVideoId
