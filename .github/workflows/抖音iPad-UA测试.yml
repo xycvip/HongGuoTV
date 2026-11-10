@@ -65,7 +65,7 @@ jobs:
               "dom_candidates": {}, "meta": {}, "network_detail_responses": [],
               "redirects": [], "observed_video_ids": [], "iesdouyin_page": {},
               "console_errors": [], "page_errors": [], "blocked_indicators": [],
-              "error": ""
+              "error": "", "detail": {}, "detail_attempts": [], "raw_api_samples": []
           }
 
           def scan_json(obj, found, path="$", depth=0):
@@ -81,6 +81,83 @@ jobs:
                   for i, value in enumerate(obj[:100]):
                       if isinstance(value, (dict, list)):
                           scan_json(value, found, f"{path}[{i}]", depth + 1)
+
+          def extract_router_data(html):
+              marker = re.search(r"(?:window\\.)?_ROUTER_DATA\\s*=\\s*", html)
+              if not marker:
+                  return None
+              start = html.find("{", marker.end())
+              if start < 0:
+                  return None
+              depth, in_string, escaped = 0, False, False
+              for i in range(start, len(html)):
+                  ch = html[i]
+                  if in_string:
+                      if escaped:
+                          escaped = False
+                      elif ch == "\\\\":
+                          escaped = True
+                      elif ch == '"':
+                          in_string = False
+                  else:
+                      if ch == '"':
+                          in_string = True
+                      elif ch == "{":
+                          depth += 1
+                      elif ch == "}":
+                          depth -= 1
+                          if depth == 0:
+                              try:
+                                  return json.loads(html[start:i + 1])
+                              except Exception:
+                                  return None
+              return None
+
+          def find_video_item(obj, path="$", depth=0):
+              if depth > 18:
+                  return None
+              if isinstance(obj, dict):
+                  info = obj.get("videoInfoRes")
+                  if isinstance(info, dict):
+                      items = info.get("item_list") or []
+                      if items and isinstance(items[0], dict):
+                          return items[0], path + ".videoInfoRes.item_list[0]"
+                  for key, value in obj.items():
+                      if key in ("aweme_detail", "awemeDetail") and isinstance(value, dict) and value.get("aweme_id"):
+                          return value, path + "." + key
+                      if isinstance(value, (dict, list)):
+                          found = find_video_item(value, path + "." + str(key), depth + 1)
+                          if found:
+                              return found
+              elif isinstance(obj, list):
+                  for i, value in enumerate(obj[:100]):
+                      found = find_video_item(value, f"{path}[{i}]", depth + 1)
+                      if found:
+                          return found
+              return None
+
+          def normalize_item(item, source_path):
+              video = item.get("video") or {}
+              author = item.get("author") or {}
+              stats = item.get("statistics") or {}
+              cover = video.get("cover") or video.get("origin_cover") or {}
+              play = video.get("play_addr") or {}
+              return {
+                  "source_path": source_path,
+                  "aweme_id": str(item.get("aweme_id") or item.get("item_id") or ""),
+                  "desc": item.get("desc") or "",
+                  "author": author.get("nickname") or author.get("unique_id") or "",
+                  "digg_count": stats.get("digg_count"),
+                  "comment_count": stats.get("comment_count"),
+                  "share_count": stats.get("share_count"),
+                  "collect_count": stats.get("collect_count"),
+                  "duration_ms": video.get("duration"),
+                  "width": video.get("width"),
+                  "height": video.get("height"),
+                  "cover_urls": (cover.get("url_list") or [])[:5],
+                  "play_urls": (play.get("url_list") or [])[:5],
+                  "item_type": item.get("aweme_type")
+              }
 
           def safe_url(url):
               try:
@@ -136,8 +213,22 @@ jobs:
                               scan_json(payload, found)
                               item["json_top_keys"] = list(payload.keys())[:50] if isinstance(payload, dict) else []
                               item["json_fields_sample"] = found[:30]
+                              if isinstance(payload, dict):
+                                  item["json_errno"] = payload.get("errno")
+                                  item["json_message"] = str(payload.get("message") or payload.get("msg") or "")[:300]
                       except Exception as exc:
                           item["body_parse_error"] = str(exc)[:300]
+                          try:
+                              body_text = response.text()
+                              item["body_preview"] = re.sub(r"\\s+", " ", body_text)[:1200]
+                              if len(report["raw_api_samples"]) < 10:
+                                  report["raw_api_samples"].append({
+                                      "url": safe_url(response.url),
+                                      "status": response.status,
+                                      "body_preview": item["body_preview"]
+                                  })
+                          except Exception:
+                              pass
                       report["network_detail_responses"].append(item)
 
               page.on("response", on_response)
@@ -172,11 +263,47 @@ jobs:
                       ).slice(0,20).map(t => t.slice(0,20000))""")
                       report["iesdouyin_page"]["html_has_video_id"] = video_id in html
                       report["iesdouyin_page"]["html_length"] = len(html)
+
+                      router_data = extract_router_data(html)
+                      if router_data is not None:
+                          report["iesdouyin_page"]["router_data_keys"] = list(router_data.keys())[:40]
+                          found_item = find_video_item(router_data)
+                          if found_item:
+                              report["detail"] = normalize_item(found_item[0], found_item[1])
+                              report["detail"]["source"] = "iesdouyin _ROUTER_DATA"
                       for marker in ("验证码", "访问过于频繁", "登录后", "安全验证", "网络异常"):
                           if marker in report["iesdouyin_page"]["text"]:
                               report["blocked_indicators"].append("iesdouyin:" + marker)
 
-                  page.wait_for_timeout(7000)
+                  if not report["detail"]:
+                      for fallback_url in (
+                          f"https://m.douyin.com/share/video/{video_id}",
+                          f"https://www.douyin.com/video/{video_id}"
+                      ):
+                          attempt = {"url": safe_url(fallback_url)}
+                          try:
+                              fallback_response = page.goto(fallback_url, wait_until="domcontentloaded", timeout=45000)
+                              attempt["http_status"] = fallback_response.status if fallback_response else None
+                              page.wait_for_timeout(6000)
+                              fallback_html = page.content()
+                              fallback_router = extract_router_data(fallback_html)
+                              attempt["title"] = page.title()
+                              attempt["html_length"] = len(fallback_html)
+                              attempt["has_router_data"] = fallback_router is not None
+                              if fallback_router is not None:
+                                  found_item = find_video_item(fallback_router)
+                                  if found_item:
+                                      report["detail"] = normalize_item(found_item[0], found_item[1])
+                                      report["detail"]["source"] = safe_url(fallback_url) + " _ROUTER_DATA"
+                                      attempt["detail_found"] = True
+                              attempt["page_text"] = re.sub(r"\\s+", " ", page.locator("body").inner_text())[:1000]
+                          except Exception as exc:
+                              attempt["error"] = f"{type(exc).__name__}: {exc}"[:500]
+                          report["detail_attempts"].append(attempt)
+                          if report["detail"]:
+                              break
+
+                  page.wait_for_timeout(3000)
                   report["resolved_url"] = safe_url(page.url)
                   report["page_title"] = page.title()
                   body = page.locator("body").inner_text() if page.locator("body").count() else ""
