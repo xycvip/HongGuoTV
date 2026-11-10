@@ -64,8 +64,8 @@ private data class DouyinShareInfo(
     val updatedEpisodes:Int?
 )
 private object DouyinShareResolver {
-    private val videoIdPattern=Regex("""/(?:share/video|video)/(\\d{8,25})""",RegexOption.IGNORE_CASE)
-    private val queryIdPattern=Regex("""(?:[?&]|^)aweme_id=(\\d{8,25})""",RegexOption.IGNORE_CASE)
+    private val videoIdPattern=Regex("""/(?:share/video|video)/(\d{8,25})""",RegexOption.IGNORE_CASE)
+    private val queryIdPattern=Regex("""(?:[?&]|^)aweme_id=(\d{8,25})""",RegexOption.IGNORE_CASE)
     private val shareTitlePattern=Regex("""[【〖]([^】〗]{1,100})[】〗]""")
     private fun text(obj:JSONObject?,key:String):String =
         obj?.opt(key)?.takeUnless { it==JSONObject.NULL }?.toString()?.trim().orEmpty().takeUnless { it=="null" }.orEmpty()
