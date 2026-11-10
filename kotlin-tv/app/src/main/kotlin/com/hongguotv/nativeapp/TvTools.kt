@@ -232,7 +232,7 @@ class TvTools(private val activity: Activity) {
             content.addView(placeholder,LinearLayout.LayoutParams(-2,-2).apply {
                 topMargin=dp(16); bottomMargin=dp(14)
             })
-            content.addView(label("目录：/storage/emulated/0/\n端口：${LibraryTransferServer.DEFAULT_PORT}\n获取到 IPv4 地址后，二维码会在重新打开本页时生成。",13f).apply {
+            content.addView(label("目录：/storage/emulated/0/HongGuoTV/\n端口：${LibraryTransferServer.DEFAULT_PORT}\n获取到 IPv4 地址后，二维码会在重新打开本页时生成。",13f).apply {
                 gravity=Gravity.CENTER
                 setTextColor(TvStyle.muted)
                 setPadding(dp(8),dp(14),dp(8),dp(4))
@@ -242,7 +242,7 @@ class TvTools(private val activity: Activity) {
 
         worker.execute {
             try {
-                val folder=android.os.Environment.getExternalStorageDirectory()
+                val folder=java.io.File(android.os.Environment.getExternalStorageDirectory(),"HongGuoTV")
                 val session=LibraryTransferServer(address,folder,onExpired = {
                     main.post {
                         if(this@TvTools.dialog===dialog) {
@@ -258,7 +258,7 @@ class TvTools(private val activity: Activity) {
                     content.removeAllViews()
                     content.gravity=Gravity.CENTER_HORIZONTAL
                     content.addView(TvDialog.title(activity,"远程文件管理"))
-                    content.addView(label("扫描二维码，打开电视公共存储目录",15f).apply {
+                    content.addView(label("扫描二维码，打开 HongGuoTV 文件夹",15f).apply {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
                     })
