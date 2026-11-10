@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "51155fd1662693e2c21db7f1b4d242e23018d959",
-  "versionCode": 69,
-  "versionName": "0.0.69",
+  "sourceCommit": "8c0a6c5f6305c3c28ee71f2df797d6e453ccfd90",
+  "versionCode": 70,
+  "versionName": "0.0.70",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.69",
+  "tag": "hongguotv-bate-v0.0.70",
   "apk": {
-    "name": "HongguoTV-0.0.69.apk",
-    "size": 2008853,
-    "sha256": "b5e64851f215c827c62e1b71066a8f25edd1eeaeb087288721ee853b54acc3ea",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.69/HongguoTV-0.0.69.apk"
+    "name": "HongguoTV-0.0.70.apk",
+    "size": 2009021,
+    "sha256": "6295ff3a43e69d2eb36423173f9690ceef84b812d58eb5f0cccb208ba0c84631",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.70/HongguoTV-0.0.70.apk"
   },
-  "notes": "【播放与播放器】\n- 将推送播放返回焦点恢复到导航项\n- 播放期间关闭推送扫码服务\n- 推送播放视频退出时直接返回二维码页面\n- 退出推送播放视频后返回二维码页面\n- 将推送播放卡片标题调整到左上角\n- 修正推送播放卡片标题创建方式\n- 将推送播放说明标题移至二维码卡片顶部\n- 放大推送播放候选结果海报\n- 修复推送播放候选弹窗匹配数量显示\n- 修复推送候选点击播放后的导航焦点恢复\n- 从推送播放返回目录时恢复导航焦点\n- 推送播放打开剧集时记录来源导航焦点\n- 记录推送播放返回焦点状态\n【焦点与遥控器】\n- 保留推送服务并让二维码卡片可恢复焦点\n【网络与接口】\n- 精简接口状态设置说明\n- 补充接口状态设置项左侧说明\n【界面与交互】\n- 修复推送候选弹窗标题语法错误\n【其他功能与问题修复】\n- 首页接着看仅展示最近两部\n- 首页最近观看改为自适应双列横向卡片\n- 更新推送服务生命周期说明\n- 同步放大推送候选卡片文字尺寸\n- 仅将远程文件管理默认打开目录设为 HongGuoTV"
+  "notes": "【播放与播放器】\n- 调整推送播放标题与二维码内容间距\n- 修正推送播放卡片底部留白不增高\n- 调整推送播放二维码卡片纵向留白\n【其他功能与问题修复】\n- 还原首页接着看展示调整"
 }
