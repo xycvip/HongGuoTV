@@ -53,7 +53,8 @@ private object PushShareParser {
 /** 红果短链专用解析器：只跟随红果 /s/ 短链，不处理抖音链接。 */
 private object RedShareResolver {
     private val seriesPattern=Regex("""["']?(?:video_series_id|series_id|seriesId|series_id_str)["']?\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
-    private val videoPattern=Regex("""["']?(?:video_id|vid|episode_id|episodeId)["']?\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
+    private val episodePattern=Regex("""["']?(?:share_toast_vid|vid|episode_id|episodeId)["']?\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
+    private val genericVideoPattern=Regex("""["']?video_id["']?\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
     private val playerPath=Regex("""/player/(\d{1,30})/(\d{1,30})""",RegexOption.IGNORE_CASE)
     private fun decoded(value:String):String {
         var current=value
@@ -86,17 +87,22 @@ private object RedShareResolver {
             }.orEmpty()
             val sources=listOf(finalUrl,decoded(finalUrl),body,decoded(body))
             var seriesId:String?=null
-            var videoId:String?=null
+            var episodeId:String?=null
+            var genericVideoId:String?=null
             for(source in sources) {
                 if(seriesId==null) seriesId=seriesPattern.find(source)?.groupValues?.getOrNull(1)
-                if(videoId==null) videoId=videoPattern.find(source)?.groupValues?.getOrNull(1)
+                if(episodeId==null) episodeId=episodePattern.find(source)?.groupValues?.getOrNull(1)
+                if(genericVideoId==null) genericVideoId=genericVideoPattern.find(source)?.groupValues?.getOrNull(1)
                 val path=playerPath.find(source)
                 if(path!=null) {
                     if(seriesId==null) seriesId=path.groupValues[1]
-                    if(videoId==null) videoId=path.groupValues[2]
+                    if(episodeId==null) episodeId=path.groupValues[2]
                 }
             }
-            return RedShareIds(seriesId,videoId)
+            // 部分红果整剧分享把 series ID 放在 schemeParams.video_id；若没有独立分集字段，将它视为剧名 ID。
+            if(seriesId==null && episodeId==null) seriesId=genericVideoId
+            else if(episodeId==null) episodeId=genericVideoId
+            return RedShareIds(seriesId,episodeId)
         } finally {
             connection.disconnect()
         }
