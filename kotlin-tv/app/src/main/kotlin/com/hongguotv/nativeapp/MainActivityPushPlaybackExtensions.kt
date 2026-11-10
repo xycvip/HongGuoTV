@@ -25,6 +25,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
 import java.util.Locale
+import org.json.JSONArray
+import org.json.JSONObject
 
 private data class PushShareItem(val title:String,val url:String,val source:String)
 private data class RedShareIds(val seriesId:String?,val videoId:String?)
@@ -49,6 +51,119 @@ private object PushShareParser {
             if(title.isNotBlank()) result+=PushShareItem(title,match.value,"抖音")
         }
         return result.distinctBy { it.source+"|"+it.url+"|"+it.title }
+    }
+}
+
+/** 抖音分享短链解析：短链重定向提取 aweme_id，再用移动端 Feed 精确匹配作品并读取短剧信息。 */
+private data class DouyinShareInfo(
+    val awemeId:String,
+    val title:String,
+    val author:String,
+    val seriesId:String?,
+    val totalEpisodes:Int?,
+    val updatedEpisodes:Int?
+)
+private object DouyinShareResolver {
+    private val videoIdPattern=Regex("""/(?:share/video|video)/(\\d{8,25})""",RegexOption.IGNORE_CASE)
+    private val queryIdPattern=Regex("""(?:[?&]|^)aweme_id=(\\d{8,25})""",RegexOption.IGNORE_CASE)
+    private val shareTitlePattern=Regex("""[【〖]([^】〗]{1,100})[】〗]""")
+    private fun text(obj:JSONObject?,key:String):String =
+        obj?.opt(key)?.takeUnless { it==JSONObject.NULL }?.toString()?.trim().orEmpty().takeUnless { it=="null" }.orEmpty()
+    private fun findAweme(value:Any?,awemeId:String,depth:Int=0):JSONObject? {
+        if(depth>24) return null
+        when(value) {
+            is JSONObject -> {
+                val direct=text(value,"aweme_id")
+                val status=value.optJSONObject("status")
+                val statistics=value.optJSONObject("statistics")
+                if(direct==awemeId || text(status,"aweme_id")==awemeId || text(statistics,"aweme_id")==awemeId) return value
+                val keys=value.keys()
+                while(keys.hasNext()) {
+                    val found=findAweme(value.opt(keys.next()),awemeId,depth+1)
+                    if(found!=null) return found
+                }
+            }
+            is JSONArray -> for(index in 0 until value.length()) {
+                val found=findAweme(value.opt(index),awemeId,depth+1)
+                if(found!=null) return found
+            }
+        }
+        return null
+    }
+    private fun titleFrom(info:JSONObject?):String {
+        if(info==null) return ""
+        val direct=listOf(text(info,"series_name"),text(info,"mix_name"),text(info.optJSONObject("next_info"),"name"))
+            .firstOrNull { it.isNotBlank() }.orEmpty()
+        if(direct.isNotBlank()) return direct
+        val share=text(info.optJSONObject("share_info"),"share_desc")
+        return shareTitlePattern.find(share)?.groupValues?.getOrNull(1).orEmpty()
+    }
+    private fun feed(awemeId:String,host:String):DouyinShareInfo {
+        val endpoint="https://$host/aweme/v1/feed/?aweme_id=$awemeId&aid=1128"
+        val connection=(URL(endpoint).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects=true
+            connectTimeout=8000
+            readTimeout=10000
+            requestMethod="GET"
+            setRequestProperty("User-Agent","com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7; Build/TQ3A.230805.001; Cronet/TTNetVersion)")
+            setRequestProperty("Accept","application/json, text/plain, */*")
+            setRequestProperty("Referer","https://www.douyin.com/")
+        }
+        try {
+            val status=connection.responseCode
+            if(status !in 200..299) throw java.io.IOException("Feed HTTP $status")
+            val body=connection.inputStream.use { input ->
+                val out=java.io.ByteArrayOutputStream()
+                val buffer=ByteArray(8192)
+                while(out.size()<3*1024*1024) {
+                    val n=input.read(buffer,0,minOf(buffer.size,3*1024*1024-out.size()))
+                    if(n<=0) break
+                    out.write(buffer,0,n)
+                }
+                String(out.toByteArray(),Charsets.UTF_8)
+            }
+            val root=JSONObject(body)
+            val aweme=findAweme(root,awemeId) ?: throw java.io.IOException("Feed 返回成功，但没有找到匹配作品 ID")
+            val series=aweme.optJSONObject("series_info")
+            val mix=aweme.optJSONObject("mix_info")
+            val title=(titleFrom(series).ifBlank { titleFrom(mix) })
+                .removePrefix("短剧 · ").removePrefix("短剧·").removePrefix("漫剧 · ").trim()
+            if(title.isBlank()) throw java.io.IOException("作品 ID 已匹配，但 Feed 中没有短剧名称")
+            val stats=series?.optJSONObject("stats") ?: mix?.optJSONObject("stats")
+            val author=text(aweme.optJSONObject("author"),"nickname")
+            return DouyinShareInfo(
+                awemeId,title,author,
+                text(series,"series_id").ifBlank { text(mix,"mix_id") }.ifBlank { null },
+                stats?.optInt("total_episode")?.takeIf { it>0 },
+                stats?.optInt("updated_to_episode")?.takeIf { it>0 }
+            )
+        } finally { connection.disconnect() }
+    }
+    fun resolve(shortUrl:String):DouyinShareInfo {
+        val parsed=URL(shortUrl)
+        require(parsed.protocol=="https" && parsed.host.equals("v.douyin.com",true)) { "不是抖音短链接" }
+        val redirect=(parsed.openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects=true
+            connectTimeout=8000
+            readTimeout=10000
+            requestMethod="GET"
+            setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36")
+            setRequestProperty("Accept","text/html,application/xhtml+xml")
+        }
+        val awemeId=try {
+            val status=redirect.responseCode
+            val finalUrl=redirect.url.toString()
+            if(status !in 200..399) throw java.io.IOException("抖音短链跳转 HTTP $status")
+            videoIdPattern.find(finalUrl)?.groupValues?.getOrNull(1)
+                ?: queryIdPattern.find(finalUrl)?.groupValues?.getOrNull(1)
+                ?: throw java.io.IOException("短链已跳转，但没有从最终地址提取到 aweme_id：$finalUrl")
+        } finally { redirect.disconnect() }
+        var last:Exception?=null
+        listOf("aweme.snssdk.com","api5-normal-c-hl.amemv.com").forEach { host ->
+            if(Thread.currentThread().isInterrupted) throw InterruptedException("抖音分享识别已取消")
+            try { return feed(awemeId,host) } catch(problem:Exception) { last=problem }
+        }
+        throw java.io.IOException("作品 $awemeId 的 Feed 解析失败："+(last?.message ?: "未知错误"),last)
     }
 }
 
@@ -256,9 +371,24 @@ private fun MainActivity.acceptPushShare(raw:String) {
             var directDetail:Detail?=null
             var directVideoId:String?=null
             var directForceFirst=false
+            val verifiedTitles=mutableListOf<String>()
             shares.take(4).forEach { share ->
                 if(Thread.currentThread().isInterrupted) return@submit
                 var resolved=false
+                var searchTitle=share.title
+                if(share.source=="抖音" && share.url.isNotBlank()) {
+                    try {
+                        val info=DouyinShareResolver.resolve(share.url)
+                        searchTitle=info.title
+                        verifiedTitles+=info.title
+                        debugLog("推送播放：抖音作品匹配成功 aweme_id=${info.awemeId}，短剧《${info.title}》，作者=${info.author.ifBlank { "未知" }}，集数=${info.updatedEpisodes ?: info.totalEpisodes ?: "未知"}，series_id=${info.seriesId ?: "未知"}")
+                    } catch(problem:Exception) {
+                        failures+="抖音短链接识别失败："+(problem.message ?: "未知错误")
+                        debugLog("推送播放：抖音 Feed 识别失败："+(problem.message ?: "未知错误"))
+                        // “某某的作品”只是分享卡片作者描述，不是短剧名，禁止拿它去搜索误播。
+                        if(searchTitle.contains("的作品") || searchTitle=="作品") searchTitle=""
+                    }
+                } else if(share.title.isNotBlank()) verifiedTitles+=share.title
                 if(share.source=="红果" && share.url.isNotBlank()) {
                     try {
                         val ids=RedShareResolver.resolve(share.url)
@@ -278,17 +408,18 @@ private fun MainActivity.acceptPushShare(raw:String) {
                         failures+="红果链接解析/剧目读取失败："+(problem.message ?: "未知错误")
                     }
                 }
-                // 红果解析失败才使用红果文案兜底；抖音始终只走抖音文案搜索，不调用红果解析器。
-                if(!resolved && share.title.isNotBlank()) {
+                // 抖音优先使用 Feed 验证出的短剧名；Feed 无法确认时不把“作者的作品”当剧名。
+                if(!resolved && searchTitle.isNotBlank()) {
                     try {
-                        repository.searchCombined(share.title,1).items.take(12).forEach { series ->
-                            if(candidates.none { it.second.id==series.id }) candidates+=share to series
+                        repository.searchCombined(searchTitle,1).items.take(12).forEach { series ->
+                            if(candidates.none { it.second.id==series.id }) candidates+=share.copy(title=searchTitle) to series
                         }
-                    } catch(problem:Exception) { failures+=share.source+"《"+share.title+"》："+(problem.message ?: "搜索失败") }
+                    } catch(problem:Exception) { failures+=share.source+"《"+searchTitle+"》："+(problem.message ?: "搜索失败") }
                 }
             }
-            val ranked=candidates.distinctBy { it.second.id }.sortedByDescending { (_,series) -> pushTitleScore(series.title,shares.map { it.title }.filter { it.isNotBlank() }) }.take(12)
-            val exact=ranked.filter { (_,series) -> shares.any { it.title.isNotBlank() && normalizePushTitle(series.title)==normalizePushTitle(it.title) } }
+            val searchTitles=verifiedTitles.ifEmpty { shares.map { it.title }.filter { it.isNotBlank() } }
+            val ranked=candidates.distinctBy { it.second.id }.sortedByDescending { (_,series) -> pushTitleScore(series.title,searchTitles) }.take(12)
+            val exact=ranked.filter { (_,series) -> searchTitles.any { normalizePushTitle(series.title)==normalizePushTitle(it) } }
             val readyDetail=directDetail
             val readyVideoId=directVideoId
             val forceFirst=directForceFirst
