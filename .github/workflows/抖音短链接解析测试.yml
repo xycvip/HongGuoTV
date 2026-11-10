@@ -250,7 +250,6 @@ jobs:
                       mobile_context.set_extra_http_headers({
                           "Referer": "https://www.douyin.com/"
                       })
-                      mobile_context.on("page", lambda p: p.on("response", on_response))
                       for label, mobile_url in mobile_targets:
                           mobile_page = mobile_context.new_page()
                           mobile_page.on("response", on_response)
