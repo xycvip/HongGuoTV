@@ -173,7 +173,13 @@ import java.util.concurrent.atomic.AtomicLong
         if(screen=="player" && commentPanel!=null) { closeOfficialComments(); return }
         when(screen) {
             "player" -> if(player?.playbackState==Player.STATE_ENDED) returnToDetail() else if(hud.visibility==View.VISIBLE && !playError) hidePlaybackOverlay() else returnToDetail()
-            "detail" -> { showCatalog(); if(tab==6) navForTab()?.requestFocus() }
+            "detail" -> {
+                showCatalog()
+                if(pushPlaybackReturnFocus) {
+                    pushPlaybackReturnFocus=false
+                    root.post { nav.firstOrNull { it.tag=="nav:push-playback" }?.takeIf { it.isAttachedToWindow }?.requestFocus() }
+                } else if(tab==6) navForTab()?.requestFocus()
+            }
             "account" -> { showCatalog(); if(tab==6) navForTab()?.requestFocus() }
             else -> {
                 // 统一所有标签页的返回层级：
