@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "f32f9928a8fe910f54f9bcf273c496990a7a5ff9",
-  "versionCode": 62,
-  "versionName": "0.0.62",
+  "sourceCommit": "3984d19d0f99bd8b0faf82f1567c4354041e92a6",
+  "versionCode": 63,
+  "versionName": "0.0.63",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.62",
+  "tag": "hongguotv-bate-v0.0.63",
   "apk": {
-    "name": "HongguoTV-0.0.62.apk",
-    "size": 2003573,
-    "sha256": "665f70f5e12909b7d9b69896e38b71b494b0f96eeb0076638bf80f5ed7b61ec1",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.62/HongguoTV-0.0.62.apk"
+    "name": "HongguoTV-0.0.63.apk",
+    "size": 2003569,
+    "sha256": "2a1ac928ea09280318eed742737641f04d0542260784ad3fcbfb07fd1d6addc2",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.63/HongguoTV-0.0.63.apk"
   },
-  "notes": "【播放与播放器】\n- 修复进入推送播放时旧导航焦点残留\n- 增加推送播放搜索结果弹窗状态管理\n- 优化推送播放二维码卡片布局\n【片源与数据管理】\n- 补充推送候选弹窗 ViewGroup 导入\n【界面与交互】\n- 修复推送候选弹窗 ScrollView 布局参数编译错误\n- 完善推送搜索弹窗提示与窗口配置\n- 将推送搜索候选结果改为居中弹窗\n- 修正推送服务状态单行显示"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
