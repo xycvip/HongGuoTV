@@ -168,7 +168,7 @@ private fun pushQr(url:String):Bitmap {
     return Bitmap.createBitmap(pixels,512,512,Bitmap.Config.ARGB_8888)
 }
 private fun MainActivity.pushText(value:String,size:Float,color:Int=TvStyle.text)=TextView(this).apply {
-    text=value;textSize=size;setTextColor(color);setLineSpacing(dp(3).toFloat(),1f)
+    text=value;textSize=size;setTextColor(color);setLineSpacing(dp(6).toFloat(),1f)
 }
 private fun MainActivity.pushAction(parent:LinearLayout,title:String,action:()->Unit):TextView {
     val view=TextView(this).apply {
@@ -185,7 +185,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     val scroll=ScrollView(this).apply { isFillViewport=true;isVerticalScrollBarEnabled=false }
     val page=LinearLayout(this).apply {
         orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER
-        setPadding(dp(28),dp(24),dp(28),dp(24))
+        setPadding(dp(28),dp(20),dp(28),dp(20))
     }
     scroll.addView(page,ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
     container.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
@@ -199,17 +199,17 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         background=GradientDrawable().apply { setColor(Color.WHITE);cornerRadius=dp(14).toFloat() }
     }
     val qr=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="手机扫码打开推送播放网页" }
-    qrCard.addView(qr,LinearLayout.LayoutParams(dp(200),dp(200)))
+    qrCard.addView(qr,LinearLayout.LayoutParams(dp(240),dp(240)))
     hero.addView(qrCard,LinearLayout.LayoutParams(-2,-2))
-    val info=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(28),0,dp(4),0) }
+    val info=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(30),0,dp(4),0) }
     fun oneLine(value:String,size:Float,color:Int)=pushText(value,size,color).apply {
         setSingleLine(false);maxLines=4;ellipsize=null
     }
     val status=oneLine("服务运行中 · 端口 3309",18f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD }
     info.addView(status)
-    info.addView(oneLine("手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。",18f,TvStyle.text).apply { setPadding(0,dp(8),0,0) })
+    info.addView(oneLine("手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。",18f,TvStyle.text).apply { setPadding(0,dp(14),0,0) })
     val divider=View(this).apply { setBackgroundColor(TvStyle.outline) }
-    info.addView(divider,LinearLayout.LayoutParams(-1,dp(1)).apply { topMargin=dp(12);bottomMargin=dp(11) })
+    info.addView(divider,LinearLayout.LayoutParams(-1,dp(1)).apply { topMargin=dp(17);bottomMargin=dp(16) })
     info.addView(oneLine("手机操作步骤",18f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD })
     listOf(
         "01  手机与电视连接同一 Wi-Fi",
@@ -217,13 +217,13 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         "03  复制红果 / 抖音分享文案并粘贴",
         "04  点击发送，电视自动搜索并显示结果"
     ).forEach { step ->
-        info.addView(oneLine(step,16f,TvStyle.muted).apply { setPadding(0,dp(6),0,0) })
+        info.addView(oneLine(step,16f,TvStyle.muted).apply { setPadding(0,dp(9),0,0) })
     }
-    val urlLabel=oneLine("访问地址：等待服务启动",16f,TvStyle.accent).apply { setPadding(0,dp(10),0,0) }
+    val urlLabel=oneLine("访问地址：等待服务启动",16f,TvStyle.accent).apply { setPadding(0,dp(14),0,0) }
     pushPlaybackUrlView=urlLabel
     info.addView(urlLabel)
     hero.addView(info,LinearLayout.LayoutParams(0,-2,1f))
-    hero.minimumHeight=dp(300)
+    hero.minimumHeight=dp(420)
     page.addView(hero,LinearLayout.LayoutParams(-2,-2).apply { gravity=Gravity.CENTER })
     pushPlaybackStatusView=status
     pushPlaybackQrView=qr
