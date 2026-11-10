@@ -227,6 +227,8 @@ class MainActivity: Activity() {
     internal var pushPlaybackRevision: Long = 0L
     internal var pushPlaybackTask: java.util.concurrent.Future<*>? = null
     internal var pushPlaybackPageActive: Boolean = false
+    /** 推送播放打开剧集后，返回目录时将焦点还给推送播放导航项。 */
+    internal var pushPlaybackReturnFocus: Boolean = false
     internal var pushPlaybackServer: PhoneInputServer? = null
     internal var pushPlaybackStatusView: TextView? = null
     internal var pushPlaybackCandidateHost: LinearLayout? = null
