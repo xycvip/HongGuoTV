@@ -442,11 +442,16 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     ).forEach { step ->
         info.addView(oneLine(step,16f,TvStyle.muted).apply { setPadding(0,dp(9),0,0) })
     }
-    val urlLabel=oneLine("访问地址：等待服务启动",16f,TvStyle.accent).apply { setPadding(0,dp(14),0,0) }
+    val urlLabel=oneLine("访问地址：等待服务启动",16f,TvStyle.accent).apply {
+        gravity=Gravity.END
+        maxLines=3
+        setPadding(0,dp(14),0,0)
+    }
     pushPlaybackUrlView=urlLabel
-    info.addView(urlLabel)
     contentRow.addView(info,LinearLayout.LayoutParams(0,-2,1f))
     hero.addView(contentRow,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(15) })
+    // 访问地址独立放在卡片右下方，使用卡片内宽度换行，避免末尾字符越界。
+    hero.addView(urlLabel,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) })
     hero.minimumHeight=dp(440)
     page.addView(hero,LinearLayout.LayoutParams(-2,-2).apply { gravity=Gravity.CENTER })
     pushPlaybackStatusView=status
