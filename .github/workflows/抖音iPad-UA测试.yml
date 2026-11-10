@@ -1,13 +1,13 @@
-name: 抖音 iPad UA 网页访问测试
+name: 抖音分享链接真实浏览器识别测试
 
 on:
   workflow_dispatch:
     inputs:
-      page_url:
-        description: 抖音视频网页地址
+      share_input:
+        description: 抖音短链接、视频长链接或视频 ID
         required: true
         type: string
-        default: https://www.douyin.com/video/7673080238095486249
+        default: https://v.douyin.com/z_xefff5id4/
   push:
     paths:
       - .github/workflows/抖音iPad-UA测试.yml
@@ -16,240 +16,172 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  douyin-browser-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     steps:
       - name: 安装 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 分别使用 iPad、Android、OkHttp UA 请求抖音网页
-        env:
-          PAGE_URL: ${{ inputs.page_url || 'https://www.douyin.com/video/7673080238095486249' }}
+      - name: 安装 Playwright Chromium
         run: |
-          python -m pip install requests
-          python - <<'PY'
-          import json
-          import os
-          import re
-          from html.parser import HTMLParser
-          from urllib.parse import urlparse
-          import requests
-
-          url = os.environ["PAGE_URL"].strip()
-          parsed = urlparse(url)
-          if parsed.scheme != "https" or parsed.hostname not in {
-              "www.douyin.com", "douyin.com", "v.douyin.com"
-          }:
-              raise SystemExit("只允许访问抖音官方 HTTPS 域名")
-
-          user_agents = {
-              "iPad_Safari": (
-                  "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) "
-                  "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-                  "Version/18.0 Mobile/15E148 Safari/604.1"
-              ),
-              "Android_Chrome": (
-                  "Mozilla/5.0 (Linux; Android 16; PHK110) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/131.0.0.0 Mobile Safari/537.36"
-              ),
-              "OkHttp_4.12": "okhttp/4.12.0",
-          }
-
-          class PageParser(HTMLParser):
-              def __init__(self):
-                  super().__init__()
-                  self.in_title = False
-                  self.title_text = []
-                  self.meta = {}
-                  self.script_count = 0
-                  self.script_ids = []
-                  self.markers = set()
-              def handle_starttag(self, tag, attrs):
-                  attrs = dict(attrs)
-                  if tag == "title":
-                      self.in_title = True
-                  elif tag == "meta":
-                      key = attrs.get("property") or attrs.get("name") or attrs.get("itemprop")
-                      if key and attrs.get("content"):
-                          self.meta[key] = attrs["content"][:1000]
-                  elif tag == "script":
-                      self.script_count += 1
-                      if attrs.get("id"):
-                          self.script_ids.append(attrs["id"])
-              def handle_endtag(self, tag):
-                  if tag == "title":
-                      self.in_title = False
-              def handle_data(self, data):
-                  if self.in_title:
-                      self.title_text.append(data)
-                  for marker in ("RENDER_DATA", "__UNIVERSAL_DATA_FOR_REHYDRATION__", "_ROUTER_DATA", "aweme_detail", "videoInfoRes"):
-                      if marker in data:
-                          self.markers.add(marker)
-
-          report = {"input_url": url, "tests": []}
-          for name, ua in user_agents.items():
-              item = {"name": name, "user_agent": ua}
-              try:
-                  response = requests.get(
-                      url,
-                      headers={
-                          "User-Agent": ua,
-                          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                          "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-                          "Cache-Control": "no-cache",
-                      },
-                      timeout=35,
-                      allow_redirects=True,
-                  )
-                  html = response.text
-                  parser = PageParser()
-                  parser.feed(html)
-                  item.update({
-                      "status": response.status_code,
-                      "final_url": response.url,
-                      "content_type": response.headers.get("content-type", ""),
-                      "html_bytes": len(response.content),
-                      "title": " ".join(parser.title_text).strip(),
-                      "meta": parser.meta,
-                      "script_count": parser.script_count,
-                      "script_ids": parser.script_ids[:80],
-                      "data_markers": sorted(parser.markers),
-                      "body_has_video_id": "7673080238095486249" in html,
-                      "html_excerpt": re.sub(r"\s+", " ", html[:2500]),
-                  })
-                  if name == "iPad_Safari":
-                      with open("douyin-ipad.html", "w", encoding="utf-8") as f:
-                          f.write(html[:8000000])
-                  print(f"\n===== {name} =====")
-                  print(json.dumps(item, ensure_ascii=False, indent=2)[:12000])
-              except Exception as exc:
-                  item["error"] = f"{type(exc).__name__}: {exc}"
-                  print(f"{name} 请求失败：{item['error']}")
-              report["tests"].append(item)
-
-          with open("douyin-ipad-ua-report.json", "w", encoding="utf-8") as f:
-              json.dump(report, f, ensure_ascii=False, indent=2)
-          with open("douyin-ipad-ua-report.md", "w", encoding="utf-8") as f:
-              f.write("# 抖音 UA 对照测试\n\n")
-              f.write(f"目标地址：{url}\n\n")
-              for item in report["tests"]:
-                  f.write(f"## {item['name']}\n\n")
-                  f.write(json.dumps(item, ensure_ascii=False, indent=2))
-                  f.write("\n\n")
-          PY
-
-      - name: 使用真实 WebKit 浏览器模拟 iPad 并执行网页脚本
-        env:
-          PAGE_URL: ${{ inputs.page_url || 'https://www.douyin.com/video/7673080238095486249' }}
-        run: |
+          python -m pip install --upgrade pip
           python -m pip install playwright
-          python -m playwright install --with-deps webkit
+          python -m playwright install --with-deps chromium
+
+      - name: 使用真实 Chromium 解析抖音分享链接并监听详情接口
+        env:
+          SHARE_INPUT: ${{ inputs.share_input || 'https://v.douyin.com/z_xefff5id4/' }}
+        run: |
           python - <<'PY'
           import json
           import os
           import re
+          from urllib.parse import urlparse
           from playwright.sync_api import sync_playwright
 
-          url = os.environ["PAGE_URL"].strip()
-          ua = (
-              "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) "
-              "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-              "Version/18.0 Mobile/15E148 Safari/604.1"
-          )
-          report = {"url": url, "engine": "WebKit", "user_agent": ua,
-                    "status": None, "final_url": "", "title": "",
-                    "html_bytes": 0, "body_text": "", "video_id_in_dom": False,
-                    "meta": {}, "script_count": 0, "script_ids": [],
-                    "network_json": [], "console_errors": [], "page_errors": [],
-                    "error": ""}
+          raw = os.environ["SHARE_INPUT"].strip()
+          if re.fullmatch(r"\d{10,25}", raw):
+              start_url = f"https://www.douyin.com/video/{raw}"
+          else:
+              start_url = raw if "://" in raw else "https://" + raw
+
+          def is_douyin(url):
+              p = urlparse(url)
+              host = (p.hostname or "").lower()
+              return p.scheme == "https" and (host == "douyin.com" or host.endswith(".douyin.com"))
+
+          if not is_douyin(start_url):
+              raise SystemExit("只允许输入抖音官方 HTTPS 链接或纯数字视频 ID")
+
+          report = {
+              "input": raw, "start_url": start_url, "resolved_url": "",
+              "video_id": "", "page_title": "", "page_text": "",
+              "dom_candidates": {}, "meta": {}, "network_detail_responses": [],
+              "console_errors": [], "page_errors": [], "blocked_indicators": [],
+              "error": ""
+          }
+
+          def scan_json(obj, found, path="$", depth=0):
+              if depth > 12 or len(found) >= 30:
+                  return
+              if isinstance(obj, dict):
+                  for key, value in obj.items():
+                      if key in ("desc", "description", "title", "nickname") and isinstance(value, str) and value.strip():
+                          found.append({"path": f"{path}.{key}", "value": value[:1000]})
+                      if isinstance(value, (dict, list)):
+                          scan_json(value, found, f"{path}.{key}", depth + 1)
+              elif isinstance(obj, list):
+                  for i, value in enumerate(obj[:100]):
+                      if isinstance(value, (dict, list)):
+                          scan_json(value, found, f"{path}[{i}]", depth + 1)
+
           with sync_playwright() as p:
-              browser = p.webkit.launch(headless=True)
+              browser = p.chromium.launch(headless=True)
               context = browser.new_context(
-                  user_agent=ua,
-                  viewport={"width": 1024, "height": 1366},
-                  screen={"width": 1024, "height": 1366},
-                  device_scale_factor=2,
-                  is_mobile=True,
-                  has_touch=True,
-                  locale="zh-CN",
+                  locale="zh-CN", timezone_id="Asia/Shanghai",
+                  viewport={"width": 1440, "height": 1000}
               )
               page = context.new_page()
+              page.set_default_timeout(15000)
               page.on("console", lambda msg: report["console_errors"].append(msg.text[:500])
-                      if msg.type == "error" else None)
-              page.on("pageerror", lambda exc: report["page_errors"].append(str(exc)[:1000]))
+                      if msg.type == "error" and len(report["console_errors"]) < 30 else None)
+              page.on("pageerror", lambda exc: report["page_errors"].append(str(exc)[:1000])
+                      if len(report["page_errors"]) < 30 else None)
+
               def on_response(response):
-                  try:
-                      ct = response.headers.get("content-type", "").lower()
-                      if "json" in ct:
-                          report["network_json"].append({
-                              "url": response.url[:1000], "status": response.status,
-                              "content_type": ct
-                          })
-                  except Exception:
-                      pass
+                  low = response.url.lower()
+                  if any(k in low for k in ("aweme", "video/detail", "iteminfo", "detail")):
+                      item = {
+                          "url": response.url[:1500], "status": response.status,
+                          "content_type": response.headers.get("content-type", "")[:200]
+                      }
+                      try:
+                          if "json" in item["content_type"].lower():
+                              payload = response.json()
+                              found = []
+                              scan_json(payload, found)
+                              item["json_top_keys"] = list(payload.keys())[:50] if isinstance(payload, dict) else []
+                              item["json_fields_sample"] = found[:30]
+                      except Exception as exc:
+                          item["body_parse_error"] = str(exc)[:300]
+                      report["network_detail_responses"].append(item)
+
               page.on("response", on_response)
               try:
-                  response = page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                  report["status"] = response.status if response else None
+                  response = page.goto(start_url, wait_until="domcontentloaded", timeout=60000)
+                  report["initial_http_status"] = response.status if response else None
                   page.wait_for_timeout(12000)
-                  report["final_url"] = page.url
-                  report["title"] = await_title = page.title()
-                  data = page.evaluate("""() => {
+                  resolved = page.url
+                  if not is_douyin(resolved):
+                      raise RuntimeError("短链接跳转到了非抖音官方域名，停止访问")
+                  report["resolved_url"] = resolved
+                  match = re.search(r"/(?:video|note)/(\d+)", resolved)
+                  video_id = match.group(1) if match else ""
+                  report["video_id"] = video_id
+
+                  detail_url = f"https://www.douyin.com/video/{video_id}" if video_id else resolved
+                  if detail_url != page.url:
+                      response = page.goto(detail_url, wait_until="domcontentloaded", timeout=60000)
+                      report["detail_http_status"] = response.status if response else None
+
+                  page.wait_for_timeout(15000)
+                  report["resolved_url"] = page.url
+                  report["page_title"] = page.title()
+                  body = page.locator("body").inner_text() if page.locator("body").count() else ""
+                  report["page_text"] = re.sub(r"\s+", " ", body)[:5000]
+                  report["dom_candidates"] = page.evaluate("""() => {
+                    const selectors = ['h1','[data-e2e="video-desc"]',
+                      '[data-e2e="video-author-nickname"]',
+                      '[class*="video-info"] [class*="desc"]','[class*="desc"]'];
+                    const out = {};
+                    for (const selector of selectors) {
+                      out[selector] = [...document.querySelectorAll(selector)].slice(0,8)
+                        .map(e => (e.innerText || e.textContent || '').trim())
+                        .filter(Boolean).map(s => s.slice(0,1000));
+                    }
                     const meta = {};
                     for (const e of document.querySelectorAll('meta')) {
                       const k = e.getAttribute('property') || e.getAttribute('name') || e.getAttribute('itemprop');
-                      if (k && e.content) meta[k] = e.content;
+                      if (k && e.content) meta[k] = e.content.slice(0,2000);
                     }
-                    const html = document.documentElement?.outerHTML || '';
-                    return {
-                      html,
-                      body: document.body?.innerText || '',
-                      meta,
-                      scripts: [...document.scripts].map(s => ({id:s.id || '', type:s.type || '', text:(s.textContent || '').slice(0,2000)}))
-                    };
+                    return {selectors:out,meta};
                   }""")
-                  html = data["html"]
-                  report.update({
-                      "html_bytes": len(html.encode("utf-8")),
-                      "body_text": re.sub(r"\s+", " ", data["body"])[:3000],
-                      "video_id_in_dom": "7673080238095486249" in html,
-                      "meta": data["meta"],
-                      "script_count": len(data["scripts"]),
-                      "script_ids": [s["id"] for s in data["scripts"] if s["id"]],
-                      "data_markers": [m for m in (
-                          "RENDER_DATA", "__UNIVERSAL_DATA_FOR_REHYDRATION__",
-                          "_ROUTER_DATA", "aweme_detail", "videoInfoRes"
-                      ) if m in html],
-                      "navigator_user_agent": page.evaluate("navigator.userAgent"),
-                      "navigator_platform": page.evaluate("navigator.platform"),
-                      "max_touch_points": page.evaluate("navigator.maxTouchPoints"),
-                  })
-                  with open("douyin-ipad-webkit.html", "w", encoding="utf-8") as f:
-                      f.write(html[:8000000])
-                  with open("douyin-ipad-webkit-dom.json", "w", encoding="utf-8") as f:
-                      json.dump(data, f, ensure_ascii=False, indent=2)
+                  report["meta"] = report["dom_candidates"].pop("meta", {})
+                  for marker in ("验证码", "访问过于频繁", "登录后", "安全验证", "网络异常"):
+                      if marker in report["page_text"]:
+                          report["blocked_indicators"].append(marker)
+                  with open("douyin-rendered.html", "w", encoding="utf-8") as f:
+                      f.write(page.content()[:10000000])
               except Exception as exc:
                   report["error"] = f"{type(exc).__name__}: {exc}"
-              browser.close()
+                  try:
+                      with open("douyin-rendered.html", "w", encoding="utf-8") as f:
+                          f.write(page.content()[:10000000])
+                  except Exception:
+                      pass
+              finally:
+                  browser.close()
 
-          print("===== iPad WebKit 浏览器执行结果 =====")
-          print(json.dumps(report, ensure_ascii=False, indent=2)[:20000])
-          with open("douyin-ipad-webkit-report.json", "w", encoding="utf-8") as f:
+          print("========== 抖音真实浏览器识别结果 ==========")
+          print(json.dumps(report, ensure_ascii=False, indent=2)[:30000])
+          with open("douyin-browser-report.json", "w", encoding="utf-8") as f:
               json.dump(report, f, ensure_ascii=False, indent=2)
+          with open("douyin-browser-report.md", "w", encoding="utf-8") as f:
+              f.write("# 抖音真实浏览器识别报告\n\n")
+              f.write(json.dumps(report, ensure_ascii=False, indent=2))
           PY
 
-      - name: 上传网页与对照报告
+      - name: 上传识别报告和渲染后网页
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: douyin-ipad-ua-report
+          name: douyin-browser-identification-report
           path: |
-            douyin-ipad-ua-report.json
-            douyin-ipad-ua-report.md
-            douyin-ipad.html
+            douyin-browser-report.json
+            douyin-browser-report.md
+            douyin-rendered.html
           if-no-files-found: ignore
           retention-days: 7
