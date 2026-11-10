@@ -395,12 +395,12 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     container.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
     val hero=LinearLayout(this).apply {
         orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
-        setPadding(dp(26),dp(20),dp(26),dp(38))
+        setPadding(dp(26),dp(20),dp(26),dp(20))
         background=GradientDrawable().apply { setColor(TvStyle.surface);cornerRadius=dp(20).toFloat();setStroke(dp(1),TvStyle.outline) }    }
     val cardTitle=pushText("手机扫码 · 粘贴分享 · 电视即刻播放",20f,TvStyle.text).apply {
         gravity=Gravity.START
         typeface=Typeface.DEFAULT_BOLD
-        setPadding(0,0,0,dp(18))
+        setPadding(0,0,0,0)
         maxLines=1
     }
     hero.addView(cardTitle,LinearLayout.LayoutParams(-1,-2))
