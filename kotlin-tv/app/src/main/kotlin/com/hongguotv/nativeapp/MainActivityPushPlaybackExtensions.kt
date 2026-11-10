@@ -447,7 +447,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     info.addView(urlLabel)
     contentRow.addView(info,LinearLayout.LayoutParams(0,-2,1f))
     hero.addView(contentRow,LinearLayout.LayoutParams(-1,-2))
-    hero.minimumHeight=dp(447)
+    hero.minimumHeight=dp(440)
     page.addView(hero,LinearLayout.LayoutParams(-2,-2).apply { gravity=Gravity.CENTER })
     pushPlaybackStatusView=status
     pushPlaybackQrView=qr
