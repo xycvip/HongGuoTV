@@ -607,7 +607,8 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
         text="${candidates.size} 个匹配结果"
         textSize=15f
         setTextColor(TvStyle.muted)
-    })    panel.addView(heading,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) })
+    })
+    panel.addView(heading,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) })
     val grid=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
     val columns=4
     val cards=mutableListOf<View>()
