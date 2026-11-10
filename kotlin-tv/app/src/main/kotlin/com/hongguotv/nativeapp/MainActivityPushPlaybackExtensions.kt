@@ -99,10 +99,10 @@ private object RedShareResolver {
                     if(episodeId==null) episodeId=path.groupValues[2]
                 }
             }
-            // 部分红果整剧分享把 series ID 放在 schemeParams.video_id；若没有独立分集字段，将它视为剧名 ID。
-            if(seriesId==null && episodeId==null) seriesId=genericVideoId
-            else if(episodeId==null) episodeId=genericVideoId
-            return RedShareIds(seriesId,episodeId)
+            // 部分红果整剧分享把 series ID 放在 schemeParams.video_id；独立 vid / share_toast_vid 才优先视为单集 ID。
+            if(seriesId==null) seriesId=genericVideoId
+            val videoId=episodeId ?: genericVideoId?.takeIf { it!=seriesId }
+            return RedShareIds(seriesId,videoId)
         } finally {
             connection.disconnect()
         }
