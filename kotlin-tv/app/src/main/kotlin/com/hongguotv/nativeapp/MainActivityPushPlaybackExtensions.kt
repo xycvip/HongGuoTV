@@ -207,18 +207,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     val serviceRow=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL;orientation=LinearLayout.HORIZONTAL }
     val status=pushText("正在开启推送服务…",14f,TvStyle.muted)
     pushPlaybackStatusView=status
-    serviceRow.addView(status,LinearLayout.LayoutParams(0,-2,1f))
-    val serviceButton=TextView(this).apply {
-        text=if(pushPlaybackServer==null) "开启服务" else "关闭服务"
-        textSize=15f;gravity=Gravity.CENTER;setTextColor(Color.WHITE);isFocusable=true;isClickable=true
-        setPadding(dp(20),dp(12),dp(20),dp(12))
-        background=GradientDrawable().apply { setColor(TvStyle.accent);cornerRadius=dp(12).toFloat() }
-        setOnClickListener {
-            if(pushPlaybackServer==null) startPushPlaybackService() else closePushPlaybackService()
-            text=if(pushPlaybackServer==null) "开启服务" else "关闭服务"
-        }
-    }
-    serviceRow.addView(serviceButton)
+    serviceRow.addView(status,LinearLayout.LayoutParams(-1,-2))
     page.addView(serviceRow,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(14) })
     pushPlaybackQrView=qr
     val result=LinearLayout(this).apply {
@@ -235,10 +224,6 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         qr.setImageBitmap(pushQr(pushPlaybackServer!!.url))
         urlLabel.text="访问地址："+pushPlaybackServer!!.url
         status.text="服务运行中 · 端口 3309\n手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。"
-    }
-    pushAction(page,"关闭推送播放页面") {
-        pushPlaybackPageActive=false;closePushPlaybackService();showCatalog()
-        root.post { navForTab().takeIf { it.isAttachedToWindow }?.requestFocus() }
     }
 }
 private fun MainActivity.acceptPushShare(raw:String) {
