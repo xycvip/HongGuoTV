@@ -446,7 +446,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         gravity=Gravity.END
         setSingleLine(true)
         maxLines=1
-        ellipsize=TextUtils.TruncateAt.MARQUEE
+        ellipsize=android.text.TextUtils.TruncateAt.MARQUEE
         isSelected=true
         setHorizontallyScrolling(true)
         setPadding(0,dp(14),0,0)
