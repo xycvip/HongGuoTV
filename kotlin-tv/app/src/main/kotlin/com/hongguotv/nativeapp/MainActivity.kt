@@ -230,6 +230,7 @@ class MainActivity: Activity() {
     internal var pushPlaybackServer: PhoneInputServer? = null
     internal var pushPlaybackStatusView: TextView? = null
     internal var pushPlaybackCandidateHost: LinearLayout? = null
+    internal var pushPlaybackCandidateDialog: android.app.Dialog? = null
     internal var pushPlaybackQrView: ImageView? = null
     internal var pushPlaybackUrlView: TextView? = null
     internal lateinit var extras: PlaybackExtras
@@ -823,6 +824,11 @@ class MainActivity: Activity() {
 
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed() {
+        if(pushPlaybackCandidateDialog?.isShowing==true) {
+            pushPlaybackCandidateDialog?.dismiss()
+            pushPlaybackCandidateDialog=null
+            return
+        }
         if(pushPlaybackPageActive) {
             pushPlaybackPageActive=false
             closePushPlaybackService()
