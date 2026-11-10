@@ -444,7 +444,11 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     }
     val urlLabel=oneLine("访问地址：等待服务启动",16f,TvStyle.accent).apply {
         gravity=Gravity.END
-        maxLines=3
+        setSingleLine(true)
+        maxLines=1
+        ellipsize=TextUtils.TruncateAt.MARQUEE
+        isSelected=true
+        setHorizontallyScrolling(true)
         setPadding(0,dp(14),0,0)
     }
     pushPlaybackUrlView=urlLabel
