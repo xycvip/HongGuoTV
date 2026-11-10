@@ -66,6 +66,7 @@ jobs:
               "redirects": [], "observed_video_ids": [], "iesdouyin_page": {},
               "console_errors": [], "page_errors": [], "blocked_indicators": [],
               "error": "", "detail": {}, "detail_attempts": [], "raw_api_samples": [],
+              "network_detail_matches": [],
           "feed_api_attempts": [], "feed_api_result": {}
           }
 
@@ -266,8 +267,29 @@ jobs:
 
               page.on("request", lambda request: add_video_id(request.url))
 
-              def on_response(response):
-                  low = response.url.lower()
+          def find_matching_aweme(obj, video_id, path="$", depth=0):
+              """在接口 JSON 中递归寻找与分享链接 ID 完全一致的作品对象。"""
+              if depth > 20:
+                  return None
+              if isinstance(obj, dict):
+                  item_id = str(obj.get("aweme_id") or obj.get("item_id") or "")
+                  if item_id == str(video_id) and ("video" in obj or "author" in obj or "desc" in obj or "statistics" in obj):
+                      return obj, path
+                  for key, value in obj.items():
+                      if isinstance(value, (dict, list)):
+                          found = find_matching_aweme(value, video_id, f"{path}.{key}", depth + 1)
+                          if found:
+                              return found
+              elif isinstance(obj, list):
+                  for i, value in enumerate(obj[:2000]):
+                      if isinstance(value, (dict, list)):
+                          found = find_matching_aweme(value, video_id, f"{path}[{i}]", depth + 1)
+                          if found:
+                              return found
+              return None
+
+          def on_response(response):
+              low = response.url.lower()
                   add_video_id(response.url)
                   location = response.headers.get("location", "")
                   if 300 <= response.status < 400:
@@ -277,21 +299,44 @@ jobs:
                           "status": response.status,
                           "location": safe_url(location) if location else ""
                       })
+                  content_type = response.headers.get("content-type", "")[:200]
+                  # 第二级：监听浏览器实际请求的详情/作品接口，不预设单一接口路径。
+                  # 只有响应 JSON 中出现与分享链接完全相同的 aweme_id 才认定为目标作品。
                   if any(k in low for k in ("aweme", "video/detail", "iteminfo", "detail", "share/video")):
                       item = {
                           "url": safe_url(response.url), "status": response.status,
-                          "content_type": response.headers.get("content-type", "")[:200]
+                          "content_type": content_type
                       }
                       try:
-                          if "json" in item["content_type"].lower():
+                          if "json" in content_type.lower() or "javascript" in content_type.lower():
                               payload = response.json()
                               found = []
                               scan_json(payload, found)
                               item["json_top_keys"] = list(payload.keys())[:50] if isinstance(payload, dict) else []
-                              item["json_fields_sample"] = found[:30]
+                              item["json_fields_sample"] = found[:40]
                               if isinstance(payload, dict):
                                   item["json_errno"] = payload.get("errno")
                                   item["json_message"] = str(payload.get("message") or payload.get("msg") or "")[:300]
+                              target_id = report.get("video_id")
+                              if target_id:
+                                  matched = find_matching_aweme(payload, target_id)
+                                  if matched:
+                                      matched_item, matched_path = matched
+                                      normalized = normalize_item(matched_item, "浏览器网络详情接口:" + matched_path)
+                                      match_record = {
+                                          "url": safe_url(response.url),
+                                          "status": response.status,
+                                          "matched_aweme_id": target_id,
+                                          "matched_path": matched_path,
+                                          "desc": str(matched_item.get("desc") or "")[:1000],
+                                          "author": str(((matched_item.get("author") or {}).get("nickname")) or "")[:160],
+                                          "item_keys": list(matched_item.keys())[:100],
+                                          "title_fields": [x for x in found if x.get("path", "").lower().endswith((".title", ".desc", ".description", ".series_name", ".mix_name"))][:60]
+                                      }
+                                      report["network_detail_matches"].append(match_record)
+                                      if (not report.get("detail")) or (not report["detail"].get("desc") and normalized.get("desc")):
+                                          report["detail"] = normalized
+                                          report["detail"]["source"] = "浏览器网络详情接口"
                       except Exception as exc:
                           item["body_parse_error"] = str(exc)[:300]
                           try:
@@ -446,8 +491,12 @@ jobs:
                   add_title_candidate("DOM:" + selector, value)
           for response in report.get("network_detail_responses", []):
               for field in response.get("json_fields_sample", []):
-                  if field.get("path", "").lower().endswith((".title", ".desc", ".description")):
+                  if field.get("path", "").lower().endswith((".title", ".desc", ".description", ".series_name", ".mix_name")):
                       add_title_candidate("接口JSON:" + field.get("path", ""), field.get("value", ""))
+          for matched in report.get("network_detail_matches", []):
+              add_title_candidate("网络详情接口作品文案", matched.get("desc", ""))
+              for field in matched.get("title_fields", []):
+                  add_title_candidate("网络详情接口:" + field.get("path", ""), field.get("value", ""))
           author_name = str(detail.get("author") or "")
           filtered = []
           seen = set()
