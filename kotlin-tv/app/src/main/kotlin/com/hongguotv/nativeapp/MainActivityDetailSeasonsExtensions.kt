@@ -121,7 +121,18 @@ internal fun MainActivity.loadSameNameInBackground(snapshot: Detail) {
     internal fun MainActivity.returnToDetail(forceDetail: Boolean=false) {
         main.removeCallbacks(startupRecommendationTimeout)
         sleepTimer.cancel(); sleepStopped=false; startupAutoPlaybackActive=false; saveProgress(); bootAutoPlaybackPending=false; hideBootSplash(); library.flush(); invalidatePage(); releasePlayer()
-        if(directPlayback && !forceDetail) {
+        if(pushPlaybackReturnFocus && !forceDetail) {
+            // 推送播放来源的视频退出时，直接回到二维码页；保留扫码服务供下一次推送使用。
+            pushPlaybackReturnFocus=false
+            directPlayback=false
+            pushPlaybackPageActive=true
+            showCatalog()
+            root.post {
+                (pushPlaybackQrView?.parent as? View)
+                    ?.takeIf { it.isAttachedToWindow }
+                    ?.requestFocus()
+            }
+        } else if(directPlayback && !forceDetail) {
             showCatalog()
             if(tab==6) navForTab()?.post { if(tab==6 && screen=="catalog") navForTab()?.requestFocus() }
         } else {
