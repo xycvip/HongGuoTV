@@ -7,7 +7,7 @@ on:
         description: 抖音短链接、视频长链接或视频 ID
         required: true
         type: string
-        default: https://v.douyin.com/z_xefff5id4/
+        default: https://v.douyin.com/TWTYb0ANh3c/
   push:
     paths:
       - .github/workflows/抖音iPad-UA测试.yml
@@ -33,7 +33,7 @@ jobs:
 
       - name: 使用真实 Chromium 解析抖音分享链接并监听详情接口
         env:
-          SHARE_INPUT: ${{ inputs.share_input || 'https://v.douyin.com/z_xefff5id4/' }}
+          SHARE_INPUT: ${{ inputs.share_input || 'https://v.douyin.com/TWTYb0ANh3c/' }}
         run: |
           python - <<'PY'
           import json
