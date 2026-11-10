@@ -54,7 +54,7 @@ import java.util.concurrent.atomic.AtomicLong
         })
     }
 
-    internal fun MainActivity.openDetail(series: Series,resume: Boolean=false,autoplay: Boolean=true,randomLoading: Boolean=false) {
+    internal fun MainActivity.openDetail(series: Series,resume: Boolean=false,autoplay: Boolean=true,randomLoading: Boolean=false,startEpisodeId: String?=null,forceFirstEpisode: Boolean=false,resolvedDetail: Detail?=null) {
         debugLog("页面导航：打开剧集详情 title=${series.title} resume=$resume autoplay=$autoplay random=$randomLoading")
         val startupAttempt=bootAutoPlaybackPending
         pendingDetail=series; detailAutoplay=autoplay
@@ -81,13 +81,17 @@ import java.util.concurrent.atomic.AtomicLong
                 randomLoadingLabel?.text="正在准备播放：${series.title}"
             }
         } else message(body,"正在加载剧集…")
-        work({ repository.detail(series.id) }, { result ->
+        work({ resolvedDetail ?: repository.detail(series.id) }, { result ->
             if(startupAttempt && startupRecommendationExpired) return@work
             detail=result; library.observeFavorite(series.id,result.episodes.size,System.currentTimeMillis(),acknowledge=true)
             val progress=library.progress(series.id)
             val cloud = pendingCloudProgress?.takeIf { it.series.id == series.id }
             pendingCloudProgress = null
-            val target=ResumePlayback.target(result.episodes,cloud?.episodeId ?: progress?.episodeId,cloud?.position ?: progress?.position ?: 0,progress?.completed==true)
+            val target=when {
+                !startEpisodeId.isNullOrBlank() -> ResumeTarget(result.episodes.indexOf(startEpisodeId).takeIf { it>=0 } ?: 0,0)
+                forceFirstEpisode -> ResumeTarget(0,0)
+                else -> ResumePlayback.target(result.episodes,cloud?.episodeId ?: progress?.episodeId,cloud?.position ?: progress?.position ?: 0,progress?.completed==true)
+            }
             episodeIndex=target.index; group=episodeIndex/20
             if(resume) playEpisode(target.index,target.position,autoplay=detailAutoplay)
             else {
