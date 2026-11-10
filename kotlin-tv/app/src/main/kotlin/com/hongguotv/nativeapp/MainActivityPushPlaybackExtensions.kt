@@ -194,6 +194,7 @@ private object RedShareResolver {
     private val episodePattern=Regex("""["']?(?:share_toast_vid|vid|episode_id|episodeId)["']?\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
     private val genericVideoPattern=Regex("""["']?video_id["']?\s*[=:]\s*["']?(\d{1,30})""",RegexOption.IGNORE_CASE)
     private val playerPath=Regex("""/player/(\d{1,30})/(\d{1,30})""",RegexOption.IGNORE_CASE)
+    private val playerSeriesPath=Regex("""(?:^|/)player/(\d{1,30})/?(?:[?#].*)?$""",RegexOption.IGNORE_CASE)
     private fun decoded(value:String):String {
         var current=value
         repeat(2) { current=runCatching { URLDecoder.decode(current,"UTF-8") }.getOrDefault(current) }
