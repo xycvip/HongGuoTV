@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "3d7378205d723b31089360425382bdfa4681d2ca",
-  "versionCode": 67,
-  "versionName": "0.0.67",
+  "sourceCommit": "30647bfd62c5e1e9a22be4574fd074a208d41cab",
+  "versionCode": 68,
+  "versionName": "0.0.68",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.67",
+  "tag": "hongguotv-bate-v0.0.68",
   "apk": {
-    "name": "HongguoTV-0.0.67.apk",
-    "size": 2003633,
-    "sha256": "5493578d3beae30135a5b6020af0b74b1605187ec73d1ddf1e2ddf7d66250fd1",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.67/HongguoTV-0.0.67.apk"
+    "name": "HongguoTV-0.0.68.apk",
+    "size": 2008129,
+    "sha256": "9f3f090321b350aaaabe00d0ccbdbda59d41200d91ac38858353a0366af8a1f5",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.68/HongguoTV-0.0.68.apk"
   },
-  "notes": "【播放与播放器】\n- 优化推送播放二维码卡片布局\n【界面与交互】\n- 将默认清晰度设置名称简化为画质\n【其他功能与问题修复】\n- 对齐推送与账户二维码卡片顶部位置"
+  "notes": "【播放与播放器】\n- 补齐红果官网单剧播放页 ID 提取\n- 修正推送播放抖音作品 ID 正则\n- 在推送播放中接入抖音短链 Feed 剧名识别\n【网络与接口】\n- 修正严格链接校验的 URI 连接调用\n【其他功能与问题修复】\n- 支持 iesdouyin 抖音作品与短剧分享链接\n- 支持 www.douyin.com 作品分享链接\n- 支持 hongguoduanju.com 红果网页分享链接\n- 修正分享链接尾部引号处理语法\n- 严格区分红果与抖音分享链接\n- 修正抖音 Feed 剧目 ID 空值处理"
 }
