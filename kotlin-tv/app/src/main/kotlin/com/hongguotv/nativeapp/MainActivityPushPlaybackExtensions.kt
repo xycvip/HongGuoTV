@@ -295,6 +295,7 @@ private fun pushTitleScore(title:String,queries:List<String>):Int {
     } ?: 0
 }
 private fun MainActivity.showPushCandidates(candidates:List<Series>) {
+    val activity = this
     val host=pushPlaybackCandidateHost ?: return
     host.removeAllViews()
     val columns=4
@@ -305,9 +306,9 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
         val card=LinearLayout(this).apply {
             id=View.generateViewId();orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
             isFocusable=true;isClickable=true;setPadding(dp(8),dp(8),dp(8),dp(9))
-            background=TvStyle.card(this,false)
+            background=TvStyle.card(activity,false)
             contentDescription="选择剧集：${series.title}"
-            setOnFocusChangeListener { v,focused -> v.background=TvStyle.card(this,focused) }
+            setOnFocusChangeListener { v,focused -> v.background=TvStyle.card(activity,focused) }
             setOnClickListener {
                 pushPlaybackRevision++;pushPlaybackTask?.cancel(true);pushPlaybackPageActive=false;closePushPlaybackService();openDetail(series,resume=true)
             }
