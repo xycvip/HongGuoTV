@@ -23,6 +23,7 @@ import com.hongguotv.core.Series
 import java.net.Inet4Address
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URI
 import java.net.URLDecoder
 import java.util.Locale
 import org.json.JSONArray
@@ -32,23 +33,39 @@ private data class PushShareItem(val title:String,val url:String,val source:Stri
 private data class RedShareIds(val seriesId:String?,val videoId:String?)
 private object PushShareParser {
     private val redTitle=Regex("(?:漫剧|短剧)《([^》]{1,80})》")
-    private val redUrl=Regex("https?://(?:www\\.)?novelquickapp\\.com/s/[A-Za-z0-9_-]+/?",RegexOption.IGNORE_CASE)
-    private val douyinUrl=Regex("https?://v\\.douyin\\.com/[A-Za-z0-9_/-]+/?",RegexOption.IGNORE_CASE)
+    private val urlToken=Regex("""https?://[^\s<>\"'，。]+""",RegexOption.IGNORE_CASE)
     private val bracketTitle=Regex("[《【〖]([^》】〗]{1,100})[》】〗]")
     private fun clean(v:String)=v.replace(Regex("#[^\\n]*"),"").replace(Regex("\\s+")," ").trim().trimEnd('！','!','。','，',',','…')
+    private fun classifyUrl(rawUrl:String):String? {
+        val candidate=rawUrl.trim().trimEnd('！','!','。','，',',','；',';','）',')','】',']','>','"','\\'')
+        val uri=runCatching { URI(candidate) }.getOrNull() ?: return null
+        if(!uri.scheme.equals("https",true) || uri.rawUserInfo!=null || uri.port !in listOf(-1,443)) return null
+        val host=uri.host?.lowercase(Locale.ROOT)?.trimEnd('.') ?: return null
+        val path=uri.path.orEmpty()
+        return when {
+            (host=="novelquickapp.com" || host=="www.novelquickapp.com") &&
+                Regex("^/s/[A-Za-z0-9_-]+/?$").matches(path) -> "红果"
+            host=="v.douyin.com" && Regex("^/[A-Za-z0-9_-]+/?$").matches(path) -> "抖音"
+            else -> null
+        }
+    }
     fun parse(raw:String):List<PushShareItem> {
         val result=mutableListOf<PushShareItem>()
         val redTitles=redTitle.findAll(raw).map { it.groupValues[1].trim() }.toList()
-        val redLinks=redUrl.findAll(raw).toList()
-        redLinks.forEachIndexed { i,m -> result+=PushShareItem(redTitles.getOrNull(i).orEmpty(),m.value,"红果") }
+        val classified=urlToken.findAll(raw).mapNotNull { match ->
+            val url=match.value.trimEnd('！','!','。','，',',','；',';','）',')','】',']','>','"','\\'')
+            classifyUrl(url)?.let { Triple(match.range.first,url,it) }
+        }.toList()
+        val redLinks=classified.filter { it.third=="红果" }
+        redLinks.forEachIndexed { i,item -> result+=PushShareItem(redTitles.getOrNull(i).orEmpty(),item.second,"红果") }
         if(redLinks.isEmpty()) redTitles.forEach { result+=PushShareItem(it,"","红果") }
-        douyinUrl.findAll(raw).forEach { match ->
-            val marker=raw.lastIndexOf("复制打开抖音",match.range.first)
+        classified.filter { it.third=="抖音" }.forEach { item ->
+            val marker=raw.lastIndexOf("复制打开抖音",item.first)
             val lineStart=if(marker<0) 0 else (raw.lastIndexOf('\n',marker).takeIf { it>=0 }?.plus(1) ?: 0)
-            // 抖音分享标题常用【作者的作品】或〖作者的作品〗；不能先截掉右括号前的内容。
-            val block=raw.substring(lineStart,match.range.first)
-            val title=bracketTitle.find(block)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() } ?: clean(block).removePrefix(Regex("^\\d+(?:\\.\\d+)?\\s*").find(clean(block))?.value.orEmpty()).removePrefix("复制打开抖音").removePrefix("看看").trim()
-            if(title.isNotBlank()) result+=PushShareItem(title,match.value,"抖音")
+            val block=raw.substring(lineStart,item.first)
+            val title=bracketTitle.find(block)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+                ?: clean(block).removePrefix(Regex("^\\d+(?:\\.\\d+)?\\s*").find(clean(block))?.value.orEmpty()).removePrefix("复制打开抖音").removePrefix("看看").trim()
+            if(title.isNotBlank()) result+=PushShareItem(title,item.second,"抖音")
         }
         return result.distinctBy { it.source+"|"+it.url+"|"+it.title }
     }
@@ -140,8 +157,10 @@ private object DouyinShareResolver {
         } finally { connection.disconnect() }
     }
     fun resolve(shortUrl:String):DouyinShareInfo {
-        val parsed=URL(shortUrl)
-        require(parsed.protocol=="https" && parsed.host.equals("v.douyin.com",true)) { "不是抖音短链接" }
+        val parsed=URI(shortUrl)
+        require(parsed.scheme.equals("https",true) && parsed.host.equals("v.douyin.com",true) &&
+            parsed.rawUserInfo==null && parsed.port in listOf(-1,443) &&
+            Regex("^/[A-Za-z0-9_-]+/?$").matches(parsed.path.orEmpty())) { "不是受支持的抖音短链接" }
         val redirect=(parsed.openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects=true
             connectTimeout=8000
@@ -179,7 +198,11 @@ private object RedShareResolver {
         return current
     }
     fun resolve(shortUrl:String):RedShareIds {
-        require(shortUrl.startsWith("https://novelquickapp.com/s/",true) || shortUrl.startsWith("https://www.novelquickapp.com/s/",true)) { "不是红果短链" }
+        val parsed=URI(shortUrl)
+        val host=parsed.host?.lowercase(Locale.ROOT)?.trimEnd('.')
+        require(parsed.scheme.equals("https",true) && host in setOf("novelquickapp.com","www.novelquickapp.com") &&
+            parsed.rawUserInfo==null && parsed.port in listOf(-1,443) &&
+            Regex("^/s/[A-Za-z0-9_-]+/?$").matches(parsed.path.orEmpty())) { "不是受支持的红果短链接" }
         val connection=(URL(shortUrl).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects=true
             connectTimeout=8000
