@@ -160,7 +160,7 @@ jobs:
                       page.wait_for_timeout(8000)
                       report["iesdouyin_page"]["title"] = page.title()
                       share_text = page.locator("body").inner_text() if page.locator("body").count() else ""
-                      report["iesdouyin_page"]["text"] = re.sub(r"\\s+", " ", share_text)[:3000]
+                      report["iesdouyin_page"]["text"] = re.sub(r"\s+", " ", share_text)[:3000]
                       html = page.content()
                       markers = ("_ROUTER_DATA", "SSR_HYDRATED_DATA", "__INITIAL_STATE__", "__NEXT_DATA__", "__UNIVERSAL_DATA_FOR_REHYDRATION__")
                       report["iesdouyin_page"]["data_markers"] = [m for m in markers if m in html]
