@@ -583,7 +583,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
         typeface=Typeface.DEFAULT_BOLD
     },LinearLayout.LayoutParams(0,-2,1f))
     heading.addView(TextView(this).apply {
-        text="\${candidates.size} 个匹配结果"
+        text="${candidates.size} 个匹配结果"
         textSize=13f
         setTextColor(TvStyle.muted)
     })
