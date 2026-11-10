@@ -197,8 +197,7 @@ private object DouyinShareResolver {
             if(title.isBlank()) throw java.io.IOException("作品 ID 已匹配，但 Feed 中没有短剧名称")
             val stats=series?.optJSONObject("stats") ?: mix?.optJSONObject("stats")
             val author=text(aweme.optJSONObject("author"),"nickname")
-            return DouyinShareInfo(
-                awemeId,title,author,
+            return DouyinShareInfo(                awemeId,title,author,
                 (text(series,"series_id").ifBlank { text(mix,"mix_id") }).takeIf { it.isNotBlank() },
                 stats?.optInt("total_episode")?.takeIf { it>0 },
                 stats?.optInt("updated_to_episode")?.takeIf { it>0 }
@@ -397,10 +396,9 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     val hero=LinearLayout(this).apply {
         orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
         setPadding(dp(26),dp(20),dp(26),dp(20))
-        background=GradientDrawable().apply { setColor(TvStyle.surface);cornerRadius=dp(20).toFloat();setStroke(dp(1),TvStyle.outline) }
-    }
+        background=GradientDrawable().apply { setColor(TvStyle.surface);cornerRadius=dp(20).toFloat();setStroke(dp(1),TvStyle.outline) }    }
     val cardTitle=pushText("手机扫码 · 粘贴分享 · 电视即刻播放",20f,TvStyle.text).apply {
-        gravity=Gravity.CENTER
+        gravity=Gravity.START
         typeface=Typeface.DEFAULT_BOLD
         setPadding(0,0,0,dp(18))
         maxLines=1
@@ -597,8 +595,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
         text="${candidates.size} 个匹配结果"
         textSize=15f
         setTextColor(TvStyle.muted)
-    })
-    panel.addView(heading,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) })
+    })    panel.addView(heading,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) })
     val grid=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
     val columns=4
     val cards=mutableListOf<View>()
