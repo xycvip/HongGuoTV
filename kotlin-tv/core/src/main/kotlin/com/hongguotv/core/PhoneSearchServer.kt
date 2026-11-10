@@ -60,10 +60,10 @@ class PhoneInputServer(
     private val form: PhoneForm,
     private val onSubmit: (Map<String, String>)->Unit,
     private val onExpired: ()->Unit = {},
-    ttlMillis: Long = 300_000,
+    private val ttlMillis: Long = 300_000,
     fixedPort: Int = 0,
     tokenRequired: Boolean = true,
-    singleUse: Boolean = true
+    private val singleUse: Boolean = true
 ): Closeable {
     private val stopped=AtomicBoolean(false)
     private val consumed=AtomicBoolean(false)
