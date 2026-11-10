@@ -48,6 +48,7 @@ private object PushShareParser {
             (host=="hongguoduanju.com" || host=="www.hongguoduanju.com") &&
                 Regex("^/player/\\d{1,30}(?:/\\d{1,30})?/?$").matches(path) -> "红果"
             host=="v.douyin.com" && Regex("^/[A-Za-z0-9_-]+/?$").matches(path) -> "抖音"
+            host=="www.douyin.com" && Regex("^/(?:video|share/video)/\\d{8,25}/?$").matches(path) -> "抖音"
             else -> null
         }
     }
@@ -160,25 +161,36 @@ private object DouyinShareResolver {
     }
     fun resolve(shortUrl:String):DouyinShareInfo {
         val parsed=URI(shortUrl)
-        require(parsed.scheme.equals("https",true) && parsed.host.equals("v.douyin.com",true) &&
-            parsed.rawUserInfo==null && parsed.port in listOf(-1,443) &&
-            Regex("^/[A-Za-z0-9_-]+/?$").matches(parsed.path.orEmpty())) { "不是受支持的抖音短链接" }
-        val redirect=(parsed.toURL().openConnection() as HttpURLConnection).apply {
-            instanceFollowRedirects=true
-            connectTimeout=8000
-            readTimeout=10000
-            requestMethod="GET"
-            setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36")
-            setRequestProperty("Accept","text/html,application/xhtml+xml")
+        val host=parsed.host?.lowercase(Locale.ROOT)?.trimEnd('.')
+        val path=parsed.path.orEmpty()
+        require(parsed.scheme.equals("https",true) && parsed.rawUserInfo==null &&
+            parsed.port in listOf(-1,443) &&
+            ((host=="v.douyin.com" && Regex("^/[A-Za-z0-9_-]+/?$").matches(path)) ||
+             (host=="www.douyin.com" && Regex("^/(?:video|share/video)/\\d{8,25}/?$").matches(path)))) {
+            "不是受支持的抖音分享链接"
         }
-        val awemeId=try {
-            val status=redirect.responseCode
-            val finalUrl=redirect.url.toString()
-            if(status !in 200..399) throw java.io.IOException("抖音短链跳转 HTTP $status")
-            videoIdPattern.find(finalUrl)?.groupValues?.getOrNull(1)
-                ?: queryIdPattern.find(finalUrl)?.groupValues?.getOrNull(1)
-                ?: throw java.io.IOException("短链已跳转，但没有从最终地址提取到 aweme_id：$finalUrl")
-        } finally { redirect.disconnect() }
+        // www.douyin.com 的作品页 URL 已包含 aweme_id，直接提取；v.douyin.com 才需要跟随短链跳转。
+        val awemeId=if(host=="www.douyin.com") {
+            videoIdPattern.find(path)?.groupValues?.getOrNull(1)
+                ?: throw java.io.IOException("抖音作品页地址中没有 aweme_id")
+        } else {
+            val redirect=(parsed.toURL().openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects=true
+                connectTimeout=8000
+                readTimeout=10000
+                requestMethod="GET"
+                setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36")
+                setRequestProperty("Accept","text/html,application/xhtml+xml")
+            }
+            try {
+                val status=redirect.responseCode
+                val finalUrl=redirect.url.toString()
+                if(status !in 200..399) throw java.io.IOException("抖音短链跳转 HTTP $status")
+                videoIdPattern.find(finalUrl)?.groupValues?.getOrNull(1)
+                    ?: queryIdPattern.find(finalUrl)?.groupValues?.getOrNull(1)
+                    ?: throw java.io.IOException("短链已跳转，但没有从最终地址提取到 aweme_id：$finalUrl")
+            } finally { redirect.disconnect() }
+        }
         var last:Exception?=null
         listOf("aweme.snssdk.com","api5-normal-c-hl.amemv.com").forEach { host ->
             if(Thread.currentThread().isInterrupted) throw InterruptedException("抖音分享识别已取消")
