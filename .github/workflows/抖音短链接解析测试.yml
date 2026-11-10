@@ -211,6 +211,120 @@ jobs:
                       except Exception:
                           pass
 
+                  # 第二阶段：用手机端 UA 测试抖音分享页 SSR 数据
+                  # 桌面页可能只有 CSR 空壳；重点检查 iesdouyin.com 的 _ROUTER_DATA。
+                  mobile_tests = []
+                  id_match = re.search(r"/(?:video|note|share/video|aweme/detail)/(\\d+)", page.url)
+                  aweme_id = id_match.group(1) if id_match else ""
+                  if aweme_id:
+                      mobile_targets = [
+                          ("m_douyin", f"https://m.douyin.com/share/video/{aweme_id}/"),
+                          ("iesdouyin", f"https://www.iesdouyin.com/share/video/{aweme_id}/")
+                      ]
+                      mobile_ua = (
+                          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                          "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                          "Version/17.0 Mobile/15E148 Safari/604.1"
+                      )
+                      for label, mobile_url in mobile_targets:
+                          mobile_page = context.new_page()
+                          mobile_page.set_extra_http_headers({
+                              "User-Agent": mobile_ua,
+                              "Referer": "https://www.douyin.com/"
+                          })
+                          mobile_page.on("response", on_response)
+                          test = {"name": label, "url": mobile_url, "status": None,
+                                  "final_url": "", "title": "", "html_bytes": 0,
+                                  "body_excerpt": "", "inline_json_count": 0,
+                                  "matched_aweme_id": aweme_id}
+                          try:
+                              mobile_response = mobile_page.goto(
+                                  mobile_url, wait_until="domcontentloaded", timeout=45000
+                              )
+                              test["status"] = mobile_response.status if mobile_response else None
+                              mobile_page.wait_for_timeout(5000)
+                              test["final_url"] = mobile_page.url
+                              test["title"] = clean(mobile_page.title())
+                              mobile_data = mobile_page.evaluate("""() => ({
+                                html: document.documentElement?.outerHTML || '',
+                                body: document.body?.innerText || '',
+                                scripts: [...document.scripts].map((s, i) => ({
+                                  index: i, id: s.id || '', type: s.type || '',
+                                  text: s.textContent || ''
+                                })).filter(s => s.text.trim()),
+                                meta: [...document.querySelectorAll('meta')].reduce((o, e) => {
+                                  const k = e.getAttribute('property') || e.getAttribute('name');
+                                  if (k && e.content) o[k] = e.content;
+                                  return o;
+                                }, {})
+                              })""")
+                              mobile_html = mobile_data.get("html", "")
+                              test["html_bytes"] = len(mobile_html.encode("utf-8"))
+                              test["body_excerpt"] = clean(mobile_data.get("body", ""))[:1500]
+                              test["inline_json_count"] = len(mobile_data.get("scripts", []))
+                              mobile_inline = []
+                              for script in mobile_data.get("scripts", []):
+                                  raw = script.get("text", "").strip()
+                                  if not raw:
+                                      continue
+                                  try:
+                                      parsed_json = json.loads(raw)
+                                      mobile_inline.append({
+                                          "index": script["index"], "id": script["id"],
+                                          "type": script["type"], "json": parsed_json
+                                      })
+                                      walk_json(parsed_json, f"{label}.inline_script[{script['index']}]")
+                                  except Exception:
+                                      # 保留 _ROUTER_DATA 等非纯 JSON 注入脚本
+                                      if any(k in raw for k in ("_ROUTER_DATA", "videoInfoRes", "aweme")):
+                                          mobile_inline.append({
+                                              "index": script["index"], "id": script["id"],
+                                              "type": script["type"], "text_excerpt": raw[:500000]
+                                          })
+                                          for marker in ("_ROUTER_DATA", "videoInfoRes"):
+                                              pos = raw.find(marker)
+                                              if pos >= 0:
+                                                  snippet = raw[pos:pos + 450000]
+                                                  # 尝试从脚本中提取 JSON 对象，兼容赋值语句
+                                                  start = snippet.find("{")
+                                                  if start >= 0:
+                                                      depth, quoted, escaped, end = 0, False, False, -1
+                                                      for j, ch in enumerate(snippet[start:], start):
+                                                          if quoted:
+                                                              if escaped: escaped = False
+                                                              elif ch == "\\\\": escaped = True
+                                                              elif ch == '"': quoted = False
+                                                          else:
+                                                              if ch == '"': quoted = True
+                                                              elif ch == "{": depth += 1
+                                                              elif ch == "}":
+                                                                  depth -= 1
+                                                                  if depth == 0:
+                                                                      end = j + 1
+                                                                      break
+                                                      if end > start:
+                                                          try:
+                                                              parsed_json = json.loads(snippet[start:end])
+                                                              mobile_inline.append({
+                                                                  "source": marker, "json": parsed_json
+                                                              })
+                                                              walk_json(parsed_json, f"{label}.{marker}")
+                                                          except Exception:
+                                                              pass
+                              with open(f"douyin-{label}-page.html", "w", encoding="utf-8") as out:
+                                  out.write(mobile_html[:5_000_000])
+                              with open(f"douyin-{label}-inline-json.json", "w", encoding="utf-8") as out:
+                                  json.dump({"meta": mobile_data.get("meta", {}),
+                                             "scripts": mobile_inline},
+                                            out, ensure_ascii=False, indent=2)
+                          except Exception as mobile_exc:
+                              test["error"] = f"{type(mobile_exc).__name__}: {mobile_exc}"
+                          mobile_tests.append(test)
+                          mobile_page.close()
+                  else:
+                      mobile_tests.append({"error": "未能从最终 URL 提取作品 ID，跳过手机端测试"})
+                  report["mobile_page_tests"] = mobile_tests
+
                   report["network_json_count"] = len(network_json)
                   report["network_json_urls"] = [
                       {
@@ -259,5 +373,9 @@ jobs:
             douyin-page.html
             douyin-inline-json.json
             douyin-network-json.json
+            douyin-m_douyin-page.html
+            douyin-m_douyin-inline-json.json
+            douyin-iesdouyin-page.html
+            douyin-iesdouyin-inline-json.json
           if-no-files-found: ignore
           retention-days: 7
