@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "0159776a501850d46ac3bf1ecf8a09d69834bfb9",
-  "versionCode": 59,
-  "versionName": "0.0.59",
+  "sourceCommit": "5ef2b159a4a2a77e331a3b976066b07317e84cdc",
+  "versionCode": 60,
+  "versionName": "0.0.60",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.59",
+  "tag": "hongguotv-bate-v0.0.60",
   "apk": {
-    "name": "HongguoTV-0.0.59.apk",
-    "size": 1998629,
-    "sha256": "fa3cd1342f99306de9275b721ed87ac86f4a80d87020597d26c9fe50d30ad649",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.59/HongguoTV-0.0.59.apk"
+    "name": "HongguoTV-0.0.60.apk",
+    "size": 2002109,
+    "sha256": "6aaf623bdbbeff4c992ddc14064969d333ef5176d05ed50040713b5e9510a4f8",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.60/HongguoTV-0.0.60.apk"
   },
-  "notes": "【播放与播放器】\n- 修正无感连播双播放器内存门槛\n- 将接口状态详情迁移至播放设置\n- 将默认播放线路首选设为 Phoenix\n【网络与接口】\n- 将接口状态入口名称简化为接口状态\n【界面与交互】\n- 补充自动清晰度设置说明\n- 设置页显示自动清晰度策略名称\n【其他功能与问题修复】\n- Fix push playback focus anchor fallback\n- Restore focus to push playback navigation entry\n- Require a single search result for automatic push playback\n- Add cancellable push-playback search progress\n- Fix parsing multiple Douyin share entries\n- Avoid auto-play when multiple share items are submitted\n- Add LAN push playback and manual candidate selection\n- 清晰度选择器加入两种自动策略"
+  "notes": "【其他功能与问题修复】\n- Keep push playback navigation state and stop service on source switch\n- Improve push playback page, fixed LAN service and share form"
 }
