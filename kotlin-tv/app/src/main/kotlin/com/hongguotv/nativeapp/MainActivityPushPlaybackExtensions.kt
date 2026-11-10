@@ -353,7 +353,9 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
     }
     cards.forEachIndexed { i,v ->
         v.nextFocusLeftId=cards.getOrNull(i-1)?.id ?: v.id;v.nextFocusRightId=cards.getOrNull(i+1)?.id ?: v.id
-        v.nextFocusUpId=cards.getOrNull(i-columns)?.id ?: v.id;v.nextFocusDownId=cards.getOrNull(i+columns)?.id ?: v.id
+        // 第一排向上交给系统焦点搜索，避免焦点被锁在海报卡片内。
+        v.nextFocusUpId=cards.getOrNull(i-columns)?.id ?: View.NO_ID
+        v.nextFocusDownId=cards.getOrNull(i+columns)?.id ?: View.NO_ID
     }
     cards.firstOrNull()?.requestFocus()
 }
