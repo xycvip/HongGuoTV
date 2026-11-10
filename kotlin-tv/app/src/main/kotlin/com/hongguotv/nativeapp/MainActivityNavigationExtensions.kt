@@ -38,6 +38,10 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
     internal fun MainActivity.switchTab(next: Int) {
         val targetTab=if(next==9) 4 else next
         debugLog("页面导航：主导航页签 $tab -> $targetTab")
+        if(pushPlaybackPageActive || pushPlaybackServer!=null) {
+            pushPlaybackPageActive=false
+            closePushPlaybackService()
+        }
         leaveCollection()
         tabState[tab]=CatalogState(page,catalog,hasMore,ranking,rankBoard,genre,aiCatalog,aiGenre); tabFocus[tab]=catalogFocus
         // 从其他模块切回搜索页时重置为全新搜索状态，不保留上次的搜索词与结果

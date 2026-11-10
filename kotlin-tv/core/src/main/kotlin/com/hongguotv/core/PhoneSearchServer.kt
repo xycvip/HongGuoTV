@@ -60,16 +60,21 @@ class PhoneInputServer(
     private val form: PhoneForm,
     private val onSubmit: (Map<String, String>)->Unit,
     private val onExpired: ()->Unit = {},
-    ttlMillis: Long = 300_000
+    ttlMillis: Long = 300_000,
+    fixedPort: Int = 0,
+    tokenRequired: Boolean = true,
+    singleUse: Boolean = true
 ): Closeable {
     private val stopped=AtomicBoolean(false)
     private val consumed=AtomicBoolean(false)
     private val localAddress=InetAddress.getByName(address).also { require(it.isLoopbackAddress || it.isSiteLocalAddress) }.hostAddress
-    private val listener=ServerSocket(0,4).apply { soTimeout=500 }
-    private val deadline=System.nanoTime()+ttlMillis.coerceIn(1,300_000)*1_000_000
-    private val token=ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it.toInt() and 255) }
+    private val listener=if(fixedPort>0) ServerSocket().apply { reuseAddress=true; bind(java.net.InetSocketAddress(fixedPort),4); soTimeout=500 } else ServerSocket(0,4).apply { soTimeout=500 }
+    private val deadline=if(ttlMillis<=0) Long.MAX_VALUE else System.nanoTime()+ttlMillis.coerceIn(1,300_000)*1_000_000
+    private val token=if(tokenRequired) ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it.toInt() and 255) } else ""
     private val host="$localAddress:${listener.localPort}"
-    val url="http://$host/$token"
+    private val pagePath=if(tokenRequired) "/$token" else "/"
+    private val submitPath=if(tokenRequired) "/$token/submit" else "/submit"
+    val url="http://$host$pagePath"
     private val thread=Thread({ serve() },"hongguotv-phone-input").apply { isDaemon=true }
     init {
         thread.start()
@@ -86,7 +91,7 @@ class PhoneInputServer(
             }
         } catch(_: Exception) { /* Closing the dialog interrupts accept(). */ }
         finally {
-            val expired=!stopped.get() && !consumed.get()
+            val expired=!stopped.get() && ttlMillis>0 && !consumed.get()
             close()
             if(expired) onExpired()
         }
@@ -116,19 +121,20 @@ class PhoneInputServer(
             val key=next.substring(0,at).lowercase(Locale.ROOT)
             if(headers.put(key,next.substring(at+1).trim())!=null) return respond(socket,400,"重复请求头")
         }
-        if(stopped.get() || consumed.get() || System.nanoTime()>=deadline) return respond(socket,410,"二维码已失效，请在电视上重新打开")
-        if(headers["host"]!=host || request[1] !in listOf("/$token","/$token/submit")) return respond(socket,404,"页面不存在")
-        if(request[0]=="GET" && request[1]=="/$token") return respond(socket,200,formPage())
-        if(request[0]!="POST" || request[1]!="/$token/submit") return respond(socket,405,"不支持的操作")
+        if(stopped.get() || (singleUse && consumed.get()) || System.nanoTime()>=deadline) return respond(socket,410,"服务已关闭，请回到电视重新开启")
+        if(headers["host"]!=host || request[1] !in listOf(pagePath,submitPath)) return respond(socket,404,"页面不存在")
+        if(request[0]=="GET" && request[1]==pagePath) return respond(socket,200,formPage())
+        if(request[0]!="POST" || request[1]!=submitPath) return respond(socket,405,"不支持的操作")
         if(foreignOrigin(headers["origin"], localAddress)) return respond(socket,403,"来源不匹配")
         if(headers.containsKey("transfer-encoding") || headers["content-type"]?.substringBefore(';')!="application/x-www-form-urlencoded") return respond(socket,400,"请求格式错误")
         val length=headers["content-length"]?.toIntOrNull()?.takeIf { it in 1..65536 } ?: return respond(socket,413,"输入内容过长")
         val body=ByteArray(length); var offset=0
         while(offset<body.size) { val n=input.read(body,offset,body.size-offset); if(n<0) return; offset+=n }
         val values=parseFields(String(body,Charsets.UTF_8)) ?: return respond(socket,400,form.invalidMessage)
-        if(stopped.get() || System.nanoTime()>=deadline || !consumed.compareAndSet(false,true)) return respond(socket,410,"二维码已失效")
-        try { respond(socket,200,"<h1>${escapeHtml(form.doneMessage)}</h1><p>${escapeHtml(form.doneHint)}</p>") }
-        finally { close(); onSubmit(values) }
+        if(stopped.get() || System.nanoTime()>=deadline || (singleUse && !consumed.compareAndSet(false,true))) return respond(socket,410,"服务已关闭")
+        respond(socket,200,"<h1>${escapeHtml(form.doneMessage)}</h1><p>${escapeHtml(form.doneHint)}</p><p>可以返回上页继续发送其他分享内容。</p>")
+        onSubmit(values)
+        if(singleUse) close()
     }
     /** 表单校验：字段名必须与表单定义完全一致；重复、缺失、超长、控制字符一律拒绝且不消耗会话。 */
     private fun parseFields(body: String): Map<String,String>? {
@@ -144,7 +150,7 @@ class PhoneInputServer(
         if(values.keys!=expected) return null
         for(field in form.fields) {
             val value=values[field.key].orEmpty().trim()
-            if(value.any { it.isISOControl() }) return null
+            if(value.any { it.isISOControl() && it != '\n' && it != '\r' && it != '\t' }) return null
             if(field.required && value.isEmpty()) return null
             if(value.length>field.maxLength) return null
             values[field.key]=value
@@ -152,9 +158,9 @@ class PhoneInputServer(
         return values
     }
     private fun formPage(): String = buildString {
-        append("<h1>").append(escapeHtml(form.heading)).append("</h1>")
+        append("<main class=\"panel\"><div class=\"eyebrow\">HONGGUO TV · PUSH PLAY</div><h1>").append(escapeHtml(form.heading)).append("</h1>")
         append("<p>").append(escapeHtml(form.description)).append("</p>")
-        append("<form method=\"post\" action=\"/").append(token).append("/submit\">")
+        append("<form method=\"post\" action=\"").append(submitPath).append("\">")
         form.fields.forEachIndexed { index, field ->
             append("<label for=\"field").append(index).append("\">").append(escapeHtml(field.label)).append("</label>")
             if(field.multiline) {
@@ -174,10 +180,22 @@ class PhoneInputServer(
             if(index==0) append("<script>document.getElementById('field0').focus()</script>")
         }
         append("<button>").append(escapeHtml(form.submitLabel)).append("</button></form>")
-        append("<p>页面仅在电视的填写窗口打开期间有效，最长 5 分钟。</p>")
+        append("<p class=\"foot\">请确认手机与电视连接同一 Wi-Fi。提交后电视会立即识别并显示匹配结果。</p></main>")
     }
     private fun respond(socket: Socket, code: Int, message: String) {
-        val body="""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>红果 TV · 手机填写</title><style>body{font:18px sans-serif;background:#10131b;color:#f4f5f8;max-width:500px;margin:40px auto;padding:20px}label{display:block;margin-top:12px;font-size:16px;color:#c9cedb}input,button{box-sizing:border-box;width:100%;font:inherit;padding:16px;margin:8px 0;border-radius:8px}button{background:#ff634c;color:white;border:0}p{line-height:1.6}</style></head><body>$message</body></html>""".toByteArray(Charsets.UTF_8)
+        val body="""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#10131b"><title>红果 TV · 推送播放</title><style>
+:root{color-scheme:dark;--bg:#0c1018;--line:#2b3547;--text:#f6f7fb;--muted:#aab4c5;--accent:#ff654f}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:28px 18px calc(28px + env(safe-area-inset-bottom));font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--text);background:radial-gradient(ellipse at 85% 0%,#45251f 0,transparent 42%),linear-gradient(160deg,#111927 0%,var(--bg) 62%)}
+main{width:100%;max-width:620px;margin:0 auto}.panel{padding:clamp(22px,6vw,38px);border:1px solid rgba(255,255,255,.09);border-radius:26px;background:linear-gradient(145deg,rgba(29,39,55,.96),rgba(19,25,36,.96));box-shadow:0 22px 70px rgba(0,0,0,.34)}
+.eyebrow{font-size:11px;letter-spacing:2.6px;font-weight:800;color:var(--accent);margin-bottom:12px}h1{font-size:clamp(28px,7vw,36px);letter-spacing:.5px;margin:0 0 10px;font-weight:800}p{font-size:15px;line-height:1.75;color:var(--muted);margin:0 0 22px}
+label{display:block;font-size:15px;font-weight:700;color:#e8edf6;margin:22px 0 10px}
+textarea{display:block;width:100%;min-height:280px;resize:vertical;border:1px solid #3b485d;border-radius:17px;padding:18px;background:#0d1420;color:var(--text);font:16px/1.8 system-ui,-apple-system,"PingFang SC",sans-serif;outline:none;box-shadow:inset 0 2px 8px rgba(0,0,0,.18)}
+input{display:block;width:100%;min-height:56px;border:1px solid #3b485d;border-radius:14px;padding:14px;background:#0d1420;color:var(--text);font:16px system-ui,-apple-system,"PingFang SC",sans-serif;outline:none}
+textarea:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,101,79,.15)}textarea::placeholder,input::placeholder{color:#738198}
+button{width:100%;min-height:58px;margin-top:20px;border:0;border-radius:16px;background:linear-gradient(105deg,#ff795d,#f04e43);color:white;font-size:18px;font-weight:800;letter-spacing:1px;box-shadow:0 10px 28px rgba(240,78,67,.22);cursor:pointer}
+button:active{transform:scale(.99)}.foot{margin:20px 0 0;padding-top:17px;border-top:1px solid var(--line);font-size:13px}
+@media(min-width:520px){body{padding-top:7vh}textarea{min-height:320px}}
+</style></head><body>$message</body></html>""".toByteArray(Charsets.UTF_8)
         val header="HTTP/1.1 $code Response\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'\r\n\r\n"
         socket.getOutputStream().apply { write(header.toByteArray(Charsets.US_ASCII)); write(body); flush() }
     }

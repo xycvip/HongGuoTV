@@ -226,7 +226,12 @@ class MainActivity: Activity() {
     internal lateinit var tvTools: TvTools
     internal var pushPlaybackRevision: Long = 0L
     internal var pushPlaybackTask: java.util.concurrent.Future<*>? = null
-    internal var pushPlaybackProgressDialog: AlertDialog? = null
+    internal var pushPlaybackPageActive: Boolean = false
+    internal var pushPlaybackServer: PhoneInputServer? = null
+    internal var pushPlaybackStatusView: TextView? = null
+    internal var pushPlaybackCandidateHost: LinearLayout? = null
+    internal var pushPlaybackQrView: ImageView? = null
+    internal var pushPlaybackUrlView: TextView? = null
     internal lateinit var extras: PlaybackExtras
     internal lateinit var updater: AppUpdater
     internal lateinit var mediaSession: TvMediaSession
@@ -818,6 +823,13 @@ class MainActivity: Activity() {
 
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed() {
+        if(pushPlaybackPageActive) {
+            pushPlaybackPageActive=false
+            closePushPlaybackService()
+            showCatalog()
+            root.post { navForTab().takeIf { it.isAttachedToWindow }?.requestFocus() }
+            return
+        }
         if(screen=="third_source") {
             if(thirdSourceScreen?.onBack()!=true) showCatalog()
             return
@@ -969,7 +981,7 @@ class MainActivity: Activity() {
     override fun onDestroy() {
         pushPlaybackRevision++
         pushPlaybackTask?.cancel(true); pushPlaybackTask=null
-        pushPlaybackProgressDialog?.dismiss(); pushPlaybackProgressDialog=null
+        closePushPlaybackService()
         debugLog("生命周期：onDestroy；页面=$screen；正在销毁 Activity")
         apiStatusUiState.checkBatchId++
         stopApiStatusAnimations()

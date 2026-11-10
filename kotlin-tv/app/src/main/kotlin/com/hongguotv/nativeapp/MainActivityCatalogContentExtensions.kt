@@ -56,6 +56,10 @@ internal fun MainActivity.renderCatalogContent(
     compactHeader: Boolean,
 ) {
         if(tab==0) container.post { if(screen=="catalog" && tab==0) runAutomaticApiChecks() }
+        if(pushPlaybackPageActive) {
+            renderPushPlaybackPage(container)
+            return
+        }
         if(tab==6) {
             val host = FrameLayout(this)
             accountContentHost = host
