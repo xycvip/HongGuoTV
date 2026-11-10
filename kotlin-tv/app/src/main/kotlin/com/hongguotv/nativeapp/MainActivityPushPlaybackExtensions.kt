@@ -399,7 +399,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         setPadding(dp(26),dp(20),dp(26),dp(20))
         background=GradientDrawable().apply { setColor(TvStyle.surface);cornerRadius=dp(20).toFloat();setStroke(dp(1),TvStyle.outline) }
     }
-    val cardTitle=oneLine("手机扫码 · 粘贴分享 · 电视即刻播放",20f,TvStyle.text).apply {
+    val cardTitle=pushText("手机扫码 · 粘贴分享 · 电视即刻播放",20f,TvStyle.text).apply {
         gravity=Gravity.CENTER
         typeface=Typeface.DEFAULT_BOLD
         setPadding(0,0,0,dp(18))
