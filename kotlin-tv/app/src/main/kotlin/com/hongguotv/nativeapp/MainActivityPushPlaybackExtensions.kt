@@ -33,14 +33,14 @@ private object PushShareParser {
             val title=redTitles.getOrNull(i).orEmpty()
             if(title.isNotBlank()) result+=PushShareItem(title,url,"红果")
         }
-        val douyinBlocks=raw.split(Regex("(?=\\d+(?:\\.\\d+)?\\s+复制打开抖音)"))
-        for(block in douyinBlocks) {
-            val url=douyinUrl.find(block)?.value ?: continue
-            val author=douyinAuthor.find(block)?.groupValues?.getOrNull(1).orEmpty()
+        for(match in douyinUrl.findAll(raw)) {
+            val url=match.value
+            val marker=raw.lastIndexOf("复制打开抖音",match.range.first)
+            val lineStart=if(marker<0) 0 else (raw.lastIndexOf('\n',marker).takeIf { it>=0 }?.plus(1) ?: 0)
+            val block=raw.substring(lineStart,match.range.first)
             val afterAuthor=block.substringAfter("】",block)
             val explicit=bracketTitle.find(afterAuthor)?.groupValues?.getOrNull(1).orEmpty()
-            val beforeUrl=afterAuthor.substringBefore(url)
-            val title=if(explicit.isNotBlank()) explicit else clean(beforeUrl)
+            val title=if(explicit.isNotBlank()) explicit else clean(afterAuthor)
             if(title.isNotBlank()) result+=PushShareItem(title,url,"抖音")
         }
         return result.distinctBy { it.url }
