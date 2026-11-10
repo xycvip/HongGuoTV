@@ -89,15 +89,17 @@ jobs:
           def add_video_id(url):
               if not url:
                   return
-              match = re.search(r"/(?:share/video|video|note)/(\\d+)", url)
+              match = re.search(r"/(?:share/video|video|note)/(\d+)", url)
               if match and match.group(1) not in report["observed_video_ids"]:
                   report["observed_video_ids"].append(match.group(1))
 
           with sync_playwright() as p:
               browser = p.chromium.launch(headless=True)
               context = browser.new_context(
+                  user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
                   locale="zh-CN", timezone_id="Asia/Shanghai",
-                  viewport={"width": 1440, "height": 1000}
+                  viewport={"width": 390, "height": 844},
+                  is_mobile=True, has_touch=True
               )
               page = context.new_page()
               page.set_default_timeout(15000)
@@ -144,16 +146,34 @@ jobs:
                   if not is_douyin(resolved):
                       raise RuntimeError("短链接跳转到了非抖音官方域名，停止访问")
                   report["resolved_url"] = resolved
-                  match = re.search(r"/(?:video|note)/(\d+)", resolved)
-                  video_id = match.group(1) if match else ""
+                  add_video_id(resolved)
+                  video_id = report["observed_video_ids"][0] if report["observed_video_ids"] else ""
                   report["video_id"] = video_id
 
-                  detail_url = f"https://www.douyin.com/video/{video_id}" if video_id else resolved
-                  if detail_url != page.url:
-                      response = page.goto(detail_url, wait_until="domcontentloaded", timeout=60000)
-                      report["detail_http_status"] = response.status if response else None
+                  # 分享短链可能先经过 iesdouyin.com/share/video/{id}，
+                  # 最终却跳到精选首页；因此使用捕获到的中间 URL ID 继续检查。
+                  if video_id:
+                      share_page_url = f"https://www.iesdouyin.com/share/video/{video_id}/"
+                      response = page.goto(share_page_url, wait_until="domcontentloaded", timeout=60000)
+                      report["iesdouyin_page"]["http_status"] = response.status if response else None
+                      report["iesdouyin_page"]["final_url"] = safe_url(page.url)
+                      page.wait_for_timeout(8000)
+                      report["iesdouyin_page"]["title"] = page.title()
+                      share_text = page.locator("body").inner_text() if page.locator("body").count() else ""
+                      report["iesdouyin_page"]["text"] = re.sub(r"\\s+", " ", share_text)[:3000]
+                      html = page.content()
+                      markers = ("_ROUTER_DATA", "SSR_HYDRATED_DATA", "__INITIAL_STATE__", "__NEXT_DATA__", "__UNIVERSAL_DATA_FOR_REHYDRATION__")
+                      report["iesdouyin_page"]["data_markers"] = [m for m in markers if m in html]
+                      report["iesdouyin_page"]["script_data_candidates"] = page.locator("script").evaluate_all("""els => els.map(e => e.textContent || '').filter(t =>
+                        /_ROUTER_DATA|SSR_HYDRATED_DATA|__INITIAL_STATE__|__NEXT_DATA__|__UNIVERSAL_DATA_FOR_REHYDRATION__|aweme_detail|videoInfoRes/i.test(t)
+                      ).slice(0,20).map(t => t.slice(0,20000))""")
+                      report["iesdouyin_page"]["html_has_video_id"] = video_id in html
+                      report["iesdouyin_page"]["html_length"] = len(html)
+                      for marker in ("验证码", "访问过于频繁", "登录后", "安全验证", "网络异常"):
+                          if marker in report["iesdouyin_page"]["text"]:
+                              report["blocked_indicators"].append("iesdouyin:" + marker)
 
-                  page.wait_for_timeout(15000)
+                  page.wait_for_timeout(7000)
                   report["resolved_url"] = safe_url(page.url)
                   report["page_title"] = page.title()
                   body = page.locator("body").inner_text() if page.locator("body").count() else ""
