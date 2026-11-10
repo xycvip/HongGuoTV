@@ -83,7 +83,7 @@ jobs:
                           scan_json(value, found, f"{path}[{i}]", depth + 1)
 
           def extract_router_data(html):
-              marker = re.search(r"(?:window\\.)?_ROUTER_DATA\\s*=\\s*", html)
+              marker = re.search(r"(?:window\.)?_ROUTER_DATA\s*=\s*", html)
               if not marker:
                   return None
               start = html.find("{", marker.end())
@@ -95,7 +95,7 @@ jobs:
                   if in_string:
                       if escaped:
                           escaped = False
-                      elif ch == "\\\\":
+                      elif ch == "\\":
                           escaped = True
                       elif ch == '"':
                           in_string = False
