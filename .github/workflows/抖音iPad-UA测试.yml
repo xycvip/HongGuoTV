@@ -67,7 +67,10 @@ jobs:
               "console_errors": [], "page_errors": [], "blocked_indicators": [],
               "error": "", "detail": {}, "detail_attempts": [], "raw_api_samples": [],
               "network_detail_matches": [],
-          "feed_api_attempts": [], "feed_api_result": {}
+              "feed_api_disabled": True,
+              "redirect_chain": [],
+              "navigation_urls": [],
+              "json_response_matches": []
           }
 
           def scan_json(obj, found, path="$", depth=0):
@@ -185,113 +188,6 @@ jobs:
                   "item_type": item.get("aweme_type")
               }
 
-          def try_mobile_feed(video_id):
-              """优先请求用户验证过的最简 Feed URL，再尝试带 App 参数的形式。"""
-              import requests
-              endpoints = (
-                  "https://aweme.snssdk.com/aweme/v1/feed/",
-                  "https://api5-normal-c-hl.amemv.com/aweme/v1/feed/",
-              )
-              request_variants = [
-                  {"aweme_id": video_id},
-                  {
-                      "aweme_id": video_id, "aid": "1128",
-                      "device_platform": "android", "app_name": "aweme",
-                      "version_code": "350102", "version_name": "35.1.2",
-                      "channel": "googleplay", "device_type": "Pixel 7",
-                      "os_version": "13", "language": "zh",
-                  },
-              ]
-              headers = {
-                  "User-Agent": "com.ss.android.ugc.aweme/350102 (Linux; U; Android 13; zh_CN; Pixel 7; Build/TP1A.221005.002; Cronet/TTNetVersion:)",
-                  "Accept": "application/json",
-                  "Accept-Encoding": "gzip, deflate",
-                  "Connection": "close",
-              }
-              for endpoint in endpoints:
-                  for variant_index, params in enumerate(request_variants, start=1):
-                      attempt = {
-                          "url": endpoint,
-                          "request_variant": "aweme_id_only" if variant_index == 1 else "app_params",
-                          "status": None,
-                          "matched": False,
-                      }
-                      try:
-                          response = requests.get(endpoint, params=params, headers=headers, timeout=20)
-                          attempt["status"] = response.status_code
-                          attempt["content_type"] = response.headers.get("content-type", "")[:160]
-                          attempt["final_url"] = safe_url(response.url)
-                          attempt["response_bytes"] = len(response.content)
-                          if response.ok:
-                              payload = response.json()
-                              attempt["top_keys"] = list(payload.keys())[:40] if isinstance(payload, dict) else []
-                              attempt["status_code"] = payload.get("status_code") if isinstance(payload, dict) else None
-                              attempt["message"] = str((payload.get("message") or payload.get("msg") or ""))[:240] if isinstance(payload, dict) else ""
-                              candidates = []
-                              if isinstance(payload, dict):
-                                  for key in ("aweme_list", "items", "data"):
-                                      value = payload.get(key)
-                                      if isinstance(value, list):
-                                          candidates.extend(x for x in value if isinstance(x, dict))
-                                      elif isinstance(value, dict):
-                                          nested = value.get("aweme_list") or value.get("items") or []
-                                          candidates.extend(x for x in nested if isinstance(x, dict))
-                                  direct = payload.get("aweme_detail")
-                                  if isinstance(direct, dict):
-                                      candidates.append(direct)
-
-                              # Feed 响应可能把目标作品放在多层嵌套结构中，递归按 ID 精确匹配。
-                              def find_target(node, depth=0):
-                                  if depth > 20:
-                                      return None
-                                  if isinstance(node, dict):
-                                      if str(node.get("aweme_id") or node.get("item_id") or "") == str(video_id):
-                                          return node
-                                      for child in node.values():
-                                          if isinstance(child, (dict, list)):
-                                              found = find_target(child, depth + 1)
-                                              if found:
-                                                  return found
-                                  elif isinstance(node, list):
-                                      for child in node[:2000]:
-                                          if isinstance(child, (dict, list)):
-                                              found = find_target(child, depth + 1)
-                                              if found:
-                                                  return found
-                                  return None
-
-                              target = find_target(payload)
-                              attempt["candidate_count"] = len(candidates)
-                              attempt["candidate_ids"] = [
-                                  str(x.get("aweme_id") or x.get("item_id") or "")
-                                  for x in candidates[:12]
-                              ]
-                              if target:
-                                  attempt["matched"] = True
-                                  attempt["matched_desc"] = str(target.get("desc") or "")[:500]
-                                  attempt["matched_author"] = str(((target.get("author") or {}).get("nickname")) or "")[:120]
-                                  attempt["matched_keys"] = list(target.keys())[:80]
-                                  series = target.get("series_info") or target.get("mix_info") or {}
-                                  if isinstance(series, dict):
-                                      attempt["matched_series_name"] = str(series.get("series_name") or "")[:200]
-                                      attempt["matched_mix_name"] = str(series.get("mix_name") or "")[:200]
-                                  report["feed_api_result"] = normalize_item(target, "抖音 App Feed API")
-                                  report["feed_api_result"]["source"] = endpoint
-                                  report["feed_api_result"]["response_status"] = response.status_code
-                                  report["feed_api_result"]["response_top_keys"] = attempt["top_keys"]
-                                  report["feed_api_result"]["candidate_count"] = len(candidates)
-                                  report["feed_api_result"]["exact_aweme_id_match"] = True
-                                  report["detail"] = report["feed_api_result"]
-                                  report["detail"]["source"] = "抖音 App Feed API"
-                                  report["feed_api_attempts"].append(attempt)
-                                  return
-                              attempt["error"] = "响应成功，但没有找到 aweme_id 完全匹配的作品"
-                          else:
-                              attempt["body_preview"] = re.sub(r"\\s+", " ", response.text)[:500]
-                      except Exception as exc:
-                          attempt["error"] = f"{type(exc).__name__}: {exc}"[:500]
-                      report["feed_api_attempts"].append(attempt)
-
           def safe_url(url):
               try:
                   parsed = urlparse(url)
@@ -321,7 +217,27 @@ jobs:
               page.on("pageerror", lambda exc: report["page_errors"].append(str(exc)[:1000])
                       if len(report["page_errors"]) < 30 else None)
 
-              page.on("request", lambda request: add_video_id(request.url))
+              def on_request(request):
+                  add_video_id(request.url)
+                  if len(report["navigation_urls"]) < 300:
+                      report["navigation_urls"].append({
+                          "url": safe_url(request.url),
+                          "resource_type": request.resource_type,
+                          "method": request.method,
+                          "redirected_from": safe_url(request.redirected_from.url) if request.redirected_from else ""
+                      })
+                  chain = []
+                  previous = request
+                  while previous is not None and len(chain) < 20:
+                      chain.append(safe_url(previous.url))
+                      previous = previous.redirected_from
+                  if len(chain) > 1:
+                      chain.reverse()
+                      record = {"chain": chain}
+                      if record not in report["redirect_chain"] and len(report["redirect_chain"]) < 100:
+                          report["redirect_chain"].append(record)
+
+              page.on("request", on_request)
 
               def find_matching_aweme(obj, video_id, path="$", depth=0):
                   """在接口 JSON 中递归寻找与分享链接 ID 完全一致的作品对象。"""
@@ -356,9 +272,9 @@ jobs:
                           "location": safe_url(location) if location else ""
                       })
                   content_type = response.headers.get("content-type", "")[:200]
-                  # 第二级：监听浏览器实际请求的详情/作品接口，不预设单一接口路径。
-                  # 只有响应 JSON 中出现与分享链接完全相同的 aweme_id 才认定为目标作品。
-                  if any(k in low for k in ("aweme", "video/detail", "iteminfo", "detail", "share/video")):
+                  # 不依赖 Feed：捕获所有 3xx 跳转，并检查浏览器加载的所有 JSON 响应。
+                  # 仅当响应中精确出现目标 aweme_id 时，才认定为目标作品详情。
+                  if "json" in content_type.lower() or any(k in low for k in ("aweme", "video/detail", "iteminfo", "detail", "share/video")):
                       item = {
                           "url": safe_url(response.url), "status": response.status,
                           "content_type": content_type
@@ -421,9 +337,8 @@ jobs:
                   video_id = report["observed_video_ids"][0] if report["observed_video_ids"] else ""
                   report["video_id"] = video_id
 
-                  # 第一级：抖音 App Feed API。若精确命中目标作品，优先采用其完整详情。
-                  if video_id:
-                      try_mobile_feed(video_id)
+                  # 本轮明确禁用 Feed API：只依靠重定向链、浏览器网络响应和网页 HTML。
+                  report["feed_api_disabled"] = True
 
                   # 分享短链可能先经过 iesdouyin.com/share/video/{id}，
                   # 最终却跳到精选首页；因此使用捕获到的中间 URL ID 继续检查。
