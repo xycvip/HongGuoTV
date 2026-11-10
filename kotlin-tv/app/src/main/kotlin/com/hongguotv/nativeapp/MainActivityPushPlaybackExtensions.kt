@@ -405,7 +405,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     }
     hero.addView(cardTitle,LinearLayout.LayoutParams(-1,-2))
     val contentRow=LinearLayout(this).apply {
-        orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+        orientation=LinearLayout.HORIZONTAL;gravity=Gravity.TOP
     }
     val qrCard=LinearLayout(this).apply {
         gravity=Gravity.CENTER;setPadding(dp(8),dp(8),dp(8),dp(8))
@@ -452,7 +452,8 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         setPadding(0,dp(14),0,0)
     }
     pushPlaybackUrlView=urlLabel
-    contentRow.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+    // 右侧说明区域与二维码卡片等高；访问地址单独放在整个 hero 卡片底部。
+    contentRow.addView(info,LinearLayout.LayoutParams(0,-1,1f))
     hero.addView(contentRow,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(15) })
     // 访问地址独立放在卡片右下方，使用卡片内宽度换行，避免末尾字符越界。
     hero.addView(urlLabel,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) })
