@@ -226,13 +226,11 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     page.addView(hero,LinearLayout.LayoutParams(-2,-2))
     pushPlaybackStatusView=status
     pushPlaybackQrView=qr
-    // 改为横向长方形卡片：适度增加二维码与说明区间距，减少上下空白。
+    // 保持横向长方形结构；卡片高度随内容增长，确保二维码和说明完整显示。
     page.post {
         val availableWidth=page.width-page.paddingLeft-page.paddingRight
-        val cardWidth=minOf(availableWidth,dp(760))
-        hero.layoutParams=hero.layoutParams.apply { width=cardWidth;height=dp(210) }
-        val qrSize=dp(132)
-        qr.layoutParams=qr.layoutParams.apply { width=qrSize;height=qrSize }
+        val cardWidth=minOf(availableWidth,dp(820))
+        hero.layoutParams=hero.layoutParams.apply { width=cardWidth;height=ViewGroup.LayoutParams.WRAP_CONTENT }
         hero.requestLayout()
     }
     // 搜索结果改为独立弹窗，二维码卡片始终保持原位和原尺寸。
