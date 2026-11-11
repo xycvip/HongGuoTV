@@ -2,6 +2,7 @@
 package com.hongguotv.core
 
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -211,16 +212,16 @@ class PhoenixPlaybackSource(
      */
     private fun resolveResponse(raw: String, maxQuality: Int): StreamInfo {
         val fallbackUrl = PhoenixMediaResolver.fallbackUrl(raw)
-        val fallbackRaw = if (fallbackUrl.startsWith("https://") || fallbackUrl.startsWith("http://")) {
+        fun fetchFallback(url: String): String {
             val request = Request.Builder()
-                .url(fallbackUrl)
+                .url(url)
                 .header("User-Agent", PHOENIX_UA)
                 .header("Referer", "https://novel.snssdk.com/")
                 .header("Accept", "application/json, */*")
                 .header("Accept-Encoding", "identity")
                 .get()
                 .build()
-            RequestScope.execute(http.newCall(request)) { response ->
+            return RequestScope.execute(http.newCall(request)) { response ->
                 if (!response.isSuccessful) throw IOException("Phoenix fallback_api 请求失败（HTTP ${response.code}）")
                 val body = response.body ?: throw IOException("Phoenix fallback_api 正文为空")
                 if (body.contentLength() > 16L * 1024 * 1024) throw IOException("Phoenix fallback_api 响应过大")
@@ -228,7 +229,19 @@ class PhoenixPlaybackSource(
                 if (bytes.size > 16 * 1024 * 1024) throw IOException("Phoenix fallback_api 响应过大")
                 String(bytes, Charsets.UTF_8)
             }
+        }
+        var fallbackRaw = if (fallbackUrl.startsWith("https://") || fallbackUrl.startsWith("http://")) {
+            fetchFallback(fallbackUrl)
         } else null
+        // OOIUa retries a ByteVC2-only fallback with the H.264 compatibility override.
+        if (fallbackUrl.startsWith("https://") && !fallbackRaw.isNullOrBlank() &&
+            PhoenixMediaResolver.needsCodecOverride(fallbackRaw!!)) {
+            val compatibleUrl = fallbackUrl.toHttpUrl().newBuilder()
+                .setQueryParameter("codec_type", "0")
+                .setQueryParameter("force_codec", "h264")
+                .build().toString()
+            fallbackRaw = fetchFallback(compatibleUrl)
+        }
         return PhoenixMediaResolver.parse(raw, maxQuality, fallbackRaw, ::emitDiagnostic)
     }
 
