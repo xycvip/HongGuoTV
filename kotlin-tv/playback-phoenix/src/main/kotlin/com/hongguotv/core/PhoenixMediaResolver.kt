@@ -18,7 +18,7 @@ internal object PhoenixMediaResolver {
         return extractFallbackUrl(model.opt("fallback_api"))
     }
 
-    fun needsFallback(raw: String): Boolean {
+    fun needsFallback(raw: String, maxQuality: Int): Boolean {
         val root = runCatching { JSONObject(raw) }.getOrNull() ?: return true
         val data = root.optJSONObject("data") ?: return true
         val model = runCatching { modelFrom(data) }.getOrNull() ?: return true
@@ -34,7 +34,15 @@ internal object PhoenixMediaResolver {
             val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
             spade.isBlank() && !encryption.has("encrypt")
         }
-        val hasUsableDeclaredCandidate = inlineRows.any { (_, item) -> hasUsableDeclaredCandidate(item) }
+        val portrait = inlineRows.firstNotNullOfOrNull { (_, item) ->
+            val meta = objectOrString(item.opt("video_meta"))
+            val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
+            val height = item.optInt("vheight", item.optInt("height", meta.optInt("vheight", meta.optInt("height", 0))))
+            if (width > 0 && height > 0) height > width else null
+        }
+        val hasUsableDeclaredCandidate = inlineRows.any { (_, item) ->
+            hasUsableDeclaredCandidate(item, maxQuality, portrait)
+        }
         return allByteVc2 || (undeclaredEncryption && !hasUsableDeclaredCandidate)
     }
 
@@ -86,7 +94,9 @@ internal object PhoenixMediaResolver {
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
             codec in setOf("bytevc2", "bvc2")
         }
-        val hasUsableDeclaredCandidate = inlineRows.any { (_, item) -> hasUsableDeclaredCandidate(item) }
+        val hasUsableDeclaredCandidate = inlineRows.any { (_, item) ->
+            hasUsableDeclaredCandidate(item, maxQuality, inlinePortrait)
+        }
         val inlineUndeclaredEncryption = !hasUsableDeclaredCandidate && inlineRows.any { (_, item) ->
             val encryption = objectOrString(item.opt("encrypt_info"))
             val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
@@ -315,21 +325,22 @@ internal object PhoenixMediaResolver {
         runCatching { JSONObject(raw) }.getOrElse { throw IOException(message) }
 
     /** OOIUa 先按清晰度/编码筛选，再优先返回已有有效密钥或明确声明明文的候选。 */
-    private fun hasUsableDeclaredCandidate(item: JSONObject): Boolean {
+    private fun hasUsableDeclaredCandidate(item: JSONObject, maxQuality: Int, portrait: Boolean?): Boolean {
         val encryption = objectOrString(item.opt("encrypt_info"))
-        val codec = item.str("codec_type").ifEmpty {
-            objectOrString(item.opt("video_meta")).str("codec_type")
-        }.lowercase(Locale.ROOT)
-        if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) {
-            return false
-        }
+        val meta = objectOrString(item.opt("video_meta"))
+        val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
+        if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) return false
+        val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
+        val height = item.optInt("vheight", item.optInt("height", meta.optInt("vheight", meta.optInt("height", 0))))
+        val definition = item.str("quality_desc").ifEmpty { item.str("definition") }
+            .ifEmpty { meta.str("definition") }.ifEmpty { item.str("height").ifEmpty { item.str("vheight") } }
+        val shortSide = if (width > 0 && height > 0) minOf(width, height) else qualityNumber(definition)
+        val target = PlaybackQualityMode.limit(maxQuality, portrait)
+        if (target != Int.MAX_VALUE && shortSide < target) return false
         val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
-        if (spade.isNotBlank()) {
-            return runCatching { PhoenixSpade.deriveKey(spade) }.isSuccess
-        }
+        if (spade.isNotBlank()) return runCatching { PhoenixSpade.deriveKey(spade) }.isSuccess
         return declaredPlain(encryption)
     }
-
     /** 与 OOIUa declaredPlain 一致：只看 encrypt_info.encrypt，顶层 encrypt 不参与判断。 */
     private fun declaredPlain(encryption: JSONObject): Boolean {
         val flag = encryption.opt("encrypt") ?: return false
