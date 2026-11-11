@@ -208,7 +208,7 @@ internal object PhoenixMediaResolver {
                     report("Phoenix资源#$name：拒绝URL，原因=当前链路不支持容器格式(${path.substringAfterLast('.', "unknown")})")
                     continue
                 }
-                val shortSide = if (reportedWidth > 0 && reportedHeight > 0) minOf(reportedWidth, reportedHeight) else height
+                val shortSide = if (reportedWidth > 0 && reportedHeight > 0) minOf(reportedWidth, reportedHeight) else 0
                 if (verifiedUndeclaredFallback && useFallbackRows && shortSide < inlineMinimumPixels) {
                     report("Phoenix备用资源#$name：拒绝，原因=清晰度低于内联候选最低像素要求")
                     continue
@@ -329,9 +329,7 @@ internal object PhoenixMediaResolver {
         if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1") || !hasUrlCandidate(item)) return false
         val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
         val height = item.optInt("vheight", item.optInt("height", meta.optInt("vheight", meta.optInt("height", 0))))
-        val definition = item.str("quality_desc").ifEmpty { item.str("definition") }
-            .ifEmpty { meta.str("definition") }.ifEmpty { item.str("height").ifEmpty { item.str("vheight") } }
-        val shortSide = if (width > 0 && height > 0) minOf(width, height) else qualityNumber(definition)
+        val shortSide = if (width > 0 && height > 0) minOf(width, height) else 0
         val target = PlaybackQualityMode.limit(maxQuality, portrait)
         return (target == Int.MAX_VALUE || shortSide >= target) &&
             item.str("spade_a").ifEmpty { encryption.str("spade_a") }.isBlank() && !encryption.has("encrypt")
@@ -346,9 +344,7 @@ internal object PhoenixMediaResolver {
         if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) return false
         val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
         val height = item.optInt("vheight", item.optInt("height", meta.optInt("vheight", meta.optInt("height", 0))))
-        val definition = item.str("quality_desc").ifEmpty { item.str("definition") }
-            .ifEmpty { meta.str("definition") }.ifEmpty { item.str("height").ifEmpty { item.str("vheight") } }
-        val shortSide = if (width > 0 && height > 0) minOf(width, height) else qualityNumber(definition)
+        val shortSide = if (width > 0 && height > 0) minOf(width, height) else 0
         val target = PlaybackQualityMode.limit(maxQuality, portrait)
         if (target != Int.MAX_VALUE && shortSide < target) return false
         val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
