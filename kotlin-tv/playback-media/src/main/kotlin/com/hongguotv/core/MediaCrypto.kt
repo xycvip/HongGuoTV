@@ -45,8 +45,11 @@ object MediaCrypto {
         if(size<8 || end>total || end>8*1024*1024) throw IOException("视频索引大小异常")
         return end.toInt()
     }
-    fun prepare(data: ByteArray,key: ByteArray?): Prepared {
-        if(key==null) return Prepared(data.copyOf(),emptyList())
+    fun prepare(data: ByteArray,key: ByteArray?, requirePlainValidation: Boolean = false): Prepared {
+        if(key==null) {
+            if(requirePlainValidation) inspectPlainMp4(data)
+            return Prepared(data.copyOf(),emptyList())
+        }
         val moov=box(data,data.u32(0).toInt()) ?: throw IOException("视频索引不完整")
         require(moov.type=="moov")
         val samples=mutableListOf<Sample>(); val header=data.copyOf()
@@ -131,6 +134,47 @@ object MediaCrypto {
         if(sorted.zipWithNext().any { (a,b) -> a.end>b.start }) throw IOException("视频样本重叠")
         return Prepared(header,sorted)
     }
+    /**
+     * OOIUa's no-key path does not trust omitted encrypt_info: inspect the MP4 moov
+     * and reject CENC/protected sample entries before allowing the bytes as plaintext.
+     * This opt-in check is only enabled by the Phoenix source; N keeps the old path.
+     */
+    private fun inspectPlainMp4(data: ByteArray) {
+        val ftyp = box(data, 0) ?: throw IOException("明文 MP4 文件头无效")
+        if (ftyp.type != "ftyp") throw IOException("明文 MP4 缺少 ftyp")
+        val moov = box(data, ftyp.end) ?: throw IOException("明文 MP4 索引不完整")
+        if (moov.type != "moov" || moov.end != data.size) {
+            throw IOException("明文 MP4 索引布局不受支持")
+        }
+        val forbidden = setOf("encv", "enca", "sinf", "schi", "senc", "saiz", "saio", "pssh", "tenc")
+        for (type in forbidden) {
+            if (containsFourcc(data, moov.start, moov.end, type)) {
+                throw IOException("未声明加密的片源实际包含 MP4 加密标记")
+            }
+        }
+        val required = setOf("mvhd", "trak", "mdia", "hdlr", "minf", "stbl", "stsz", "stsc")
+        for (type in required) {
+            if (!containsFourcc(data, moov.start, moov.end, type)) {
+                throw IOException("明文 MP4 索引缺少 $type")
+            }
+        }
+        if (!containsFourcc(data, moov.start, moov.end, "stco") &&
+            !containsFourcc(data, moov.start, moov.end, "co64")) {
+            throw IOException("明文 MP4 缺少块偏移索引")
+        }
+    }
+
+    private fun containsFourcc(data: ByteArray, start: Int, end: Int, type: String): Boolean {
+        val a = type.toByteArray(Charsets.US_ASCII)
+        var i = start + 4
+        while (i <= end - 4) {
+            if (data[i] == a[0] && data[i + 1] == a[1] &&
+                data[i + 2] == a[2] && data[i + 3] == a[3]) return true
+            i++
+        }
+        return false
+    }
+
     fun decrypt(data: ByteArray,start: Long,key: ByteArray?,prepared: Prepared): ByteArray {
         require(start>=0)
         val result=data.copyOf(); val end=start+data.size
