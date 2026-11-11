@@ -149,8 +149,13 @@ object PhoenixDeviceRegister {
         GZIPOutputStream(out).use { it.write(data) }
     }.toByteArray()
 
-    private fun ttEncrypt(data: ByteArray): ByteArray {
-        val rnd = ByteArray(32).also(random::nextBytes)
+    internal fun registrationUrlForTest(): String = REGISTER_URL
+
+    private fun ttEncrypt(data: ByteArray): ByteArray =
+        ttEncrypt(data, ByteArray(32).also(random::nextBytes))
+
+    internal fun ttEncrypt(data: ByteArray, rnd: ByteArray): ByteArray {
+        require(rnd.size == 32)
         val inner = digest("SHA-512", rnd)
         val derived = digest("SHA-512", inner + KDF_SALT).copyOfRange(0, 32)
         val plain = digest("SHA-512", data) + data
