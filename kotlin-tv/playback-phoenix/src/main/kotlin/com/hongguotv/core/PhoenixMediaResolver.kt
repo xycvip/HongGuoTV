@@ -64,9 +64,12 @@ internal object PhoenixMediaResolver {
         } else null
         val fallbackVideoInfo = fallbackRoot?.optJSONObject("video_info")
         if (fallbackRoot != null) {
-            val outerCode = fallbackRoot.opt("Code") ?: fallbackRoot.opt("code") ?: 0
+            val upperCode = fallbackRoot.opt("Code") ?: 0
+            val lowerCode = fallbackRoot.opt("code") ?: 0
             val infoCode = fallbackVideoInfo?.opt("Code") ?: 0
-            if (outerCode.toString().toIntOrNull() != 0 || infoCode.toString().toIntOrNull() != 0) {
+            if (upperCode.toString().toIntOrNull() != 0 ||
+                lowerCode.toString().toIntOrNull() != 0 ||
+                infoCode.toString().toIntOrNull() != 0) {
                 throw IOException("Phoenix fallback_api 业务状态异常")
             }
         }
