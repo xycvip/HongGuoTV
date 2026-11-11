@@ -3,6 +3,8 @@ package com.hongguotv.nativeapp
 
 import android.content.Context
 import com.hongguotv.core.ContentRepository
+import com.hongguotv.core.PlayerDeviceSource
+import com.hongguotv.core.PlayerDeviceStore
 import com.hongguotv.core.PhoenixPlaybackSource
 import com.hongguotv.core.PhoenixPlaybackDeviceSession
 import com.hongguotv.core.PhoenixRequestSigner
@@ -19,6 +21,18 @@ private const val PLAYBACK_API_KEY = "source"
 private const val PLAYBACK_API_REVISION_KEY = "revision"
 
 internal data class PlaybackRouteSnapshot(val api: String, val revision: Long)
+
+private fun Context.configureNativePlayerDeviceStore() {
+    val prefs = getSharedPreferences("n3urda-player-device-v1", Context.MODE_PRIVATE)
+    PlayerDeviceSource.configureStore(object : PlayerDeviceStore {
+        override fun load(): String? = prefs.getString("device", null)
+        override fun save(value: String?) {
+            val editor = prefs.edit()
+            if (value == null) editor.remove("device") else editor.putString("device", value)
+            editor.apply()
+        }
+    })
+}
 
 /** Marks failures thrown while obtaining a stream URL, distinct from later media/decode IO. */
 internal class PlaybackApiRequestException(cause: IOException) :
@@ -193,6 +207,7 @@ internal fun Context.playbackStreamSource(
     notifyOnFallback: Boolean = true,
     allowFallback: Boolean = true
 ): StreamSource {
+    configureNativePlayerDeviceStore()
     fun createSource(api: String): StreamSource {
         return if (api == "phoenix") {
             PlaybackApiDebugState.recordActual(api, "选择 Phoenix 播放接口")
