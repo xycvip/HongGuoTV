@@ -320,12 +320,12 @@ class PhoenixPlaybackSource(
     /** OOIUa 单集主线路必须明确返回 code=0 或 Code=0；缺字段不能默认成功。 */
     private fun requireSingleSuccessCode(raw: String) {
         val root = runCatching { JSONObject(raw) }.getOrElse {
-            throw IOException("OOIUa 单集播放响应不是有效 JSON")
+            throw IllegalStateException("OOIUa 单集播放响应不是有效 JSON")
         }
         val code = root.opt("code") ?: root.opt("Code")
-            ?: throw IOException("OOIUa 单集播放响应缺少 code")
+            ?: throw IllegalStateException("OOIUa 单集播放响应缺少 code")
         if (code.toString().toIntOrNull() != 0) {
-            throw IOException("OOIUa 单集播放接口业务状态异常")
+            throw IllegalStateException("OOIUa 单集播放接口业务状态异常")
         }
     }
 
