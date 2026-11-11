@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "cbabda3908b30be29d21e9802f0014e4a3b60a2e",
-  "versionCode": 80,
-  "versionName": "0.0.80",
+  "sourceCommit": "69a398500b95a4f343b852a7c238c6370e2568f6",
+  "versionCode": 81,
+  "versionName": "0.0.81",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.80",
+  "tag": "hongguotv-bate-v0.0.81",
   "apk": {
-    "name": "HongguoTV-0.0.80.apk",
-    "size": 2019505,
-    "sha256": "bb14df8f7a324c8fad95661ff637b62b9ba6e82936643dcd80c58010a1e6a17a",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.80/HongguoTV-0.0.80.apk"
+    "name": "HongguoTV-0.0.81.apk",
+    "size": 2039649,
+    "sha256": "dc72612b2036be248dc4cae688aa693c592e2f14488984b0025272b063bc79df",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.81/HongguoTV-0.0.81.apk"
   },
-  "notes": "【其他功能与问题修复】\n- Persist N player registration identity like N3urda"
+  "notes": "【其他功能与问题修复】\n- Remove obsolete Phoenix signer import\n- Wire Phoenix playback to OOIUa PlayerSign implementation\n- Update compatibility quality setting description"
 }
