@@ -15,7 +15,7 @@ import javax.crypto.spec.SecretKeySpec
  * Signer.signPlayback path: Phoenix video_model/v1 uses SignPlayer and does
  * not use the Helios/Medusa headers emitted by the older implementation.
  */
-internal object PhoenixPlayerSigner {
+object PhoenixPlayerSigner {
     private val random = SecureRandom()
     private val requestKey = hex("44b9b9d9a4aef9fca493aa757ca3c2c4a496938f")
     private val argusKey = hex("ac1adaae95a7af94a5114ab3b3a97dd80050aa0a39314c40528caec95256c28c")

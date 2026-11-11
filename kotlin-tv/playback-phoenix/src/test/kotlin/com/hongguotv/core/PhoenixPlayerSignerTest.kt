@@ -51,7 +51,7 @@ class PhoenixPlayerSignerTest {
         assertFalse(url.contains("cronet_version="))
     }
 
-    @Test fun activePhoenixRequestSignerOmitsMedusaPlaybackHeader() {
+    @Test fun legacyPhoenixRequestSignerRemainsAvailable() {
         val signer = PhoenixRequestSigner({ 1794050000000L }) { 0.5 }
         val request = signer.signPlayback(
             "https://example.test/novel/player/video_model/v1/",

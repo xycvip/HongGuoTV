@@ -9,9 +9,10 @@ import org.json.JSONObject
 import org.json.JSONArray
 import java.io.IOException
 import java.util.Locale
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
-open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).cookieJar(MemoryCookies()).build(), private val clock: () -> Long = System::currentTimeMillis, private val playbackSession: PlaybackDeviceSession = PlaybackDeviceSession.shared) {
+open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).cookieJar(MemoryCookies()).build(), private val clock: () -> Long = System::currentTimeMillis, private val playbackSession: PlaybackDeviceSession = PlaybackDeviceSession.shared, private val phoenixDetailSession: PhoenixPlaybackDeviceSession = PhoenixPlaybackDeviceSession.shared) {
     private val signer = Signer()
     private val site = "https://hongguoduanju.com"
     private val playbackRepository by lazy { PlaybackRepository(http,clock,playbackSession,signer,site) { url,signed -> text(url,signed) } }
@@ -72,7 +73,69 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
     fun suggest(query: String): List<String> = searchRepository.suggest(query)
     fun probeSuggest(query: String): Int = searchRepository.probeSuggest(query)
 
-    private val detailRepository by lazy { DetailRepository(site,{ url -> text(url) },::card,::valid,searchRepository) }
+
+    /** Phoenix App 原生单剧详情；HTTP 200 空体/403 时轮换注册身份，另一官方域名作为线路兜底。 */
+    private fun phoenixDetail(id: String): JSONObject {
+        val body = JSONObject().put("series_id", id).toString().toByteArray(Charsets.UTF_8)
+        val hosts = listOf("api5-normal-sinfonlinea.fqnovel.com", "api5-normal-sinfonlineb.fqnovel.com")
+        var identity = phoenixDetailSession.profile(http)
+        var rotations = 0
+        var lastError: IOException? = null
+        for (host in hosts) {
+            while (true) {
+                RequestScope.ensureActive()
+                try {
+                    val now = clock()
+                    val values = LinkedHashMap(identity.values)
+                    values["ac"] = values["ac"]?.ifBlank { "wifi" } ?: "wifi"
+                    values["rom_version"] = values["rom_version"]?.ifBlank { "BP2A.250605.031.A3" } ?: "BP2A.250605.031.A3"
+                    val query = values.entries.joinToString("&") { (key, value) ->
+                        URLEncoder.encode(key, "UTF-8") + "=" + URLEncoder.encode(value, "UTF-8")
+                    } + "&_rticket=" + now
+                    val url = "https://$host/novel/player/video_detail/v1/?$query"
+                    val headers = PhoenixPlayerSigner.headers(
+                        query, body, values["device_id"].orEmpty(), now, VendorConstants.VIDEO_UA
+                    )
+                    val request = Request.Builder().url(url).apply {
+                        headers.forEach { (key, value) -> header(key, value) }
+                        if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
+                    }.post(body.toRequestBody("application/json; charset=UTF-8".toMediaType())).build()
+                    data class Result(val status: Int, val raw: String, val bytes: Int)
+                    val result = RequestScope.execute(http.newCall(request)) { response ->
+                        val bytes = response.body?.bytes() ?: ByteArray(0)
+                        if (bytes.size > 16 * 1024 * 1024) throw IOException("Phoenix 详情响应过大")
+                        Result(response.code, String(bytes, Charsets.UTF_8), bytes.size)
+                    }
+                    if ((result.bytes == 0 || result.status == 403) && rotations < 2) {
+                        rotations++
+                        identity = phoenixDetailSession.renew(http)
+                        continue
+                    }
+                    if (result.status !in 200..299) {
+                        throw IOException("Phoenix 详情接口 HTTP ${result.status}，响应长度=${result.bytes}")
+                    }
+                    if (result.raw.isBlank()) throw IOException("Phoenix 详情接口返回空响应")
+                    val root = JSONObject(result.raw)
+                    val code = root.opt("code")?.toString().orEmpty()
+                    if (code.isNotBlank() && code != "0") {
+                        throw IOException("Phoenix 详情接口业务错误（code=$code，${root.optString("message").take(100)}）")
+                    }
+                    return root.optJSONObject("data") ?: throw IOException("Phoenix 详情响应缺少 data")
+                } catch (error: java.io.InterruptedIOException) {
+                    throw error
+                } catch (error: IOException) {
+                    lastError = error
+                    break
+                } catch (error: Exception) {
+                    lastError = IOException("Phoenix 详情响应解析失败", error)
+                    break
+                }
+            }
+        }
+        throw lastError ?: IOException("Phoenix 详情接口暂不可用")
+    }
+
+    private val detailRepository by lazy { DetailRepository(site,{ url -> text(url) },::phoenixDetail,::card,::valid,searchRepository) }
     fun detail(id: String): Detail = detailRepository.detail(id)
     fun sameNameSeasons(current: Series, related: List<Series>): List<Series> =
         detailRepository.sameNameSeasons(current,related)
