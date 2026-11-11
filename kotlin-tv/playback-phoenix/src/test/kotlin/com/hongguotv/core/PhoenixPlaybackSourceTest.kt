@@ -42,7 +42,7 @@ class PhoenixPlaybackSourceTest {
             "video_meta":{"codec_type":"h264","mime_type":"video/avc","definition":"720P","vheight":720}}
         }}}}"""
         val diagnostics = mutableListOf<String>()
-        val result = PhoenixMediaResolver.parse(raw, 1080, onDiagnostic = diagnostics::add)
+        val result = PhoenixMediaResolver.parse(raw, 720, onDiagnostic = diagnostics::add)
 
         assertEquals("https://media.fqnovelvod.com/path/720.mp4?signature=secret", result.url)
         assertEquals("720P", result.quality)
@@ -86,7 +86,7 @@ class PhoenixPlaybackSourceTest {
           "bad":{"main_url":"https://cdn.qznovelvod.com/bvc.mp4","codec_type":"bytevc2","height":1080},
           "good":{"main_url":"https://cdn.qznovelvod.com/avc.mp4","codec_type":"h264","height":720}
         }}}}"""
-        val stream = PhoenixMediaResolver.parse(initial, 1080, fallback)
+        val stream = PhoenixMediaResolver.parse(initial, 720, fallback)
         assertEquals("https://cdn.qznovelvod.com/avc.mp4", stream.url)
     }
 
@@ -109,7 +109,7 @@ class PhoenixPlaybackSourceTest {
         ]}"""
         val encoded = java.util.Base64.getEncoder().encodeToString(model.toByteArray(Charsets.UTF_8))
         val raw = """{"code":0,"data":{"video_model":"$encoded"}}"""
-        val stream = PhoenixMediaResolver.parse(raw, 1080)
+        val stream = PhoenixMediaResolver.parse(raw, 720)
         assertEquals("https://cdn.qznovelvod.com/portrait.mp4", stream.url)
         assertEquals("720P", stream.quality)
     }
