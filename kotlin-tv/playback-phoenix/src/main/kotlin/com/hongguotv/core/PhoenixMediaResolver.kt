@@ -154,13 +154,15 @@ internal object PhoenixMediaResolver {
             } else null
             if (encrypted && key == null) { encryptedSkipped++; report("Phoenix资源#$name：拒绝，原因=加密资源缺少可用密钥；encryption_method=${method.ifBlank { "unknown" }}"); continue }
 
-            val rawUrls = stringValues(item.opt("main_url")) + stringValues(item.opt("backup_url")) +
+            val rawUrls = listOf(item.opt("main_url"), item.opt("backup_url"))
+                .filterIsInstance<String>().filter(String::isNotBlank) +
                 stringValues(item.opt("backup_url_list"))
             if (rawUrls.isEmpty()) report("Phoenix资源#$name：拒绝，原因=没有可识别的媒体URL字段")
             for (rawUrl in rawUrls.distinct()) {
                 val cleaned = cleanUrl(rawUrl)
                 val url = if (seed != null) {
-                    try { MediaCrypto.decryptUrl(cleaned, seed) } catch (_: Exception) { normalizeUrl(cleaned) }
+                    try { MediaCrypto.decryptUrl(cleaned, seed) }
+                    catch (error: Exception) { throw IOException("Phoenix 媒体 URL 解密失败", error) }
                 } else normalizeUrl(cleaned)
                 if (!isAllowedVodUrl(url)) { report("Phoenix资源#$name：拒绝一个URL，原因=不符合 OOIUa VOD_DOMAINS 校验"); continue }
                 val path = runCatching { java.net.URI(url).path.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
