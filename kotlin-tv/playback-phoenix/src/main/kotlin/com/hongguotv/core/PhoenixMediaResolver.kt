@@ -44,7 +44,7 @@ internal object PhoenixMediaResolver {
             ?: root.optJSONObject("data")
             ?: videoInfo
             ?: root
-        val offered = rows(info.opt("video_list")).map { it.second }.filter { it.str("main_url").isNotBlank() }
+        val offered = rows(info.opt("video_list")).map { it.second }
         return offered.isNotEmpty() && offered.all { row ->
             val meta = objectOrString(row.opt("video_meta"))
             val codec = row.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
