@@ -105,30 +105,53 @@ class RemoteVideo(
     @Synchronized fun prepare(): RemoteVideo {
         if(::prepared.isInitialized) return this
         readChunk(0L)
-        val first=chunkOrFetch(0L)
-        val end=MediaCrypto.headerEnd(first,total)
-        val header=if(end>first.size) first+range(first.size.toLong(),end-1L).bytes else first.copyOf(end)
-        prepared=MediaCrypto.prepare(header,info.key,info.requireOoiUaMp4Validation)
-        if(prepared.samples.any { it.start < 0 || it.end > total || it.end <= it.start }) throw IOException("视频样本超出资源大小")
-        if (info.requireOoiUaMp4Validation && info.key != null) {
-            val mdatRanges = scanMdatPayloads(header.size.toLong())
+        if (info.requireOoiUaMp4Validation) {
+            val boxes = scanTopLevelBoxes()
+            if (boxes.firstOrNull()?.type != "ftyp") throw IOException("MP4 缺少 ftyp 文件头")
+            val moovBoxes = boxes.filter { it.type == "moov" }
+            if (moovBoxes.size != 1) throw IOException("MP4 moov 索引缺失或重复")
+            val moov = moovBoxes.single()
+            val moovBytes = readRange(moov.start, moov.end - moov.start)
+            prepared = MediaCrypto.prepare(moovBytes, info.key, true, moov.start)
+            if (prepared.samples.any { it.start < 0 || it.end > total || it.end <= it.start }) {
+                throw IOException("视频样本超出资源大小")
+            }
+            val mdatRanges = boxes.filter { it.type == "mdat" }.map { it.payloadStart to it.end }
+            if (mdatRanges.isEmpty()) throw IOException("MP4 缺少 mdat 数据区间")
             for (sample in prepared.samples) {
                 if (mdatRanges.none { sample.start >= it.first && sample.end <= it.second }) {
                     throw IOException("CENC 样本不在 mdat 数据区间内")
                 }
             }
-            MediaCrypto.verifyVideoIv(prepared, info.key) { sample ->
-                range(sample.start, sample.end - 1).bytes
+            if (info.key != null) {
+                MediaCrypto.verifyVideoIv(prepared, info.key) { sample ->
+                    range(sample.start, sample.end - 1).bytes
+                }
             }
+        } else {
+            val first = chunkOrFetch(0L)
+            val headerEnd = MediaCrypto.headerEnd(first, total)
+            val header = if (headerEnd > first.size) first + range(first.size.toLong(), headerEnd - 1L).bytes
+                else first.copyOf(headerEnd)
+            prepared = MediaCrypto.prepare(header, info.key)
+            if (prepared.samples.any { it.end > total }) throw IOException("视频样本超出资源大小")
         }
         return this
     }
 
-    /** Walk top-level ISO-BMFF boxes without downloading mdat payloads. */
-    private fun scanMdatPayloads(startAt: Long): List<Pair<Long, Long>> {
-        val ranges = mutableListOf<Pair<Long, Long>>()
-        var offset = startAt
+    private data class TopLevelBox(
+        val type: String,
+        val start: Long,
+        val payloadStart: Long,
+        val end: Long
+    )
+
+    /** Scan top-level ISO-BMFF headers only; media payloads are skipped by declared size. */
+    private fun scanTopLevelBoxes(): List<TopLevelBox> {
+        val boxes = mutableListOf<TopLevelBox>()
+        var offset = 0L
         while (offset + 8 <= total) {
+            if (boxes.size >= 100_000) throw IOException("MP4 顶层 box 数量过多")
             val head = range(offset, offset + 7).bytes
             val size32 = ((head[0].toLong() and 255) shl 24) or
                 ((head[1].toLong() and 255) shl 16) or
@@ -136,7 +159,7 @@ class RemoteVideo(
                 (head[3].toLong() and 255)
             val type = String(head, 4, 4, Charsets.US_ASCII)
             var headerSize = 8L
-            val boxSize = when (size32) {
+            val size = when (size32) {
                 0L -> total - offset
                 1L -> {
                     val extended = range(offset, offset + 15).bytes
@@ -150,15 +173,32 @@ class RemoteVideo(
                 }
                 else -> size32
             }
-            if (boxSize < headerSize || offset > Long.MAX_VALUE - boxSize || offset + boxSize > total) {
+            if (size < headerSize || offset > Long.MAX_VALUE - size || offset + size > total) {
                 throw IOException("MP4 顶层 box 范围异常")
             }
-            if (type == "mdat") ranges += (offset + headerSize) to (offset + boxSize)
-            offset += boxSize
+            boxes += TopLevelBox(type, offset, offset + headerSize, offset + size)
+            offset += size
             if (size32 == 0L) break
         }
-        if (offset != total || ranges.isEmpty()) throw IOException("MP4 缺少有效 mdat 数据区间")
-        return ranges
+        if (offset != total || boxes.isEmpty()) throw IOException("MP4 顶层 box 链不完整")
+        return boxes
+    }
+
+    /** Read a bounded metadata box in normal playback-sized HTTP ranges. */
+    private fun readRange(start: Long, length: Long): ByteArray {
+        if (length <= 0 || length > 16L * 1024 * 1024 || length > Int.MAX_VALUE) {
+            throw IOException("MP4 moov 索引大小异常")
+        }
+        val result = ByteArray(length.toInt())
+        var copied = 0
+        while (copied < result.size) {
+            val count = minOf(chunkBytes, result.size - copied)
+            val bytes = range(start + copied, start + copied + count - 1L).bytes
+            if (bytes.size != count) throw IOException("MP4 moov 分段读取不完整")
+            bytes.copyInto(result, copied)
+            copied += count
+        }
+        return result
     }
 
     /** Bounded warm-up: parses the header, keeps the first chunk resident, starts read-ahead. */
