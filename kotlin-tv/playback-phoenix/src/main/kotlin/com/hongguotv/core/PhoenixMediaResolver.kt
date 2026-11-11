@@ -185,8 +185,8 @@ internal object PhoenixMediaResolver {
     private fun confirmSameVideo(reference: JSONObject, other: JSONObject) {
         val id = reference.str("video_id").trim()
         val otherId = other.str("video_id").trim()
-        val duration = reference.number("video_duration")
-        val otherDuration = other.number("video_duration")
+        val duration = reference.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
+        val otherDuration = other.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
         if ((id.isNotEmpty() && otherId.isNotEmpty() && id != otherId) ||
             (duration > 0.0 && otherDuration > 0.0 && kotlin.math.abs(duration - otherDuration) > 0.5)) {
             throw IOException("备用片源编号或完整时长无法确认，已停止取址")
