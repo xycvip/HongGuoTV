@@ -5,7 +5,7 @@ import java.io.IOException
 import java.math.BigInteger
 
 object MediaCrypto {
-    data class Sample(val start: Long, val end: Long, val iv: ByteArray, val encryptedOffset: Long = 0)
+    data class Sample(val start: Long, val end: Long, val iv: ByteArray, val encryptedOffset: Long = 0, val isVideo: Boolean = false, val sampleIndex: Int = 0)
     data class Prepared(val header: ByteArray, val samples: List<Sample>)
     fun deriveKey(value: String): ByteArray {
         val raw=decode64(value); require(raw.size>=3) { "内容密钥格式异常" }
