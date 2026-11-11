@@ -167,7 +167,7 @@ object MediaCrypto {
             val tkhd = directChild(data, track, "tkhd") ?: throw IOException("明文 MP4 缺少 tkhd")
             if (tkhd.body + 4 > tkhd.end) throw IOException("明文 MP4 tkhd 截断")
             val version = data[tkhd.body].u()
-            if (version > 1 || tkhd.end - tkhd.body < if (version == 1) 96 else 84) {
+            if (version > 1 || tkhd.end - tkhd.body < (if (version == 1) 96 else 84)) {
                 throw IOException("明文 MP4 tkhd 格式异常")
             }
             val trackId = data.u32(tkhd.body + if (version == 1) 20 else 12)
@@ -187,7 +187,7 @@ object MediaCrypto {
             if (sampleCount < 1L || sampleCount > 250_000L || uniformSize > 8L * 1024 * 1024) {
                 throw IOException("明文 MP4 样本数量或大小异常")
             }
-            if (stsz.end - stsz.body != 12L + if (uniformSize == 0L) sampleCount * 4 else 0L) {
+            if (stsz.end - stsz.body != 12L + (if (uniformSize == 0L) sampleCount * 4 else 0L)) {
                 throw IOException("明文 MP4 样本索引长度异常")
             }
             if (uniformSize == 0L) {
@@ -245,7 +245,7 @@ object MediaCrypto {
                 throw IOException("未声明加密的片源包含受保护 sample entry")
             }
             totalSamples += sampleCount
-            if (totalSamples > 250_000) throw IOException("明文 MP4 总样本数量过大")
+            if (totalSamples > 250_000L) throw IOException("明文 MP4 总样本数量过大")
         }
     }
 
