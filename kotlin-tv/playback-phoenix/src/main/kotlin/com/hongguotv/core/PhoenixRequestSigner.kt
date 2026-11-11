@@ -252,9 +252,6 @@ class PhoenixRequestSigner(private val clock: () -> Long = System::currentTimeMi
             if (branch(query, body, ts) == 0) {
                 val url = "$base?$query"
                 val random = (random()*65536).toInt()
-                // medusa must bind the SAME device id / version as the query string
-                // (upstream hgParamOf(query, "device_id"/"version_name")) or risk
-                // control answers 110001.
                 val headers = linkedMapOf(
                     "User-Agent" to userAgent,
                     "Accept" to "application/json; charset=utf-8,application/x-protobuf",
