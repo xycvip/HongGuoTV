@@ -67,23 +67,16 @@ internal object PhoenixMediaResolver {
         }
         val data = root.optJSONObject("data") ?: throw IOException("Phoenix 播放数据为空")
         val model = modelFrom(data)
+        // OOIUa 把 fallback_api 的解析/业务错误视为备用线路失败；未声明加密的内联候选仍可进入 MP4 明文校验。
         val fallbackRoot = if (!fallbackRaw.isNullOrBlank()) {
-            json(fallbackRaw, "Phoenix fallback_api 返回不是有效 JSON")
+            runCatching { JSONObject(fallbackRaw) }.getOrNull()
         } else null
         val fallbackVideoInfo = fallbackRoot?.optJSONObject("video_info")
-        if (fallbackRoot != null) {
-            val upperCode = fallbackRoot.opt("Code") ?: 0
-            val lowerCode = fallbackRoot.opt("code") ?: 0
-            val infoCode = fallbackVideoInfo?.opt("Code") ?: 0
-            if (upperCode.toString().toIntOrNull() != 0 ||
-                lowerCode.toString().toIntOrNull() != 0 ||
-                infoCode.toString().toIntOrNull() != 0) {
-                throw IOException("Phoenix fallback_api 业务状态异常")
-            }
-        }
-        val fallbackData = if (fallbackRoot == null) null else
-            fallbackVideoInfo?.optJSONObject("data")
-                ?: throw IOException("Phoenix fallback_api 未返回 video_info.data")
+        val fallbackCodesOk = fallbackRoot != null &&
+            (fallbackRoot.opt("Code") ?: 0).toString().toIntOrNull() == 0 &&
+            (fallbackRoot.opt("code") ?: 0).toString().toIntOrNull() == 0 &&
+            (fallbackVideoInfo?.opt("Code") ?: 0).toString().toIntOrNull() == 0
+        val fallbackData = if (fallbackCodesOk) fallbackVideoInfo?.optJSONObject("data") else null
         val source = fallbackData ?: model
         // OOIUa 只读取 video_model.video_list；未实际取得 fallback_api 时不能把内联列表冒充备用列表。
         val inlineRows = rows(model.opt("video_list"))
