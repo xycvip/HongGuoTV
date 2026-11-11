@@ -64,9 +64,13 @@ internal class DetailRepository(
             remark, tags.take(5).joinToString(" · ")
         )
 
-        val rawEpisodes = o.optJSONArray("video_list") ?: throw IOException("App 详情缺少 video_list")
-        val episodes = (0 until rawEpisodes.length()).map { index ->
-            val item = rawEpisodes.optJSONObject(index) ?: throw IOException("App 分集数据格式异常")
+        val rawEpisodes = o.opt("video_list") ?: throw IOException("App 详情缺少 video_list")
+        val episodeRows = when (rawEpisodes) {
+            is JSONArray -> (0 until rawEpisodes.length()).mapNotNull { rawEpisodes.optJSONObject(it) }
+            is JSONObject -> rawEpisodes.keys().asSequence().mapNotNull { rawEpisodes.optJSONObject(it) }.toList()
+            else -> emptyList()
+        }
+        val episodes = episodeRows.map { item ->
             val videoId = item.str("vid").trim()
             val number = item.optInt("vid_index", 0)
             if (!videoId.matches(Regex("[0-9]{1,30}")) || number < 1) throw IOException("App 分集编号或 VID 无效")
