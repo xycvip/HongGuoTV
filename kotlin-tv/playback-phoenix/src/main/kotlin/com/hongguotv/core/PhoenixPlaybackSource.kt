@@ -304,6 +304,13 @@ class PhoenixPlaybackSource(
         val fallbackUrl = PhoenixMediaResolver.fallbackUrl(raw)
         fun fetchFallback(url: String): String {
             val fallbackHttp = http.newBuilder().callTimeout(15, TimeUnit.SECONDS).followRedirects(false).build()
+            val parsed = runCatching { java.net.URI(url) }.getOrNull()
+                ?: throw IOException("fallback_api URL 格式异常")
+            val host = parsed.host.orEmpty().lowercase(java.util.Locale.ROOT)
+            if (!(host == "fqnovel.com" || host.endsWith(".fqnovel.com") ||
+                    host == "snssdk.com" || host.endsWith(".snssdk.com"))) {
+                throw IOException("fallback_api 域名不在 OOIUa 白名单内")
+            }
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", VendorConstants.VIDEO_UA)
@@ -325,10 +332,16 @@ class PhoenixPlaybackSource(
         if (fallbackUrl.startsWith("https://") && !fallbackRaw.isNullOrBlank() &&
             PhoenixMediaResolver.needsCodecOverride(fallbackRaw!!)) {
             for (codecQuery in listOf("codec_type=1", "codec_type=0&force_codec=h264")) {
-                val compatibleUrl = compatibleFallback(fallbackUrl, codecQuery)
-                val compatibleRaw = fetchFallback(compatibleUrl)
-                fallbackRaw = compatibleRaw
-                if (!PhoenixMediaResolver.needsCodecOverride(compatibleRaw)) break
+                try {
+                    val compatibleUrl = compatibleFallback(fallbackUrl, codecQuery)
+                    val compatibleRaw = fetchFallback(compatibleUrl)
+                    fallbackRaw = compatibleRaw
+                    if (!PhoenixMediaResolver.needsCodecOverride(compatibleRaw)) break
+                } catch (error: java.io.InterruptedIOException) {
+                    throw error
+                } catch (error: IOException) {
+                    emitDiagnostic("Phoenix：兼容编码备用请求失败，继续下一种编码参数")
+                }
             }
         }
         return PhoenixMediaResolver.parse(raw, maxQuality, fallbackRaw, ::emitDiagnostic)
