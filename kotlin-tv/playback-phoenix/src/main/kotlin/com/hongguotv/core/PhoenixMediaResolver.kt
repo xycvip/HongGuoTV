@@ -102,11 +102,28 @@ internal object PhoenixMediaResolver {
         val referenceDuration = model.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
         val fallbackId = source.str("video_id").trim()
         val fallbackDuration = source.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
+        val inlinePortrait = inlineRows.firstNotNullOfOrNull { (_, item) ->
+            val width = item.optInt("vwidth", item.optInt("width", 0))
+            val height = item.optInt("vheight", item.optInt("height", 0))
+            if (width > 0 && height > 0) height > width else null
+        }
+        val inlineTarget = PlaybackQualityMode.limit(maxQuality, inlinePortrait)
+        val inlineShortSides = inlineRows.mapNotNull { (_, item) ->
+            val meta = objectOrString(item.opt("video_meta"))
+            val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
+            val height = item.optInt("vheight", item.optInt("height", meta.optInt("vheight", meta.optInt("height", 0))))
+            val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
+            if (width > 0 && height > 0 && codec in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) {
+                minOf(width, height)
+            } else null
+        }
+        val inlineMinimumPixels = inlineShortSides.filter { it >= inlineTarget && inlineTarget != Int.MAX_VALUE }
+            .minOrNull() ?: inlineShortSides.maxOrNull() ?: 0
         val verifiedUndeclaredFallback = inlineUndeclaredEncryption && fallbackRows.isNotEmpty() &&
-            referenceId.isNotEmpty() && fallbackId == referenceId &&
+            inlineMinimumPixels > 0 && referenceId.isNotEmpty() && fallbackId == referenceId &&
             referenceDuration > 0.0 && fallbackDuration > 0.0 &&
             kotlin.math.abs(referenceDuration - fallbackDuration) <= 0.5
-        // OOIUa 优先内联；仅在内联缺失、全为 ByteVC2，或未声明加密且备用模型身份/时长通过校验时使用 fallback。
+        // OOIUa 优先内联；仅在内联缺失、全为 ByteVC2，或未声明加密且备用模型身份/时长/最低像素通过校验时使用 fallback。
         val useFallbackRows = inlineRows.isEmpty() ||
             (fallbackRows.isNotEmpty() && (inlineOnlyByteVc2 || verifiedUndeclaredFallback))
         if (inlineOnlyByteVc2 && fallbackRows.isNotEmpty()) confirmSameVideo(model, source)
@@ -120,7 +137,11 @@ internal object PhoenixMediaResolver {
             try { decode64(seedText) } catch (_: Exception) { throw IOException("Phoenix key_seed 格式异常") }
         } else null
 
-        data class Candidate(val quality: Int, val codec: String, val url: String, val key: ByteArray?, val width: Int, val height: Int, val shortSide: Int)
+        data class Candidate(
+            val quality: Int, val codec: String, val url: String, val key: ByteArray?,
+            val width: Int, val height: Int, val shortSide: Int,
+            val requirePlainMp4Validation: Boolean
+        )
         val candidates = mutableListOf<Candidate>()
         var encryptedSkipped = 0
         var unsupportedSkipped = 0
@@ -149,11 +170,18 @@ internal object PhoenixMediaResolver {
             }
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
             val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
+            val undeclaredEncryption = spade.isBlank() && !encryption.has("encrypt")
             val encrypted = (!declaredPlain(encryption) && encryption.has("encrypt")) || spade.isNotBlank()
             val key = if (spade.isNotBlank()) {
                 try { PhoenixSpade.deriveKey(spade) } catch (_: Exception) { null }
             } else null
             if (encrypted && key == null) { encryptedSkipped++; report("Phoenix资源#$name：拒绝，原因=加密资源缺少可用密钥；encryption_method=${method.ifBlank { "unknown" }}"); continue }
+            if (verifiedUndeclaredFallback && useFallbackRows &&
+                spade.isBlank() && !declaredPlain(encryption)) {
+                encryptedSkipped++
+                report("Phoenix备用资源#$name：拒绝，原因=备用模型缺少明确的明文声明或有效密钥")
+                continue
+            }
 
             val rawUrls = listOf(item.opt("main_url"), item.opt("backup_url"))
                 .filterIsInstance<String>().filter(String::isNotBlank) +
@@ -174,7 +202,14 @@ internal object PhoenixMediaResolver {
                     continue
                 }
                 val shortSide = if (reportedWidth > 0 && reportedHeight > 0) minOf(reportedWidth, reportedHeight) else height
-                candidates += Candidate(height, codec, url, key, reportedWidth, reportedHeight, shortSide)
+                if (verifiedUndeclaredFallback && useFallbackRows && shortSide < inlineMinimumPixels) {
+                    report("Phoenix备用资源#$name：拒绝，原因=清晰度低于内联候选最低像素要求")
+                    continue
+                }
+                candidates += Candidate(
+                    height, codec, url, key, reportedWidth, reportedHeight, shortSide,
+                    undeclaredEncryption && !useFallbackRows
+                )
                 val safeHost = runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
                 report("Phoenix资源#$name：URL通过初筛，host=$safeHost，codec=$codec，height=${height.takeIf { it > 0 } ?: "unknown"}")
             }
@@ -190,6 +225,11 @@ internal object PhoenixMediaResolver {
             val fallbackEnvelope = JSONObject().put("code", 0)
                 .put("data", JSONObject().put("video_model", source))
             return parse(fallbackEnvelope.toString(), maxQuality, null, onDiagnostic)
+        }
+        if (candidates.isEmpty() && verifiedUndeclaredFallback && useFallbackRows) {
+            // 备用模型未通过密钥/明文声明/最低像素校验时，回到内联未声明候选；
+            // 该候选随后必须通过 P 专用 MP4 明文索引检查，不能直接当作明文播放。
+            return parse(raw, maxQuality, null, onDiagnostic)
         }
         if (candidates.isEmpty()) {
             throw UnplayableVideoException(
@@ -216,7 +256,10 @@ internal object PhoenixMediaResolver {
         val quality = if (selected.quality > 0) "${selected.quality}P" else "自动"
         val selectedHost = runCatching { java.net.URI(selected.url).host.orEmpty() }.getOrDefault("")
         report("Phoenix资源筛选结果：选中 codec=${selected.codec}，清晰度=$quality，host=$selectedHost；完整URL及敏感参数已隐藏")
-        return StreamInfo(selected.url, selected.key, quality, "video/mp4")
+        return StreamInfo(
+            selected.url, selected.key, quality, "video/mp4",
+            selected.requirePlainMp4Validation
+        )
     }
 
     private fun confirmSameVideo(reference: JSONObject, other: JSONObject) {
