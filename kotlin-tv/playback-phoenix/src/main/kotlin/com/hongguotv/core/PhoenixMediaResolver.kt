@@ -31,8 +31,8 @@ internal object PhoenixMediaResolver {
         }
         val undeclaredEncryption = inlineRows.any { (_, item) ->
             val encryption = objectOrString(item.opt("encrypt_info"))
-            val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
-            spade.isBlank() && !encryption.has("encrypt") && !item.has("encrypt")
+            val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
+            spade.isBlank() && !encryption.has("encrypt")
         }
         return allByteVc2 || undeclaredEncryption
     }
@@ -96,7 +96,7 @@ internal object PhoenixMediaResolver {
             val encryption = objectOrString(item.opt("encrypt_info"))
             val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
 
-            spade.isBlank() && !encryption.has("encrypt") && !item.has("encrypt")
+            spade.isBlank() && !encryption.has("encrypt")
         }
         val referenceId = model.str("video_id").trim()
         val referenceDuration = model.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
@@ -149,7 +149,7 @@ internal object PhoenixMediaResolver {
             }
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
             val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
-            val encrypted = encryption.optBoolean("encrypt") || item.optBoolean("encrypt") || spade.isNotBlank()
+            val encrypted = (!declaredPlain(encryption) && encryption.has("encrypt")) || spade.isNotBlank()
             val key = if (spade.isNotBlank()) {
                 try { PhoenixSpade.deriveKey(spade) } catch (_: Exception) { null }
             } else null
@@ -270,6 +270,17 @@ internal object PhoenixMediaResolver {
 
     private fun json(raw: String, message: String) =
         runCatching { JSONObject(raw) }.getOrElse { throw IOException(message) }
+
+    /** 与 OOIUa declaredPlain 一致：只看 encrypt_info.encrypt，顶层 encrypt 不参与判断。 */
+    private fun declaredPlain(encryption: JSONObject): Boolean {
+        val flag = encryption.opt("encrypt") ?: return false
+        return when (flag) {
+            is Boolean -> !flag
+            is Number -> flag.toLong() == 0L
+            is String -> flag.trim() == "0" || flag.trim().equals("false", ignoreCase = true)
+            else -> false
+        }
+    }
 
     private fun objectOrString(value: Any?): JSONObject =
         (value as? JSONObject) ?: JSONObject()
