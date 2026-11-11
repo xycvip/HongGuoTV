@@ -2,6 +2,57 @@ package com.hongguotv.core
 
 fun main(args: Array<String>) {
     val repository=ContentRepository()
+    if(args.contains("--detail-probe")) {
+        val keyword=args.getOrNull(args.indexOf("--keyword")+1) ?: "永昼赴星光"
+        require(keyword.isNotBlank())
+        try {
+            println("targetTitle=$keyword")
+            val search=repository.searchCombined(keyword)
+            val exact=search.items.filter { it.title.trim()==keyword.trim() }.distinctBy { it.id }
+            println("searchCandidates=${search.items.size}; exactMatches=${exact.size}")
+            search.items.take(20).forEach { println("candidate|id=${it.id}|title=${it.title}") }
+            if(exact.isEmpty()) { println("RESULT|NO_EXACT_SEARCH_MATCH"); return }
+            for(series in exact) {
+                println("MATCH|id=${series.id}|title=${series.title}|exact=100%")
+                try {
+                    val method=ContentRepository::class.java.getDeclaredMethod("phoenixDetail", String::class.java)
+                    method.isAccessible=true
+                    val data=method.invoke(repository,series.id) as org.json.JSONObject
+                    val video=data.optJSONObject("video_data") ?: throw java.io.IOException("missing video_data")
+                    val title=listOf("series_title","series_name","title","name").map { video.optString(it).trim() }.firstOrNull { it.isNotBlank() }.orEmpty()
+                    val rows=video.opt("video_list")
+                    val episodeCount=when(rows) { is org.json.JSONArray -> rows.length(); is org.json.JSONObject -> rows.length(); else -> 0 }
+                    val exactTitle=title==keyword
+                    println("ENDPOINT|Phoenix video_detail/v1|status=HTTP_200_JSON|title=$title|exact=${if(exactTitle) "100%" else "NO"}|episodes=$episodeCount|usable=${exactTitle && episodeCount>0}")
+                } catch(error: Throwable) {
+                    val cause=(error.cause ?: error).message ?: error.javaClass.simpleName
+                    println("ENDPOINT|Phoenix video_detail/v1|status=FAILED|reason=${cause.replace('|','/')}")
+                }
+                try {
+                    val url="https://hongguoduanju.com/detail?series_id=${series.id}"
+                    val request=okhttp3.Request.Builder().url(url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9").get().build()
+                    val html=RequestScope.execute(repository.http.newCall(request)) { response ->
+                        if(!response.isSuccessful) throw java.io.IOException("HTTP ${response.code}")
+                        response.body?.string() ?: throw java.io.IOException("empty body")
+                    }
+                    val loader=ContentRepository.extractRouter(html).getJSONObject("loaderData")
+                    val detail=loader.optJSONObject("detail_page")?.optJSONObject("seriesDetail") ?: throw java.io.IOException("missing detail_page.seriesDetail")
+                    val title=listOf("series_name","series_title","title","name").map { detail.optString(it).trim() }.firstOrNull { it.isNotBlank() }.orEmpty()
+                    val episodeCount=detail.optJSONArray("vid_list")?.length() ?: 0
+                    val exactTitle=title==keyword
+                    println("ENDPOINT|Website SSR detail|status=HTTP_200_ROUTER|title=$title|exact=${if(exactTitle) "100%" else "NO"}|episodes=$episodeCount|usable=${exactTitle && episodeCount>0}")
+                } catch(error: Throwable) {
+                    val cause=(error.cause ?: error).message ?: error.javaClass.simpleName
+                    println("ENDPOINT|Website SSR detail|status=FAILED|reason=${cause.replace('|','/')}")
+                }
+            }
+            println("RESULT|DETAIL_PROBE_COMPLETED")
+        } finally {
+            repository.http.connectionPool.evictAll()
+            repository.http.dispatcher.executorService.shutdown()
+        }
+        return
+    }
     if(args.contains("--ranking")) {
         try {
             val first=repository.comicRanking()
