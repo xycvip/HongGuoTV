@@ -326,7 +326,7 @@ internal object PhoenixMediaResolver {
         val encryption = objectOrString(item.opt("encrypt_info"))
         val meta = objectOrString(item.opt("video_meta"))
         val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
-        if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) return false
+        if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1") || !hasUrlCandidate(item)) return false
         val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
         val height = item.optInt("vheight", item.optInt("height", meta.optInt("vheight", meta.optInt("height", 0))))
         val definition = item.str("quality_desc").ifEmpty { item.str("definition") }
@@ -336,6 +336,9 @@ internal object PhoenixMediaResolver {
         return (target == Int.MAX_VALUE || shortSide >= target) &&
             item.str("spade_a").ifEmpty { encryption.str("spade_a") }.isBlank() && !encryption.has("encrypt")
     }
+    private fun hasUrlCandidate(item: JSONObject): Boolean =
+        listOf(item.opt("main_url"), item.opt("backup_url")).any { it is String && it.isNotBlank() } ||
+            stringValues(item.opt("backup_url_list")).isNotEmpty()
     private fun hasUsableDeclaredCandidate(item: JSONObject, maxQuality: Int, portrait: Boolean?): Boolean {
         val encryption = objectOrString(item.opt("encrypt_info"))
         val meta = objectOrString(item.opt("video_meta"))
