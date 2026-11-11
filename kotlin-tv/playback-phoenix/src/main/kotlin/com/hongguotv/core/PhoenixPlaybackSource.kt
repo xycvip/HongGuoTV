@@ -340,7 +340,7 @@ class PhoenixPlaybackSource(
                 ?: throw IOException("fallback_api URL 格式异常")
             val scheme = parsed.scheme?.lowercase(java.util.Locale.ROOT)
             val host = parsed.host.orEmpty().lowercase(java.util.Locale.ROOT)
-            val allowedHost = listOf("fqnovel.com", "snssdk.com").any { host == it || host.endsWith(".$" + "it") }
+            val allowedHost = listOf("fqnovel.com", "snssdk.com").any { host == it || host.endsWith("." + it) }
             if (scheme != "https" || parsed.userInfo != null ||
                 (parsed.port != -1 && parsed.port != 443) || !allowedHost) {
                 throw IOException("fallback_api URL 不符合 OOIUa API_DOMAINS 校验规则")
