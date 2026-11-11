@@ -197,7 +197,7 @@ object MediaCrypto {
             if (stts.body + 8 > stts.end) throw IOException("明文 MP4 stts 截断")
             val timeEntries = data.u32(stts.body + 4)
             if (timeEntries < 1L || timeEntries > 250_000L ||
-                stts.end - stts.body != 8L + timeEntries * 8) {
+                (stts.end - stts.body).toLong() != 8L + timeEntries * 8) {
                 throw IOException("明文 MP4 stts 长度异常")
             }
             var timedSamples = 0L
@@ -216,7 +216,7 @@ object MediaCrypto {
                 timedSamples != sampleCount) {
                 throw IOException("明文 MP4 样本数量或大小异常")
             }
-            if (stsz.end - stsz.body != 12L + (if (uniformSize == 0L) sampleCount * 4 else 0L)) {
+            if ((stsz.end - stsz.body).toLong() != 12L + (if (uniformSize == 0L) sampleCount * 4 else 0L)) {
                 throw IOException("明文 MP4 样本索引长度异常")
             }
             if (uniformSize == 0L) {
@@ -233,13 +233,13 @@ object MediaCrypto {
             val width = if (co64 != null) 8 else 4
             if (chunks.body + 8 > chunks.end) throw IOException("明文 MP4 块偏移表截断")
             val chunkCount = data.u32(chunks.body + 4)
-            if (chunkCount < 1L || chunkCount > sampleCount || chunks.end - chunks.body != 8L + chunkCount * width) {
+            if (chunkCount < 1L || chunkCount > sampleCount || (chunks.end - chunks.body).toLong() != 8L + chunkCount * width) {
                 throw IOException("明文 MP4 块偏移表异常")
             }
             val stsc = directChild(data, stbl, "stsc") ?: throw IOException("明文 MP4 缺少 stsc")
             if (stsc.body + 8 > stsc.end) throw IOException("明文 MP4 stsc 截断")
             val mappingCount = data.u32(stsc.body + 4)
-            if (mappingCount < 1L || mappingCount > chunkCount || stsc.end - stsc.body != 8L + mappingCount * 12) {
+            if (mappingCount < 1L || mappingCount > chunkCount || (stsc.end - stsc.body).toLong() != 8L + mappingCount * 12) {
                 throw IOException("明文 MP4 stsc 长度异常")
             }
             var previousFirst = 0L
