@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "e10e6237040f1e153b2e9fb2464e7f8f017de66b",
-  "versionCode": 71,
-  "versionName": "0.0.71",
+  "sourceCommit": "cbabda3908b30be29d21e9802f0014e4a3b60a2e",
+  "versionCode": 80,
+  "versionName": "0.0.80",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.71",
+  "tag": "hongguotv-bate-v0.0.80",
   "apk": {
-    "name": "HongguoTV-0.0.71.apk",
-    "size": 2009037,
-    "sha256": "96f57caa205c0540ef2bf4f58a92e2ff69bdbc3ce5110695c48996fb64aa787d",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.71/HongguoTV-0.0.71.apk"
+    "name": "HongguoTV-0.0.80.apk",
+    "size": 2019505,
+    "sha256": "bb14df8f7a324c8fad95661ff637b62b9ba6e82936643dcd80c58010a1e6a17a",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.80/HongguoTV-0.0.80.apk"
   },
-  "notes": "【播放与播放器】\n- 修复推送播放访问地址 TextUtils 编译错误\n- 使推送播放右侧说明与二维码等高\n- 将推送播放访问地址移至卡片右下角\n- 推送播放二维码及说明整体下移15dp\n- 将推送播放卡片最小高度调整为440dp\n【其他功能与问题修复】\n- 访问地址保持单行并在超宽时向左滚动"
+  "notes": "【其他功能与问题修复】\n- Persist N player registration identity like N3urda"
 }
