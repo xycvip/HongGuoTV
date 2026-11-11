@@ -10,6 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 /**
  * 独立 Phoenix video_model/v1 通道。
@@ -95,6 +96,7 @@ class PhoenixPlaybackSource(
     fun resolve(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}"))) { "无效的分集 ID" }
         emitDiagnostic("Phoenix：按 OOIUa 流程注册匿名播放设备")
+        val playbackHttp = http.newBuilder().callTimeout(8, TimeUnit.SECONDS).followRedirects(false).build()
         var identity = session.profile(http)
         val singleBody = JSONObject()
             .put("video_id", id)
@@ -133,7 +135,7 @@ class PhoenixPlaybackSource(
                 headers.forEach { (key, value) -> header(key, value) }
                 if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
             }.post(singleBody.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
-            val raw = RequestScope.execute(http.newCall(request)) { response ->
+            val raw = RequestScope.execute(playbackHttp.newCall(request)) { response ->
                 if (response.code != 200) throw IOException("OOIUa 单集播放接口 HTTP ${response.code}")
                 val body = response.body ?: throw IOException("OOIUa 单集播放接口响应为空")
                 if (body.contentLength() > 16L * 1024 * 1024) throw IOException("播放响应过大")
@@ -152,7 +154,7 @@ class PhoenixPlaybackSource(
             emitDiagnostic("Phoenix：单集主线路失败，转入 OOIUa 备用播放阶梯")
         }
 
-        val legacyFailure = tryLegacyRoutes(id, maxQuality, identity)
+        val legacyFailure = tryLegacyRoutes(id, maxQuality, identity, playbackHttp)
         if (legacyFailure.first != null) return legacyFailure.first!!
         throw legacyFailure.second ?: primaryFailure ?: IOException("Phoenix 播放接口暂不可用")
     }
@@ -160,7 +162,8 @@ class PhoenixPlaybackSource(
     private fun tryLegacyRoutes(
         id: String,
         maxQuality: Int,
-        initialIdentity: PhoenixPlaybackDeviceSession.Profile
+        initialIdentity: PhoenixPlaybackDeviceSession.Profile,
+        playbackHttp: OkHttpClient
     ): Pair<StreamInfo?, IOException?> {
         data class Route(val post: Boolean, val host: String, val renewIdentity: Boolean)
         val mainHost = "api5-normal-sinfonlineb.fqnovel.com"
@@ -233,7 +236,7 @@ class PhoenixPlaybackSource(
                 if (identity.cookie.isNotBlank()) builder.header("Cookie", identity.cookie)
                 val request = if (body == null) builder.get().build()
                     else builder.post(body.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
-                val raw = RequestScope.execute(http.newCall(request)) { response ->
+                val raw = RequestScope.execute(fallbackHttp.newCall(request)) { response ->
                     if (response.code != 200) throw IOException("OOIUa 备用播放线路 HTTP ${response.code}")
                     val responseBody = response.body ?: throw IOException("备用播放响应为空")
                     if (responseBody.contentLength() > 16L * 1024 * 1024) throw IOException("备用播放响应过大")
@@ -299,6 +302,7 @@ class PhoenixPlaybackSource(
     private fun resolveResponse(raw: String, maxQuality: Int): StreamInfo {
         val fallbackUrl = PhoenixMediaResolver.fallbackUrl(raw)
         fun fetchFallback(url: String): String {
+            val fallbackHttp = http.newBuilder().callTimeout(15, TimeUnit.SECONDS).followRedirects(false).build()
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", PHOENIX_UA)
