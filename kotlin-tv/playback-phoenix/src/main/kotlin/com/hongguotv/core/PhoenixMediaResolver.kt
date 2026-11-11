@@ -218,7 +218,7 @@ internal object PhoenixMediaResolver {
                     true
                 )
                 val safeHost = runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
-                report("Phoenix资源#$name：URL通过初筛，host=$safeHost，codec=$codec，height=${height.takeIf { it > 0 } ?: "unknown"}")
+                report("Phoenix资源#$name：URL通过初筛，host=$safeHost，codec=$codec，height=${height?.takeIf { it > 0 } ?: "unknown"}")
             }
         }
         report("Phoenix资源筛选汇总：候选项=${rows.size}，通过媒体URL=${candidates.size}，不兼容编码/容器=$unsupportedSkipped，加密密钥不可用=$encryptedSkipped")
