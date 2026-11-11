@@ -144,5 +144,8 @@ class PhoenixPlaybackSourceTest {
         assertThrows(java.io.IOException::class.java) {
             PhoenixMediaResolver.parse("""{"code":1001,"data":{}}""", 1080)
         }
+        assertThrows(java.io.IOException::class.java) {
+            PhoenixMediaResolver.parse("""{"data":{"video_model":{"video_list":[]}}}""", 1080)
+        }
     }
 }
