@@ -49,6 +49,7 @@ internal object DetailApiProbe {
     }
 
     private val endpoints = listOf(
+        Endpoint("legacy signer video_detail/v1", "/novel/player/video_detail/v1/", { sid -> JSONObject().put("series_id", sid) }),
         Endpoint("zhangbaio multi_video_detail/v1", "/novel/player/multi_video_detail/v1/", zhangBody),
         Endpoint("zhangbaio preload", "/novel/player/multi_video_detail/preload/v1", { sid -> zhangBody(sid).put("dr_scene", "preload") }),
         Endpoint("openhongguo player scene", "/novel/player/multi_video_detail/player/v1", playerBody),
