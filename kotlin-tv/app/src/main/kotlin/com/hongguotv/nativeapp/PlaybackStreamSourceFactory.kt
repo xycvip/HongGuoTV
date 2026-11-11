@@ -211,7 +211,7 @@ internal fun Context.playbackStreamSource(
     fun createSource(api: String): StreamSource {
         return if (api == "phoenix") {
             PlaybackApiDebugState.recordActual(api, "选择 Phoenix 播放接口")
-            PhoenixPlaybackSource(http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build(), PhoenixPlaybackDeviceSession.shared, PhoenixRequestSigner()) { event ->
+            PhoenixPlaybackSource(http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build(), PhoenixPlaybackDeviceSession.shared) { event ->
                 if (PlaybackApiDebugState.recordActual(api, event) && this is MainActivity) {
                     debugLog("播放接口诊断：[$api] $event")
                 }
