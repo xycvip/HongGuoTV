@@ -98,6 +98,7 @@ class PhoenixPlaybackSource(
         emitDiagnostic("Phoenix：按 OOIUa 流程注册匿名播放设备")
         val playbackHttp = http.newBuilder().callTimeout(8, TimeUnit.SECONDS).followRedirects(false).build()
         var identity = session.profile(http)
+        val playbackStarted = System.currentTimeMillis()
         val singleBody = JSONObject()
             .put("video_id", id)
             .put("content_type", 1)
@@ -154,7 +155,7 @@ class PhoenixPlaybackSource(
             emitDiagnostic("Phoenix：单集主线路失败，转入 OOIUa 备用播放阶梯")
         }
 
-        val legacyFailure = tryLegacyRoutes(id, maxQuality, identity, playbackHttp)
+        val legacyFailure = tryLegacyRoutes(id, maxQuality, identity, playbackHttp, playbackStarted)
         if (legacyFailure.first != null) return legacyFailure.first!!
         throw legacyFailure.second ?: primaryFailure ?: IOException("Phoenix 播放接口暂不可用")
     }
@@ -163,7 +164,8 @@ class PhoenixPlaybackSource(
         id: String,
         maxQuality: Int,
         initialIdentity: PhoenixPlaybackDeviceSession.Profile,
-        playbackHttp: OkHttpClient
+        playbackHttp: OkHttpClient,
+        started: Long
     ): Pair<StreamInfo?, IOException?> {
         data class Route(val post: Boolean, val host: String, val renewIdentity: Boolean)
         val mainHost = "api5-normal-sinfonlineb.fqnovel.com"
@@ -173,7 +175,6 @@ class PhoenixPlaybackSource(
             Route(false, mainHost, true),
             Route(true, "api5-normal-hl.fqnovel.com", false)
         )
-        val started = System.currentTimeMillis()
         var identity = initialIdentity
         var lastFailure: IOException? = null
         val legacyBody = JSONObject()
