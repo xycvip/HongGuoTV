@@ -234,10 +234,7 @@ internal object PhoenixMediaResolver {
             val text = value.trim()
             if (text.startsWith("{")) {
                 val nested = runCatching { JSONObject(text) }.getOrNull()
-                if (nested != null) extractFallbackUrl(nested.opt("fallback_api")) else text
-            } else if (text.startsWith("[")) {
-                val nested = runCatching { JSONArray(text) }.getOrNull()
-                if (nested != null && nested.length() > 0) extractFallbackUrl(nested.opt(0)) else ""
+                if (nested != null) nested.opt("fallback_api")?.toString().orEmpty() else text
             } else text
         }
         is JSONObject -> extractFallbackUrl(value.opt("fallback_api"))
