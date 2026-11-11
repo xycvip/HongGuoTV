@@ -29,11 +29,7 @@ internal object PhoenixMediaResolver {
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
             codec in setOf("bytevc2", "bvc2")
         }
-        val undeclaredEncryption = inlineRows.any { (_, item) ->
-            val encryption = objectOrString(item.opt("encrypt_info"))
-            val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
-            spade.isBlank() && !encryption.has("encrypt")
-        }
+        val undeclaredEncryption = inlineRows.any { (_, item) -> isUndeclaredCandidate(item, maxQuality, portrait) }
         val portrait = inlineRows.firstNotNullOfOrNull { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
             val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
@@ -97,11 +93,7 @@ internal object PhoenixMediaResolver {
         val hasUsableDeclaredCandidate = inlineRows.any { (_, item) ->
             hasUsableDeclaredCandidate(item, maxQuality, inlinePortrait)
         }
-        val inlineUndeclaredEncryption = !hasUsableDeclaredCandidate && inlineRows.any { (_, item) ->
-            val encryption = objectOrString(item.opt("encrypt_info"))
-            val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
-            spade.isBlank() && !encryption.has("encrypt")
-        }
+        val inlineUndeclaredEncryption = !hasUsableDeclaredCandidate && inlineRows.any { (_, item) -> isUndeclaredCandidate(item, maxQuality, inlinePortrait) }
         val referenceId = model.str("video_id").trim()
         val referenceDuration = model.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
         val fallbackId = source.str("video_id").trim()
@@ -329,6 +321,20 @@ internal object PhoenixMediaResolver {
         runCatching { JSONObject(raw) }.getOrElse { throw IOException(message) }
 
     /** OOIUa 先按清晰度/编码筛选，再优先返回已有有效密钥或明确声明明文的候选。 */
+    private fun isUndeclaredCandidate(item: JSONObject, maxQuality: Int, portrait: Boolean?): Boolean {
+        val encryption = objectOrString(item.opt("encrypt_info"))
+        val meta = objectOrString(item.opt("video_meta"))
+        val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
+        if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) return false
+        val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
+        val height = item.optInt("vheight", item.optInt("height", meta.optInt("vheight", meta.optInt("height", 0))))
+        val definition = item.str("quality_desc").ifEmpty { item.str("definition") }
+            .ifEmpty { meta.str("definition") }.ifEmpty { item.str("height").ifEmpty { item.str("vheight") } }
+        val shortSide = if (width > 0 && height > 0) minOf(width, height) else qualityNumber(definition)
+        val target = PlaybackQualityMode.limit(maxQuality, portrait)
+        return (target == Int.MAX_VALUE || shortSide >= target) &&
+            item.str("spade_a").ifEmpty { encryption.str("spade_a") }.isBlank() && !encryption.has("encrypt")
+    }
     private fun hasUsableDeclaredCandidate(item: JSONObject, maxQuality: Int, portrait: Boolean?): Boolean {
         val encryption = objectOrString(item.opt("encrypt_info"))
         val meta = objectOrString(item.opt("video_meta"))
