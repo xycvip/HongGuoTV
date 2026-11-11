@@ -143,8 +143,9 @@ internal object PhoenixMediaResolver {
             if (encrypted && key == null) { encryptedSkipped++; report("Phoenix资源#$name：拒绝，原因=加密资源缺少可用密钥；encryption_method=${method.ifBlank { "unknown" }}"); continue }
 
             val rawUrls = stringValues(item.opt("main_url")) + stringValues(item.opt("backup_url")) +
-                stringValues(item.opt("backup_url_1")) + stringValues(item.opt("backup_url_2")) +
-                stringValues(item.opt("backup_urls")) + stringValues(item.opt("url_list"))
+                stringValues(item.opt("backup_url_list")) + stringValues(item.opt("backup_url_1")) +
+                stringValues(item.opt("backup_url_2")) + stringValues(item.opt("backup_urls")) +
+                stringValues(item.opt("url_list"))
             if (rawUrls.isEmpty()) report("Phoenix资源#$name：拒绝，原因=没有可识别的媒体URL字段")
             for (rawUrl in rawUrls.distinct()) {
                 val cleaned = cleanUrl(rawUrl)
