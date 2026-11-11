@@ -8,7 +8,8 @@ object PlaybackQualityMode {
 
     fun limit(mode: Int, portrait: Boolean?): Int = when (mode) {
         AUTO_HIGH -> 1080
-        AUTO_COMPAT -> if (portrait == false) 1080 else 720
+        // Compatibility mode is codec-driven; portrait orientation no longer imposes a quality cap.
+        AUTO_COMPAT -> Int.MAX_VALUE
         else -> mode
     }
 }
