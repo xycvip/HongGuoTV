@@ -56,21 +56,27 @@ internal object PhoenixMediaResolver {
         val source = fallbackData ?: fallbackRoot ?: model
         // 空的 video_list 经常与 dynamic_video 同时出现；不能因为字段存在但为空，
         // 就提前停止回退，否则真实动态视频资源会被误报成“没有清晰度”。
-        val listCandidates = listOf(
-            source.opt("video_list"),
+        val inlineCandidates = listOf(
             model.opt("video_list"),
-            data.opt("video_list"),
-            source.optJSONObject("dynamic_video")?.opt("dynamic_video_list"),
             model.optJSONObject("dynamic_video")?.opt("dynamic_video_list"),
+            data.opt("video_list"),
             data.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
         )
-        val rows = listCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
+        val inlineRows = inlineCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
+        val fallbackCandidates = listOf(
+            source.opt("video_list"),
+            source.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
+        )
+        val fallbackRows = fallbackCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
+        // OOIUa 优先使用 video_model 内联片源；只有内联缺失时才读取 fallback_api。
+        val rows = inlineRows.ifEmpty { fallbackRows }
         if (rows.isEmpty()) throw IOException("Phoenix 未返回视频清晰度（fallback_api=${!fallbackRaw.isNullOrBlank()}）")
         report("Phoenix资源筛选：发现 ${rows.size} 项候选，数据来源=${if (!fallbackRaw.isNullOrBlank()) "fallback" else "video_model"}")
         // key_seed 在不同版本中可能位于 fallback 的顶层、video_info 或 video_info.data。
         // 逐层查找，避免 URL 已经拿到、却因密钥字段层级变化而把加密媒体误当成普通 MP4。
         val seedText = sequenceOf(
-            source.str("key_seed"),
+            if (inlineRows.isNotEmpty()) model.str("key_seed") else source.str("key_seed"),
+            if (inlineRows.isNotEmpty()) data.str("key_seed") else "",
             fallbackVideoInfo?.str("key_seed").orEmpty(),
             fallbackRoot?.str("key_seed").orEmpty(),
             model.str("key_seed"),
@@ -138,6 +144,17 @@ internal object PhoenixMediaResolver {
             }
         }
         report("Phoenix资源筛选汇总：候选项=${rows.size}，通过媒体URL=${candidates.size}，不兼容编码/容器=$unsupportedSkipped，加密密钥不可用=$encryptedSkipped")
+        if (candidates.isEmpty() && inlineRows.isNotEmpty() && fallbackRows.isNotEmpty() &&
+            inlineRows.all { (_, item) ->
+                val meta = objectOrString(item.opt("video_meta"))
+                val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.lowercase(Locale.ROOT)
+                codec in setOf("bytevc2", "bvc2") || item.str("gear_des_key").contains("bytevc2", true)
+            }) {
+            confirmSameVideo(model, source)
+            val fallbackEnvelope = JSONObject().put("code", 0)
+                .put("data", JSONObject().put("video_model", source))
+            return parse(fallbackEnvelope.toString(), maxQuality, null, onDiagnostic)
+        }
         if (candidates.isEmpty()) {
             throw UnplayableVideoException(
                 "Phoenix 无可用 MP4：不兼容编码 $unsupportedSkipped 项，未能解密/不支持的加密资源 $encryptedSkipped 项"
@@ -163,6 +180,17 @@ internal object PhoenixMediaResolver {
         val selectedHost = runCatching { java.net.URI(selected.url).host.orEmpty() }.getOrDefault("")
         report("Phoenix资源筛选结果：选中 codec=${selected.codec}，清晰度=$quality，host=$selectedHost；完整URL及敏感参数已隐藏")
         return StreamInfo(selected.url, selected.key, quality, "video/mp4")
+    }
+
+    private fun confirmSameVideo(reference: JSONObject, other: JSONObject) {
+        val id = reference.str("video_id").trim()
+        val otherId = other.str("video_id").trim()
+        val duration = reference.number("video_duration")
+        val otherDuration = other.number("video_duration")
+        if ((id.isNotEmpty() && otherId.isNotEmpty() && id != otherId) ||
+            (duration > 0.0 && otherDuration > 0.0 && kotlin.math.abs(duration - otherDuration) > 0.5)) {
+            throw IOException("备用片源编号或完整时长无法确认，已停止取址")
+        }
     }
 
     private fun extractFallbackUrl(value: Any?): String = when (value) {
