@@ -120,8 +120,14 @@ internal object PhoenixMediaResolver {
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.ifEmpty { "unknown" }.lowercase(Locale.ROOT)
             val definition = item.str("quality_desc").ifEmpty { item.str("definition") }
                 .ifEmpty { meta.str("definition") }.ifEmpty { item.str("height").ifEmpty { item.str("vheight") } }
-            val reportedHeight = meta.optInt("vheight", item.optInt("vheight", item.optInt("height", 0)))
-            val reportedWidth = meta.optInt("vwidth", item.optInt("vwidth", 0))
+            val dimensions = listOf(
+                item.optInt("vwidth", 0) to item.optInt("vheight", 0),
+                item.optInt("width", 0) to item.optInt("height", 0),
+                meta.optInt("vwidth", 0) to meta.optInt("vheight", 0),
+                meta.optInt("width", 0) to meta.optInt("height", 0)
+            ).firstOrNull { it.first > 0 && it.second > 0 }
+            val reportedWidth = dimensions?.first ?: 0
+            val reportedHeight = dimensions?.second ?: 0
             val height = qualityNumber(definition).takeIf { it > 0 }
                 ?: reportedHeight.takeIf { it > 0 }
             val mime = meta.str("mime_type").ifEmpty { item.str("mime_type") }.ifEmpty { "unknown" }
