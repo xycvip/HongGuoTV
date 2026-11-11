@@ -39,11 +39,7 @@ internal object PhoenixMediaResolver {
 
     fun needsCodecOverride(fallbackRaw: String): Boolean {
         val root = runCatching { JSONObject(fallbackRaw) }.getOrNull() ?: return false
-        val videoInfo = root.optJSONObject("video_info")
-        val info = videoInfo?.optJSONObject("data")
-            ?: root.optJSONObject("data")
-            ?: videoInfo
-            ?: root
+        val info = root.optJSONObject("video_info")?.optJSONObject("data") ?: return false
         val offered = rows(info.opt("video_list")).map { it.second }
         return offered.isNotEmpty() && offered.all { row ->
             val meta = objectOrString(row.opt("video_meta"))
@@ -67,10 +63,17 @@ internal object PhoenixMediaResolver {
             json(fallbackRaw, "Phoenix fallback_api 返回不是有效 JSON")
         } else null
         val fallbackVideoInfo = fallbackRoot?.optJSONObject("video_info")
-        val fallbackData = fallbackVideoInfo?.optJSONObject("data")
-            ?: fallbackRoot?.optJSONObject("data")
-            ?: fallbackVideoInfo
-        val source = fallbackData ?: fallbackRoot ?: model
+        if (fallbackRoot != null) {
+            val outerCode = fallbackRoot.opt("Code") ?: fallbackRoot.opt("code") ?: 0
+            val infoCode = fallbackVideoInfo?.opt("Code") ?: 0
+            if (outerCode.toString().toIntOrNull() != 0 || infoCode.toString().toIntOrNull() != 0) {
+                throw IOException("Phoenix fallback_api 业务状态异常")
+            }
+        }
+        val fallbackData = if (fallbackRoot == null) null else
+            fallbackVideoInfo?.optJSONObject("data")
+                ?: throw IOException("Phoenix fallback_api 未返回 video_info.data")
+        val source = fallbackData ?: model
         // OOIUa 只读取 video_model.video_list；其他扩展字段不作为片源来源。
         val inlineRows = rows(model.opt("video_list"))
         val fallbackRows = rows(source.opt("video_list"))
@@ -102,10 +105,7 @@ internal object PhoenixMediaResolver {
         report("Phoenix资源筛选：发现 ${rows.size} 项候选，数据来源=${if (!fallbackRaw.isNullOrBlank()) "fallback" else "video_model"}")
         // key_seed 在不同版本中可能位于 fallback 的顶层、video_info 或 video_info.data。
         // 逐层查找，避免 URL 已经拿到、却因密钥字段层级变化而把加密媒体误当成普通 MP4。
-        val seedText = if (useFallbackRows) {
-            sequenceOf(source.str("key_seed"), fallbackVideoInfo?.str("key_seed").orEmpty(),
-                fallbackRoot?.str("key_seed").orEmpty()).firstOrNull { it.isNotBlank() }.orEmpty()
-        } else model.str("key_seed")
+        val seedText = if (useFallbackRows) source.str("key_seed") else model.str("key_seed")
         val seed = if (seedText.isNotBlank()) {
             try { decode64(seedText) } catch (_: Exception) { throw IOException("Phoenix key_seed 格式异常") }
         } else null
