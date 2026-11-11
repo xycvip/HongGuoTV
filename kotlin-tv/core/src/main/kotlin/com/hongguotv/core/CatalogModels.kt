@@ -12,7 +12,46 @@ data class Series(val id: String, val title: String, val cover: String = "", val
 data class SeriesSocial(val rating: Double = 0.0, val ratingCount: String = "", val favoriteText: String = "", val heatText: String = "") {
     val isEmpty get() = rating<=0.0 && favoriteText.isBlank() && heatText.isBlank()
 }
-data class Detail(val series: Series, val episodes: List<String>, val related: List<Series> = emptyList(), val sameName: List<Series> = emptyList(), val social: SeriesSocial = SeriesSocial()) {
+/** Phoenix App 详情中的完整分集元数据；episodes 仍保留 VID 列表以兼容现有播放入口。 */
+data class DetailEpisode(
+    val videoId: String,
+    val number: Int,
+    val title: String = "",
+    val durationSeconds: Double = 0.0,
+    val playable: Boolean = true,
+    val vertical: Boolean = false,
+    val newlyUpdated: Boolean = false,
+    val cover: String = "",
+    val commentCount: Long = 0,
+    val diggCount: Long = 0
+)
+/** 与 Phoenix DramaDetails 对齐的剧集扩展字段。 */
+data class DetailMetadata(
+    val category: String = "",
+    val remark: String = "",
+    val episodeCount: Int = 0,
+    val releaseStatus: String = "",
+    val heat: String = "",
+    val onlineDate: String = "",
+    val isMultiSeason: Boolean = false,
+    val seasonIndex: Int = 1,
+    val albumId: String = "",
+    val novelBookId: String = "",
+    val novelTitle: String = "",
+    val playCount: Long = 0,
+    val followCount: Long = 0,
+    val diggCount: Long = 0,
+    val credits: List<String> = emptyList()
+)
+data class Detail(
+    val series: Series,
+    val episodes: List<String>,
+    val related: List<Series> = emptyList(),
+    val sameName: List<Series> = emptyList(),
+    val social: SeriesSocial = SeriesSocial(),
+    val metadata: DetailMetadata = DetailMetadata(),
+    val episodeDetails: List<DetailEpisode> = emptyList()
+) {
     /** Same-name entries with a finite season number beyond the current one (untitled season counts as 1). */
     val newerSeasons: List<Series> get() {
         val current=seasonNumber(series.title).let { if(it==Int.MAX_VALUE) 1 else it }
