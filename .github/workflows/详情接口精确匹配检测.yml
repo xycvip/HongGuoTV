@@ -43,7 +43,7 @@ jobs:
           chmod +x ./gradlew
           mkdir -p "$RUNNER_TEMP/detail-probe"
           set +e
-          ./gradlew --no-daemon --stacktrace :core:run --args="--detail-probe --keyword 永昼赴星光 --control-id 7615470177953532990" 2>&1 | tee "$RUNNER_TEMP/detail-probe/report.txt"
+          ./gradlew --no-daemon --stacktrace :core:run --args="--detail-probe --keyword 永昼赴星光 --control-id 7701937936731737112" 2>&1 | tee "$RUNNER_TEMP/detail-probe/report.txt"
           STATUS=${PIPESTATUS[0]}
           set -e
           echo "gradle_exit_code=$STATUS" >> "$GITHUB_STEP_SUMMARY"
@@ -53,7 +53,7 @@ jobs:
             echo "- 目标片名：永昼赴星光"
             echo "- 匹配规则：标题必须逐字完全一致，不接受相似标题"
             echo "- 特殊剧：永昼赴星光（先从搜索结果中逐字匹配真实 series_id）"
-            echo "- 正常剧对照 ID：7615470177953532990"
+            echo "- 正常剧对照：《十八岁太奶奶驾到，重整家族荣耀第五部》；ID：7701937936731737112"
             echo "- 检测接口：Phoenix 单剧详情、普通批量详情、预加载详情、播放器场景详情、dynamic_data/detail 场景、官网 /detail 与 /player 页面"
             echo "- 成功标准：真实标题/详情字段或有效分集数据；HTTP 200 空响应不算成功"
             echo
