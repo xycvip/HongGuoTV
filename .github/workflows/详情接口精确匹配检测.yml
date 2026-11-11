@@ -2,6 +2,13 @@ name: 详情接口精确匹配检测
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'kotlin-tv/core/src/main/kotlin/com/hongguotv/core/DetailApiProbe.kt'
+      - 'kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Probe.kt'
+      - '.github/workflows/详情接口精确匹配检测.yml'
 
 permissions:
   contents: read
