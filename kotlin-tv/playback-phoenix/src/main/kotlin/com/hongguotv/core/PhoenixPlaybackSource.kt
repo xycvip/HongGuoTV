@@ -134,7 +134,6 @@ class PhoenixPlaybackSource(
             )
             val request = Request.Builder().url(url).apply {
                 headers.forEach { (key, value) -> header(key, value) }
-                if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
             }.post(singleBody.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
             val raw = RequestScope.execute(playbackHttp.newCall(request)) { response ->
                 if (response.code != 200) throw IOException("OOIUa 单集播放接口 HTTP ${response.code}")
@@ -145,6 +144,7 @@ class PhoenixPlaybackSource(
                 String(bytes, Charsets.UTF_8)
             }
             if (raw.isBlank()) throw IOException("OOIUa 单集播放接口返回空响应")
+            requireSingleSuccessCode(raw)
             return try {
                 resolveResponse(raw, maxQuality).also {
                     emitDiagnostic("Phoenix：OOIUa 单集主线路命中，清晰度=${it.quality}")
@@ -316,6 +316,18 @@ class PhoenixPlaybackSource(
         return JSONObject().put("code", 0).put("data", JSONObject().put("video_model", model)).toString()
     }
 
+    /** OOIUa 单集主线路必须明确返回 code=0 或 Code=0；缺字段不能默认成功。 */
+    private fun requireSingleSuccessCode(raw: String) {
+        val root = runCatching { JSONObject(raw) }.getOrElse {
+            throw IOException("OOIUa 单集播放响应不是有效 JSON")
+        }
+        val code = root.opt("code") ?: root.opt("Code")
+            ?: throw IOException("OOIUa 单集播放响应缺少 code")
+        if (code.toString().toIntOrNull() != 0) {
+            throw IOException("OOIUa 单集播放接口业务状态异常")
+        }
+    }
+
     /**
      * Resolve the optional second-stage fallback_api endpoint before parsing media.
      * This is a plain GET with the reader UA; credentials and signed query data are not logged.
@@ -326,10 +338,12 @@ class PhoenixPlaybackSource(
             val fallbackHttp = http.newBuilder().callTimeout(15, TimeUnit.SECONDS).followRedirects(false).build()
             val parsed = runCatching { java.net.URI(url) }.getOrNull()
                 ?: throw IOException("fallback_api URL 格式异常")
+            val scheme = parsed.scheme?.lowercase(java.util.Locale.ROOT)
             val host = parsed.host.orEmpty().lowercase(java.util.Locale.ROOT)
-            if (!(host == "fqnovel.com" || host.endsWith(".fqnovel.com") ||
-                    host == "snssdk.com" || host.endsWith(".snssdk.com"))) {
-                throw IOException("fallback_api 域名不在 OOIUa 白名单内")
+            val allowedHost = listOf("fqnovel.com", "snssdk.com").any { host == it || host.endsWith(".$" + "it") }
+            if (scheme != "https" || parsed.userInfo != null ||
+                (parsed.port != -1 && parsed.port != 443) || !allowedHost) {
+                throw IOException("fallback_api URL 不符合 OOIUa API_DOMAINS 校验规则")
             }
             val request = Request.Builder()
                 .url(url)
