@@ -143,7 +143,7 @@ object MediaCrypto {
         val ftyp = box(data, 0) ?: throw IOException("明文 MP4 文件头无效")
         if (ftyp.type != "ftyp") throw IOException("明文 MP4 缺少 ftyp")
         val moov = box(data, ftyp.end) ?: throw IOException("明文 MP4 索引不完整")
-        if (moov.type != "moov" || moov.end != data.size) {
+        if (moov.type != "moov" || moov.end != data.size || moov.end - moov.start > 16 * 1024 * 1024) {
             throw IOException("明文 MP4 索引布局不受支持")
         }
         val forbidden = setOf("encv", "enca", "sinf", "schi", "senc", "saiz", "saio", "pssh", "tenc")
@@ -152,16 +152,115 @@ object MediaCrypto {
                 throw IOException("未声明加密的片源实际包含 MP4 加密标记")
             }
         }
-        val required = setOf("mvhd", "trak", "mdia", "hdlr", "minf", "stbl", "stsz", "stsc")
-        for (type in required) {
-            if (!containsFourcc(data, moov.start, moov.end, type)) {
-                throw IOException("明文 MP4 索引缺少 $type")
+        if (directChild(data, moov, "mvhd") == null) throw IOException("明文 MP4 缺少 mvhd")
+        val tracks = mutableListOf<Box>()
+        var at = moov.body
+        while (at < moov.end) {
+            val child = box(data, at, moov.end) ?: throw IOException("明文 MP4 moov 子框损坏")
+            if (child.type == "trak") tracks += child
+            at = child.end
+        }
+        if (tracks.isEmpty() || tracks.size > 8) throw IOException("明文 MP4 轨道数量异常")
+        val trackIds = mutableSetOf<Long>()
+        var totalSamples = 0L
+        for (track in tracks) {
+            val tkhd = directChild(data, track, "tkhd") ?: throw IOException("明文 MP4 缺少 tkhd")
+            if (tkhd.body + 4 > tkhd.end) throw IOException("明文 MP4 tkhd 截断")
+            val version = data[tkhd.body].u()
+            if (version > 1 || tkhd.end - tkhd.body < if (version == 1) 96 else 84) {
+                throw IOException("明文 MP4 tkhd 格式异常")
             }
+            val trackId = data.u32(tkhd.body + if (version == 1) 20 else 12)
+            if (!trackIds.add(trackId)) throw IOException("明文 MP4 轨道 ID 重复")
+
+            val mdia = directChild(data, track, "mdia") ?: throw IOException("明文 MP4 缺少 mdia")
+            val hdlr = directChild(data, mdia, "hdlr") ?: throw IOException("明文 MP4 缺少 hdlr")
+            if (hdlr.body + 12 > hdlr.end) throw IOException("明文 MP4 hdlr 截断")
+            val handler = String(data, hdlr.body + 8, 4, Charsets.US_ASCII)
+            if (handler != "vide" && handler != "soun") throw IOException("明文 MP4 存在不支持的轨道类型")
+            val minf = directChild(data, mdia, "minf") ?: throw IOException("明文 MP4 缺少 minf")
+            val stbl = directChild(data, minf, "stbl") ?: throw IOException("明文 MP4 缺少 stbl")
+            val stsz = directChild(data, stbl, "stsz") ?: throw IOException("明文 MP4 缺少 stsz")
+            if (stsz.body + 12 > stsz.end) throw IOException("明文 MP4 stsz 截断")
+            val uniformSize = data.u32(stsz.body + 4)
+            val sampleCount = data.u32(stsz.body + 8)
+            if (sampleCount !in 1..250_000 || uniformSize > 8L * 1024 * 1024) {
+                throw IOException("明文 MP4 样本数量或大小异常")
+            }
+            if (stsz.end - stsz.body != 12L + if (uniformSize == 0L) sampleCount * 4 else 0L) {
+                throw IOException("明文 MP4 样本索引长度异常")
+            }
+            if (uniformSize == 0L) {
+                for (i in 0 until sampleCount.toInt()) {
+                    if (data.u32(stsz.body + 12 + i * 4) > 8L * 1024 * 1024) {
+                        throw IOException("明文 MP4 单个样本过大")
+                    }
+                }
+            }
+            val stco = directChild(data, stbl, "stco")
+            val co64 = directChild(data, stbl, "co64")
+            if (stco != null && co64 != null) throw IOException("明文 MP4 块偏移表重复")
+            val chunks = stco ?: co64 ?: throw IOException("明文 MP4 缺少块偏移索引")
+            val width = if (co64 != null) 8 else 4
+            if (chunks.body + 8 > chunks.end) throw IOException("明文 MP4 块偏移表截断")
+            val chunkCount = data.u32(chunks.body + 4)
+            if (chunkCount !in 1..sampleCount || chunks.end - chunks.body != 8L + chunkCount * width) {
+                throw IOException("明文 MP4 块偏移表异常")
+            }
+            val stsc = directChild(data, stbl, "stsc") ?: throw IOException("明文 MP4 缺少 stsc")
+            if (stsc.body + 8 > stsc.end) throw IOException("明文 MP4 stsc 截断")
+            val mappingCount = data.u32(stsc.body + 4)
+            if (mappingCount !in 1..chunkCount || stsc.end - stsc.body != 8L + mappingCount * 12) {
+                throw IOException("明文 MP4 stsc 长度异常")
+            }
+            var previousFirst = 0L
+            val mappings = ArrayList<Pair<Long, Long>>(mappingCount.toInt())
+            for (i in 0 until mappingCount.toInt()) {
+                val offset = stsc.body + 8 + i * 12
+                val firstChunk = data.u32(offset)
+                val perChunk = data.u32(offset + 4)
+                val description = data.u32(offset + 8)
+                if ((i == 0 && firstChunk != 1L) || firstChunk <= previousFirst ||
+                    firstChunk > chunkCount || perChunk !in 1..sampleCount || description != 1L) {
+                    throw IOException("明文 MP4 stsc 映射异常")
+                }
+                previousFirst = firstChunk
+                mappings += firstChunk to perChunk
+            }
+            var mappedSamples = 0L
+            var mappingIndex = 0
+            for (chunk in 1..chunkCount.toInt()) {
+                while (mappingIndex + 1 < mappings.size && mappings[mappingIndex + 1].first <= chunk) {
+                    mappingIndex++
+                }
+                mappedSamples += mappings[mappingIndex].second
+            }
+            if (mappedSamples != sampleCount) throw IOException("明文 MP4 样本与块映射不一致")
+            val stsd = directChild(data, stbl, "stsd") ?: throw IOException("明文 MP4 缺少 stsd")
+            if (stsd.body + 8 > stsd.end || data.u32(stsd.body + 4) != 1L) {
+                throw IOException("明文 MP4 sample description 不受支持")
+            }
+            val entry = box(data, stsd.body + 8, stsd.end) ?: throw IOException("明文 MP4 sample entry 损坏")
+            if (entry.end != stsd.end || entry.type == "encv" || entry.type == "enca") {
+                throw IOException("未声明加密的片源包含受保护 sample entry")
+            }
+            totalSamples += sampleCount
+            if (totalSamples > 250_000) throw IOException("明文 MP4 总样本数量过大")
         }
-        if (!containsFourcc(data, moov.start, moov.end, "stco") &&
-            !containsFourcc(data, moov.start, moov.end, "co64")) {
-            throw IOException("明文 MP4 缺少块偏移索引")
+    }
+
+    private fun directChild(data: ByteArray, parent: Box, type: String): Box? {
+        var found: Box? = null
+        var at = parent.body
+        while (at < parent.end) {
+            val child = box(data, at, parent.end) ?: throw IOException("MP4 子框结构损坏")
+            if (child.type == type) {
+                if (found != null) throw IOException("MP4 存在重复的 $type 框")
+                found = child
+            }
+            at = child.end
         }
+        return found
     }
 
     private fun containsFourcc(data: ByteArray, start: Int, end: Int, type: String): Boolean {
