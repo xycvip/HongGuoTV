@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "f6ff2e0fc77ed8e48b48bd69e2964c1a182d8905",
-  "versionCode": 75,
-  "versionName": "0.0.75",
+  "sourceCommit": "00f915a30815b400c8b6a6de9d25f46eae728464",
+  "versionCode": 76,
+  "versionName": "0.0.76",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.75",
+  "tag": "hongguotv-bate-v0.0.76",
   "apk": {
-    "name": "HongguoTV-0.0.75.apk",
-    "size": 2009661,
-    "sha256": "84ff7a05daaf1c962ec6b70afc517c234da19aeb685f2549759a567a22bbfb50",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.75/HongguoTV-0.0.75.apk"
+    "name": "HongguoTV-0.0.76.apk",
+    "size": 2009589,
+    "sha256": "1a5d50e509055b9843469f1b1c46a5bc34bbc07bbdf00f08731ed6e2139bc2d4",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.76/HongguoTV-0.0.76.apk"
   },
-  "notes": "【其他功能与问题修复】\n- Wire Phoenix SignPlayer into playback source"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
