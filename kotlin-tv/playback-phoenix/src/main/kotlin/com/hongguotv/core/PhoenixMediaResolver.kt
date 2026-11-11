@@ -27,12 +27,11 @@ internal object PhoenixMediaResolver {
         val allByteVc2 = inlineRows.all { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
-            codec in setOf("bytevc2", "bvc2") || item.str("gear_des_key").contains("bytevc2", true)
+            codec in setOf("bytevc2", "bvc2")
         }
         val undeclaredEncryption = inlineRows.any { (_, item) ->
             val encryption = objectOrString(item.opt("encrypt_info"))
             val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
-                .ifEmpty { objectOrString(item.opt("video_meta")).str("spade_a") }
             spade.isBlank() && !encryption.has("encrypt") && !item.has("encrypt")
         }
         return allByteVc2 || undeclaredEncryption
@@ -57,11 +56,9 @@ internal object PhoenixMediaResolver {
         // 诊断回调不得改变播放行为；只记录字段摘要，不记录完整URL或密钥。
         fun report(message: String) { runCatching { onDiagnostic(message) } }
         val root = json(raw, "Phoenix 播放响应不是有效 JSON")
-        val baseResp = root.optJSONObject("BaseResp")
-        val code = (root.opt("code") ?: root.opt("Code") ?: baseResp?.opt("StatusCode") ?: -1)
-            .toString().toIntOrNull() ?: -1
+        val code = (root.opt("code") ?: root.opt("Code") ?: -1).toString().toIntOrNull() ?: -1
         if (code != 0) {
-            val message = root.str("message").ifEmpty { baseResp?.str("StatusMessage").orEmpty() }
+            val message = root.str("message")
             throw IOException("Phoenix 播放接口业务错误：$code ${message.take(100)}")
         }
         val data = root.optJSONObject("data") ?: throw IOException("Phoenix 播放数据为空")
@@ -74,14 +71,13 @@ internal object PhoenixMediaResolver {
             ?: fallbackRoot?.optJSONObject("data")
             ?: fallbackVideoInfo
         val source = fallbackData ?: fallbackRoot ?: model
-        // 空的 video_list 经常与 dynamic_video 同时出现；不能因为字段存在但为空，
-        // 就提前停止回退，否则真实动态视频资源会被误报成“没有清晰度”。
+        // OOIUa 只读取 video_model.video_list；其他扩展字段不作为片源来源。
         val inlineRows = rows(model.opt("video_list"))
         val fallbackRows = rows(source.opt("video_list"))
         val inlineOnlyByteVc2 = inlineRows.isNotEmpty() && inlineRows.all { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
-            codec in setOf("bytevc2", "bvc2") || item.str("gear_des_key").contains("bytevc2", true)
+            codec in setOf("bytevc2", "bvc2")
         }
         val inlineUndeclaredEncryption = inlineRows.any { (_, item) ->
             val encryption = objectOrString(item.opt("encrypt_info"))
@@ -106,13 +102,10 @@ internal object PhoenixMediaResolver {
         report("Phoenix资源筛选：发现 ${rows.size} 项候选，数据来源=${if (!fallbackRaw.isNullOrBlank()) "fallback" else "video_model"}")
         // key_seed 在不同版本中可能位于 fallback 的顶层、video_info 或 video_info.data。
         // 逐层查找，避免 URL 已经拿到、却因密钥字段层级变化而把加密媒体误当成普通 MP4。
-        val seedText = sequenceOf(
-            if (useFallbackRows) source.str("key_seed") else model.str("key_seed"),
-            if (useFallbackRows) fallbackVideoInfo?.str("key_seed").orEmpty() else data.str("key_seed"),
-            fallbackRoot?.str("key_seed").orEmpty(),
-            model.str("key_seed"),
-            data.str("key_seed")
-        ).firstOrNull { it.isNotBlank() }.orEmpty()
+        val seedText = if (useFallbackRows) {
+            sequenceOf(source.str("key_seed"), fallbackVideoInfo?.str("key_seed").orEmpty(),
+                fallbackRoot?.str("key_seed").orEmpty()).firstOrNull { it.isNotBlank() }.orEmpty()
+        } else model.str("key_seed")
         val seed = if (seedText.isNotBlank()) {
             try { decode64(seedText) } catch (_: Exception) { throw IOException("Phoenix key_seed 格式异常") }
         } else null
@@ -264,22 +257,19 @@ internal object PhoenixMediaResolver {
                     decoded ?: throw IOException("Phoenix video_model 格式异常")
                 }
             }
-            else -> data
+            else -> JSONObject()
         }
     }
 
     private fun json(raw: String, message: String) =
         runCatching { JSONObject(raw) }.getOrElse { throw IOException(message) }
 
-    private fun objectOrString(value: Any?): JSONObject = when (value) {
-        is JSONObject -> value
-        is String -> runCatching { JSONObject(value) }.getOrNull() ?: JSONObject()
-        else -> JSONObject()
-    }
+    private fun objectOrString(value: Any?): JSONObject =
+        (value as? JSONObject) ?: JSONObject()
 
     private fun rows(value: Any?): List<Pair<String, JSONObject>> = when (value) {
-        // Go's source sorts object keys before iterating; keep selection and diagnostics deterministic.
-        is JSONObject -> value.keys().asSequence().toList().sorted()
+        // Keep the source object's iteration order, matching OOIUa map-value traversal.
+        is JSONObject -> value.keys().asSequence()
             .mapNotNull { key -> value.optJSONObject(key)?.let { key to it } }
         is JSONArray -> (0 until value.length()).mapNotNull { i -> value.optJSONObject(i)?.let { i.toString() to it } }
         else -> emptyList()
