@@ -6,7 +6,7 @@ import java.math.BigInteger
 
 object MediaCrypto {
     data class Sample(val start: Long, val end: Long, val iv: ByteArray, val encryptedOffset: Long = 0, val isVideo: Boolean = false, val sampleIndex: Int = 0, val isEncrypted: Boolean = true)
-    data class Prepared(val header: ByteArray, val samples: List<Sample>, val headerStart: Long = 0)
+    data class Prepared(val header: ByteArray, val samples: List<Sample>, val headerStart: Long = 0, val topLevelPsshOffsets: List<Long> = emptyList())
     fun deriveKey(value: String): ByteArray {
         val raw=decode64(value); require(raw.size>=3) { "内容密钥格式异常" }
         val length=minOf(raw.size-(raw[0].u() xor raw[1].u() xor raw[2].u())+47,raw.size-1)
@@ -710,6 +710,14 @@ object MediaCrypto {
                 (copyStart - headerStart).toInt(),
                 (copyEnd - headerStart).toInt()
             )
+        }
+        val freeType = byteArrayOf(0x66, 0x72, 0x65, 0x65)
+        for (offset in prepared.topLevelPsshOffsets) {
+            val from = maxOf(start, offset)
+            val to = minOf(end, offset + 4)
+            if (from < to) {
+                freeType.copyInto(result, (from - start).toInt(), (from - offset).toInt(), (to - offset).toInt())
+            }
         }
         if(key==null) return result
         val samples=prepared.samples
