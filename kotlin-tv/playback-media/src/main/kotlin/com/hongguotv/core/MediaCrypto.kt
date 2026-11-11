@@ -328,9 +328,15 @@ object MediaCrypto {
     private fun validateOoiUaBoxTree(data: ByteArray, parent: Box, depth: Int) {
         if (depth > 16) throw IOException("MP4 box 嵌套过深")
         if (parent.type in setOf("mvex", "moof", "traf", "stz2", "uuid")) {
-            throw IOException("不支持的 MP4 结构：\${parent.type}")
+            throw IOException("不支持的 MP4 结构：" + parent.type)
         }
         val containers = setOf("moov", "trak", "mdia", "minf", "stbl", "edts", "dinf", "udta", "sinf", "schi")
+        if (parent.type == "sgpd" || parent.type == "sbgp") {
+            if (parent.body + 8 > parent.end) throw IOException("MP4 sample group 截断")
+            val grouping = String(data, parent.body + 4, 4, Charsets.US_ASCII)
+            if (grouping != "roll" && grouping != "prol") throw IOException("不支持 MP4 sample group：" + grouping)
+            return
+        }
         val childStart = when {
             parent.type == "stsd" -> {
                 if (parent.body + 8 > parent.end) throw IOException("MP4 stsd 截断")
@@ -349,12 +355,6 @@ object MediaCrypto {
             }
             parent.type in containers -> parent.body
             else -> return
-        }
-        if (parent.type == "sgpd" || parent.type == "sbgp") {
-            if (parent.body + 8 > parent.end) throw IOException("MP4 sample group 截断")
-            val grouping = String(data, parent.body + 4, 4, Charsets.US_ASCII)
-            if (grouping != "roll" && grouping != "prol") throw IOException("不支持 MP4 sample group：\${grouping}")
-            return
         }
         var at = childStart
         while (at < parent.end) {
