@@ -119,8 +119,9 @@ internal object PhoenixMediaResolver {
         }
         val inlineMinimumPixels = inlineShortSides.filter { it >= inlineTarget && inlineTarget != Int.MAX_VALUE }
             .minOrNull() ?: inlineShortSides.maxOrNull() ?: 0
-        val verifiedUndeclaredFallback = inlineUndeclaredEncryption && fallbackRows.isNotEmpty() &&
-            inlineMinimumPixels > 0 && referenceId.isNotEmpty() && fallbackId == referenceId &&
+        val verifiedUndeclaredFallback = !inlineOnlyByteVc2 && inlineUndeclaredEncryption &&
+            fallbackRows.isNotEmpty() && inlineMinimumPixels > 0 &&
+            referenceId.isNotEmpty() && fallbackId == referenceId &&
             referenceDuration > 0.0 && fallbackDuration > 0.0 &&
             kotlin.math.abs(referenceDuration - fallbackDuration) <= 0.5
         // OOIUa 优先内联；仅在内联缺失、全为 ByteVC2，或未声明加密且备用模型身份/时长/最低像素通过校验时使用 fallback。
