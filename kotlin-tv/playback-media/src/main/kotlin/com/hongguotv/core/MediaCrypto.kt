@@ -146,7 +146,7 @@ object MediaCrypto {
         if (moov.type != "moov" || moov.end != data.size || moov.end - moov.start > 16 * 1024 * 1024) {
             throw IOException("明文 MP4 索引布局不受支持")
         }
-        val forbidden = setOf("encv", "enca", "sinf", "schi", "senc", "saiz", "saio", "pssh", "tenc")
+        val forbidden = setOf("encv", "enca", "sinf", "schi", "senc", "saiz", "saio", "pssh", "tenc", "mvex", "moof", "traf", "stz2", "uuid")
         for (type in forbidden) {
             if (containsFourcc(data, moov.start, moov.end, type)) {
                 throw IOException("未声明加密的片源实际包含 MP4 加密标记")
@@ -243,6 +243,19 @@ object MediaCrypto {
             val entry = box(data, stsd.body + 8, stsd.end) ?: throw IOException("明文 MP4 sample entry 损坏")
             if (entry.end != stsd.end || entry.type == "encv" || entry.type == "enca") {
                 throw IOException("未声明加密的片源包含受保护 sample entry")
+            }
+            val visualEntries = setOf("avc1", "avc3", "hvc1", "hev1", "av01", "mp4v", "vp08", "vp09", "dvav", "dva1")
+            val audioEntries = setOf("mp4a", "ac-3", "ec-3", "Opus", "fLaC", "samr", "sawb")
+            val fixedEntryBytes = when {
+                handler == "vide" && entry.type in visualEntries -> 78
+                handler == "soun" && entry.type in audioEntries -> 28
+                else -> throw IOException("明文 MP4 sample entry 类型与轨道不匹配")
+            }
+            if (entry.body + fixedEntryBytes > entry.end) throw IOException("明文 MP4 sample entry 截断")
+            var nestedAt = entry.body + fixedEntryBytes
+            while (nestedAt < entry.end) {
+                val nested = box(data, nestedAt, entry.end) ?: throw IOException("明文 MP4 sample entry 子框损坏")
+                nestedAt = nested.end
             }
             totalSamples += sampleCount
             if (totalSamples > 250_000L) throw IOException("明文 MP4 总样本数量过大")
