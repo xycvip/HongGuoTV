@@ -103,7 +103,7 @@ class DanmakuRepository(
         // Device identity must be registered once and remain stable. Regenerating IDs here
         // creates an identity the platform has never registered and can yield HTTP 200 + empty body.
         val profile = playbackSession.profile(http)
-        val requestSigner = Signer(profile.values)
+        val requestSigner = Signer(device = profile.values)
         val endpoint = "/novel/commentapi/comment/list/$vid/v1/"
         var lastError: IOException? = null
         var sawEmptyReply = false
