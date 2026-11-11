@@ -11,7 +11,7 @@ class PhoenixPlaybackSourceTest {
           "code":0,
           "data":{"video_model":{"video_list":{
             "high":{"main_url":"https://cdn.qznovelvod.com/1080.mp4","video_meta":{"codec_type":"h265","vheight":1080,"definition":"1080P"}},
-            "normal":{"main_url":["https://cdn.qznovelvod.com/720.mp4"],"video_meta":{"codec_type":"h264","vheight":720,"definition":"720P"}}
+            "normal":{"main_url":"https://cdn.qznovelvod.com/720.mp4","video_meta":{"codec_type":"h264","vheight":720,"definition":"720P"}}
           }}}
         }"""
         val result = PhoenixPlaybackSource.parseResponse(json, 720)
@@ -124,6 +124,16 @@ class PhoenixPlaybackSourceTest {
         }}"""
         assertThrows(java.io.IOException::class.java) {
             PhoenixMediaResolver.parse(raw, 1080)
+        }
+    }
+
+    @Test fun `rejects media URLs outside OOIUa VOD_DOMAINS`() {
+        val raw = """{"code":0,"data":{"video_model":{"video_list":[
+          {"main_url":"https://cdn.example/outside.mp4",
+           "video_meta":{"codec_type":"h264","definition":"720P","vheight":720}}
+        ]}}}"""
+        assertThrows(UnplayableVideoException::class.java) {
+            PhoenixMediaResolver.parse(raw, 720)
         }
     }
 
