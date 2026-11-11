@@ -158,6 +158,9 @@ class PhoenixPlaybackSource(
         } catch (error: IOException) {
             primaryFailure = error
             emitDiagnostic("Phoenix：单集主线路失败，转入 OOIUa 备用播放阶梯")
+        } catch (error: Exception) {
+            primaryModelFailure = IOException("Phoenix 单集主线路模型或签名异常", error)
+            emitDiagnostic("Phoenix：单集主线路异常，转入 OOIUa 备用播放阶梯")
         }
 
         val legacyFailure = tryLegacyRoutes(id, maxQuality, identity, playbackHttp, playbackStarted, primaryModelFailure)
@@ -265,11 +268,18 @@ class PhoenixPlaybackSource(
                     modelFailure = error
                     emitDiagnostic("Phoenix：备用线路 ${index + 1} 模型解析失败，继续下一线路")
                     continue
+                } catch (error: Exception) {
+                    modelFailure = IOException("OOIUa 备用线路模型解析异常", error)
+                    emitDiagnostic("Phoenix：备用线路 ${index + 1} 模型解析失败，继续下一线路")
+                    continue
                 }
             } catch (error: java.io.InterruptedIOException) {
                 throw error
             } catch (error: IOException) {
                 requestFailure = error
+                emitDiagnostic("Phoenix：OOIUa 备用线路 ${index + 1} 请求失败")
+            } catch (error: Exception) {
+                requestFailure = IOException("OOIUa 备用线路请求异常", error)
                 emitDiagnostic("Phoenix：OOIUa 备用线路 ${index + 1} 请求失败")
             }
         }
