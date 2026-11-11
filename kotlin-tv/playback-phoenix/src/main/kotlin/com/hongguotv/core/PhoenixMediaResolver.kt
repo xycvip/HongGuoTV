@@ -84,9 +84,9 @@ internal object PhoenixMediaResolver {
             fallbackVideoInfo?.optJSONObject("data")
                 ?: throw IOException("Phoenix fallback_api 未返回 video_info.data")
         val source = fallbackData ?: model
-        // OOIUa 只读取 video_model.video_list；其他扩展字段不作为片源来源。
+        // OOIUa 只读取 video_model.video_list；未实际取得 fallback_api 时不能把内联列表冒充备用列表。
         val inlineRows = rows(model.opt("video_list"))
-        val fallbackRows = rows(source.opt("video_list"))
+        val fallbackRows = fallbackData?.let { rows(it.opt("video_list")) }.orEmpty()
         val inlineOnlyByteVc2 = inlineRows.isNotEmpty() && inlineRows.all { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
