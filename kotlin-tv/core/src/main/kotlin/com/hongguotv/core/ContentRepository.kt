@@ -88,6 +88,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
                     val now = clock()
                     val values = LinkedHashMap(identity.values)
                     values["ac"] = values["ac"]?.ifBlank { "wifi" } ?: "wifi"
+                    values["rom_version"] = values["rom_version"]?.ifBlank { "BP2A.250605.031.A3" } ?: "BP2A.250605.031.A3"
                     val query = values.entries.joinToString("&") { (key, value) ->
                         URLEncoder.encode(key, "UTF-8") + "=" + URLEncoder.encode(value, "UTF-8")
                     } + "&_rticket=" + now
