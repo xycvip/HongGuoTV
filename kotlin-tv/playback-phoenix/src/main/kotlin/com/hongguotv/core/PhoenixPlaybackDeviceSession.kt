@@ -19,7 +19,6 @@ class PhoenixPlaybackDeviceSession(
 
     data class Profile(val values: Map<String, String>, val cookie: String)
 
-    @Synchronized
     fun profile(http: OkHttpClient): Profile {
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
         val registered = try {
