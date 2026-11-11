@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "c2cc12a5043068d33365e5f8909fa008f1167ca2",
-  "versionCode": 73,
-  "versionName": "0.0.73",
+  "sourceCommit": "0f579cd096fc670b555476b3d99970b667db5673",
+  "versionCode": 74,
+  "versionName": "0.0.74",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.73",
+  "tag": "hongguotv-bate-v0.0.74",
   "apk": {
-    "name": "HongguoTV-0.0.73.apk",
+    "name": "HongguoTV-0.0.74.apk",
     "size": 2004025,
-    "sha256": "42b0a1a0956f695eade1d90a10a595bd2424021343817edb5fa0b2617640a920",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.73/HongguoTV-0.0.73.apk"
+    "sha256": "52f787f4b425038815ca14dba1c17ef11e8bf220eebb5b14b953529d5daf2143",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.74/HongguoTV-0.0.74.apk"
   },
   "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
