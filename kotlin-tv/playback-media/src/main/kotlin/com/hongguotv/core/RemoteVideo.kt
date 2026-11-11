@@ -113,6 +113,7 @@ class RemoteVideo(
             val moov = moovBoxes.single()
             val moovBytes = readRange(moov.start, moov.end - moov.start)
             prepared = MediaCrypto.prepare(moovBytes, info.key, true, moov.start)
+                .copy(topLevelPsshOffsets = boxes.filter { it.type == "pssh" }.map { it.start + 4 })
             if (prepared.samples.any { it.start < 0 || it.end > total || it.end <= it.start }) {
                 throw IOException("视频样本超出资源大小")
             }
@@ -158,6 +159,7 @@ class RemoteVideo(
                 ((head[2].toLong() and 255) shl 8) or
                 (head[3].toLong() and 255)
             val type = String(head, 4, 4, Charsets.US_ASCII)
+            if (type == "moof" || type == "mfra" || type == "sidx") throw IOException("不支持分片或索引式 MP4：$type")
             var headerSize = 8L
             val size = when (size32) {
                 0L -> total - offset
