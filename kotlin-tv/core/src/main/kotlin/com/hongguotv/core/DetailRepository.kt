@@ -43,7 +43,7 @@ internal class DetailRepository(
     private fun parseAppDetail(data: JSONObject, requestedId: String): Detail {
         val o = data.optJSONObject("video_data") ?: throw IOException("App 详情缺少 video_data")
         val videoDetail = o.optJSONObject("video_detail")
-        val returnedId = first(o.str("series_id_str"), o.str("series_id"), o.str("book_id"), videoDetail?.str("series_id").orEmpty())
+        val returnedId = first(o.str("series_id_str"), o.str("series_id"), o.str("book_id"), o.str("keyword"), videoDetail?.str("series_id").orEmpty())
         if (returnedId != requestedId) throw IOException("App 返回的剧集 ID 与请求不一致")
 
         val title = first(o.str("series_title"), o.str("series_name"), o.str("title"), o.str("name"), videoDetail?.str("series_title").orEmpty(), videoDetail?.str("title").orEmpty())
