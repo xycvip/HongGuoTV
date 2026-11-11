@@ -28,7 +28,6 @@ class PhoenixLiveResourceDiagnosticTest {
         val source = PhoenixPlaybackSource(
             http = client,
             session = PhoenixPlaybackDeviceSession(),
-            signer = PhoenixRequestSigner(),
             onDiagnostic = { println("[PHOENIX-LIVE] $it") }
         )
 
