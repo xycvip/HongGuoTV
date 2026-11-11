@@ -128,16 +128,14 @@ internal object PhoenixMediaResolver {
                 "Phoenix 无可用 MP4：不兼容编码 $unsupportedSkipped 项，未能解密/不支持的加密资源 $encryptedSkipped 项"
             )
         }
-        val h264 = candidates.filter { it.codec in setOf("h264", "avc1") }
         val portrait = candidates.firstNotNullOfOrNull { candidate ->
             if (candidate.width > 0 && candidate.height > 0) candidate.height > candidate.width else null
         }
         val selectionLimit = PlaybackQualityMode.limit(maxQuality, portrait)
-        // 高清优先先比清晰度，同档优先 H.264；兼容优先则优先使用 H.264 候选池。
-        val pool = if (maxQuality == PlaybackQualityMode.AUTO_HIGH) {
-            candidates.sortedWith(compareByDescending<Candidate> { it.quality }
-                .thenBy { if (it.codec in setOf("h264", "avc1")) 0 else 1 })
-        } else if (h264.isNotEmpty()) h264 else candidates
+        // 所有清晰度模式统一先按分辨率排序，编码只在同档位时决定优先级。
+        // 不要把 H.264 做成跨分辨率候选池过滤条件，否则 720P H.264 会压过 1080P HEVC。
+        val pool = candidates.sortedWith(compareByDescending<Candidate> { it.quality }
+            .thenBy { if (it.codec in setOf("h264", "avc1")) 0 else 1 })
         val selected = pool.filter { it.quality in 1..selectionLimit }.maxByOrNull { it.quality }
             ?: pool.filter { it.quality > 0 }.minByOrNull { it.quality }
             ?: pool.first()
