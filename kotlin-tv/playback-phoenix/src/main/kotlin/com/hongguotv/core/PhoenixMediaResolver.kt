@@ -114,9 +114,10 @@ internal object PhoenixMediaResolver {
         for ((name, item) in rows) {
             val meta = objectOrString(item.opt("video_meta"))
             val encryption = objectOrString(item.opt("encrypt_info"))
-            val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.ifEmpty { "unknown" }.lowercase(Locale.ROOT)
+            val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.ifEmpty { "unknown" }.lowercase(Locale.ROOT)
             val gearKey = item.str("gear_des_key").lowercase(Locale.ROOT)
-            val definition = meta.str("definition").ifEmpty { item.str("definition") }
+            val definition = item.str("quality_desc").ifEmpty { item.str("definition") }
+                .ifEmpty { meta.str("definition") }.ifEmpty { item.str("height").ifEmpty { item.str("vheight") } }
             val reportedHeight = meta.optInt("vheight", item.optInt("vheight", item.optInt("height", 0)))
             val reportedWidth = meta.optInt("vwidth", item.optInt("vwidth", 0))
             // Match GuoAPP's portrait-video fallback: when only width is reliable,
@@ -127,9 +128,10 @@ internal object PhoenixMediaResolver {
                 ?: qualityNumber(item.str("quality_desc").ifEmpty { name })
             val mime = meta.str("mime_type").ifEmpty { item.str("mime_type") }.ifEmpty { "unknown" }
             report("Phoenix资源#$name：开始筛选 codec=$codec，mime=$mime，definition=${definition.ifBlank { "unknown" }}，height=${height.takeIf { it > 0 } ?: "unknown"}")
-            if (codec in setOf("bytevc2", "bvc2") || gearKey.contains("bytevc2")) {
+            if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1") ||
+                codec in setOf("bytevc2", "bvc2") || gearKey.contains("bytevc2")) {
                 unsupportedSkipped++
-                report("Phoenix资源#$name：拒绝，原因=不兼容编码(ByteVC2)")
+                report("Phoenix资源#$name：拒绝，原因=不支持的编码($codec)")
                 continue
             }
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
