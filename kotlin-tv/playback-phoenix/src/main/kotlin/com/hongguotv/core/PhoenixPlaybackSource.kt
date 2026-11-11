@@ -360,7 +360,7 @@ class PhoenixPlaybackSource(
                 String(bytes, Charsets.UTF_8)
             }
         }
-        val shouldFetchFallback = PhoenixMediaResolver.needsFallback(raw)
+        val shouldFetchFallback = PhoenixMediaResolver.needsFallback(raw, maxQuality)
         var fallbackRaw = if (shouldFetchFallback &&
             (fallbackUrl.startsWith("https://") || fallbackUrl.startsWith("http://"))) {
             try {
