@@ -208,7 +208,7 @@ internal object PhoenixMediaResolver {
                 }
                 candidates += Candidate(
                     height, codec, url, key, reportedWidth, reportedHeight, shortSide,
-                    undeclaredEncryption && !useFallbackRows
+                    key == null
                 )
                 val safeHost = runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
                 report("Phoenix资源#$name：URL通过初筛，host=$safeHost，codec=$codec，height=${height.takeIf { it > 0 } ?: "unknown"}")
