@@ -7,6 +7,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
@@ -53,7 +54,7 @@ object PhoenixDeviceRegister {
             .header("x-ss-stub", digest("MD5", body).hex().uppercase())
             .post(body.toRequestBody("application/octet-stream;tt-data=a".toMediaType()))
             .build()
-        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).followRedirects(false).build()
+        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).followRedirects(false).callTimeout(8, TimeUnit.SECONDS).build()
         return RequestScope.execute(transport.newCall(request)) { response ->
             if (response.code != 200) throw IOException("播放设备注册失败（HTTP ${response.code}）")
             val responseBody = response.body ?: throw IOException("播放设备注册响应为空")
