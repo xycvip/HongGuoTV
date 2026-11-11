@@ -45,7 +45,10 @@ jobs:
             echo
             echo "- 目标片名：永昼赴星光"
             echo "- 匹配规则：标题必须逐字完全一致，不接受相似标题"
-            echo "- 特殊剧：永昼赴星光（先从搜索结果中逐字匹配真实 series_id）"\n            echo "- 正常剧对照 ID：7615470177953532990"\n            echo "- 检测接口：Phoenix 单剧详情、普通批量详情、预加载详情、播放器场景详情、dynamic_data/detail 场景、官网 /detail 与 /player 页面"\n            echo "- 成功标准：真实标题/详情字段或有效分集数据；HTTP 200 空响应不算成功"
+            echo "- 特殊剧：永昼赴星光（先从搜索结果中逐字匹配真实 series_id）"
+            echo "- 正常剧对照 ID：7615470177953532990"
+            echo "- 检测接口：Phoenix 单剧详情、普通批量详情、预加载详情、播放器场景详情、dynamic_data/detail 场景、官网 /detail 与 /player 页面"
+            echo "- 成功标准：真实标题/详情字段或有效分集数据；HTTP 200 空响应不算成功"
             echo
             echo '```text'
             cat "$RUNNER_TEMP/detail-probe/report.txt"
