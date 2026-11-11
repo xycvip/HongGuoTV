@@ -306,11 +306,13 @@ class PhoenixPlaybackSource(
             else -> null
         } ?: return null
         val list = model.opt("video_list")
-        val hasRows = when (list) {
-            is JSONObject -> list.length() > 0
-            is JSONArray -> list.length() > 0
-            else -> false
-        }
+        val hasRows = if (post) {
+            when (list) {
+                is JSONObject -> list.length() > 0
+                is JSONArray -> list.length() > 0
+                else -> false
+            }
+        } else list is JSONArray && list.length() > 0
         if (!hasRows && (!post || !model.has("fallback_api"))) return null
         return JSONObject().put("code", 0).put("data", JSONObject().put("video_model", model)).toString()
     }
