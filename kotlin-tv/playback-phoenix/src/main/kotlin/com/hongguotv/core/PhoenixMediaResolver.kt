@@ -18,6 +18,21 @@ internal object PhoenixMediaResolver {
         return extractFallbackUrl(model.opt("fallback_api"))
     }
 
+    fun needsCodecOverride(fallbackRaw: String): Boolean {
+        val root = runCatching { JSONObject(fallbackRaw) }.getOrNull() ?: return false
+        val videoInfo = root.optJSONObject("video_info")
+        val info = videoInfo?.optJSONObject("data")
+            ?: root.optJSONObject("data")
+            ?: videoInfo
+            ?: root
+        val offered = rows(info.opt("video_list")).map { it.second }.filter { it.str("main_url").isNotBlank() }
+        return offered.isNotEmpty() && offered.all { row ->
+            val meta = objectOrString(row.opt("video_meta"))
+            val codec = meta.str("codec_type").ifEmpty { row.str("codec_type") }.lowercase(Locale.ROOT)
+            codec in setOf("bytevc2", "bvc2")
+        }
+    }
+
     fun parse(raw: String, maxQuality: Int, fallbackRaw: String? = null, onDiagnostic: (String) -> Unit = {}): StreamInfo {
         // 诊断回调不得改变播放行为；只记录字段摘要，不记录完整URL或密钥。
         fun report(message: String) { runCatching { onDiagnostic(message) } }
