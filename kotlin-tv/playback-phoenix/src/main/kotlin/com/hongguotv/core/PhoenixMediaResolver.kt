@@ -94,7 +94,7 @@ internal object PhoenixMediaResolver {
         }
         val inlineUndeclaredEncryption = inlineRows.any { (_, item) ->
             val encryption = objectOrString(item.opt("encrypt_info"))
-            val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
+            val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
 
             spade.isBlank() && !encryption.has("encrypt")
         }
@@ -148,7 +148,7 @@ internal object PhoenixMediaResolver {
                 continue
             }
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
-            val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
+            val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
             val encrypted = (!declaredPlain(encryption) && encryption.has("encrypt")) || spade.isNotBlank()
             val key = if (spade.isNotBlank()) {
                 try { PhoenixSpade.deriveKey(spade) } catch (_: Exception) { null }
