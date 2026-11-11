@@ -94,116 +94,206 @@ class PhoenixPlaybackSource(
 
     fun resolve(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}"))) { "无效的分集 ID" }
-        emitDiagnostic("Phoenix：开始获取设备注册身份")
-        var identity = try {
-            session.profile(http)
-        } catch (error: java.io.InterruptedIOException) {
-            throw error
-        } catch (error: IOException) {
-            emitDiagnostic("Phoenix：设备注册/会话失败，异常类型=" + error.javaClass.simpleName)
-            throw error
-        }
-        emitDiagnostic("Phoenix：设备身份已就绪（身份字段已校验，敏感值不记录）")
-        // 与 GuoAPP 的 video_model/v1 请求结构保持一致；不混入 PhoenixReadApi
-        // 旧接口专属的 biz_param 字段。
-        val payload = JSONObject()
+        emitDiagnostic("Phoenix：按 OOIUa 流程注册匿名播放设备")
+        var identity = session.profile(http)
+        val singleBody = JSONObject()
             .put("video_id", id)
             .put("content_type", 1)
             .put("biz_param", JSONObject()
                 .put("need_all_video_definition", true)
                 .put("video_platform", 3))
-            .toString()
-            .toByteArray(Charsets.UTF_8)
+            .toString().toByteArray(Charsets.UTF_8)
 
-        val hosts = listOf("api5-normal-sinfonlineb.fqnovel.com")
-        var last: IOException? = null
-        var rotations = 0
-        for (host in hosts) {
-            while (true) {
-                RequestScope.ensureActive()
+        var primaryFailure: IOException? = null
+        try {
+            val values = java.util.TreeMap(VendorConstants.device).apply {
+                listOf("host_abi", "dragon_device_type", "pv_player", "compliance_status",
+                    "need_personal_recommend", "player_so_load", "is_android_pad_screen").forEach(::remove)
+                put("version_code", "73532")
+                put("manifest_version_code", "73532")
+                put("update_version_code", "73532")
+                put("version_name", "7.3.5.32")
+                put("device_id", identity.values["device_id"].orEmpty())
+                put("iid", identity.values["iid"].orEmpty())
+                put("_rticket", System.currentTimeMillis().toString())
+            }
+            if (values["device_id"].isNullOrBlank() || values["iid"].isNullOrBlank()) {
+                throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
+            }
+            val query = values.entries.joinToString("&") { (key, value) ->
+                java.net.URLEncoder.encode(key, "UTF-8").replace("+", "%20") + "=" +
+                    java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+            }
+            val url = "https://api5-normal-sinfonlineb.fqnovel.com/novel/player/video_model/v1/?$query"
+            val headers = PhoenixPlayerSigner.headers(
+                query, singleBody, identity.values["device_id"].orEmpty(),
+                values["_rticket"]!!.toLong(), VendorConstants.VIDEO_UA.replace("71332", "73532")
+            )
+            val request = Request.Builder().url(url).apply {
+                headers.forEach { (key, value) -> header(key, value) }
+                if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
+            }.post(singleBody.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
+            val raw = RequestScope.execute(http.newCall(request)) { response ->
+                if (response.code != 200) throw IOException("OOIUa 单集播放接口 HTTP \${response.code}")
+                val body = response.body ?: throw IOException("OOIUa 单集播放接口响应为空")
+                if (body.contentLength() > 16L * 1024 * 1024) throw IOException("播放响应过大")
+                val bytes = body.bytes()
+                if (bytes.size > 16 * 1024 * 1024) throw IOException("播放响应过大")
+                String(bytes, Charsets.UTF_8)
+            }
+            if (raw.isBlank()) throw IOException("OOIUa 单集播放接口返回空响应")
+            return resolveResponse(raw, maxQuality).also {
+                emitDiagnostic("Phoenix：OOIUa 单集主线路命中，清晰度=\${it.quality}")
+            }
+        } catch (error: java.io.InterruptedIOException) {
+            throw error
+        } catch (error: IOException) {
+            primaryFailure = error
+            emitDiagnostic("Phoenix：单集主线路失败，转入 OOIUa 备用播放阶梯")
+        }
+
+        val legacyFailure = tryLegacyRoutes(id, maxQuality, identity)
+        if (legacyFailure.first != null) return legacyFailure.first!!
+        throw legacyFailure.second ?: primaryFailure ?: IOException("Phoenix 播放接口暂不可用")
+    }
+
+    private fun tryLegacyRoutes(
+        id: String,
+        maxQuality: Int,
+        initialIdentity: PhoenixPlaybackDeviceSession.Profile
+    ): Pair<StreamInfo?, IOException?> {
+        data class Route(val post: Boolean, val host: String, val renewIdentity: Boolean)
+        val mainHost = "api5-normal-sinfonlineb.fqnovel.com"
+        val routes = listOf(
+            Route(false, mainHost, false),
+            Route(true, mainHost, false),
+            Route(false, mainHost, true),
+            Route(true, "api5-normal-hl.fqnovel.com", false)
+        )
+        val started = System.currentTimeMillis()
+        var identity = initialIdentity
+        var lastFailure: IOException? = null
+        val legacyBody = JSONObject()
+            .put("biz_param", JSONObject()
+                .put("detail_page_version", 0)
+                .put("device_level", 1)
+                .put("disable_digg_stat", false)
+                .put("need_all_video_definition", true)
+                .put("need_mp4_align", false)
+                .put("use_os_player", false)
+                .put("use_server_dns", false)
+                .put("video_platform", 1024))
+            .put("mixed_video_id_map", JSONObject().put("1004", JSONArray().put(id)))
+            .toString().toByteArray(Charsets.UTF_8)
+
+        for ((index, route) in routes.withIndex()) {
+            if (System.currentTimeMillis() - started >= 20_000L) break
+            RequestScope.ensureActive()
+            if (route.renewIdentity) {
                 try {
-                    // 使用当前注册会话的设备身份，版本及设备指纹统一取近期实测的 7.1.3.32 配置。
-                    val values = java.util.TreeMap(VendorConstants.device).apply {
-                        listOf("host_abi", "dragon_device_type", "pv_player", "compliance_status",
-                            "need_personal_recommend", "player_so_load", "is_android_pad_screen").forEach(::remove)
-                        put("version_code", "73532")
-                        put("manifest_version_code", "73532")
-                        put("update_version_code", "73532")
-                        put("version_name", "7.3.5.32")
-                        put("device_id", identity.values["device_id"].orEmpty())
-                        put("iid", identity.values["iid"].orEmpty())
-                    }
-                    if (values["device_id"].isNullOrBlank() || values["iid"].isNullOrBlank()) {
-                        throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
-                    }
-                    emitDiagnostic("Phoenix：正在生成播放请求签名，host=" + host)
-                    val now = System.currentTimeMillis()
-                    values["_rticket"] = now.toString()
-                    val query = values.entries.joinToString("&") { (key, value) ->
-                        java.net.URLEncoder.encode(key, "UTF-8").replace("+", "%20") + "=" +
-                            java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-                    }
-                    val url = "https://$host/novel/player/video_model/v1/?$query"
-                    val signedHeaders = PhoenixPlayerSigner.headers(
-                        query, payload, identity.values["device_id"].orEmpty(), now,
-                        VendorConstants.VIDEO_UA.replace("71332", "73532")
-                    )
-                    emitDiagnostic("Phoenix：请求签名完成，开始发送 video_model/v1 POST")
-                    val request = Request.Builder()
-                        .url(url)
-                        .apply {
-                            signedHeaders.forEach { (key, value) -> header(key, value) }
-                            if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
-                        }
-                        .post(payload.toRequestBody("application/json; charset=UTF-8".toMediaType()))
-                        .build()
-                    data class ResponseBody(val raw: String, val status: Int, val contentType: String, val size: Int)
-                    val result = RequestScope.execute(http.newCall(request)) { response ->
-                        val body = response.body
-                        val bytes = body?.bytes() ?: ByteArray(0)
-                        if (bytes.size > 16 * 1024 * 1024) throw IOException("Phoenix 播放响应过大")
-                        ResponseBody(
-                            String(bytes, Charsets.UTF_8),
-                            response.code,
-                            response.header("Content-Type").orEmpty(),
-                            bytes.size
-                        )
-                    }
-                    emitDiagnostic("Phoenix：播放接口响应 HTTP " + result.status + "，Content-Type=" + result.contentType.take(60) + "，正文=" + result.size + " bytes")
-                    if ((result.size == 0 || result.status == 403) && rotations < 2) {
-                        rotations++
-                        emitDiagnostic("Phoenix：响应为空或 403，执行第 " + rotations + " 次设备会话轮换")
-                        identity = session.renew(http)
-                        emitDiagnostic("Phoenix：设备会话轮换完成")
-                        continue
-                    }
-                    if (result.status !in 200..299) {
-                        throw IOException("Phoenix 播放接口 HTTP ${result.status}，Content-Type=${result.contentType.take(80)}，正文长度=${result.size}")
-                    }
-                    if (result.raw.isBlank()) {
-                        throw IOException("Phoenix 播放接口返回空正文（HTTP ${result.status}，Content-Type=${result.contentType.take(80)}）")
-                    }
-                    return try {
-                        resolveResponse(result.raw, maxQuality).also { emitDiagnostic("Phoenix：播放模型解析成功，清晰度=" + it.quality + "，MIME=" + it.mimeType) }
-                    } catch (error: IOException) {
-                        val preview = result.raw
-                            .replace(Regex("[\\r\\n\\t]+"), " ")
-                            .take(180)
-                        throw IOException(
-                            "${error.message}；HTTP=${result.status}，Content-Type=${result.contentType.take(80)}，正文长度=${result.size}，响应摘要=${preview}",
-                            error
-                        )
-                    }
+                    identity = session.renew(http)
                 } catch (error: java.io.InterruptedIOException) {
                     throw error
                 } catch (error: IOException) {
-                    last = error
-                    emitDiagnostic("Phoenix：host=" + host + " 请求失败，异常类型=" + error.javaClass.simpleName)
-                    break
+                    lastFailure = error
                 }
             }
+            try {
+                val values = linkedMapOf<String, String>().apply {
+                    putAll(VendorConstants.device)
+                    put("device_id", identity.values["device_id"].orEmpty())
+                    put("iid", identity.values["iid"].orEmpty())
+                    put("version_code", "73932")
+                    put("manifest_version_code", "73932")
+                    put("update_version_code", "73932")
+                    put("pv_player", "73932")
+                    put("version_name", "7.3.9.32")
+                    put("cdid", identity.values["cdid"].orEmpty())
+                    if (!route.post) {
+                        put("video_id", id)
+                        put("video_id_type", "0")
+                        put("device_level", "1")
+                        put("need_all_video_definition", "1")
+                        put("need_mp4_align", "0")
+                        put("use_os_player", "0")
+                        put("video_platform", "1024")
+                        put("source", "0")
+                        put("from_video_id", "")
+                    }
+                }
+                val base = if (route.post) {
+                    "https://\${route.host}/novel/player/multi_video_model/v1/"
+                } else {
+                    "https://\${route.host}/reading/bookapi/video_tab/multi_video_model/v1/"
+                }
+                val body = if (route.post) legacyBody else null
+                val signed = PhoenixLegacySigner().signPlayback(base, values, body, PLAYBACK_UA)
+                val builder = Request.Builder().url(signed.url)
+                signed.headers.forEach { (key, value) -> builder.header(key, value) }
+                if (identity.cookie.isNotBlank()) builder.header("Cookie", identity.cookie)
+                val request = if (body == null) builder.get().build()
+                    else builder.post(body.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
+                val raw = RequestScope.execute(http.newCall(request)) { response ->
+                    if (response.code != 200) throw IOException("OOIUa 备用播放线路 HTTP \${response.code}")
+                    val responseBody = response.body ?: throw IOException("备用播放响应为空")
+                    if (responseBody.contentLength() > 16L * 1024 * 1024) throw IOException("备用播放响应过大")
+                    val bytes = responseBody.bytes()
+                    if (bytes.size > 16 * 1024 * 1024) throw IOException("备用播放响应过大")
+                    String(bytes, Charsets.UTF_8)
+                }
+                val normalized = normalizeLegacyResponse(raw, id, route.post) ?: run {
+                    lastFailure = IOException("OOIUa 备用线路未返回本集有效 video_model")
+                    continue
+                }
+                return try {
+                    resolveResponse(normalized, maxQuality) to null
+                } catch (error: java.io.InterruptedIOException) {
+                    throw error
+                } catch (error: IOException) {
+                    lastFailure = error
+                    emitDiagnostic("Phoenix：备用线路 \${index + 1} 模型解析失败，继续下一线路")
+                    continue
+                }
+            } catch (error: java.io.InterruptedIOException) {
+                throw error
+            } catch (error: IOException) {
+                lastFailure = error
+                emitDiagnostic("Phoenix：OOIUa 备用线路 \${index + 1} 请求失败")
+            }
         }
-        throw last ?: IOException("Phoenix 播放接口暂不可用")
+        return null to lastFailure
+    }
+
+    private fun normalizeLegacyResponse(raw: String, id: String, post: Boolean): String? {
+        val root = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+        val code = root.optInt("code", root.optInt("Code", -1))
+        if (code != 0) return null
+        val data = root.optJSONObject("data") ?: return null
+        val rawModel = if (post) {
+            val row = data.optJSONObject(id)
+            row?.opt("video_model") ?: data.opt("video_model")
+        } else {
+            val rows = data.optJSONObject("video_model_data") ?: return null
+            rows.optJSONObject(id)?.opt("video_model")
+        } ?: return null
+        val model = when (rawModel) {
+            is JSONObject -> rawModel
+            is String -> runCatching { JSONObject(rawModel) }.getOrNull()
+            else -> null
+        } ?: return null
+        val list = model.opt("video_list")
+        val hasRows = when (list) {
+            is JSONObject -> list.length() > 0
+            is JSONArray -> list.length() > 0
+            else -> false
+        }
+        if (!hasRows && !model.has("fallback_api")) return null
+        return JSONObject().put("code", 0).put("data", JSONObject().put("video_model", model)).toString()
+    }
+
+    companion object {
+        private const val PLAYBACK_UA =
+            "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)"
     }
 
     /**
