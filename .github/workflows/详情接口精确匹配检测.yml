@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   detail-probe:
-    name: 检测《永昼赴星光》详情接口
+    name: 横向检测多仓库详情接口（特殊剧 + 正常剧对照）
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -36,16 +36,16 @@ jobs:
           chmod +x ./gradlew
           mkdir -p "$RUNNER_TEMP/detail-probe"
           set +e
-          ./gradlew --no-daemon --stacktrace :core:run --args="--detail-probe --keyword 永昼赴星光" 2>&1 | tee "$RUNNER_TEMP/detail-probe/report.txt"
+          ./gradlew --no-daemon --stacktrace :core:run --args="--detail-probe --keyword 永昼赴星光 --control-id 7615470177953532990" 2>&1 | tee "$RUNNER_TEMP/detail-probe/report.txt"
           STATUS=${PIPESTATUS[0]}
           set -e
           echo "gradle_exit_code=$STATUS" >> "$GITHUB_STEP_SUMMARY"
           {
-            echo "## 《永昼赴星光》详情接口检测"
+            echo "## 红果详情接口横向兼容性检测"
             echo
             echo "- 目标片名：永昼赴星光"
             echo "- 匹配规则：标题必须逐字完全一致，不接受相似标题"
-            echo "- 检测接口：Phoenix App video_detail/v1、hongguoduanju.com 网站 SSR 详情"
+            echo "- 特殊剧：永昼赴星光（先从搜索结果中逐字匹配真实 series_id）"\n            echo "- 正常剧对照 ID：7615470177953532990"\n            echo "- 检测接口：Phoenix 单剧详情、普通批量详情、预加载详情、播放器场景详情、dynamic_data/detail 场景、官网 /detail 与 /player 页面"\n            echo "- 成功标准：真实标题/详情字段或有效分集数据；HTTP 200 空响应不算成功"
             echo
             echo '```text'
             cat "$RUNNER_TEMP/detail-probe/report.txt"
@@ -61,7 +61,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: 永昼赴星光-详情接口检测报告
+          name: 红果详情接口横向兼容性检测报告
           path: |
             kotlin-tv/detail-probe-report.txt
             ${{ runner.temp }}/detail-probe/report.txt
