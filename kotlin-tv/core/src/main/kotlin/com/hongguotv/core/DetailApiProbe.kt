@@ -111,8 +111,14 @@ internal object DetailApiProbe {
             val title = firstText(detail, "series_title", "series_name", "title", "name")
             val episodes = episodeCount(detail)
             val exact = expectedTitle.isBlank() || kind == "CONTROL" || title == expectedTitle
-            val usable = title.isNotBlank() || episodes > 0
-            println("ENDPOINT|name=${endpoint.label}|kind=$kind|id=$sid|status=HTTP_${result.first}|code=$code|bytes=${result.second.size}|title=${safe(title)}|exact=${if(exact) "YES" else "NO"}|episodes=$episodes|usable=$usable|ms=${System.currentTimeMillis()-started}")
+            val classification = when {
+                title.isNotBlank() && episodes > 0 -> "FULL_DETAIL"
+                title.isNotBlank() -> "METADATA_ONLY"
+                episodes > 0 -> "EPISODES_ONLY"
+                else -> "NO_DETAIL"
+            }
+            val fields = detail.keys().asSequence().toList().sorted().joinToString(",")
+            println("ENDPOINT|name=${endpoint.label}|kind=$kind|id=$sid|status=HTTP_${result.first}|code=$code|bytes=${result.second.size}|title=${safe(title)}|exact=${if(exact) "YES" else "NO"}|episodes=$episodes|episodeCnt=${detail.optInt("episode_cnt", 0)}|class=$classification|fields=${safe(fields)}|ms=${System.currentTimeMillis()-started}")
         } catch (error: Throwable) {
             val cause = error.cause ?: error
             println("ENDPOINT|name=${endpoint.label}|kind=$kind|id=$sid|status=FAILED|reason=${safe(cause.message ?: cause.javaClass.simpleName)}|ms=${System.currentTimeMillis()-started}")
@@ -139,7 +145,8 @@ internal object DetailApiProbe {
             val title = firstText(detail, "series_name", "series_title", "title", "name")
             val episodes = episodeCount(detail)
             val exact = expectedTitle.isBlank() || kind == "CONTROL" || title == expectedTitle
-            println("ENDPOINT|name=$label|kind=$kind|id=$sid|status=HTTP_200_ROUTER|bytes=${html.toByteArray().size}|title=${safe(title)}|exact=${if(exact) "YES" else "NO"}|episodes=$episodes|usable=${title.isNotBlank() && episodes>0}|ms=${System.currentTimeMillis()-started}")
+            val classification = if (title.isNotBlank() && episodes > 0) "FULL_DETAIL" else if (title.isNotBlank()) "METADATA_ONLY" else "NO_DETAIL"
+            println("ENDPOINT|name=$label|kind=$kind|id=$sid|status=HTTP_200_ROUTER|bytes=${html.toByteArray().size}|title=${safe(title)}|exact=${if(exact) "YES" else "NO"}|episodes=$episodes|class=$classification|ms=${System.currentTimeMillis()-started}")
         } catch (error: Throwable) {
             val cause = error.cause ?: error
             println("ENDPOINT|name=$label|kind=$kind|id=$sid|status=FAILED|reason=${safe(cause.message ?: cause.javaClass.simpleName)}|ms=${System.currentTimeMillis()-started}")
@@ -151,7 +158,13 @@ internal object DetailApiProbe {
         val title = firstText(detail, "series_title", "series_name", "title", "name")
         val episodes = episodeCount(detail)
         val exact = expectedTitle.isBlank() || kind == "CONTROL" || title == expectedTitle
-        println("ENDPOINT|name=$name|kind=$kind|id=$sid|status=JSON_DATA|title=${safe(title)}|exact=${if(exact) "YES" else "NO"}|episodes=$episodes|usable=${title.isNotBlank() || episodes>0}|ms=$elapsed")
+        val classification = when {
+            title.isNotBlank() && episodes > 0 -> "FULL_DETAIL"
+            title.isNotBlank() -> "METADATA_ONLY"
+            episodes > 0 -> "EPISODES_ONLY"
+            else -> "NO_DETAIL"
+        }
+        println("ENDPOINT|name=$name|kind=$kind|id=$sid|status=JSON_DATA|title=${safe(title)}|exact=${if(exact) "YES" else "NO"}|episodes=$episodes|episodeCnt=${detail.optInt("episode_cnt", 0)}|class=$classification|fields=${safe(detail.keys().asSequence().toList().sorted().joinToString(","))}|ms=$elapsed")
     }
 
     private fun episodeCount(o: JSONObject): Int {
