@@ -155,11 +155,20 @@ object MediaCrypto {
         var trackCount = 0
         var encryptedTrackCount = 0
         var totalSamples = 0L
+        val trackIds = mutableSetOf<Long>()
         while (cursor < moov.end) {
             val track = box(data, cursor, moov.end) ?: throw IOException("MP4 轨道结构损坏")
             cursor = track.end
             if (track.type != "trak") continue
             if (++trackCount > 8) throw IOException("MP4 轨道数量异常")
+            val tkhd = directChild(data, track, "tkhd") ?: throw IOException("MP4 缺少 tkhd")
+            if (tkhd.body + 4 > tkhd.end) throw IOException("MP4 tkhd 截断")
+            val tkhdVersion = data[tkhd.body].u()
+            if (tkhdVersion > 1 || tkhd.body + (if (tkhdVersion == 1) 24 else 16) > tkhd.end) {
+                throw IOException("MP4 tkhd 格式异常")
+            }
+            val trackId = data.u32(tkhd.body + if (tkhdVersion == 1) 20 else 12)
+            if (trackId == 0L || !trackIds.add(trackId)) throw IOException("MP4 轨道 ID 无效或重复")
             val mdia = directChild(data, track, "mdia") ?: throw IOException("MP4 缺少 mdia")
             val hdlr = directChild(data, mdia, "hdlr") ?: throw IOException("MP4 缺少 hdlr")
             if (hdlr.body + 12 > hdlr.end) throw IOException("MP4 hdlr 截断")
@@ -171,12 +180,18 @@ object MediaCrypto {
             if (stsd.body + 8 > stsd.end || data.u32(stsd.body + 4) != 1L) throw IOException("MP4 sample description 不受支持")
             val entry = box(data, stsd.body + 8, stsd.end) ?: throw IOException("MP4 sample entry 损坏")
             if (entry.end != stsd.end) throw IOException("MP4 sample description 数量异常")
+            for (groupType in listOf("sgpd", "sbgp")) {
+                val group = directChild(data, stbl, groupType) ?: continue
+                if (group.body + 8 > group.end) throw IOException("MP4 sample group 截断")
+                val grouping = String(data, group.body + 4, 4, Charsets.US_ASCII)
+                if (grouping != "roll" && grouping != "prol") throw IOException("不支持 CENC sample group：$grouping")
+            }
             val senc = directChild(data, stbl, "senc")
             val saiz = directChild(data, stbl, "saiz")
             val saio = directChild(data, stbl, "saio")
             val protected = entry.type == "encv" || entry.type == "enca"
             if (!protected) {
-                if (senc != null || saiz != null || saio != null) throw IOException("明文轨道包含 CENC 辅助索引")
+                if (senc != null || saiz != null || saio != null || directChildRange(data, entry.body + (if (entry.type in setOf("avc1", "avc3", "hvc1", "hev1", "av01", "mp4v", "vp08", "vp09", "dvav", "dva1")) 78 else 28), entry.end, "sinf") != null) throw IOException("明文轨道包含 CENC 辅助索引")
                 continue
             }
             if ((handler == "vide") != (entry.type == "encv")) throw IOException("受保护 sample entry 与轨道类型不匹配")
@@ -204,6 +219,15 @@ object MediaCrypto {
             val ivBytes = senc.end - senc.body - 8
             if (ivBytes != sencCount * 8L && ivBytes != sencCount * 16L) throw IOException("CENC IV 长度与数量不匹配")
             val ivSize = (ivBytes / sencCount).toInt()
+            val schi = directChild(data, sinf, "schi")
+            val tenc = schi?.let { directChild(data, it, "tenc") }
+            if (tenc != null) {
+                if (tenc.body + 5 > tenc.end) throw IOException("CENC tenc 截断")
+                val tencVersion = data[tenc.body].u()
+                if (tencVersion > 1) throw IOException("CENC tenc 版本不支持")
+                val declaredIvSize = data[tenc.body + if (tencVersion == 1) 9 else 4].u()
+                if (declaredIvSize != 0 && declaredIvSize != ivSize) throw IOException("CENC IV 长度与 tenc 声明不一致")
+            }
 
             val stsz = directChild(data, stbl, "stsz") ?: throw IOException("MP4 缺少 stsz")
             if (stsz.body + 12 > stsz.end) throw IOException("MP4 stsz 截断")
@@ -275,6 +299,13 @@ object MediaCrypto {
             if (saiz != null) "free".toByteArray(Charsets.US_ASCII).copyInto(header, saiz.start + 4)
             if (saio != null) "free".toByteArray(Charsets.US_ASCII).copyInto(header, saio.start + 4)
             encryptedTrackCount++
+        }
+        // OOIUa removes any PSSH declarations while preserving every byte and offset.
+        var moovChildAt = moov.body
+        while (moovChildAt < moov.end) {
+            val child = box(data, moovChildAt, moov.end) ?: throw IOException("MP4 moov 子框损坏")
+            if (child.type == "pssh") "free".toByteArray(Charsets.US_ASCII).copyInto(header, child.start + 4)
+            moovChildAt = child.end
         }
         if (trackCount == 0 || encryptedTrackCount == 0 || samples.none { it.isVideo }) {
             throw IOException("MP4 没有可验证的 CENC 视频轨")
