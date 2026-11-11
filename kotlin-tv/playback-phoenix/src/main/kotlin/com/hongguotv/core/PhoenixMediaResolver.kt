@@ -68,16 +68,36 @@ internal object PhoenixMediaResolver {
             source.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
         )
         val fallbackRows = fallbackCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
-        // OOIUa 优先使用 video_model 内联片源；只有内联缺失时才读取 fallback_api。
-        val rows = inlineRows.ifEmpty { fallbackRows }
+        val inlineOnlyByteVc2 = inlineRows.isNotEmpty() && inlineRows.all { (_, item) ->
+            val meta = objectOrString(item.opt("video_meta"))
+            val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.lowercase(Locale.ROOT)
+            codec in setOf("bytevc2", "bvc2") || item.str("gear_des_key").contains("bytevc2", true)
+        }
+        val inlineUndeclaredEncryption = inlineRows.any { (_, item) ->
+            val encryption = objectOrString(item.opt("encrypt_info"))
+            val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
+                .ifEmpty { objectOrString(item.opt("video_meta")).str("spade_a") }
+            spade.isBlank() && !encryption.has("encrypt") && !item.has("encrypt")
+        }
+        val referenceId = model.str("video_id").trim()
+        val referenceDuration = model.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
+        val fallbackId = source.str("video_id").trim()
+        val fallbackDuration = source.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
+        val verifiedUndeclaredFallback = inlineUndeclaredEncryption && fallbackRows.isNotEmpty() &&
+            referenceId.isNotEmpty() && fallbackId == referenceId &&
+            referenceDuration > 0.0 && fallbackDuration > 0.0 &&
+            kotlin.math.abs(referenceDuration - fallbackDuration) <= 0.5
+        // OOIUa 优先内联；仅在内联缺失、全为 ByteVC2，或未声明加密且备用模型身份/时长通过校验时使用 fallback。
+        val useFallbackRows = inlineRows.isEmpty() ||
+            (fallbackRows.isNotEmpty() && (inlineOnlyByteVc2 || verifiedUndeclaredFallback))
+        val rows = if (useFallbackRows) fallbackRows else inlineRows
         if (rows.isEmpty()) throw IOException("Phoenix 未返回视频清晰度（fallback_api=${!fallbackRaw.isNullOrBlank()}）")
         report("Phoenix资源筛选：发现 ${rows.size} 项候选，数据来源=${if (!fallbackRaw.isNullOrBlank()) "fallback" else "video_model"}")
         // key_seed 在不同版本中可能位于 fallback 的顶层、video_info 或 video_info.data。
         // 逐层查找，避免 URL 已经拿到、却因密钥字段层级变化而把加密媒体误当成普通 MP4。
         val seedText = sequenceOf(
-            if (inlineRows.isNotEmpty()) model.str("key_seed") else source.str("key_seed"),
-            if (inlineRows.isNotEmpty()) data.str("key_seed") else "",
-            fallbackVideoInfo?.str("key_seed").orEmpty(),
+            if (useFallbackRows) source.str("key_seed") else model.str("key_seed"),
+            if (useFallbackRows) fallbackVideoInfo?.str("key_seed").orEmpty() else data.str("key_seed"),
             fallbackRoot?.str("key_seed").orEmpty(),
             model.str("key_seed"),
             data.str("key_seed")
