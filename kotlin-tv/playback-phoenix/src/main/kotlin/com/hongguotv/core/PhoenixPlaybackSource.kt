@@ -343,11 +343,20 @@ class PhoenixPlaybackSource(
                 String(bytes, Charsets.UTF_8)
             }
         }
-        var fallbackRaw = if (fallbackUrl.startsWith("https://") || fallbackUrl.startsWith("http://")) {
-            fetchFallback(fallbackUrl)
+        val shouldFetchFallback = PhoenixMediaResolver.needsFallback(raw)
+        var fallbackRaw = if (shouldFetchFallback &&
+            (fallbackUrl.startsWith("https://") || fallbackUrl.startsWith("http://"))) {
+            try {
+                fetchFallback(fallbackUrl)
+            } catch (error: java.io.InterruptedIOException) {
+                throw error
+            } catch (error: IOException) {
+                emitDiagnostic("Phoenix：fallback_api 请求失败，按 OOIUa 规则继续检查内联片源")
+                null
+            }
         } else null
         // OOIUa tries codec_type=1 first, then the older force_codec=h264 override.
-        if (fallbackUrl.startsWith("https://") && !fallbackRaw.isNullOrBlank() &&
+        if (shouldFetchFallback && fallbackUrl.startsWith("https://") && !fallbackRaw.isNullOrBlank() &&
             PhoenixMediaResolver.needsCodecOverride(fallbackRaw!!)) {
             for (codecQuery in listOf("codec_type=1", "codec_type=0&force_codec=h264")) {
                 try {
