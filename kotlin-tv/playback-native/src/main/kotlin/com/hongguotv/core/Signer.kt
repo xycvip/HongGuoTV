@@ -18,7 +18,7 @@ class Signer(
         .encodeToString(ByteArray(18).also(java.security.SecureRandom()::nextBytes)),
 ) {
     /** Backward-compatible device-first constructor used by existing core repositories. */
-    constructor(device: Map<String, String>) : this(device = device)
+    constructor(device: Map<String, String>) : this(clock = System::currentTimeMillis, device = device, random = Math::random)
 
     private val processStarted: Long = clock()
     data class Request(val url: String, val headers: Map<String, String>, val body: ByteArray?)
