@@ -6,7 +6,7 @@ import java.math.BigInteger
 
 object MediaCrypto {
     data class Sample(val start: Long, val end: Long, val iv: ByteArray, val encryptedOffset: Long = 0, val isVideo: Boolean = false, val sampleIndex: Int = 0)
-    data class Prepared(val header: ByteArray, val samples: List<Sample>)
+    data class Prepared(val header: ByteArray, val samples: List<Sample>, val headerStart: Long = 0)
     fun deriveKey(value: String): ByteArray {
         val raw=decode64(value); require(raw.size>=3) { "内容密钥格式异常" }
         val length=minOf(raw.size-(raw[0].u() xor raw[1].u() xor raw[2].u())+47,raw.size-1)
@@ -45,12 +45,12 @@ object MediaCrypto {
         if(size<8 || end>total || end>16*1024*1024) throw IOException("视频索引大小异常")
         return end.toInt()
     }
-    fun prepare(data: ByteArray,key: ByteArray?, requireOoiUaMp4Validation: Boolean = false): Prepared {
+    fun prepare(data: ByteArray,key: ByteArray?, requireOoiUaMp4Validation: Boolean = false, moovStart: Long = 0): Prepared {
         if(key==null) {
             if(requireOoiUaMp4Validation) inspectPlainMp4(data)
-            return Prepared(data.copyOf(),emptyList())
+            return Prepared(data.copyOf(),emptyList(), if (requireOoiUaMp4Validation) moovStart else 0)
         }
-        if(requireOoiUaMp4Validation) return prepareSencCenc(data, key)
+        if(requireOoiUaMp4Validation) return prepareSencCenc(data, key, moovStart)
         val moov=box(data,data.u32(0).toInt()) ?: throw IOException("视频索引不完整")
         require(moov.type=="moov")
         val samples=mutableListOf<Sample>(); val header=data.copyOf()
@@ -141,11 +141,9 @@ object MediaCrypto {
      * senc per-sample IV encryption with full-sample AES-CTR (flags == 0).
      * Unsupported subsample/pattern layouts are rejected instead of guessed.
      */
-    private fun prepareSencCenc(data: ByteArray, key: ByteArray): Prepared {
+    private fun prepareSencCenc(data: ByteArray, key: ByteArray, moovStart: Long): Prepared {
         if (key.size != 16) throw IOException("CENC 内容密钥长度无效")
-        val ftyp = box(data, 0) ?: throw IOException("MP4 文件头无效")
-        if (ftyp.type != "ftyp") throw IOException("MP4 缺少 ftyp")
-        val moov = box(data, ftyp.end) ?: throw IOException("MP4 索引不完整")
+        val moov = box(data, 0) ?: throw IOException("MP4 索引不完整")
         if (moov.type != "moov" || moov.end != data.size || moov.end > 16 * 1024 * 1024) {
             throw IOException("CENC MP4 索引布局不受支持")
         }
@@ -321,7 +319,7 @@ object MediaCrypto {
         }
         val sorted = samples.sortedBy { it.start }
         if (sorted.zipWithNext().any { it.first.end > it.second.start }) throw IOException("MP4 加密样本重叠")
-        return Prepared(header, sorted)
+        return Prepared(header, sorted, moovStart)
     }
 
     /** Validate the same bounded ISO-BMFF box tree accepted by OOIUa Mp4Progressive. */
@@ -416,9 +414,7 @@ object MediaCrypto {
      * This opt-in check is only enabled by the Phoenix source; N keeps the old path.
      */
     private fun inspectPlainMp4(data: ByteArray) {
-        val ftyp = box(data, 0) ?: throw IOException("明文 MP4 文件头无效")
-        if (ftyp.type != "ftyp") throw IOException("明文 MP4 缺少 ftyp")
-        val moov = box(data, ftyp.end) ?: throw IOException("明文 MP4 索引不完整")
+        val moov = box(data, 0) ?: throw IOException("明文 MP4 索引不完整")
         if (moov.type != "moov" || moov.end != data.size || moov.end - moov.start > 16 * 1024 * 1024) {
             throw IOException("明文 MP4 索引布局不受支持")
         }
@@ -595,7 +591,18 @@ object MediaCrypto {
     fun decrypt(data: ByteArray,start: Long,key: ByteArray?,prepared: Prepared): ByteArray {
         require(start>=0)
         val result=data.copyOf(); val end=start+data.size
-        if(start<prepared.header.size) prepared.header.copyInto(result,0,start.toInt(),minOf(end,prepared.header.size.toLong()).toInt())
+        val headerStart = prepared.headerStart
+        val headerEnd = headerStart + prepared.header.size
+        val copyStart = maxOf(start, headerStart)
+        val copyEnd = minOf(end, headerEnd)
+        if (copyStart < copyEnd) {
+            prepared.header.copyInto(
+                result,
+                (copyStart - start).toInt(),
+                (copyStart - headerStart).toInt(),
+                (copyEnd - headerStart).toInt()
+            )
+        }
         if(key==null) return result
         val samples=prepared.samples
         var low=0; var high=samples.size
