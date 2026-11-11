@@ -158,7 +158,7 @@ internal object PhoenixMediaResolver {
                 .filterIsInstance<String>().filter(String::isNotBlank) +
                 stringValues(item.opt("backup_url_list"))
             if (rawUrls.isEmpty()) report("Phoenix资源#$name：拒绝，原因=没有可识别的媒体URL字段")
-            for (rawUrl in rawUrls.distinct()) {
+            for (rawUrl in rawUrls) {
                 val cleaned = cleanUrl(rawUrl)
                 val url = if (seed != null) {
                     try { MediaCrypto.decryptUrl(cleaned, seed) }
@@ -286,7 +286,6 @@ internal object PhoenixMediaResolver {
     }
 
     private fun stringValues(value: Any?): List<String> = when (value) {
-        is String -> listOf(value)
         is JSONArray -> (0 until value.length()).mapNotNull { value.optString(it).takeIf(String::isNotBlank) }
         else -> emptyList()
     }
@@ -304,8 +303,7 @@ internal object PhoenixMediaResolver {
 
     private fun normalizeUrl(value: String): String {
         val text = value.trim()
-        if (text.startsWith("https://") || text.startsWith("http://")) return text
-        return runCatching { String(decode64(text), Charsets.UTF_8).trim() }.getOrDefault("")
+        return text.takeIf { it.startsWith("https://") || it.startsWith("http://") }.orEmpty()
     }
 
     private fun qualityNumber(value: String): Int =
