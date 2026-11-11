@@ -528,6 +528,21 @@ class ContentRepositoryTest {
         assertEquals(9.2, detail.social.rating, 0.01)
     }
 
+    @Test fun detailAcceptsPhoenixObjectShapedVideoList() {
+        val repo = repository {
+            """{"code":0,"data":{"video_data":{
+                "series_id":"123","series_name":"对象分集剧","episode_cnt":2,
+                "video_list":{
+                    "first":{"vid":"9101","vid_index":1,"title":"第一集"},
+                    "second":{"vid":"9102","vid_index":2,"title":"第二集"}
+                }
+            }}}"""
+        }
+        val detail = repo.detail("123")
+        assertEquals(listOf("9101","9102"), detail.episodes)
+        assertEquals(listOf(1,2), detail.episodeDetails.map { it.number })
+    }
+
     @Test fun detailFallsBackToWebsiteWhenPhoenixAppDetailIsUnusable() {
         val paths = mutableListOf<String>()
         val html = """<script>_ROUTER_DATA={"loaderData":{"detail_page":{"seriesDetail":{"series_id":"123","series_name":"网页兜底剧","vid_list":["900"]}}}};</script>"""
