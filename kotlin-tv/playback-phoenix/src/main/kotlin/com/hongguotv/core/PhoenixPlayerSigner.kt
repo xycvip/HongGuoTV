@@ -39,22 +39,8 @@ internal object PhoenixPlayerSigner {
         userAgent: String
     ): Map<String, String> {
         val timestamp = (nowMs / 1000L).toInt()
-        val queryHash = digest("MD5", query.toByteArray(Charsets.UTF_8))
         val bodyHash = digest("MD5", body)
-        val payload = ByteArray(20)
-        queryHash.copyOfRange(0, 4).copyInto(payload, 0)
-        bodyHash.copyOfRange(0, 4).copyInto(payload, 4)
-        payload[12] = 0
-        payload[13] = 6
-        payload[14] = 11
-        payload[15] = 28
-        be32(timestamp).copyInto(payload, 16)
-        for (i in payload.indices) payload[i] = (payload[i].u() xor requestKey[i].u()).toByte()
-        for (i in payload.indices) {
-            val mixed = rotateLeft(payload[i], 4).u() xor payload[(i + 1) % payload.size].u()
-            payload[i] = (reverseBits(mixed.toByte()).u() xor 0xff xor payload.size).toByte()
-        }
-        val gorgon = (hex("8404401c0000") + payload).hex()
+        val gorgon = gorgon(query, body, timestamp)
         val nonce = ByteArray(11).also(random::nextBytes)
         val aid = queryValue(query, "aid").ifBlank { "8662" }
         return linkedMapOf(
@@ -71,7 +57,26 @@ internal object PhoenixPlayerSigner {
         )
     }
 
-    private fun playerArgus(query: String, body: ByteArray, timestamp: Int, deviceId: String, nonce: ByteArray): String {
+    internal fun gorgon(query: String, body: ByteArray, timestamp: Int): String {
+        val queryHash = digest("MD5", query.toByteArray(Charsets.UTF_8))
+        val bodyHash = digest("MD5", body)
+        val payload = ByteArray(20)
+        queryHash.copyOfRange(0, 4).copyInto(payload, 0)
+        bodyHash.copyOfRange(0, 4).copyInto(payload, 4)
+        payload[12] = 0
+        payload[13] = 6
+        payload[14] = 11
+        payload[15] = 28
+        be32(timestamp).copyInto(payload, 16)
+        for (i in payload.indices) payload[i] = (payload[i].u() xor requestKey[i].u()).toByte()
+        for (i in payload.indices) {
+            val mixed = rotateLeft(payload[i], 4).u() xor payload[(i + 1) % payload.size].u()
+            payload[i] = (reverseBits(mixed.toByte()).u() xor 0xff xor payload.size).toByte()
+        }
+        return (hex("8404401c0000") + payload).hex()
+    }
+
+    internal fun playerArgus(query: String, body: ByteArray, timestamp: Int, deviceId: String, nonce: ByteArray): String {
         val bodyHash = sm3(digest("MD5", body))
         val queryHash = sm3(query.toByteArray(Charsets.UTF_8))
         val message = ByteArrayOutputStreamCompat().apply {
@@ -134,7 +139,7 @@ internal object PhoenixPlayerSigner {
         return (byteArrayOf(0x3c, 0xcc.toByte()) + cipher.doFinal(encryptedInput)).base64()
     }
 
-    private fun playerLadon(aid: String, timestamp: Int, prefix: ByteArray): String {
+    internal fun playerLadon(aid: String, timestamp: Int, prefix: ByteArray): String {
         val md5Ascii = digest("MD5", prefix + aid.toByteArray(Charsets.UTF_8)).hex().toByteArray(Charsets.US_ASCII)
         var num = readLongLE(md5Ascii, 0)
         var value = readLongLE(md5Ascii, 8)
