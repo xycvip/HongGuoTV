@@ -164,7 +164,7 @@ internal object PhoenixMediaResolver {
             val height = qualityNumber(definition).takeIf { it > 0 }
                 ?: reportedHeight.takeIf { it > 0 }
             val mime = meta.str("mime_type").ifEmpty { item.str("mime_type") }.ifEmpty { "unknown" }
-            report("Phoenix资源#$name：开始筛选 codec=$codec，mime=$mime，definition=${definition.ifBlank { "unknown" }}，height=${height.takeIf { it > 0 } ?: "unknown"}")
+            report("Phoenix资源#$name：开始筛选 codec=$codec，mime=$mime，definition=${definition.ifBlank { "unknown" }}，height=${height?.takeIf { it > 0 } ?: "unknown"}")
             if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) {
                 unsupportedSkipped++
                 report("Phoenix资源#$name：拒绝，原因=不支持的编码($codec)")
@@ -214,7 +214,7 @@ internal object PhoenixMediaResolver {
                     continue
                 }
                 candidates += Candidate(
-                    height, codec, url, key, reportedWidth, reportedHeight, shortSide,
+                    height ?: 0, codec, url, key, reportedWidth, reportedHeight, shortSide,
                     true
                 )
                 val safeHost = runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
@@ -368,7 +368,7 @@ internal object PhoenixMediaResolver {
     private fun rows(value: Any?): List<Pair<String, JSONObject>> = when (value) {
         // Keep the source object's iteration order, matching OOIUa map-value traversal.
         is JSONObject -> value.keys().asSequence()
-            .mapNotNull { key -> value.optJSONObject(key)?.let { key to it } }
+            .mapNotNull { key -> value.optJSONObject(key)?.let { key to it } }.toList()
         is JSONArray -> (0 until value.length()).mapNotNull { i -> value.optJSONObject(i)?.let { i.toString() to it } }
         else -> emptyList()
     }
