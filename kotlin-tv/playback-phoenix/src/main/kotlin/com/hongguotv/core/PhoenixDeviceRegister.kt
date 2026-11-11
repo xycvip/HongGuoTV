@@ -57,6 +57,10 @@ object PhoenixDeviceRegister {
             val failure = IOException("匿名播放设备注册失败，请检查网络后重试", error)
             synchronized(failureLock) { lastFailure = failure; lastFailureAt = now }
             throw failure
+        } catch (error: Exception) {
+            val failure = IOException("匿名播放设备注册失败，请检查网络后重试", error)
+            synchronized(failureLock) { lastFailure = failure; lastFailureAt = now }
+            throw failure
         }
     }
 
