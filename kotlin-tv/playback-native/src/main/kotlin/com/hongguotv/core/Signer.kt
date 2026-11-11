@@ -264,10 +264,7 @@ class Signer(private val clock: () -> Long = System::currentTimeMillis, private 
                     "x-ladon" to be32(ts).base64(),
                     "x-argus" to le32(ts).base64(),
                     "x-gorgon" to gorgon(query, body, ts, random),
-                    "x-helios" to helios(ts),
-                    "x-medusa" to medusa(url, body, ts,
-                        deviceId = values["device_id"] ?: "0",
-                        versionName = values["version_name"] ?: "7.1.3.32"))
+                    "x-helios" to helios(ts))
                 if (body != null) { headers["Content-Type"] = "application/json; charset=utf-8"; headers["x-ss-stub"] = digest("MD5", body).hex().uppercase() }
                 return Request(url, headers, body)
             }
