@@ -42,10 +42,11 @@ internal class DetailRepository(
 
     private fun parseAppDetail(data: JSONObject, requestedId: String): Detail {
         val o = data.optJSONObject("video_data") ?: throw IOException("App 详情缺少 video_data")
-        val returnedId = first(o.str("series_id_str"), o.str("series_id"), o.str("book_id"))
+        val videoDetail = o.optJSONObject("video_detail")
+        val returnedId = first(o.str("series_id_str"), o.str("series_id"), o.str("book_id"), videoDetail?.str("series_id").orEmpty())
         if (returnedId != requestedId) throw IOException("App 返回的剧集 ID 与请求不一致")
 
-        val title = first(o.str("series_title"), o.str("series_name"), o.str("title"), o.str("name"))
+        val title = first(o.str("series_title"), o.str("series_name"), o.str("title"), o.str("name"), videoDetail?.str("series_title").orEmpty(), videoDetail?.str("title").orEmpty())
         if (title.isBlank()) throw IOException("App 详情缺少剧名")
         val tags = tagNames(o)
         val count = maxOf(
@@ -56,7 +57,7 @@ internal class DetailRepository(
             o.optJSONObject("video_detail")?.optInt("episode_cnt", 0) ?: 0
         )
         val remark = o.str("episode_right_text").ifBlank { if (count > 0) "共${count}集" else "" }
-        val cover = first(o.str("series_cover"), o.str("cover"), o.str("cover_url"), o.str("thumb_url"), o.str("expand_thumb_url"), o.optJSONObject("video_detail")?.str("cover_url").orEmpty())
+        val cover = first(o.str("series_cover"), o.str("cover"), o.str("cover_url"), o.str("thumb_url"), o.str("expand_thumb_url"), videoDetail?.str("cover_url").orEmpty())
         val series = Series(
             requestedId, title, cleanUrl(cover),
             first(o.str("series_intro"), o.str("video_desc"), o.str("abstract"), o.str("intro"), o.str("description")),
