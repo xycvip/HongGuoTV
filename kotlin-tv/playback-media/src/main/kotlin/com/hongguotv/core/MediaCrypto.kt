@@ -149,7 +149,7 @@ object MediaCrypto {
         if (moov.type != "moov" || moov.end != data.size || moov.end > 16 * 1024 * 1024) {
             throw IOException("CENC MP4 索引布局不受支持")
         }
-        validateOoiUaBoxTree(data, moov, 0)
+        validateOoiUaBoxTree(data, moov, 0, intArrayOf(0))
         val header = data.copyOf()
         val samples = mutableListOf<Sample>()
         var cursor = moov.body
@@ -325,7 +325,7 @@ object MediaCrypto {
     }
 
     /** Validate the same bounded ISO-BMFF box tree accepted by OOIUa Mp4Progressive. */
-    private fun validateOoiUaBoxTree(data: ByteArray, parent: Box, depth: Int) {
+    private fun validateOoiUaBoxTree(data: ByteArray, parent: Box, depth: Int, count: IntArray) {
         if (depth > 16) throw IOException("MP4 box 嵌套过深")
         if (parent.type in setOf("mvex", "moof", "traf", "stz2", "uuid")) {
             throw IOException("不支持的 MP4 结构：" + parent.type)
@@ -358,8 +358,9 @@ object MediaCrypto {
         }
         var at = childStart
         while (at < parent.end) {
+            if (++count[0] > 100_000) throw IOException("MP4 box 数量过多")
             val child = box(data, at, parent.end) ?: throw IOException("MP4 子框结构损坏")
-            validateOoiUaBoxTree(data, child, depth + 1)
+            validateOoiUaBoxTree(data, child, depth + 1, count)
             at = child.end
         }
     }
