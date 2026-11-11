@@ -37,7 +37,6 @@ data class PhoenixPlaybackDiagnostic(
 class PhoenixPlaybackSource(
     private val http: OkHttpClient,
     private val session: PhoenixPlaybackDeviceSession,
-    private val signer: PhoenixRequestSigner,
     private val onDiagnostic: (String) -> Unit = {},
 ) : StreamSource {
     override val name: String = "phoenix-video-model"
@@ -126,28 +125,36 @@ class PhoenixPlaybackSource(
                 RequestScope.ensureActive()
                 try {
                     // 使用当前注册会话的设备身份，版本及设备指纹统一取近期实测的 7.1.3.32 配置。
-                    val values = VendorConstants.device.toMutableMap().apply {
-                        putAll(identity.values.filterKeys { it in setOf("device_id", "iid", "cdid", "ac") })
+                    val values = java.util.TreeMap(VendorConstants.device).apply {
+                        listOf("host_abi", "dragon_device_type", "pv_player", "compliance_status",
+                            "need_personal_recommend", "player_so_load", "is_android_pad_screen").forEach(::remove)
+                        put("version_code", "73532")
+                        put("manifest_version_code", "73532")
+                        put("update_version_code", "73532")
+                        put("version_name", "7.3.5.32")
                         put("device_id", identity.values["device_id"].orEmpty())
                         put("iid", identity.values["iid"].orEmpty())
-                        put("cdid", identity.values["cdid"].orEmpty())
-                        put("ac", identity.values["ac"]?.ifBlank { "wifi" } ?: "wifi")
                     }
                     if (values["device_id"].isNullOrBlank() || values["iid"].isNullOrBlank()) {
                         throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
                     }
                     emitDiagnostic("Phoenix：正在生成播放请求签名，host=" + host)
-                    val signed = signer.signPlayback(
-                        "https://$host/novel/player/video_model/v1/",
-                        values,
-                        payload,
-                        VendorConstants.VIDEO_UA
+                    val now = System.currentTimeMillis()
+                    values["_rticket"] = now.toString()
+                    val query = values.entries.joinToString("&") { (key, value) ->
+                        java.net.URLEncoder.encode(key, "UTF-8").replace("+", "%20") + "=" +
+                            java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+                    }
+                    val url = "https://$host/novel/player/video_model/v1/?$query"
+                    val signedHeaders = PhoenixPlayerSigner.headers(
+                        query, payload, identity.values["device_id"].orEmpty(), now,
+                        VendorConstants.VIDEO_UA.replace("71332", "73532")
                     )
                     emitDiagnostic("Phoenix：请求签名完成，开始发送 video_model/v1 POST")
                     val request = Request.Builder()
-                        .url(signed.url)
+                        .url(url)
                         .apply {
-                            signed.headers.forEach { (key, value) -> header(key, value) }
+                            signedHeaders.forEach { (key, value) -> header(key, value) }
                             if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
                         }
                         .post(payload.toRequestBody("application/json; charset=UTF-8".toMediaType()))
