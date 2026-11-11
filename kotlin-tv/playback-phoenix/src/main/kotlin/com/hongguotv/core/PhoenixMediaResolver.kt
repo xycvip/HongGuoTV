@@ -29,13 +29,13 @@ internal object PhoenixMediaResolver {
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
             codec in setOf("bytevc2", "bvc2")
         }
-        val undeclaredEncryption = inlineRows.any { (_, item) -> isUndeclaredCandidate(item, maxQuality, portrait) }
         val portrait = inlineRows.firstNotNullOfOrNull { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
             val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
             val height = item.optInt("vheight", item.optInt("height", meta.optInt("vheight", meta.optInt("height", 0))))
             if (width > 0 && height > 0) height > width else null
         }
+        val undeclaredEncryption = inlineRows.any { (_, item) -> isUndeclaredCandidate(item, maxQuality, portrait) }
         val hasUsableDeclaredCandidate = inlineRows.any { (_, item) ->
             hasUsableDeclaredCandidate(item, maxQuality, portrait)
         }
@@ -90,6 +90,11 @@ internal object PhoenixMediaResolver {
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
             codec in setOf("bytevc2", "bvc2")
         }
+        val inlinePortrait = inlineRows.firstNotNullOfOrNull { (_, item) ->
+            val width = item.optInt("vwidth", item.optInt("width", 0))
+            val height = item.optInt("vheight", item.optInt("height", 0))
+            if (width > 0 && height > 0) height > width else null
+        }
         val hasUsableDeclaredCandidate = inlineRows.any { (_, item) ->
             hasUsableDeclaredCandidate(item, maxQuality, inlinePortrait)
         }
@@ -98,11 +103,7 @@ internal object PhoenixMediaResolver {
         val referenceDuration = model.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
         val fallbackId = source.str("video_id").trim()
         val fallbackDuration = source.opt("video_duration")?.toString()?.toDoubleOrNull() ?: 0.0
-        val inlinePortrait = inlineRows.firstNotNullOfOrNull { (_, item) ->
-            val width = item.optInt("vwidth", item.optInt("width", 0))
-            val height = item.optInt("vheight", item.optInt("height", 0))
-            if (width > 0 && height > 0) height > width else null
-        }
+
         val inlineTarget = PlaybackQualityMode.limit(maxQuality, inlinePortrait)
         val inlineTracks = inlineRows.mapNotNull { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
