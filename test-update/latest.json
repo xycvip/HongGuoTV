@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "afbfd108003087b0571ea9475e8744957fda333b",
-  "versionCode": 72,
-  "versionName": "0.0.72",
+  "sourceCommit": "c2cc12a5043068d33365e5f8909fa008f1167ca2",
+  "versionCode": 73,
+  "versionName": "0.0.73",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.72",
+  "tag": "hongguotv-bate-v0.0.73",
   "apk": {
-    "name": "HongguoTV-0.0.72.apk",
-    "size": 2008765,
-    "sha256": "4edacc81b6253ac9978f8fb3552e2487ebae571062fc2a7f7558653daf3c59e9",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.72/HongguoTV-0.0.72.apk"
+    "name": "HongguoTV-0.0.73.apk",
+    "size": 2004025,
+    "sha256": "42b0a1a0956f695eade1d90a10a595bd2424021343817edb5fa0b2617640a920",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.73/HongguoTV-0.0.73.apk"
   },
-  "notes": "【片源与数据管理】\n- 按正式版恢复首页接着看竖版卡片布局"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
