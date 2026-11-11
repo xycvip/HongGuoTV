@@ -107,6 +107,7 @@ class PhoenixPlaybackSource(
             .toString().toByteArray(Charsets.UTF_8)
 
         var primaryFailure: IOException? = null
+        var primaryModelFailure: IOException? = null
         try {
             val values = java.util.TreeMap(VendorConstants.device).apply {
                 listOf("host_abi", "dragon_device_type", "pv_player", "compliance_status",
@@ -144,8 +145,13 @@ class PhoenixPlaybackSource(
                 String(bytes, Charsets.UTF_8)
             }
             if (raw.isBlank()) throw IOException("OOIUa 单集播放接口返回空响应")
-            return resolveResponse(raw, maxQuality).also {
-                emitDiagnostic("Phoenix：OOIUa 单集主线路命中，清晰度=${it.quality}")
+            return try {
+                resolveResponse(raw, maxQuality).also {
+                    emitDiagnostic("Phoenix：OOIUa 单集主线路命中，清晰度=${it.quality}")
+                }
+            } catch (error: IOException) {
+                primaryModelFailure = error
+                throw error
             }
         } catch (error: java.io.InterruptedIOException) {
             throw error
@@ -154,7 +160,7 @@ class PhoenixPlaybackSource(
             emitDiagnostic("Phoenix：单集主线路失败，转入 OOIUa 备用播放阶梯")
         }
 
-        val legacyFailure = tryLegacyRoutes(id, maxQuality, identity, playbackHttp, playbackStarted)
+        val legacyFailure = tryLegacyRoutes(id, maxQuality, identity, playbackHttp, playbackStarted, primaryModelFailure)
         if (legacyFailure.first != null) return legacyFailure.first!!
         throw legacyFailure.second ?: primaryFailure ?: IOException("Phoenix 播放接口暂不可用")
     }
@@ -164,7 +170,8 @@ class PhoenixPlaybackSource(
         maxQuality: Int,
         initialIdentity: PhoenixPlaybackDeviceSession.Profile,
         playbackHttp: OkHttpClient,
-        started: Long
+        started: Long,
+        previousModelFailure: IOException?
     ): Pair<StreamInfo?, IOException?> {
         data class Route(val post: Boolean, val host: String, val renewIdentity: Boolean)
         val mainHost = "api5-normal-sinfonlineb.fqnovel.com"
@@ -175,7 +182,7 @@ class PhoenixPlaybackSource(
             Route(true, "api5-normal-hl.fqnovel.com", false)
         )
         var identity = initialIdentity
-        var modelFailure: IOException? = null
+        var modelFailure: IOException? = previousModelFailure
         var requestFailure: IOException? = null
         val legacyBody = JSONObject()
             .put("biz_param", JSONObject()
