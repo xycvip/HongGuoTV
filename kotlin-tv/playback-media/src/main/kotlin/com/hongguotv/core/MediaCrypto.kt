@@ -203,7 +203,9 @@ object MediaCrypto {
             var timedSamples = 0L
             for (i in 0 until timeEntries.toInt()) {
                 val entryAt = stts.body + 8 + i * 8
-                timedSamples += data.u32(entryAt)
+                val samplesInEntry = data.u32(entryAt)
+                if (samplesInEntry == 0L) throw IOException("明文 MP4 stts 样本数量无效")
+                timedSamples += samplesInEntry
                 if (data.u32(entryAt + 4) == 0L) throw IOException("明文 MP4 样本时长无效")
             }
             val stsz = directChild(data, stbl, "stsz") ?: throw IOException("明文 MP4 缺少 stsz")
@@ -219,7 +221,7 @@ object MediaCrypto {
             }
             if (uniformSize == 0L) {
                 for (i in 0 until sampleCount.toInt()) {
-                    if (data.u32(stsz.body + 12 + i * 4) > 8L * 1024 * 1024) {
+                    if (data.u32(stsz.body + 12 + i * 4) == 0L || data.u32(stsz.body + 12 + i * 4) > 8L * 1024 * 1024) {
                         throw IOException("明文 MP4 单个样本过大")
                     }
                 }
