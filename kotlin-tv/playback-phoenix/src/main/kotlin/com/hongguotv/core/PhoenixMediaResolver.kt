@@ -178,6 +178,11 @@ internal object PhoenixMediaResolver {
                 try { PhoenixSpade.deriveKey(spade) } catch (_: Exception) { null }
             } else null
             if (encrypted && key == null) { encryptedSkipped++; report("Phoenix资源#$name：拒绝，原因=加密资源缺少可用密钥；encryption_method=${method.ifBlank { "unknown" }}"); continue }
+            if (!useFallbackRows && undeclaredEncryption && !inlineUndeclaredEncryption) {
+                encryptedSkipped++
+                report("Phoenix资源#$name：跳过未声明加密候选，优先保留已有密钥或明确明文声明的片源")
+                continue
+            }
             if (verifiedUndeclaredFallback && useFallbackRows &&
                 spade.isBlank() && !declaredPlain(encryption)) {
                 encryptedSkipped++
