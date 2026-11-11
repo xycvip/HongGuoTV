@@ -42,7 +42,7 @@ object MediaCrypto {
         val ftyp=first.u32(0)
         if(ftyp<8 || ftyp+8>first.size || String(first,ftyp.toInt()+4,4,Charsets.US_ASCII)!="moov") throw IOException("视频索引不在文件开头")
         val size=first.u32(ftyp.toInt()); val end=ftyp+size
-        if(size<8 || end>total || end>16*1024*1024) throw IOException("视频索引大小异常")
+        if(size<8 || end>total || end>8*1024*1024) throw IOException("视频索引大小异常")
         return end.toInt()
     }
     fun prepare(data: ByteArray,key: ByteArray?, requireOoiUaMp4Validation: Boolean = false, moovStart: Long = 0): Prepared {
