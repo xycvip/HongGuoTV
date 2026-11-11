@@ -142,7 +142,7 @@ internal object PhoenixMediaResolver {
         data class Candidate(
             val quality: Int, val codec: String, val url: String, val key: ByteArray?,
             val width: Int, val height: Int, val shortSide: Int,
-            val requirePlainMp4Validation: Boolean
+            val requireOoiUaMp4Validation: Boolean
         )
         val candidates = mutableListOf<Candidate>()
         var encryptedSkipped = 0
@@ -215,7 +215,7 @@ internal object PhoenixMediaResolver {
                 }
                 candidates += Candidate(
                     height, codec, url, key, reportedWidth, reportedHeight, shortSide,
-                    key == null
+                    true
                 )
                 val safeHost = runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
                 report("Phoenix资源#$name：URL通过初筛，host=$safeHost，codec=$codec，height=${height.takeIf { it > 0 } ?: "unknown"}")
@@ -265,7 +265,7 @@ internal object PhoenixMediaResolver {
         report("Phoenix资源筛选结果：选中 codec=${selected.codec}，清晰度=$quality，host=$selectedHost；完整URL及敏感参数已隐藏")
         return StreamInfo(
             selected.url, selected.key, quality, "video/mp4",
-            selected.requirePlainMp4Validation
+            selected.requireOoiUaMp4Validation
         )
     }
 
