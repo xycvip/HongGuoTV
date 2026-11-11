@@ -4,6 +4,7 @@ package com.hongguotv.core
 
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
@@ -22,6 +23,10 @@ object PhoenixDeviceRegister {
     private val MAGIC = hex("746305100000")
     private val KDF_SALT = hex("4dd4c2e6b83162090e52b3c7a6733ba41cb2462b829ab58a196b39db57177524f49baf7f08e8d68d26a72e37c1a95a2f1f05a51892aef2949732b62a38aadd58")
     private val random = SecureRandom()
+    private const val FAILURE_COOLDOWN_MS = 10_000L
+    private val failureLock = Any()
+    @Volatile private var lastFailure: IOException? = null
+    @Volatile private var lastFailureAt = 0L
     private val allowedCookies = setOf("install_id", "ttreq", "store-region", "store-region-src")
 
     data class Registered(
@@ -34,8 +39,29 @@ object PhoenixDeviceRegister {
     }
 
     fun register(http: OkHttpClient): Registered {
-        RequestScope.ensureActive()
         val now = System.currentTimeMillis()
+        synchronized(failureLock) {
+            val failure = lastFailure
+            if (failure != null && now - lastFailureAt < FAILURE_COOLDOWN_MS) throw failure
+        }
+        return try {
+            registerNow(http, now).also {
+                synchronized(failureLock) { lastFailure = null; lastFailureAt = 0L }
+            }
+        } catch (error: InterruptedIOException) {
+            if (Thread.currentThread().isInterrupted) throw error
+            val failure = IOException("匿名播放设备注册失败，请检查网络后重试", error)
+            synchronized(failureLock) { lastFailure = failure; lastFailureAt = now }
+            throw failure
+        } catch (error: IOException) {
+            val failure = IOException("匿名播放设备注册失败，请检查网络后重试", error)
+            synchronized(failureLock) { lastFailure = failure; lastFailureAt = now }
+            throw failure
+        }
+    }
+
+    private fun registerNow(http: OkHttpClient, now: Long): Registered {
+        RequestScope.ensureActive()
         val cdid = UUID.randomUUID().toString()
         val payload = registrationPayload(now, cdid)
         val body = ttEncrypt(gzip(payload.toByteArray(Charsets.UTF_8)))
