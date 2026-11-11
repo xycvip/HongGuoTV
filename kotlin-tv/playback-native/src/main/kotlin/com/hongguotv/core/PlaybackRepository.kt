@@ -231,8 +231,9 @@ class PlaybackRepository(
                 Triple(quality,codec,o)
             }.sortedByDescending { it.first }.toList()
         val playable=rows.filter { it.second !in setOf("bytevc2","bvc2") }
-        // 所有清晰度模式统一先按分辨率排序，编码只在同档位时决定优先级。
-        // 不要把 H.264 做成跨分辨率候选池过滤条件，否则 720P H.264 会压过 1080P HEVC。
+        val h264=playable.filter { it.second=="h264" || it.second=="avc1" }
+        // 兼容优先：只要存在 H.264/AVC1，就选择其中最高分辨率；没有时才回退其他编码。
+        // 高清优先及手动档位仍按分辨率选档，同档位优先 H.264。
         val pool=playable.sortedWith(compareByDescending<Triple<Int,String,JSONObject>> { it.first }
             .thenBy { if(it.second=="h264" || it.second=="avc1") 0 else 1 })
         val portrait=rows.firstNotNullOfOrNull { row ->
@@ -242,9 +243,11 @@ class PlaybackRepository(
             if(width>0 && height>0) height>width else null
         }
         val selectionLimit=PlaybackQualityMode.limit(maxQuality,portrait)
-        val selected=pool.firstOrNull { it.first in 1..selectionLimit }
-            ?: pool.lastOrNull()
-            ?: throw UnplayableVideoException("本集片源暂不兼容，请播放下一集")
+        val selected=if(maxQuality==PlaybackQualityMode.AUTO_COMPAT) {
+            h264.firstOrNull() ?: pool.firstOrNull()
+        } else {
+            pool.firstOrNull { it.first in 1..selectionLimit } ?: pool.lastOrNull()
+        } ?: throw UnplayableVideoException("本集片源暂不兼容，请播放下一集")
         val item=selected.third
         val itemMeta=item.optJSONObject("video_meta") ?: JSONObject()
         var url=cleanUrl(item.str("main_url"))
