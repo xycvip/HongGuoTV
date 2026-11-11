@@ -7,7 +7,6 @@ import com.hongguotv.core.PlayerDeviceSource
 import com.hongguotv.core.PlayerDeviceStore
 import com.hongguotv.core.PhoenixPlaybackSource
 import com.hongguotv.core.PhoenixPlaybackDeviceSession
-import com.hongguotv.core.PhoenixRequestSigner
 import com.hongguotv.core.StreamSource
 import com.hongguotv.core.StreamInfo
 import com.hongguotv.core.UnplayableVideoException
