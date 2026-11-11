@@ -499,8 +499,8 @@ class ContentRepositoryTest {
             assertEquals("123", JSONObject(okio.Buffer().also { request.body!!.writeTo(it) }.readUtf8()).optString("series_id"))
             assertTrue(request.header("X-Gorgon").orEmpty().isNotBlank())
             assertTrue(request.header("X-Argus").orEmpty().isNotBlank())
-            assertEquals(null, request.header("X-Medusa"))
-            assertEquals(null, request.header("X-Helios"))
+            assertNull(request.header("X-Medusa"))
+            assertNull(request.header("X-Helios"))
             """{"code":0,"data":{"video_data":{
                 "series_id_str":"123","series_title":"Phoenix测试剧","series_intro":"详情简介",
                 "series_cover":"https://example.com/poster.jpg","episode_cnt":2,
