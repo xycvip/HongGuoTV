@@ -134,7 +134,7 @@ class PhoenixPlaybackSource(
                 if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
             }.post(singleBody.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
             val raw = RequestScope.execute(http.newCall(request)) { response ->
-                if (response.code != 200) throw IOException("OOIUa 单集播放接口 HTTP \${response.code}")
+                if (response.code != 200) throw IOException("OOIUa 单集播放接口 HTTP ${response.code}")
                 val body = response.body ?: throw IOException("OOIUa 单集播放接口响应为空")
                 if (body.contentLength() > 16L * 1024 * 1024) throw IOException("播放响应过大")
                 val bytes = body.bytes()
@@ -143,7 +143,7 @@ class PhoenixPlaybackSource(
             }
             if (raw.isBlank()) throw IOException("OOIUa 单集播放接口返回空响应")
             return resolveResponse(raw, maxQuality).also {
-                emitDiagnostic("Phoenix：OOIUa 单集主线路命中，清晰度=\${it.quality}")
+                emitDiagnostic("Phoenix：OOIUa 单集主线路命中，清晰度=${it.quality}")
             }
         } catch (error: java.io.InterruptedIOException) {
             throw error
@@ -222,9 +222,9 @@ class PhoenixPlaybackSource(
                     }
                 }
                 val base = if (route.post) {
-                    "https://\${route.host}/novel/player/multi_video_model/v1/"
+                    "https://${route.host}/novel/player/multi_video_model/v1/"
                 } else {
-                    "https://\${route.host}/reading/bookapi/video_tab/multi_video_model/v1/"
+                    "https://${route.host}/reading/bookapi/video_tab/multi_video_model/v1/"
                 }
                 val body = if (route.post) legacyBody else null
                 val signed = PhoenixLegacySigner().signPlayback(base, values, body, PLAYBACK_UA)
@@ -234,7 +234,7 @@ class PhoenixPlaybackSource(
                 val request = if (body == null) builder.get().build()
                     else builder.post(body.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
                 val raw = RequestScope.execute(http.newCall(request)) { response ->
-                    if (response.code != 200) throw IOException("OOIUa 备用播放线路 HTTP \${response.code}")
+                    if (response.code != 200) throw IOException("OOIUa 备用播放线路 HTTP ${response.code}")
                     val responseBody = response.body ?: throw IOException("备用播放响应为空")
                     if (responseBody.contentLength() > 16L * 1024 * 1024) throw IOException("备用播放响应过大")
                     val bytes = responseBody.bytes()
@@ -251,14 +251,14 @@ class PhoenixPlaybackSource(
                     throw error
                 } catch (error: IOException) {
                     lastFailure = error
-                    emitDiagnostic("Phoenix：备用线路 \${index + 1} 模型解析失败，继续下一线路")
+                    emitDiagnostic("Phoenix：备用线路 ${index + 1} 模型解析失败，继续下一线路")
                     continue
                 }
             } catch (error: java.io.InterruptedIOException) {
                 throw error
             } catch (error: IOException) {
                 lastFailure = error
-                emitDiagnostic("Phoenix：OOIUa 备用线路 \${index + 1} 请求失败")
+                emitDiagnostic("Phoenix：OOIUa 备用线路 ${index + 1} 请求失败")
             }
         }
         return null to lastFailure
