@@ -126,13 +126,15 @@ class PhoenixPlaybackSource(
             while (true) {
                 RequestScope.ensureActive()
                 try {
-                    // 使用当前注册会话的设备身份，版本及设备指纹统一取近期实测的 7.1.3.32 配置。
-                    val values = VendorConstants.device.toMutableMap().apply {
-                        putAll(identity.values.filterKeys { it in setOf("device_id", "iid", "cdid", "ac") })
+                    // 播放请求必须沿用设备注册会话的完整身份参数；不能只挑选部分字段，
+                    // 否则会丢失注册响应下发的 klink_egdi 等服务端身份字段。
+                    val values = LinkedHashMap(identity.values).apply {
                         put("device_id", identity.values["device_id"].orEmpty())
                         put("iid", identity.values["iid"].orEmpty())
                         put("cdid", identity.values["cdid"].orEmpty())
                         put("ac", identity.values["ac"]?.ifBlank { "wifi" } ?: "wifi")
+                        put("rom_version", identity.values["rom_version"]
+                            ?.ifBlank { "BP2A.250605.031.A3" } ?: "BP2A.250605.031.A3")
                     }
                     if (values["device_id"].isNullOrBlank() || values["iid"].isNullOrBlank()) {
                         throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
