@@ -271,8 +271,9 @@ class PhoenixPlaybackSource(
 
     private fun normalizeLegacyResponse(raw: String, id: String, post: Boolean): String? {
         val root = runCatching { JSONObject(raw) }.getOrNull() ?: return null
-        val code = root.optInt("code", root.optInt("Code", -1))
-        if (code != 0) return null
+        val codeValue = root.opt("code") ?: root.opt("Code")
+        if (!post && (codeValue == null || codeValue.toString().toIntOrNull() != 0)) return null
+        if (post && codeValue != null && codeValue.toString().toIntOrNull() != 0) return null
         val data = root.optJSONObject("data") ?: return null
         val rawModel = if (post) {
             val row = data.optJSONObject(id)
@@ -292,7 +293,7 @@ class PhoenixPlaybackSource(
             is JSONArray -> list.length() > 0
             else -> false
         }
-        if (!hasRows && !model.has("fallback_api")) return null
+        if (!hasRows && (!post || !model.has("fallback_api"))) return null
         return JSONObject().put("code", 0).put("data", JSONObject().put("video_model", model)).toString()
     }
 
