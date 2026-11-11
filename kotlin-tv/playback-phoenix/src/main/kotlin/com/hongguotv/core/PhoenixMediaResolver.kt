@@ -201,8 +201,7 @@ internal object PhoenixMediaResolver {
             pool.filter { it.shortSide >= selectionLimit && it.shortSide > 0 }
                 .minWithOrNull(compareBy<Candidate> { it.shortSide }
                     .thenBy { if (it.codec in setOf("h264", "avc", "avc1")) 0 else 1 })
-                ?: pool.maxByOrNull { it.shortSide }
-                ?: pool.first()
+                ?: throw UnplayableVideoException("Phoenix 未提供达到指定清晰度的片源")
         }
         val quality = if (selected.quality > 0) "${selected.quality}P" else "自动"
         val selectedHost = runCatching { java.net.URI(selected.url).host.orEmpty() }.getOrDefault("")
