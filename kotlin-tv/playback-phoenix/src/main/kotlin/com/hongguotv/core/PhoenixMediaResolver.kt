@@ -192,8 +192,8 @@ internal object PhoenixMediaResolver {
         // 兼容优先：只要存在 H.264/AVC1，就选择其中最高分辨率；没有时才回退其他编码。
         // 高清优先及手动档位仍按分辨率选档，同档位优先 H.264。
         val pool = candidates.sortedWith(compareByDescending<Candidate> { it.quality }
-            .thenBy { if (it.codec in setOf("h264", "avc1")) 0 else 1 })
-        val h264 = candidates.filter { it.codec in setOf("h264", "avc1") }
+            .thenBy { if (it.codec in setOf("h264", "avc", "avc1")) 0 else 1 })
+        val h264 = candidates.filter { it.codec in setOf("h264", "avc", "avc1") }
         val selected = if (maxQuality == PlaybackQualityMode.AUTO_COMPAT) {
             h264.maxByOrNull { it.quality } ?: pool.first()
         } else {
