@@ -108,10 +108,59 @@ class RemoteVideo(
         val first=chunkOrFetch(0L)
         val end=MediaCrypto.headerEnd(first,total)
         val header=if(end>first.size) first+range(first.size.toLong(),end-1L).bytes else first.copyOf(end)
-        prepared=MediaCrypto.prepare(header,info.key,info.requirePlainMp4Validation)
-        if(prepared.samples.any { it.end>total }) throw IOException("视频样本超出资源大小")
+        prepared=MediaCrypto.prepare(header,info.key,info.requireOoiUaMp4Validation)
+        if(prepared.samples.any { it.start < 0 || it.end > total || it.end <= it.start }) throw IOException("视频样本超出资源大小")
+        if (info.requireOoiUaMp4Validation && info.key != null) {
+            val mdatRanges = scanMdatPayloads(header.size.toLong())
+            for (sample in prepared.samples) {
+                if (mdatRanges.none { sample.start >= it.first && sample.end <= it.second }) {
+                    throw IOException("CENC 样本不在 mdat 数据区间内")
+                }
+            }
+            MediaCrypto.verifyVideoIv(prepared, info.key) { sample ->
+                range(sample.start, sample.end - 1).bytes
+            }
+        }
         return this
     }
+
+    /** Walk top-level ISO-BMFF boxes without downloading mdat payloads. */
+    private fun scanMdatPayloads(startAt: Long): List<Pair<Long, Long>> {
+        val ranges = mutableListOf<Pair<Long, Long>>()
+        var offset = startAt
+        while (offset + 8 <= total) {
+            val head = range(offset, offset + 7).bytes
+            val size32 = ((head[0].toLong() and 255) shl 24) or
+                ((head[1].toLong() and 255) shl 16) or
+                ((head[2].toLong() and 255) shl 8) or
+                (head[3].toLong() and 255)
+            val type = String(head, 4, 4, Charsets.US_ASCII)
+            var headerSize = 8L
+            val boxSize = when (size32) {
+                0L -> total - offset
+                1L -> {
+                    val extended = range(offset, offset + 15).bytes
+                    headerSize = 16L
+                    var value = 0L
+                    for (i in 8..15) {
+                        if (value > (Long.MAX_VALUE ushr 8)) throw IOException("MP4 扩展 box 大小溢出")
+                        value = (value shl 8) or (extended[i].toLong() and 255)
+                    }
+                    value
+                }
+                else -> size32
+            }
+            if (boxSize < headerSize || offset > Long.MAX_VALUE - boxSize || offset + boxSize > total) {
+                throw IOException("MP4 顶层 box 范围异常")
+            }
+            if (type == "mdat") ranges += (offset + headerSize) to (offset + boxSize)
+            offset += boxSize
+            if (size32 == 0L) break
+        }
+        if (offset != total || ranges.isEmpty()) throw IOException("MP4 缺少有效 mdat 数据区间")
+        return ranges
+    }
+
     /** Bounded warm-up: parses the header, keeps the first chunk resident, starts read-ahead. */
     @Synchronized fun warm(): RemoteVideo {
         prepare()
