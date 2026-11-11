@@ -149,6 +149,7 @@ object MediaCrypto {
         if (moov.type != "moov" || moov.end != data.size || moov.end > 16 * 1024 * 1024) {
             throw IOException("CENC MP4 索引布局不受支持")
         }
+        validateOoiUaBoxTree(data, moov, 0)
         val header = data.copyOf()
         val samples = mutableListOf<Sample>()
         var cursor = moov.body
@@ -321,6 +322,46 @@ object MediaCrypto {
         val sorted = samples.sortedBy { it.start }
         if (sorted.zipWithNext().any { it.first.end > it.second.start }) throw IOException("MP4 加密样本重叠")
         return Prepared(header, sorted)
+    }
+
+    /** Validate the same bounded ISO-BMFF box tree accepted by OOIUa Mp4Progressive. */
+    private fun validateOoiUaBoxTree(data: ByteArray, parent: Box, depth: Int) {
+        if (depth > 16) throw IOException("MP4 box 嵌套过深")
+        if (parent.type in setOf("mvex", "moof", "traf", "stz2", "uuid")) {
+            throw IOException("不支持的 MP4 结构：\${parent.type}")
+        }
+        val containers = setOf("moov", "trak", "mdia", "minf", "stbl", "edts", "dinf", "udta", "sinf", "schi")
+        val childStart = when {
+            parent.type == "stsd" -> {
+                if (parent.body + 8 > parent.end) throw IOException("MP4 stsd 截断")
+                parent.body + 8
+            }
+            parent.type in setOf("avc1", "avc3", "hvc1", "hev1", "av01", "mp4v", "vp08", "vp09", "dvav", "dva1", "encv") -> {
+                if (parent.body + 78 > parent.end) throw IOException("MP4 视频 sample entry 截断")
+                parent.body + 78
+            }
+            parent.type in setOf("mp4a", "ac-3", "ec-3", "Opus", "fLaC", "samr", "sawb", "enca") -> {
+                if (parent.body + 28 > parent.end) throw IOException("MP4 音频 sample entry 截断")
+                if (data[parent.body + 8].u() != 0 || data[parent.body + 9].u() != 0) {
+                    throw IOException("MP4 音频 sample entry 保留字段无效")
+                }
+                parent.body + 28
+            }
+            parent.type in containers -> parent.body
+            else -> return
+        }
+        if (parent.type == "sgpd" || parent.type == "sbgp") {
+            if (parent.body + 8 > parent.end) throw IOException("MP4 sample group 截断")
+            val grouping = String(data, parent.body + 4, 4, Charsets.US_ASCII)
+            if (grouping != "roll" && grouping != "prol") throw IOException("不支持 MP4 sample group：\${grouping}")
+            return
+        }
+        var at = childStart
+        while (at < parent.end) {
+            val child = box(data, at, parent.end) ?: throw IOException("MP4 子框结构损坏")
+            validateOoiUaBoxTree(data, child, depth + 1)
+            at = child.end
+        }
     }
 
     private fun directChildRange(data: ByteArray, start: Int, end: Int, type: String): Box? {
