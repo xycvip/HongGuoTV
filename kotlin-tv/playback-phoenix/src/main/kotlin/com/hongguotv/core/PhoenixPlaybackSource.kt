@@ -351,7 +351,7 @@ class PhoenixPlaybackSource(
                 .get()
                 .build()
             return RequestScope.execute(fallbackHttp.newCall(request)) { response ->
-                if (!response.isSuccessful) throw IOException("Phoenix fallback_api 请求失败（HTTP ${response.code}）")
+                if (response.code != 200) throw IOException("Phoenix fallback_api 请求失败（HTTP ${response.code}）")
                 val body = response.body ?: throw IOException("Phoenix fallback_api 正文为空")
                 if (body.contentLength() > 16L * 1024 * 1024) throw IOException("Phoenix fallback_api 响应过大")
                 val bytes = body.bytes()
