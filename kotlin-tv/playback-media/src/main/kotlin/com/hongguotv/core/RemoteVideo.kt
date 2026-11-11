@@ -112,7 +112,8 @@ class RemoteVideo(
             if (moovBoxes.size != 1) throw IOException("MP4 moov 索引缺失或重复")
             val moov = moovBoxes.single()
             val moovBytes = readRange(moov.start, moov.end - moov.start)
-            prepared = MediaCrypto.prepare(moovBytes, info.key, true, moov.start)
+            val playbackKey = info.key
+            prepared = MediaCrypto.prepare(moovBytes, playbackKey, true, moov.start)
                 .copy(topLevelPsshOffsets = boxes.filter { it.type == "pssh" }.map { it.start + 4 })
             if (prepared.samples.any { it.start < 0 || it.end > total || it.end <= it.start }) {
                 throw IOException("视频样本超出资源大小")
@@ -124,8 +125,8 @@ class RemoteVideo(
                     throw IOException("CENC 样本不在 mdat 数据区间内")
                 }
             }
-            if (info.key != null) {
-                MediaCrypto.verifyVideoIv(prepared, info.key) { sample ->
+            if (playbackKey != null) {
+                MediaCrypto.verifyVideoIv(prepared, playbackKey) { sample ->
                     range(sample.start, sample.end - 1).bytes
                 }
             }
