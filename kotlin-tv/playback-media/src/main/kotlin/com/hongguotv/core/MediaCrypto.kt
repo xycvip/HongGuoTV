@@ -184,7 +184,7 @@ object MediaCrypto {
             if (stsz.body + 12 > stsz.end) throw IOException("明文 MP4 stsz 截断")
             val uniformSize = data.u32(stsz.body + 4)
             val sampleCount = data.u32(stsz.body + 8)
-            if (sampleCount !in 1..250_000 || uniformSize > 8L * 1024 * 1024) {
+            if (sampleCount < 1L || sampleCount > 250_000L || uniformSize > 8L * 1024 * 1024) {
                 throw IOException("明文 MP4 样本数量或大小异常")
             }
             if (stsz.end - stsz.body != 12L + if (uniformSize == 0L) sampleCount * 4 else 0L) {
@@ -204,13 +204,13 @@ object MediaCrypto {
             val width = if (co64 != null) 8 else 4
             if (chunks.body + 8 > chunks.end) throw IOException("明文 MP4 块偏移表截断")
             val chunkCount = data.u32(chunks.body + 4)
-            if (chunkCount !in 1..sampleCount || chunks.end - chunks.body != 8L + chunkCount * width) {
+            if (chunkCount < 1L || chunkCount > sampleCount || chunks.end - chunks.body != 8L + chunkCount * width) {
                 throw IOException("明文 MP4 块偏移表异常")
             }
             val stsc = directChild(data, stbl, "stsc") ?: throw IOException("明文 MP4 缺少 stsc")
             if (stsc.body + 8 > stsc.end) throw IOException("明文 MP4 stsc 截断")
             val mappingCount = data.u32(stsc.body + 4)
-            if (mappingCount !in 1..chunkCount || stsc.end - stsc.body != 8L + mappingCount * 12) {
+            if (mappingCount < 1L || mappingCount > chunkCount || stsc.end - stsc.body != 8L + mappingCount * 12) {
                 throw IOException("明文 MP4 stsc 长度异常")
             }
             var previousFirst = 0L
@@ -221,11 +221,11 @@ object MediaCrypto {
                 val perChunk = data.u32(offset + 4)
                 val description = data.u32(offset + 8)
                 if ((i == 0 && firstChunk != 1L) || firstChunk <= previousFirst ||
-                    firstChunk > chunkCount || perChunk !in 1..sampleCount || description != 1L) {
+                    firstChunk > chunkCount || perChunk < 1L || perChunk > sampleCount || description != 1L) {
                     throw IOException("明文 MP4 stsc 映射异常")
                 }
                 previousFirst = firstChunk
-                mappings += firstChunk to perChunk
+                mappings += (firstChunk to perChunk)
             }
             var mappedSamples = 0L
             var mappingIndex = 0
