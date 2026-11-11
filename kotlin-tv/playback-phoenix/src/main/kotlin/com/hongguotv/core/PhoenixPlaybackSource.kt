@@ -8,6 +8,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.net.URLEncoder
 import java.util.Locale
 
 /**
@@ -37,7 +38,7 @@ data class PhoenixPlaybackDiagnostic(
 class PhoenixPlaybackSource(
     private val http: OkHttpClient,
     private val session: PhoenixPlaybackDeviceSession,
-    private val signer: PhoenixRequestSigner,
+    private val clock: () -> Long = System::currentTimeMillis,
     private val onDiagnostic: (String) -> Unit = {},
 ) : StreamSource {
     override val name: String = "phoenix-video-model"
@@ -136,18 +137,29 @@ class PhoenixPlaybackSource(
                     if (values["device_id"].isNullOrBlank() || values["iid"].isNullOrBlank()) {
                         throw PhoenixPlaybackDeviceRegistrationException(IOException("设备注册身份不完整"))
                     }
-                    emitDiagnostic("Phoenix：正在生成播放请求签名，host=" + host)
-                    val signed = signer.signPlayback(
-                        "https://$host/novel/player/video_model/v1/",
-                        values,
-                        payload,
-                        VendorConstants.VIDEO_UA
+                    val nowMs = clock()
+                    val timestamp = (nowMs / 1000L).toInt()
+                    val queryValues = LinkedHashMap(values).apply {
+                        put("ts", timestamp.toString())
+                        put("_rticket", nowMs.toString())
+                    }
+                    val query = queryValues.entries.joinToString("&") { (key, value) ->
+                        "${URLEncoder.encode(key, "UTF-8").replace("+", "%20").replace("%7E", "~")}=" +
+                            URLEncoder.encode(value, "UTF-8").replace("+", "%20").replace("%7E", "~")
+                    }
+                    emitDiagnostic("Phoenix：正在生成 PhoenixReadApi SignPlayer 签名，host=" + host)
+                    val headers = PhoenixPlayerSigner.headers(
+                        query = query,
+                        body = payload,
+                        deviceId = values["device_id"].orEmpty(),
+                        nowMs = nowMs,
+                        userAgent = VendorConstants.VIDEO_UA
                     )
-                    emitDiagnostic("Phoenix：请求签名完成，开始发送 video_model/v1 POST")
+                    emitDiagnostic("Phoenix：SignPlayer 签名完成，开始发送 video_model/v1 POST")
                     val request = Request.Builder()
-                        .url(signed.url)
+                        .url("https://$host/novel/player/video_model/v1/?$query")
                         .apply {
-                            signed.headers.forEach { (key, value) -> header(key, value) }
+                            headers.forEach { (key, value) -> header(key, value) }
                             if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
                         }
                         .post(payload.toRequestBody("application/json; charset=UTF-8".toMediaType()))
