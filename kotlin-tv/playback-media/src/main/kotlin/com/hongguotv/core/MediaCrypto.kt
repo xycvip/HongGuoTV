@@ -492,6 +492,7 @@ object MediaCrypto {
         if (moov.type != "moov" || moov.end != data.size || moov.end - moov.start > 16 * 1024 * 1024) {
             throw IOException("明文 MP4 索引布局不受支持")
         }
+        validateOoiUaBoxTree(data, moov, 0, intArrayOf(0))
         val forbidden = setOf("encv", "enca", "sinf", "schi", "senc", "saiz", "saio", "tenc", "mvex", "moof", "traf", "stz2", "uuid")
         for (type in forbidden) {
             if (containsFourcc(data, moov.start, moov.end, type)) {
