@@ -2,7 +2,6 @@
 package com.hongguotv.core
 
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -306,10 +305,7 @@ class PhoenixPlaybackSource(
             val fallbackHttp = http.newBuilder().callTimeout(15, TimeUnit.SECONDS).followRedirects(false).build()
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", PHOENIX_UA)
-                .header("Referer", "https://novel.snssdk.com/")
-                .header("Accept", "application/json, */*")
-                .header("Accept-Encoding", "identity")
+                .header("User-Agent", VendorConstants.VIDEO_UA)
                 .get()
                 .build()
             return RequestScope.execute(fallbackHttp.newCall(request)) { response ->
@@ -324,24 +320,37 @@ class PhoenixPlaybackSource(
         var fallbackRaw = if (fallbackUrl.startsWith("https://") || fallbackUrl.startsWith("http://")) {
             fetchFallback(fallbackUrl)
         } else null
-        // OOIUa retries a ByteVC2-only fallback with the H.264 compatibility override.
+        // OOIUa tries codec_type=1 first, then the older force_codec=h264 override.
         if (fallbackUrl.startsWith("https://") && !fallbackRaw.isNullOrBlank() &&
             PhoenixMediaResolver.needsCodecOverride(fallbackRaw!!)) {
-            val compatibleUrl = fallbackUrl.toHttpUrl().newBuilder()
-                .setQueryParameter("codec_type", "0")
-                .setQueryParameter("force_codec", "h264")
-                .build().toString()
-            fallbackRaw = fetchFallback(compatibleUrl)
+            for (codecQuery in listOf("codec_type=1", "codec_type=0&force_codec=h264")) {
+                val compatibleUrl = compatibleFallback(fallbackUrl, codecQuery)
+                val compatibleRaw = fetchFallback(compatibleUrl)
+                fallbackRaw = compatibleRaw
+                if (!PhoenixMediaResolver.needsCodecOverride(compatibleRaw)) break
+            }
         }
         return PhoenixMediaResolver.parse(raw, maxQuality, fallbackRaw, ::emitDiagnostic)
+    }
+
+    private fun compatibleFallback(fallback: String, codecQuery: String): String {
+        val url = fallback.trim()
+        val queryAt = url.indexOf('?')
+        val out = StringBuilder(if (queryAt < 0) url else url.substring(0, queryAt)).append('?')
+        if (queryAt >= 0) {
+            url.substring(queryAt + 1).split('&').forEach { part ->
+                val name = part.substringBefore('=')
+                if (part.isNotEmpty() && name != "codec_type" && name != "force_codec") {
+                    out.append(part).append('&')
+                }
+            }
+        }
+        return out.append(codecQuery).toString()
     }
 
     companion object {
         private const val PLAYBACK_UA =
             "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)"
-        private const val PHOENIX_UA =
-            "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
-
         internal fun parseResponse(raw: String, maxQuality: Int = 1080): StreamInfo {
             val root = try { JSONObject(raw) } catch (_: Exception) {
                 throw IOException("Phoenix 播放响应不是有效 JSON")
