@@ -4,7 +4,7 @@ fun main(args: Array<String>) {
     val repository=ContentRepository()
     if(args.contains("--detail-probe")) {
         val keyword=args.getOrNull(args.indexOf("--keyword")+1) ?: "永昼赴星光"
-        val controlId=args.getOrNull(args.indexOf("--control-id")+1) ?: "7615470177953532990"
+        val controlId=args.getOrNull(args.indexOf("--control-id")+1) ?: "7701937936731737112"
         require(keyword.isNotBlank() && controlId.matches(Regex("[0-9]{1,30}")))
         try {
             println("targetTitle=$keyword")
