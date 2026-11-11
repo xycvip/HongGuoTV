@@ -132,13 +132,18 @@ internal object PhoenixMediaResolver {
             if (candidate.width > 0 && candidate.height > 0) candidate.height > candidate.width else null
         }
         val selectionLimit = PlaybackQualityMode.limit(maxQuality, portrait)
-        // 所有清晰度模式统一先按分辨率排序，编码只在同档位时决定优先级。
-        // 不要把 H.264 做成跨分辨率候选池过滤条件，否则 720P H.264 会压过 1080P HEVC。
+        // 兼容优先：只要存在 H.264/AVC1，就选择其中最高分辨率；没有时才回退其他编码。
+        // 高清优先及手动档位仍按分辨率选档，同档位优先 H.264。
         val pool = candidates.sortedWith(compareByDescending<Candidate> { it.quality }
             .thenBy { if (it.codec in setOf("h264", "avc1")) 0 else 1 })
-        val selected = pool.filter { it.quality in 1..selectionLimit }.maxByOrNull { it.quality }
-            ?: pool.filter { it.quality > 0 }.minByOrNull { it.quality }
-            ?: pool.first()
+        val h264 = candidates.filter { it.codec in setOf("h264", "avc1") }
+        val selected = if (maxQuality == PlaybackQualityMode.AUTO_COMPAT) {
+            h264.maxByOrNull { it.quality } ?: pool.first()
+        } else {
+            pool.filter { it.quality in 1..selectionLimit }.maxByOrNull { it.quality }
+                ?: pool.filter { it.quality > 0 }.minByOrNull { it.quality }
+                ?: pool.first()
+        }
         val quality = if (selected.quality > 0) "${selected.quality}P" else "自动"
         val selectedHost = runCatching { java.net.URI(selected.url).host.orEmpty() }.getOrDefault("")
         report("Phoenix资源筛选结果：选中 codec=${selected.codec}，清晰度=$quality，host=$selectedHost；完整URL及敏感参数已隐藏")
