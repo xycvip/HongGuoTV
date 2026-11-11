@@ -225,7 +225,7 @@ object MediaCrypto {
             val sencCount = data.u32(senc.body + 4)
             if (sencCount < 1 || sencCount > 250_000) throw IOException("CENC IV 数量异常")
             val ivBytes = senc.end - senc.body - 8
-            if (ivBytes != sencCount * 8L && ivBytes != sencCount * 16L) throw IOException("CENC IV 长度与数量不匹配")
+            if (ivBytes.toLong() != sencCount * 8L && ivBytes.toLong() != sencCount * 16L) throw IOException("CENC IV 长度与数量不匹配")
             val ivSize = (ivBytes / sencCount).toInt()
             val schi = directChild(data, sinf, "schi")
             val tenc = schi?.let { directChild(data, it, "tenc") }
@@ -244,7 +244,7 @@ object MediaCrypto {
             val uniformSize = data.u32(stsz.body + 4)
             val sampleCount = data.u32(stsz.body + 8)
             if (sampleCount != sencCount || sampleCount > 250_000 ||
-                stsz.end - stsz.body != 12L + if (uniformSize == 0L) sampleCount * 4L else 0L) {
+                stsz.end.toLong() - stsz.body.toLong() != 12L + if (uniformSize == 0L) sampleCount * 4L else 0L) {
                 throw IOException("CENC 样本数量与 stsz 不匹配")
             }
             val sizes = LongArray(sampleCount.toInt()) { index ->
@@ -258,7 +258,7 @@ object MediaCrypto {
             if (chunks.body + 8 > chunks.end) throw IOException("MP4 chunk offset 截断")
             val chunkCount = data.u32(chunks.body + 4)
             if (chunkCount < 1 || chunkCount > sampleCount ||
-                chunks.end - chunks.body != 8L + chunkCount * offsetWidth) throw IOException("MP4 chunk offset 数量异常")
+                chunks.end.toLong() - chunks.body.toLong() != 8L + chunkCount * offsetWidth) throw IOException("MP4 chunk offset 数量异常")
             val offsets = LongArray(chunkCount.toInt()) { index ->
                 if (offsetWidth == 8) data.i64(chunks.body + 8 + index * 8)
                 else data.u32(chunks.body + 8 + index * 4)
@@ -266,7 +266,7 @@ object MediaCrypto {
             val stsc = directChild(data, stbl, "stsc") ?: throw IOException("MP4 缺少 stsc")
             if (stsc.body + 8 > stsc.end) throw IOException("MP4 stsc 截断")
             val mapCount = data.u32(stsc.body + 4)
-            if (mapCount < 1 || mapCount > chunkCount || stsc.end - stsc.body != 8L + mapCount * 12L) {
+            if (mapCount < 1 || mapCount > chunkCount || stsc.end.toLong() - stsc.body.toLong() != 8L + mapCount * 12L) {
                 throw IOException("MP4 stsc 映射数量异常")
             }
             val maps = (0 until mapCount.toInt()).map { index ->
@@ -338,7 +338,7 @@ object MediaCrypto {
         val uniform = data.u32(stsz.body + 4)
         val count = data.u32(stsz.body + 8)
         if (count < 1 || count > 250_000 || uniform > 8L * 1024 * 1024 ||
-            stsz.end - stsz.body != 12L + if (uniform == 0L) count * 4L else 0L) {
+            stsz.end.toLong() - stsz.body.toLong() != 12L + if (uniform == 0L) count * 4L else 0L) {
             throw IOException("MP4 明文轨道 stsz 异常")
         }
         val sizes = LongArray(count.toInt()) { i ->
@@ -353,7 +353,7 @@ object MediaCrypto {
         val width = if (co64 != null) 8 else 4
         if (chunks.body + 8 > chunks.end) throw IOException("MP4 明文轨道 chunk offset 截断")
         val chunkCount = data.u32(chunks.body + 4)
-        if (chunkCount < 1 || chunkCount > count || chunks.end - chunks.body != 8L + chunkCount * width) {
+        if (chunkCount < 1 || chunkCount > count || chunks.end.toLong() - chunks.body.toLong() != 8L + chunkCount * width) {
             throw IOException("MP4 明文轨道 chunk offset 数量异常")
         }
         val offsets = LongArray(chunkCount.toInt()) { i ->
@@ -362,7 +362,7 @@ object MediaCrypto {
         val stsc = directChild(data, stbl, "stsc") ?: throw IOException("MP4 明文轨道缺少 stsc")
         if (stsc.body + 8 > stsc.end) throw IOException("MP4 明文轨道 stsc 截断")
         val mapCount = data.u32(stsc.body + 4)
-        if (mapCount < 1 || mapCount > chunkCount || stsc.end - stsc.body != 8L + mapCount * 12L) {
+        if (mapCount < 1 || mapCount > chunkCount || stsc.end.toLong() - stsc.body.toLong() != 8L + mapCount * 12L) {
             throw IOException("MP4 明文轨道 stsc 数量异常")
         }
         val maps = (0 until mapCount.toInt()).map { i ->
