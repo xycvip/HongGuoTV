@@ -152,7 +152,12 @@ object MediaCrypto {
                 throw IOException("未声明加密的片源实际包含 MP4 加密标记")
             }
         }
-        if (directChild(data, moov, "mvhd") == null) throw IOException("明文 MP4 缺少 mvhd")
+        val mvhd = directChild(data, moov, "mvhd") ?: throw IOException("明文 MP4 缺少 mvhd")
+        if (mvhd.body + 4 > mvhd.end) throw IOException("明文 MP4 mvhd 截断")
+        val movieVersion = data[mvhd.body].u()
+        if (movieVersion > 1 || mvhd.end - mvhd.body < (if (movieVersion == 1) 24 else 16)) {
+            throw IOException("明文 MP4 mvhd 格式异常")
+        }
         val tracks = mutableListOf<Box>()
         var at = moov.body
         while (at < moov.end) {
@@ -180,11 +185,33 @@ object MediaCrypto {
             if (handler != "vide" && handler != "soun") throw IOException("明文 MP4 存在不支持的轨道类型")
             val minf = directChild(data, mdia, "minf") ?: throw IOException("明文 MP4 缺少 minf")
             val stbl = directChild(data, minf, "stbl") ?: throw IOException("明文 MP4 缺少 stbl")
+            for (groupType in listOf("sgpd", "sbgp")) {
+                val group = directChild(data, stbl, groupType) ?: continue
+                if (group.body + 8 > group.end) throw IOException("明文 MP4 sample group 截断")
+                val grouping = String(data, group.body + 4, 4, Charsets.US_ASCII)
+                if (grouping != "roll" && grouping != "prol") {
+                    throw IOException("明文 MP4 存在不支持的 sample group")
+                }
+            }
+            val stts = directChild(data, stbl, "stts") ?: throw IOException("明文 MP4 缺少 stts")
+            if (stts.body + 8 > stts.end) throw IOException("明文 MP4 stts 截断")
+            val timeEntries = data.u32(stts.body + 4)
+            if (timeEntries < 1L || timeEntries > 250_000L ||
+                stts.end - stts.body != 8L + timeEntries * 8) {
+                throw IOException("明文 MP4 stts 长度异常")
+            }
+            var timedSamples = 0L
+            for (i in 0 until timeEntries.toInt()) {
+                val entryAt = stts.body + 8 + i * 8
+                timedSamples += data.u32(entryAt)
+                if (data.u32(entryAt + 4) == 0L) throw IOException("明文 MP4 样本时长无效")
+            }
             val stsz = directChild(data, stbl, "stsz") ?: throw IOException("明文 MP4 缺少 stsz")
             if (stsz.body + 12 > stsz.end) throw IOException("明文 MP4 stsz 截断")
             val uniformSize = data.u32(stsz.body + 4)
             val sampleCount = data.u32(stsz.body + 8)
-            if (sampleCount < 1L || sampleCount > 250_000L || uniformSize > 8L * 1024 * 1024) {
+            if (sampleCount < 1L || sampleCount > 250_000L || uniformSize > 8L * 1024 * 1024 ||
+                timedSamples != sampleCount) {
                 throw IOException("明文 MP4 样本数量或大小异常")
             }
             if (stsz.end - stsz.body != 12L + (if (uniformSize == 0L) sampleCount * 4 else 0L)) {
