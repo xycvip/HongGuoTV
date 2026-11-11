@@ -174,7 +174,7 @@ internal object DetailApiProbe {
                 is JSONObject -> if (value.length() > 0) return value.length()
             }
         }
-        return o.optInt("episode_cnt", 0)
+        return 0
     }
 
     private fun firstText(o: JSONObject, vararg keys: String): String =
