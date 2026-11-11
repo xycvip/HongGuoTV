@@ -42,7 +42,7 @@ object MediaCrypto {
         val ftyp=first.u32(0)
         if(ftyp<8 || ftyp+8>first.size || String(first,ftyp.toInt()+4,4,Charsets.US_ASCII)!="moov") throw IOException("视频索引不在文件开头")
         val size=first.u32(ftyp.toInt()); val end=ftyp+size
-        if(size<8 || end>total || end>8*1024*1024) throw IOException("视频索引大小异常")
+        if(size<8 || end>total || end>16*1024*1024) throw IOException("视频索引大小异常")
         return end.toInt()
     }
     fun prepare(data: ByteArray,key: ByteArray?, requireOoiUaMp4Validation: Boolean = false): Prepared {
@@ -164,7 +164,7 @@ object MediaCrypto {
             val tkhd = directChild(data, track, "tkhd") ?: throw IOException("MP4 缺少 tkhd")
             if (tkhd.body + 4 > tkhd.end) throw IOException("MP4 tkhd 截断")
             val tkhdVersion = data[tkhd.body].u()
-            if (tkhdVersion > 1 || tkhd.body + (if (tkhdVersion == 1) 24 else 16) > tkhd.end) {
+            if (tkhdVersion > 1 || tkhd.end - tkhd.body < (if (tkhdVersion == 1) 96 else 84)) {
                 throw IOException("MP4 tkhd 格式异常")
             }
             val trackId = data.u32(tkhd.body + if (tkhdVersion == 1) 20 else 12)
@@ -211,7 +211,7 @@ object MediaCrypto {
             else setOf("mp4a", "ac-3", "ec-3", "Opus", "fLaC", "samr", "sawb")
             if (original !in allowed || entry.body + fixed > entry.end) throw IOException("CENC 原始编码格式无效")
 
-            if (senc.body + 8 > senc.end || (data.i32(senc.body) and 0x00ffffff) != 0) {
+            if (senc.body + 8 > senc.end || data.u32(senc.body) != 0L) {
                 throw IOException("不支持 CENC subsample/pattern 加密")
             }
             val sencCount = data.u32(senc.body + 4)
@@ -222,10 +222,12 @@ object MediaCrypto {
             val schi = directChild(data, sinf, "schi")
             val tenc = schi?.let { directChild(data, it, "tenc") }
             if (tenc != null) {
-                if (tenc.body + 5 > tenc.end) throw IOException("CENC tenc 截断")
+                if (tenc.body + 1 > tenc.end) throw IOException("CENC tenc 截断")
                 val tencVersion = data[tenc.body].u()
                 if (tencVersion > 1) throw IOException("CENC tenc 版本不支持")
-                val declaredIvSize = data[tenc.body + if (tencVersion == 1) 9 else 4].u()
+                val ivOffset = if (tencVersion == 1) 9 else 4
+                if (tenc.body + ivOffset + 17 > tenc.end) throw IOException("CENC tenc KID 截断")
+                val declaredIvSize = data[tenc.body + ivOffset].u()
                 if (declaredIvSize != 0 && declaredIvSize != ivSize) throw IOException("CENC IV 长度与 tenc 声明不一致")
             }
 
@@ -306,6 +308,12 @@ object MediaCrypto {
             val child = box(data, moovChildAt, moov.end) ?: throw IOException("MP4 moov 子框损坏")
             if (child.type == "pssh") "free".toByteArray(Charsets.US_ASCII).copyInto(header, child.start + 4)
             moovChildAt = child.end
+        }
+        val mvhd = directChild(data, moov, "mvhd") ?: throw IOException("MP4 缺少 mvhd")
+        if (mvhd.body + 4 > mvhd.end) throw IOException("MP4 mvhd 截断")
+        val mvhdVersion = data[mvhd.body].u()
+        if (mvhdVersion > 1 || mvhd.end - mvhd.body < (if (mvhdVersion == 1) 24 else 16)) {
+            throw IOException("MP4 mvhd 格式异常")
         }
         if (trackCount == 0 || encryptedTrackCount == 0 || samples.none { it.isVideo }) {
             throw IOException("MP4 没有可验证的 CENC 视频轨")
