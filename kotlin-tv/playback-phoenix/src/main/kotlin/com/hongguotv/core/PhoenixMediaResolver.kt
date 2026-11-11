@@ -39,7 +39,14 @@ internal object PhoenixMediaResolver {
 
     fun needsCodecOverride(fallbackRaw: String): Boolean {
         val root = runCatching { JSONObject(fallbackRaw) }.getOrNull() ?: return false
-        val info = root.optJSONObject("video_info")?.optJSONObject("data") ?: return false
+        val videoInfo = root.optJSONObject("video_info") ?: return false
+        val upperCode = root.opt("Code") ?: 0
+        val lowerCode = root.opt("code") ?: 0
+        val infoCode = videoInfo.opt("Code") ?: 0
+        if (upperCode.toString().toIntOrNull() != 0 ||
+            lowerCode.toString().toIntOrNull() != 0 ||
+            infoCode.toString().toIntOrNull() != 0) return false
+        val info = videoInfo.optJSONObject("data") ?: return false
         val offered = rows(info.opt("video_list")).map { it.second }
         return offered.isNotEmpty() && offered.all { row ->
             val meta = objectOrString(row.opt("video_meta"))
