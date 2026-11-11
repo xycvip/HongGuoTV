@@ -47,8 +47,8 @@ object MediaCrypto {
     }
     fun prepare(data: ByteArray,key: ByteArray?, requireOoiUaMp4Validation: Boolean = false, moovStart: Long = 0): Prepared {
         if(key==null) {
-            if(requireOoiUaMp4Validation) inspectPlainMp4(data)
-            return Prepared(data.copyOf(),emptyList(), if (requireOoiUaMp4Validation) moovStart else 0)
+            val samples = if (requireOoiUaMp4Validation) inspectPlainMp4(data) else emptyList()
+            return Prepared(data.copyOf(),samples, if (requireOoiUaMp4Validation) moovStart else 0)
         }
         if(requireOoiUaMp4Validation) return prepareSencCenc(data, key, moovStart)
         val moov=box(data,data.u32(0).toInt()) ?: throw IOException("视频索引不完整")
@@ -413,7 +413,7 @@ object MediaCrypto {
      * and reject CENC/protected sample entries before allowing the bytes as plaintext.
      * This opt-in check is only enabled by the Phoenix source; N keeps the old path.
      */
-    private fun inspectPlainMp4(data: ByteArray) {
+    private fun inspectPlainMp4(data: ByteArray): List<Sample> {
         val moov = box(data, 0) ?: throw IOException("明文 MP4 索引不完整")
         if (moov.type != "moov" || moov.end != data.size || moov.end - moov.start > 16 * 1024 * 1024) {
             throw IOException("明文 MP4 索引布局不受支持")
@@ -440,6 +440,7 @@ object MediaCrypto {
         if (tracks.isEmpty() || tracks.size > 8) throw IOException("明文 MP4 轨道数量异常")
         val trackIds = mutableSetOf<Long>()
         var totalSamples = 0L
+        val preparedSamples = mutableListOf<Sample>()
         for (track in tracks) {
             val tkhd = directChild(data, track, "tkhd") ?: throw IOException("明文 MP4 缺少 tkhd")
             if (tkhd.body + 4 > tkhd.end) throw IOException("明文 MP4 tkhd 截断")
@@ -491,12 +492,10 @@ object MediaCrypto {
             if ((stsz.end - stsz.body).toLong() != 12L + (if (uniformSize == 0L) sampleCount * 4 else 0L)) {
                 throw IOException("明文 MP4 样本索引长度异常")
             }
-            if (uniformSize == 0L) {
-                for (i in 0 until sampleCount.toInt()) {
-                    if (data.u32(stsz.body + 12 + i * 4) == 0L || data.u32(stsz.body + 12 + i * 4) > 8L * 1024 * 1024) {
-                        throw IOException("明文 MP4 单个样本过大")
-                    }
-                }
+            val sampleSizes = LongArray(sampleCount.toInt()) { i ->
+                val size = if (uniformSize > 0L) uniformSize else data.u32(stsz.body + 12 + i * 4)
+                if (size <= 0L || size > 8L * 1024 * 1024) throw IOException("明文 MP4 单个样本过大")
+                size
             }
             val stco = directChild(data, stbl, "stco")
             val co64 = directChild(data, stbl, "co64")
@@ -507,6 +506,9 @@ object MediaCrypto {
             val chunkCount = data.u32(chunks.body + 4)
             if (chunkCount < 1L || chunkCount > sampleCount || (chunks.end - chunks.body).toLong() != 8L + chunkCount * width) {
                 throw IOException("明文 MP4 块偏移表异常")
+            }
+            val chunkOffsets = LongArray(chunkCount.toInt()) { i ->
+                if (width == 8) data.i64(chunks.body + 8 + i * width) else data.u32(chunks.body + 8 + i * width)
             }
             val stsc = directChild(data, stbl, "stsc") ?: throw IOException("明文 MP4 缺少 stsc")
             if (stsc.body + 8 > stsc.end) throw IOException("明文 MP4 stsc 截断")
@@ -530,13 +532,31 @@ object MediaCrypto {
             }
             var mappedSamples = 0L
             var mappingIndex = 0
+            var sampleIndex = 0
+            val trackSamples = mutableListOf<Sample>()
             for (chunk in 1..chunkCount.toInt()) {
                 while (mappingIndex + 1 < mappings.size && mappings[mappingIndex + 1].first <= chunk) {
                     mappingIndex++
                 }
-                mappedSamples += mappings[mappingIndex].second
+                val perChunk = mappings[mappingIndex].second
+                mappedSamples += perChunk
+                var position = chunkOffsets[chunk - 1]
+                repeat(perChunk.toInt()) {
+                    if (sampleIndex >= sampleSizes.size) throw IOException("明文 MP4 样本映射超出范围")
+                    val size = sampleSizes[sampleIndex]
+                    if (position < 0L || position > Long.MAX_VALUE - size) throw IOException("明文 MP4 样本偏移溢出")
+                    trackSamples += Sample(position, position + size, ByteArray(16), 0, handler == "vide", sampleIndex)
+                    position += size
+                    sampleIndex++
+                }
             }
-            if (mappedSamples != sampleCount) throw IOException("明文 MP4 样本与块映射不一致")
+            if (mappedSamples != sampleCount || sampleIndex != sampleCount.toInt()) {
+                throw IOException("明文 MP4 样本与块映射不一致")
+            }
+            if (trackSamples.zipWithNext().any { it.first.end > it.second.start }) {
+                throw IOException("明文 MP4 样本偏移重叠")
+            }
+            preparedSamples += trackSamples
             val stsd = directChild(data, stbl, "stsd") ?: throw IOException("明文 MP4 缺少 stsd")
             if (stsd.body + 8 > stsd.end || data.u32(stsd.body + 4) != 1L) {
                 throw IOException("明文 MP4 sample description 不受支持")
@@ -561,6 +581,9 @@ object MediaCrypto {
             totalSamples += sampleCount
             if (totalSamples > 250_000L) throw IOException("明文 MP4 总样本数量过大")
         }
+        val sorted = preparedSamples.sortedBy { it.start }
+        if (sorted.zipWithNext().any { it.first.end > it.second.start }) throw IOException("明文 MP4 跨轨道样本重叠")
+        return sorted
     }
 
     private fun directChild(data: ByteArray, parent: Box, type: String): Box? {
