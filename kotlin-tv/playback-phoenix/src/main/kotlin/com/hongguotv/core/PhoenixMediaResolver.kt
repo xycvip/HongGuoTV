@@ -90,6 +90,7 @@ internal object PhoenixMediaResolver {
         // OOIUa 优先内联；仅在内联缺失、全为 ByteVC2，或未声明加密且备用模型身份/时长通过校验时使用 fallback。
         val useFallbackRows = inlineRows.isEmpty() ||
             (fallbackRows.isNotEmpty() && (inlineOnlyByteVc2 || verifiedUndeclaredFallback))
+        if (inlineOnlyByteVc2 && fallbackRows.isNotEmpty()) confirmSameVideo(model, source)
         val rows = if (useFallbackRows) fallbackRows else inlineRows
         if (rows.isEmpty()) throw IOException("Phoenix 未返回视频清晰度（fallback_api=${!fallbackRaw.isNullOrBlank()}）")
         report("Phoenix资源筛选：发现 ${rows.size} 项候选，数据来源=${if (!fallbackRaw.isNullOrBlank()) "fallback" else "video_model"}")
