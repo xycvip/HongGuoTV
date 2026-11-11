@@ -114,10 +114,7 @@ class PhoenixPlaybackSource(
             .toString()
             .toByteArray(Charsets.UTF_8)
 
-        val hosts = listOf(
-            "api5-normal-sinfonlinea.fqnovel.com",
-            "api5-normal-sinfonlineb.fqnovel.com"
-        )
+        val hosts = listOf("api5-normal-sinfonlineb.fqnovel.com")
         var last: IOException? = null
         var rotations = 0
         for (host in hosts) {
