@@ -118,30 +118,22 @@ internal object PhoenixMediaResolver {
             val meta = objectOrString(item.opt("video_meta"))
             val encryption = objectOrString(item.opt("encrypt_info"))
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.ifEmpty { "unknown" }.lowercase(Locale.ROOT)
-            val gearKey = item.str("gear_des_key").lowercase(Locale.ROOT)
             val definition = item.str("quality_desc").ifEmpty { item.str("definition") }
                 .ifEmpty { meta.str("definition") }.ifEmpty { item.str("height").ifEmpty { item.str("vheight") } }
             val reportedHeight = meta.optInt("vheight", item.optInt("vheight", item.optInt("height", 0)))
             val reportedWidth = meta.optInt("vwidth", item.optInt("vwidth", 0))
-            // Match GuoAPP's portrait-video fallback: when only width is reliable,
-            // use the shorter edge as the effective quality label.
             val height = qualityNumber(definition).takeIf { it > 0 }
                 ?: reportedHeight.takeIf { it > 0 }
-                ?: reportedWidth.takeIf { it > 0 && (reportedHeight == 0 || it < reportedHeight) }
-                ?: qualityNumber(item.str("quality_desc").ifEmpty { name })
             val mime = meta.str("mime_type").ifEmpty { item.str("mime_type") }.ifEmpty { "unknown" }
             report("Phoenix资源#$name：开始筛选 codec=$codec，mime=$mime，definition=${definition.ifBlank { "unknown" }}，height=${height.takeIf { it > 0 } ?: "unknown"}")
-            if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1") ||
-                codec in setOf("bytevc2", "bvc2") || gearKey.contains("bytevc2")) {
+            if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) {
                 unsupportedSkipped++
                 report("Phoenix资源#$name：拒绝，原因=不支持的编码($codec)")
                 continue
             }
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
             val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
-                .ifEmpty { item.str("spade_a") }
-            val encrypted = encryption.optBoolean("encrypt") || item.optBoolean("encrypt") ||
-                method.equals("cenc-aes-ctr", true) || spade.isNotBlank()
+            val encrypted = encryption.optBoolean("encrypt") || item.optBoolean("encrypt") || spade.isNotBlank()
             val key = if (spade.isNotBlank()) {
                 try { PhoenixSpade.deriveKey(spade) } catch (_: Exception) { null }
             } else null
