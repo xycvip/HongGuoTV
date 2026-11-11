@@ -28,7 +28,7 @@ internal object PhoenixMediaResolver {
         val offered = rows(info.opt("video_list")).map { it.second }.filter { it.str("main_url").isNotBlank() }
         return offered.isNotEmpty() && offered.all { row ->
             val meta = objectOrString(row.opt("video_meta"))
-            val codec = meta.str("codec_type").ifEmpty { row.str("codec_type") }.lowercase(Locale.ROOT)
+            val codec = row.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
             codec in setOf("bytevc2", "bvc2")
         }
     }
@@ -70,7 +70,7 @@ internal object PhoenixMediaResolver {
         val fallbackRows = fallbackCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
         val inlineOnlyByteVc2 = inlineRows.isNotEmpty() && inlineRows.all { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
-            val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.lowercase(Locale.ROOT)
+            val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
             codec in setOf("bytevc2", "bvc2") || item.str("gear_des_key").contains("bytevc2", true)
         }
         val inlineUndeclaredEncryption = inlineRows.any { (_, item) ->
@@ -107,7 +107,7 @@ internal object PhoenixMediaResolver {
             try { decode64(seedText) } catch (_: Exception) { throw IOException("Phoenix key_seed 格式异常") }
         } else null
 
-        data class Candidate(val quality: Int, val codec: String, val url: String, val key: ByteArray?, val width: Int, val height: Int)
+        data class Candidate(val quality: Int, val codec: String, val url: String, val key: ByteArray?, val width: Int, val height: Int, val shortSide: Int)
         val candidates = mutableListOf<Candidate>()
         var encryptedSkipped = 0
         var unsupportedSkipped = 0
@@ -162,7 +162,8 @@ internal object PhoenixMediaResolver {
                     report("Phoenix资源#$name：拒绝URL，原因=当前链路不支持容器格式(${path.substringAfterLast('.', "unknown")})")
                     continue
                 }
-                candidates += Candidate(height, codec, url, key, reportedWidth, reportedHeight)
+                val shortSide = if (reportedWidth > 0 && reportedHeight > 0) minOf(reportedWidth, reportedHeight) else height
+                candidates += Candidate(height, codec, url, key, reportedWidth, reportedHeight, shortSide)
                 val safeHost = runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
                 report("Phoenix资源#$name：URL通过初筛，host=$safeHost，codec=$codec，height=${height.takeIf { it > 0 } ?: "unknown"}")
             }
@@ -196,8 +197,10 @@ internal object PhoenixMediaResolver {
         val selected = if (maxQuality == PlaybackQualityMode.AUTO_COMPAT) {
             h264.maxByOrNull { it.quality } ?: pool.first()
         } else {
-            pool.filter { it.quality in 1..selectionLimit }.maxByOrNull { it.quality }
-                ?: pool.filter { it.quality > 0 }.minByOrNull { it.quality }
+            pool.filter { it.shortSide >= selectionLimit && it.shortSide > 0 }
+                .minWithOrNull(compareBy<Candidate> { it.shortSide }
+                    .thenBy { if (it.codec in setOf("h264", "avc", "avc1")) 0 else 1 })
+                ?: pool.maxByOrNull { it.shortSide }
                 ?: pool.first()
         }
         val quality = if (selected.quality > 0) "${selected.quality}P" else "自动"
