@@ -26,28 +26,19 @@ class PhoenixPlayerSignerTest {
         assertFalse(headers.containsKey("X-Medusa"))
     }
 
-    @Test fun ttEncryptUsesPhoenixFixedPrefixAndBlockPadding() {
-        val encrypted = PhoenixDeviceRegister.ttEncrypt("phoenix-test".toByteArray())
+    @Test fun ttEncryptMatchesOoiUaMagicAndRandomEnvelope() {
+        val random = ByteArray(32) { it.toByte() }
+        val encrypted = PhoenixDeviceRegister.ttEncrypt("phoenix-test".toByteArray(), random)
         assertEquals("746305100000", encrypted.copyOfRange(0, 6).hex())
-        assertEquals(
-            "3176c9b6d71579d7e82179c9e7cbde787b54d541bad3b15f2e8fed92293fa25a",
-            encrypted.copyOfRange(6, 38).hex()
-        )
+        assertEquals(random.hex(), encrypted.copyOfRange(6, 38).hex())
         assertEquals(0, (encrypted.size - 38) % 16)
     }
 
-    @Test fun phoenixDeviceRegistrationUsesCurrentPhoenixEndpointAndQuery() {
-        val url = PhoenixDeviceRegister.url(VendorConstants.device, 1794050000000L)
-        assertTrue(url.startsWith("https://log5-applog-lq.fqnovel.com/service/2/device_register/"))
-        assertTrue(url.contains("version_code=71332"))
-        assertTrue(url.contains("version_name=7.1.3.32"))
-        assertTrue(url.contains("device_type=25053RT47C"))
-        assertTrue(url.contains("device_brand=Redmi"))
-        assertTrue(url.contains("os_api=36"))
-        assertTrue(url.contains("os_version=16"))
-        assertTrue(url.contains("resolution=1280*2772"))
-        assertTrue(url.contains("dpi=520"))
-        assertTrue(url.contains("_rticket=1794050000000"))
-        assertFalse(url.contains("cronet_version="))
+    @Test fun registrationUsesOoiUaLog5Endpoint() {
+        val url = PhoenixDeviceRegister.registrationUrlForTest()
+        assertTrue(url.startsWith("https://log5-applog-lf.fqnovel.com/service/2/device_register/"))
+        assertTrue(url.contains("cronet_version=8d40f833_2026-03-03"))
+        assertTrue(url.contains("ttnet_version=4.2.243.31-douyin"))
+        assertTrue(url.contains("use_store_region_cookie=1"))
     }
 }
