@@ -22,10 +22,7 @@ internal object PhoenixMediaResolver {
         val root = runCatching { JSONObject(raw) }.getOrNull() ?: return true
         val data = root.optJSONObject("data") ?: return true
         val model = runCatching { modelFrom(data) }.getOrNull() ?: return true
-        val rawList = model.opt("video_list")
-        val inlineRows = rows(rawList).ifEmpty {
-            rows(model.optJSONObject("dynamic_video")?.opt("dynamic_video_list"))
-        }
+        val inlineRows = rows(model.opt("video_list"))
         if (inlineRows.isEmpty()) return true
         val allByteVc2 = inlineRows.all { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
@@ -61,7 +58,7 @@ internal object PhoenixMediaResolver {
         fun report(message: String) { runCatching { onDiagnostic(message) } }
         val root = json(raw, "Phoenix 播放响应不是有效 JSON")
         val baseResp = root.optJSONObject("BaseResp")
-        val code = (root.opt("code") ?: root.opt("Code") ?: baseResp?.opt("StatusCode") ?: 0)
+        val code = (root.opt("code") ?: root.opt("Code") ?: baseResp?.opt("StatusCode") ?: -1)
             .toString().toIntOrNull() ?: -1
         if (code != 0) {
             val message = root.str("message").ifEmpty { baseResp?.str("StatusMessage").orEmpty() }
@@ -79,18 +76,8 @@ internal object PhoenixMediaResolver {
         val source = fallbackData ?: fallbackRoot ?: model
         // 空的 video_list 经常与 dynamic_video 同时出现；不能因为字段存在但为空，
         // 就提前停止回退，否则真实动态视频资源会被误报成“没有清晰度”。
-        val inlineCandidates = listOf(
-            model.opt("video_list"),
-            model.optJSONObject("dynamic_video")?.opt("dynamic_video_list"),
-            data.opt("video_list"),
-            data.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
-        )
-        val inlineRows = inlineCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
-        val fallbackCandidates = listOf(
-            source.opt("video_list"),
-            source.optJSONObject("dynamic_video")?.opt("dynamic_video_list")
-        )
-        val fallbackRows = fallbackCandidates.asSequence().map(::rows).firstOrNull { it.isNotEmpty() }.orEmpty()
+        val inlineRows = rows(model.opt("video_list"))
+        val fallbackRows = rows(source.opt("video_list"))
         val inlineOnlyByteVc2 = inlineRows.isNotEmpty() && inlineRows.all { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
@@ -168,16 +155,14 @@ internal object PhoenixMediaResolver {
             if (encrypted && key == null) { encryptedSkipped++; report("Phoenix资源#$name：拒绝，原因=加密资源缺少可用密钥；encryption_method=${method.ifBlank { "unknown" }}"); continue }
 
             val rawUrls = stringValues(item.opt("main_url")) + stringValues(item.opt("backup_url")) +
-                stringValues(item.opt("backup_url_list")) + stringValues(item.opt("backup_url_1")) +
-                stringValues(item.opt("backup_url_2")) + stringValues(item.opt("backup_urls")) +
-                stringValues(item.opt("url_list"))
+                stringValues(item.opt("backup_url_list"))
             if (rawUrls.isEmpty()) report("Phoenix资源#$name：拒绝，原因=没有可识别的媒体URL字段")
             for (rawUrl in rawUrls.distinct()) {
                 val cleaned = cleanUrl(rawUrl)
                 val url = if (seed != null) {
                     try { MediaCrypto.decryptUrl(cleaned, seed) } catch (_: Exception) { normalizeUrl(cleaned) }
                 } else normalizeUrl(cleaned)
-                if (!url.startsWith("https://") && !url.startsWith("http://")) { report("Phoenix资源#$name：拒绝一个URL，原因=无法解码为HTTP(S)"); continue }
+                if (!isAllowedVodUrl(url)) { report("Phoenix资源#$name：拒绝一个URL，原因=不符合 OOIUa VOD_DOMAINS 校验"); continue }
                 val path = runCatching { java.net.URI(url).path.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
                 if (path.endsWith(".m3u8") || path.endsWith(".mpd") || path.endsWith(".ts") ||
                     path.endsWith(".mkv") || path.endsWith(".webm") || path.endsWith(".avi")) {
@@ -243,28 +228,20 @@ internal object PhoenixMediaResolver {
         }
     }
 
+    /** OOIUa fallback_api 只接受 URL 字符串、首个数组元素、对象的 fallback_api 字段或 JSON 字符串。 */
     private fun extractFallbackUrl(value: Any?): String = when (value) {
         is String -> {
             val text = value.trim()
             if (text.startsWith("{")) {
                 val nested = runCatching { JSONObject(text) }.getOrNull()
-                if (nested != null) extractFallbackUrl(nested) else text
+                if (nested != null) extractFallbackUrl(nested.opt("fallback_api")) else text
             } else if (text.startsWith("[")) {
                 val nested = runCatching { JSONArray(text) }.getOrNull()
-                if (nested != null) extractFallbackUrl(nested) else text
+                if (nested != null && nested.length() > 0) extractFallbackUrl(nested.opt(0)) else ""
             } else text
         }
-        is JSONObject -> {
-            val preferred = listOf("fallback_api", "url", "uri", "api")
-            preferred.firstNotNullOfOrNull { key ->
-                if (value.has(key)) extractFallbackUrl(value.opt(key)).takeIf { it.isNotBlank() } else null
-            } ?: value.keys().asSequence().mapNotNull { key ->
-                extractFallbackUrl(value.opt(key)).takeIf { it.startsWith("https://") || it.startsWith("http://") }
-            }.firstOrNull().orEmpty()
-        }
-        is JSONArray -> (0 until value.length()).asSequence()
-            .map { extractFallbackUrl(value.opt(it)) }
-            .firstOrNull { it.isNotBlank() }.orEmpty()
+        is JSONObject -> extractFallbackUrl(value.opt("fallback_api"))
+        is JSONArray -> if (value.length() > 0) extractFallbackUrl(value.opt(0)) else ""
         else -> ""
     }
 
@@ -313,6 +290,17 @@ internal object PhoenixMediaResolver {
         is String -> listOf(value)
         is JSONArray -> (0 until value.length()).mapNotNull { value.optString(it).takeIf(String::isNotBlank) }
         else -> emptyList()
+    }
+
+    /** 与 OOIUa checkedUrl(value, VOD_DOMAINS) 一致：仅 HTTPS、默认/443 端口及白名单域名。 */
+    private fun isAllowedVodUrl(value: String): Boolean {
+        val uri = runCatching { java.net.URI(value) }.getOrNull() ?: return false
+        val scheme = uri.scheme?.lowercase(Locale.ROOT)
+        val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
+        val allowed = listOf("qznovelvod.com", "fqnovelvod.com", "douyinvod.com")
+            .any { host == it || host.endsWith("." + it) }
+        return scheme == "https" && uri.userInfo == null &&
+            (uri.port == -1 || uri.port == 443) && allowed
     }
 
     private fun normalizeUrl(value: String): String {
