@@ -5,7 +5,7 @@ import java.io.IOException
 import java.math.BigInteger
 
 object MediaCrypto {
-    data class Sample(val start: Long, val end: Long, val iv: ByteArray, val encryptedOffset: Long = 0, val isVideo: Boolean = false, val sampleIndex: Int = 0)
+    data class Sample(val start: Long, val end: Long, val iv: ByteArray, val encryptedOffset: Long = 0, val isVideo: Boolean = false, val sampleIndex: Int = 0, val isEncrypted: Boolean = true)
     data class Prepared(val header: ByteArray, val samples: List<Sample>, val headerStart: Long = 0)
     fun deriveKey(value: String): ByteArray {
         val raw=decode64(value); require(raw.size>=3) { "内容密钥格式异常" }
@@ -192,7 +192,14 @@ object MediaCrypto {
             val saio = directChild(data, stbl, "saio")
             val protected = entry.type == "encv" || entry.type == "enca"
             if (!protected) {
-                if (senc != null || saiz != null || saio != null || directChildRange(data, entry.body + (if (entry.type in setOf("avc1", "avc3", "hvc1", "hev1", "av01", "mp4v", "vp08", "vp09", "dvav", "dva1")) 78 else 28), entry.end, "sinf") != null) throw IOException("明文轨道包含 CENC 辅助索引")
+                if (senc != null || saiz != null || saio != null ||
+                    directChildRange(data, entry.body + (if (entry.type in setOf("avc1", "avc3", "hvc1", "hev1", "av01", "mp4v", "vp08", "vp09", "dvav", "dva1")) 78 else 28), entry.end, "sinf") != null) {
+                    throw IOException("明文轨道包含 CENC 辅助索引")
+                }
+                val clearSamples = readClearTrackSamples(data, stbl, handler)
+                samples += clearSamples
+                totalSamples += clearSamples.size
+                if (totalSamples > 250_000L) throw IOException("MP4 总样本数量过大")
                 continue
             }
             if ((handler == "vide") != (entry.type == "encv")) throw IOException("受保护 sample entry 与轨道类型不匹配")
@@ -316,12 +323,77 @@ object MediaCrypto {
         if (mvhdVersion > 1 || mvhd.end - mvhd.body < (if (mvhdVersion == 1) 24 else 16)) {
             throw IOException("MP4 mvhd 格式异常")
         }
-        if (trackCount == 0 || encryptedTrackCount == 0 || samples.none { it.isVideo }) {
+        if (trackCount == 0 || encryptedTrackCount == 0 || samples.none { it.isVideo && it.isEncrypted }) {
             throw IOException("MP4 没有可验证的 CENC 视频轨")
         }
         val sorted = samples.sortedBy { it.start }
         if (sorted.zipWithNext().any { it.first.end > it.second.start }) throw IOException("MP4 加密样本重叠")
         return Prepared(header, sorted, moovStart)
+    }
+
+    /** Build clear-track sample ranges too; OOIUa validates every track against mdat. */
+    private fun readClearTrackSamples(data: ByteArray, stbl: Box, handler: String): List<Sample> {
+        val stsz = directChild(data, stbl, "stsz") ?: throw IOException("MP4 明文轨道缺少 stsz")
+        if (stsz.body + 12 > stsz.end) throw IOException("MP4 明文轨道 stsz 截断")
+        val uniform = data.u32(stsz.body + 4)
+        val count = data.u32(stsz.body + 8)
+        if (count < 1 || count > 250_000 || uniform > 8L * 1024 * 1024 ||
+            stsz.end - stsz.body != 12L + if (uniform == 0L) count * 4L else 0L) {
+            throw IOException("MP4 明文轨道 stsz 异常")
+        }
+        val sizes = LongArray(count.toInt()) { i ->
+            val size = if (uniform > 0L) uniform else data.u32(stsz.body + 12 + i * 4)
+            if (size <= 0L || size > 8L * 1024 * 1024) throw IOException("MP4 明文轨道样本大小异常")
+            size
+        }
+        val stco = directChild(data, stbl, "stco")
+        val co64 = directChild(data, stbl, "co64")
+        if (stco != null && co64 != null) throw IOException("MP4 明文轨道 chunk offset 重复")
+        val chunks = stco ?: co64 ?: throw IOException("MP4 明文轨道缺少 chunk offset")
+        val width = if (co64 != null) 8 else 4
+        if (chunks.body + 8 > chunks.end) throw IOException("MP4 明文轨道 chunk offset 截断")
+        val chunkCount = data.u32(chunks.body + 4)
+        if (chunkCount < 1 || chunkCount > count || chunks.end - chunks.body != 8L + chunkCount * width) {
+            throw IOException("MP4 明文轨道 chunk offset 数量异常")
+        }
+        val offsets = LongArray(chunkCount.toInt()) { i ->
+            if (width == 8) data.i64(chunks.body + 8 + i * width) else data.u32(chunks.body + 8 + i * width)
+        }
+        val stsc = directChild(data, stbl, "stsc") ?: throw IOException("MP4 明文轨道缺少 stsc")
+        if (stsc.body + 8 > stsc.end) throw IOException("MP4 明文轨道 stsc 截断")
+        val mapCount = data.u32(stsc.body + 4)
+        if (mapCount < 1 || mapCount > chunkCount || stsc.end - stsc.body != 8L + mapCount * 12L) {
+            throw IOException("MP4 明文轨道 stsc 数量异常")
+        }
+        val maps = (0 until mapCount.toInt()).map { i ->
+            val at = stsc.body + 8 + i * 12
+            Triple(data.u32(at), data.u32(at + 4), data.u32(at + 8))
+        }
+        if (maps.first().first != 1L || maps.any { it.second < 1L || it.third != 1L } ||
+            maps.zipWithNext().any { it.first.first >= it.second.first } || maps.last().first > chunkCount) {
+            throw IOException("MP4 明文轨道 stsc 映射无效")
+        }
+        val out = mutableListOf<Sample>()
+        var mapIndex = 0
+        var sampleIndex = 0
+        for (chunkIndex in offsets.indices) {
+            val chunkNumber = chunkIndex + 1L
+            while (mapIndex + 1 < maps.size && maps[mapIndex + 1].first <= chunkNumber) mapIndex++
+            if (maps[mapIndex].first > chunkNumber) throw IOException("MP4 明文轨道 chunk 映射缺失")
+            var position = offsets[chunkIndex]
+            repeat(maps[mapIndex].second.toInt()) {
+                if (sampleIndex >= sizes.size) throw IOException("MP4 明文轨道样本映射越界")
+                val size = sizes[sampleIndex]
+                if (position < 0L || position > Long.MAX_VALUE - size) throw IOException("MP4 明文轨道样本偏移溢出")
+                out += Sample(position, position + size, ByteArray(16), 0, handler == "vide", sampleIndex, false)
+                position += size
+                sampleIndex++
+            }
+        }
+        if (sampleIndex != sizes.size || out.zipWithNext().any { it.first.end > it.second.start }) {
+            throw IOException("MP4 明文轨道样本表不完整")
+        }
+        return out
     }
 
     /** Validate the same bounded ISO-BMFF box tree accepted by OOIUa Mp4Progressive. */
@@ -380,7 +452,7 @@ object MediaCrypto {
     }
 
     fun verifyVideoIv(prepared: Prepared, key: ByteArray, fetchSample: (Sample) -> ByteArray) {
-        val videoSamples = prepared.samples.filter { it.isVideo }
+        val videoSamples = prepared.samples.filter { it.isVideo && it.isEncrypted }
         if (videoSamples.isEmpty()) throw IOException("CENC 视频样本缺失")
         val probeIndices = listOf(0, 1, 2, videoSamples.size / 4, videoSamples.size / 2, videoSamples.lastIndex)
             .distinct().filter { it in videoSamples.indices && videoSamples[it].end - videoSamples[it].start >= 8 }
@@ -547,7 +619,7 @@ object MediaCrypto {
                     if (sampleIndex >= sampleSizes.size) throw IOException("明文 MP4 样本映射超出范围")
                     val size = sampleSizes[sampleIndex]
                     if (position < 0L || position > Long.MAX_VALUE - size) throw IOException("明文 MP4 样本偏移溢出")
-                    trackSamples += Sample(position, position + size, ByteArray(16), 0, handler == "vide", sampleIndex)
+                    trackSamples += Sample(position, position + size, ByteArray(16), 0, handler == "vide", sampleIndex, false)
                     position += size
                     sampleIndex++
                 }
@@ -645,6 +717,7 @@ object MediaCrypto {
         while(low<high) { val middle=(low+high) ushr 1; if(samples[middle].end<=start) low=middle+1 else high=middle }
         for(i in low until samples.size) {
             val sample=samples[i]; if(sample.start>=end) break
+            if (!sample.isEncrypted) continue
             val begin=maxOf(start,sample.start); val stop=minOf(end,sample.end); if(begin>=stop) continue
             val relative=begin-sample.start+sample.encryptedOffset; val skip=(relative%16).toInt()
             val counter=(BigInteger(1,sample.iv)+BigInteger.valueOf(relative/16)).and(BigInteger.ONE.shiftLeft(128)-BigInteger.ONE).toByteArray()
