@@ -248,7 +248,7 @@ class PhoenixLegacySigner(private val clock: () -> Long = System::currentTimeMil
         var ticket = now; var query: String
         for (offset in 0..127) {
             ticket = now + offset
-            query = PhoenixRequestSigner.encode(values + mapOf("ts" to ts.toString(), "_rticket" to ticket.toString()))
+            query = encode(values + mapOf("ts" to ts.toString(), "_rticket" to ticket.toString()))
             if (branch(query, body, ts) == 0) {
                 val url = "$base?$query"
                 val random = (random()*65536).toInt()
