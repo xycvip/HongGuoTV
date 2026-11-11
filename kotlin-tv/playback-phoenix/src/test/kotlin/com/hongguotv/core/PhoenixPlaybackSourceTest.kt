@@ -14,7 +14,7 @@ class PhoenixPlaybackSourceTest {
             "normal":{"main_url":"https://cdn.qznovelvod.com/720.mp4","video_meta":{"codec_type":"h264","vheight":720,"definition":"720P"}}
           }}}
         }"""
-        val result = PhoenixPlaybackSource.parseResponse(json, 720)
+        val result = PhoenixMediaResolver.parse(json, 720)
         assertEquals("https://cdn.qznovelvod.com/720.mp4", result.url)
         assertEquals("720P", result.quality)
     }
@@ -58,7 +58,7 @@ class PhoenixPlaybackSourceTest {
            "encrypt_info":{"encrypt":true,"encryption_method":"cenc-aes-ctr"}}
         ]}}}"""
         assertThrows(UnplayableVideoException::class.java) {
-            PhoenixPlaybackSource.parseResponse(json)
+            PhoenixMediaResolver.parse(json, 1080)
         }
     }
 
@@ -139,10 +139,10 @@ class PhoenixPlaybackSourceTest {
 
     @Test fun `rejects empty or unsuccessful response`() {
         assertThrows(java.io.IOException::class.java) {
-            PhoenixPlaybackSource.parseResponse("""{"code":0,"data":{}}""")
+            PhoenixMediaResolver.parse("""{"code":0,"data":{}}""", 1080)
         }
         assertThrows(java.io.IOException::class.java) {
-            PhoenixPlaybackSource.parseResponse("""{"code":1001,"data":{}}""")
+            PhoenixMediaResolver.parse("""{"code":1001,"data":{}}""", 1080)
         }
     }
 }
