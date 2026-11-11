@@ -82,7 +82,7 @@ internal object PhoenixMediaResolver {
         val inlineUndeclaredEncryption = inlineRows.any { (_, item) ->
             val encryption = objectOrString(item.opt("encrypt_info"))
             val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
-                .ifEmpty { objectOrString(item.opt("video_meta")).str("spade_a") }
+
             spade.isBlank() && !encryption.has("encrypt") && !item.has("encrypt")
         }
         val referenceId = model.str("video_id").trim()
@@ -139,7 +139,7 @@ internal object PhoenixMediaResolver {
             }
             val method = encryption.str("encryption_method").ifEmpty { item.str("encryption_method") }
             val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
-                .ifEmpty { meta.str("spade_a") }.ifEmpty { item.str("spade_a") }
+                .ifEmpty { item.str("spade_a") }
             val encrypted = encryption.optBoolean("encrypt") || item.optBoolean("encrypt") ||
                 method.equals("cenc-aes-ctr", true) || spade.isNotBlank()
             val key = if (spade.isNotBlank()) {
