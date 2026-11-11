@@ -1,0 +1,69 @@
+name: 详情接口精确匹配检测
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hongguotv-detail-probe
+  cancel-in-progress: false
+
+jobs:
+  detail-probe:
+    name: 检测《永昼赴星光》详情接口
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: 配置 Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: 检测搜索与详情接口
+        working-directory: kotlin-tv
+        shell: bash
+        run: |
+          set -uo pipefail
+          chmod +x ./gradlew
+          mkdir -p "$RUNNER_TEMP/detail-probe"
+          set +e
+          ./gradlew --no-daemon --stacktrace :core:run --args="--detail-probe --keyword 永昼赴星光" 2>&1 | tee "$RUNNER_TEMP/detail-probe/report.txt"
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          echo "gradle_exit_code=$STATUS" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 《永昼赴星光》详情接口检测"
+            echo
+            echo "- 目标片名：永昼赴星光"
+            echo "- 匹配规则：标题必须逐字完全一致，不接受相似标题"
+            echo "- 检测接口：Phoenix App video_detail/v1、hongguoduanju.com 网站 SSR 详情"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/detail-probe/report.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cp "$RUNNER_TEMP/detail-probe/report.txt" detail-probe-report.txt
+          if [ "$STATUS" -ne 0 ]; then
+            echo "::error::详情接口探测程序执行失败，具体信息见报告"
+            exit "$STATUS"
+          fi
+
+      - name: 上传检测报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 永昼赴星光-详情接口检测报告
+          path: |
+            kotlin-tv/detail-probe-report.txt
+            ${{ runner.temp }}/detail-probe/report.txt
+          if-no-files-found: warn
+          retention-days: 14
