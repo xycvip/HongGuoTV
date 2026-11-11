@@ -18,6 +18,29 @@ internal object PhoenixMediaResolver {
         return extractFallbackUrl(model.opt("fallback_api"))
     }
 
+    fun needsFallback(raw: String): Boolean {
+        val root = runCatching { JSONObject(raw) }.getOrNull() ?: return true
+        val data = root.optJSONObject("data") ?: return true
+        val model = runCatching { modelFrom(data) }.getOrNull() ?: return true
+        val rawList = model.opt("video_list")
+        val inlineRows = rows(rawList).ifEmpty {
+            rows(model.optJSONObject("dynamic_video")?.opt("dynamic_video_list"))
+        }
+        if (inlineRows.isEmpty()) return true
+        val allByteVc2 = inlineRows.all { (_, item) ->
+            val meta = objectOrString(item.opt("video_meta"))
+            val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
+            codec in setOf("bytevc2", "bvc2") || item.str("gear_des_key").contains("bytevc2", true)
+        }
+        val undeclaredEncryption = inlineRows.any { (_, item) ->
+            val encryption = objectOrString(item.opt("encrypt_info"))
+            val spade = encryption.str("spade_a").ifEmpty { item.str("spade_a") }
+                .ifEmpty { objectOrString(item.opt("video_meta")).str("spade_a") }
+            spade.isBlank() && !encryption.has("encrypt") && !item.has("encrypt")
+        }
+        return allByteVc2 || undeclaredEncryption
+    }
+
     fun needsCodecOverride(fallbackRaw: String): Boolean {
         val root = runCatching { JSONObject(fallbackRaw) }.getOrNull() ?: return false
         val videoInfo = root.optJSONObject("video_info")
