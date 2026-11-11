@@ -1,203 +1,140 @@
-// Adapted from charlie901208/HGTV feat/phone-login (GPL-3.0-only).
-// SPDX-License-Identifier: GPL-3.0-only.
+// SPDX-License-Identifier: GPL-3.0-only
+// Ported from OOIUa/hongguo-android PlaybackDevice (GPL-3.0-only).
 package com.hongguotv.core
 
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.UUID
 import java.util.zip.GZIPOutputStream
+import okhttp3.CookieJar
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
-/**
- * 设备注册（`POST /service/2/device_register/`）。
- *
- * 平台的内容接口按设备放行，认的是「服务端注册过的 `device_id` + `install_id` 这一对」：
- * 未注册设备的播放接口一律返回 `HTTP 200 + 0 字节`，注册后返回 `code 0` 与完整播放模型。
- * 注册本身是匿名的，不要账号、不要签名头。
- *
- * 三个实测容易踩的坑：
- * 1. body 是 `ttEncrypt(gzip(JSON))` 的原始二进制，不是 base64 文本。
- * 2. 不手动设 `Accept-Encoding`，交给 OkHttp 自己加并解压。
- * 3. 不要加 `x-gorgon` / `x-argus` 等签名头，带了会被判异常客户端。
- */
+/** OOIUa-compatible anonymous playback device registration. */
 object PhoenixDeviceRegister {
-    private const val HOST = "https://log5-applog-lq.fqnovel.com"
-    private const val PATH = "/service/2/device_register/"
+    private const val REGISTER_URL = "https://log5-applog-lf.fqnovel.com/service/2/device_register/?tt_data=a&cronet_version=8d40f833_2026-03-03&ttnet_version=4.2.243.31-douyin&use_store_region_cookie=1"
+    private const val REGISTER_UA = "com.phoenix.read/72232 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3)"
+    private val MAGIC = hex("746305100000")
+    private val KDF_SALT = hex("4dd4c2e6b83162090e52b3c7a6733ba41cb2462b829ab58a196b39db57177524f49baf7f08e8d68d26a72e37c1a95a2f1f05a51892aef2949732b62a38aadd58")
+    private val random = SecureRandom()
+    private val allowedCookies = setOf("install_id", "ttreq", "store-region", "store-region-src")
 
-    /** ttEncrypt 的固定前缀（`libEncryptor.so` 的魔数）。 */
-    private val MAGIC = byteArrayOf(0x74, 0x63, 0x05, 0x10, 0x00, 0x00)
-
-    /** PhoenixReadApi TtEncrypt 固定前缀与 KDF 常量。 */
-    private val KDF_SALT = hex(
-        "4dd4c2e6b83162090e52b3c7a6733ba41cb2462b829ab58a196b39db57177524f49baf7f08e8d68d26a72e37c1a95a2f1f05a51892aef2949732b62a38aadd58"
-    )
-    private val TT_ENCRYPT_PREFIX = hex(
-        "3176c9b6d71579d7e82179c9e7cbde787b54d541bad3b15f2e8fed92293fa25a"
-    )
-    private val TT_ENCRYPT_KEY_IV = digest(
-        "SHA-512",
-        digest("SHA-512", TT_ENCRYPT_PREFIX) + KDF_SALT
-    )
-
-    /** 注册结果：平台下发的设备身份 + 需要回写的那几个 Cookie。 */
     data class Registered(
         val deviceId: String,
         val installId: String,
-        val deviceToken: String = "",
-        /** `new_user=1` 表示平台这次新建了一台设备。 */
-        val newUser: Boolean = false,
-        val klinkEgdi: String = "",
-        /** `Set-Cookie` 里可直接回写的那几项（`install_id` / `ttreq` / `store-region` …）。 */
-        val cookies: Map<String, String> = emptyMap(),
-    )
+        val cdid: String,
+        val cookies: Map<String, String>
+    ) {
+        val cookie: String get() = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
+    }
 
-    /**
-     * ttEncrypt：`MAGIC || rnd[32] || AES-128-CBC(SHA512(SHA512(rnd)+KDF_SALT) 前 32 字节,
-     * PKCS7(SHA512(data)||data))`。
-     */
-    fun ttEncrypt(data: ByteArray): ByteArray {
-        // PhoenixReadApi TtEncrypt.Encrypt: SHA512(data) || data, AES-128-CBC/PKCS7,
-        // prefixed by the fixed tt-data magic and 32-byte prefix.
+    fun register(http: OkHttpClient): Registered {
+        RequestScope.ensureActive()
+        val now = System.currentTimeMillis()
+        val cdid = UUID.randomUUID().toString()
+        val payload = registrationPayload(now, cdid)
+        val body = ttEncrypt(gzip(payload.toByteArray(Charsets.UTF_8)))
+        val request = Request.Builder().url(REGISTER_URL)
+            .header("User-Agent", REGISTER_UA)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/octet-stream;tt-data=a")
+            .header("log-encode-type", "gzip")
+            .header("x-ss-dp", "8662")
+            .header("x-ss-req-ticket", now.toString())
+            .header("x-vc-bdturing-sdk-version", "4.0.3.cn")
+            .header("lc", "101")
+            .header("sdk-version", "2")
+            .header("passport-sdk-version", "5051452")
+            .header("x-neptune", "-8|50:51:59:30:40:47:49:39")
+            .header("x-ss-stub", digest("MD5", body).hex().uppercase())
+            .post(body.toRequestBody("application/octet-stream;tt-data=a".toMediaType()))
+            .build()
+        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).followRedirects(false).build()
+        return RequestScope.execute(transport.newCall(request)) { response ->
+            if (response.code != 200) throw IOException("播放设备注册失败（HTTP ${response.code}）")
+            val responseBody = response.body ?: throw IOException("播放设备注册响应为空")
+            if (responseBody.contentLength() > 2L * 1024 * 1024) throw IOException("播放设备注册响应过大")
+            val raw = responseBody.string()
+            if (raw.isBlank()) throw IOException("播放设备注册返回空响应")
+            val json = runCatching { org.json.JSONObject(raw) }.getOrElse {
+                throw IOException("播放设备注册响应不是有效 JSON")
+            }
+            val code = json.opt("code") ?: json.opt("Code") ?: 0
+            if (code.toString().toLongOrNull() != 0L) throw IOException("播放设备注册被拒绝")
+            fun responseId(name: String): String {
+                val preferred = json.opt(name + "_str")
+                val value = if (preferred != null && preferred.toString().isNotBlank()) preferred else json.opt(name)
+                val id = value?.toString()?.trim().orEmpty()
+                return id.takeIf { it.matches(Regex("[0-9]{1,30}")) && it.any { ch -> ch != '0' } }.orEmpty()
+            }
+            val deviceId = responseId("device_id")
+            val installId = responseId("install_id")
+            if (deviceId.isEmpty() || installId.isEmpty()) throw IOException("设备注册响应缺少有效 device_id/install_id")
+            val cookies = linkedMapOf<String, String>()
+            response.headers("Set-Cookie").forEach { header ->
+                val pair = header.substringBefore(';').trim()
+                val split = pair.indexOf('=')
+                if (split > 0) {
+                    val name = pair.substring(0, split)
+                    val value = pair.substring(split + 1)
+                    if (name in allowedCookies && value.isNotEmpty()) cookies[name] = value
+                }
+            }
+            Registered(deviceId, installId, cdid, cookies)
+        }
+    }
+
+    private fun registrationPayload(now: Long, cdid: String): String {
+        val openudid = ByteArray(8).also(random::nextBytes).hex()
+        val header = org.json.JSONObject()
+            .put("display_name", "红果免费短剧")
+            .put("update_version_code", 73932).put("manifest_version_code", 73932)
+            .put("app_version_minor", "7.3.9.32").put("aid", 8662)
+            .put("channel", "update_64").put("package", "com.phoenix.read")
+            .put("app_version", "7.3.9.32").put("version_code", 73932)
+            .put("sdk_version", "3.7.0-rc.34-fanqie-xiaoshuo").put("sdk_target_version", 29)
+            .put("git_hash", "3a88f4e").put("os", "Android").put("os_version", "16").put("os_api", 36)
+            .put("device_model", "25053RT47C").put("device_brand", "Redmi").put("device_manufacturer", "Redmi")
+            .put("cpu_abi", "arm64-v8a").put("release_build", "b5e187f")
+            .put("density_dpi", 520).put("display_density", "mdpi").put("resolution", "1280x2772")
+            .put("language", "zh").put("timezone", 8).put("access", "wifi").put("not_request_sender", 0)
+            .put("carrier", "CHINA MOBILE").put("mcc_mnc", "46000")
+            .put("rom", "eng.root.20231116.160340").put("rom_version", "W528JS release-keys")
+            .put("cdid", cdid).put("sig_hash", "56a962410c494bbaf0b58dba20cae56f")
+            .put("openudid", openudid).put("clientudid", UUID.randomUUID().toString())
+            .put("ipv6_list", org.json.JSONArray()).put("region", "CN").put("tz_name", "Asia/Shanghai")
+            .put("tz_offset", 28800).put("sim_region", "cn").put("sim_serial_number", org.json.JSONArray())
+            .put("oaid_may_support", false).put("req_id", UUID.randomUUID().toString())
+            .put("device_platform", "android")
+        header.put("custom", org.json.JSONObject().put("account_region_src", "fallback")
+            .put("account_region", "cn").put("host_bit", 64).put("dragon_device_type", "phone"))
+        header.put("pre_installed_channel", "").put("apk_first_install_time", now)
+            .put("is_system_app", 0).put("sdk_flavor", "china").put("guest_mode", 0)
+        return org.json.JSONObject().put("magic_tag", "ss_app_log").put("header", header)
+            .put("_gen_time", now).toString()
+    }
+
+    private fun gzip(data: ByteArray): ByteArray = ByteArrayOutputStream().also { out ->
+        GZIPOutputStream(out).use { it.write(data) }
+    }.toByteArray()
+
+    private fun ttEncrypt(data: ByteArray): ByteArray {
+        val rnd = ByteArray(32).also(random::nextBytes)
+        val inner = digest("SHA-512", rnd)
+        val derived = digest("SHA-512", inner + KDF_SALT).copyOfRange(0, 32)
         val plain = digest("SHA-512", data) + data
-        val padding = 16 - (plain.size % 16)
-        val padded = plain + ByteArray(padding) { padding.toByte() }
+        val pad = 16 - plain.size % 16
+        val padded = plain + ByteArray(pad) { pad.toByte() }
         val encrypted = javax.crypto.Cipher.getInstance("AES/CBC/NoPadding").run {
-            init(
-                javax.crypto.Cipher.ENCRYPT_MODE,
-                javax.crypto.spec.SecretKeySpec(TT_ENCRYPT_KEY_IV.copyOfRange(0, 16), "AES"),
-                javax.crypto.spec.IvParameterSpec(TT_ENCRYPT_KEY_IV.copyOfRange(16, 32)),
-            )
+            init(javax.crypto.Cipher.ENCRYPT_MODE,
+                javax.crypto.spec.SecretKeySpec(derived.copyOfRange(0, 16), "AES"),
+                javax.crypto.spec.IvParameterSpec(derived.copyOfRange(16, 32)))
             doFinal(padded)
         }
-        return MAGIC + TT_ENCRYPT_PREFIX + encrypted
-    }
-
-    private fun gzip(data: ByteArray): ByteArray =
-        ByteArrayOutputStream()
-            .also { out -> GZIPOutputStream(out).use { it.write(data) } }
-            .toByteArray()
-
-    /** 组装注册请求体：`ttEncrypt(gzip(JSON))`。`device_id` / `install_id` 由服务端下发。 */
-    fun payload(device: Map<String, String>, now: Long = System.currentTimeMillis()): ByteArray {
-        fun value(key: String, fallback: String) = device[key]?.takeIf { it.isNotBlank() } ?: fallback
-        val json = org.json.JSONObject().put("magic_tag", "ss_app_log")
-        json.put("header", org.json.JSONObject().apply {
-            put("display_name", "红果免费短剧")
-            put("aid", 8662)
-            put("app_version", value("version_name", "7.1.3.32"))
-            put("version_code", value("version_code", "71332").toInt())
-            put("manifest_version_code", value("manifest_version_code", "71332").toInt())
-            put("update_version_code", value("update_version_code", "71332").toInt())
-            put("channel", value("channel", "update_64"))
-            put("package", "com.phoenix.read")
-            put("app_language", "zh")
-            put("os", "Android")
-            put("os_version", value("os_version", "16"))
-            put("os_api", value("os_api", "36").toInt())
-            put("device_model", value("device_type", "25053RT47C"))
-            put("device_brand", value("device_brand", "Redmi"))
-            put("device_manufacturer", value("device_brand", "Redmi"))
-            put("cpu_abi", value("host_abi", "arm64-v8a"))
-            put("density_dpi", value("dpi", "520").toInt())
-            put("resolution", value("resolution", "1280*2772").replace('*', 'x'))
-            put("language", "zh")
-            put("timezone", 8)
-            put("access", "wifi")
-            put("openudid", value("openudid", UUID.randomUUID().toString().replace("-", "").take(16)))
-            put("clientudid", UUID.randomUUID().toString())
-            put("cdid", value("cdid", UUID.randomUUID().toString()))
-            put("region", "CN")
-            put("tz_name", "Asia/Shanghai")
-            put("tz_offset", 28800)
-            put("sim_region", "cn")
-            put("device_platform", "android")
-            put("not_request_sender", 0)
-            put("is_system_app", 0)
-            put("sdk_flavor", "china")
-            put("rom", "Android16")
-            put("rom_version", "BP2A.250605.031.A3")
-        })
-        json.put("_gen_time", now)
-        return ttEncrypt(gzip(json.toString().toByteArray(Charsets.UTF_8)))
-    }
-
-    /** 注册请求的头，刻意不加签名头。 */
-    fun headers(
-        body: ByteArray,
-        device: Map<String, String>,
-        now: Long = System.currentTimeMillis(),
-    ): Map<String, String> = linkedMapOf(
-        "User-Agent" to VendorConstants.VIDEO_UA,
-        "Accept" to "application/json",
-        "log-encode-type" to "gzip",
-        "sdk-version" to "2",
-        "passport-sdk-version" to "5051452",
-        "x-vc-bdturing-sdk-version" to "4.0.3.cn",
-        "x-ss-dp" to "8662",
-        "X-SS-STUB" to digest("MD5", body).hex().uppercase(),
-    )
-
-    /** PhoenixReadApi 的注册 query，req_id 和 ticket 每次注册重新生成。 */
-    fun url(device: Map<String, String>, now: Long = System.currentTimeMillis()): String {
-        fun value(key: String, fallback: String) = device[key]?.takeIf { it.isNotBlank() } ?: fallback
-        val values = linkedMapOf(
-            "req_id" to UUID.randomUUID().toString(),
-            "tt_data" to "a",
-            "aid" to value("aid", "8662"),
-            "app_name" to value("app_name", "novelread"),
-            "version_code" to value("version_code", "71332"),
-            "version_name" to value("version_name", "7.1.3.32"),
-            "manifest_version_code" to value("manifest_version_code", "71332"),
-            "update_version_code" to value("update_version_code", "71332"),
-            "channel" to value("channel", "update_64"),
-            "device_platform" to value("device_platform", "android"),
-            "os" to value("os", "android"),
-            "ssmix" to value("ssmix", "a"),
-            "device_type" to value("device_type", "25053RT47C"),
-            "device_brand" to value("device_brand", "Redmi"),
-            "language" to value("language", "zh"),
-            "os_api" to value("os_api", "36"),
-            "os_version" to value("os_version", "16"),
-            "resolution" to value("resolution", "1280*2772"),
-            "dpi" to value("dpi", "520"),
-            "ac" to value("ac", "wifi"),
-            "_rticket" to now.toString(),
-        )
-        val query = values.entries.joinToString("&") { (key, value) ->
-            java.net.URLEncoder.encode(key, "UTF-8").replace("+", "%20") + "=" +
-                java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-        }
-        return "$HOST$PATH?$query"
-    }
-
-    /** 解析注册响应；`device_id` / `install_id` 数字或字符串都认，全为 0 表示被拒。 */
-    fun parse(body: String, setCookies: List<String> = emptyList()): Registered? {
-        val json = runCatching { org.json.JSONObject(body) }.getOrNull() ?: return null
-        val device =
-            json.opt("device_id_str")?.toString()?.takeIf { it.isNotBlank() }
-                ?: json.opt("device_id")?.toString().orEmpty()
-        val install =
-            json.opt("install_id_str")?.toString()?.takeIf { it.isNotBlank() }
-                ?: json.opt("install_id")?.toString().orEmpty()
-        if (device.isBlank() || install.isBlank() || device == "0" || install == "0") return null
-        val cookies = linkedMapOf<String, String>()
-        setCookies.forEach { header ->
-            header
-                .split(';')
-                .firstOrNull()
-                ?.trim()
-                ?.takeIf { it.contains('=') }
-                ?.let { pair ->
-                    val name = pair.substringBefore('=').trim()
-                    val value = pair.substringAfter('=').trim()
-                    if (name.isNotEmpty() && value.isNotEmpty()) cookies[name] = value
-                }
-        }
-        return Registered(
-            device,
-            install,
-            json.optString("device_token", ""),
-            json.optInt("new_user", 0) == 1,
-            json.optString("klink_egdi", ""),
-            cookies,
-        )
+        return MAGIC + rnd + encrypted
     }
 }
