@@ -252,9 +252,6 @@ class PhoenixRequestSigner(private val clock: () -> Long = System::currentTimeMi
             if (branch(query, body, ts) == 0) {
                 val url = "$base?$query"
                 val random = (random()*65536).toInt()
-                // medusa must bind the SAME device id / version as the query string
-                // (upstream hgParamOf(query, "device_id"/"version_name")) or risk
-                // control answers 110001.
                 val headers = linkedMapOf(
                     "User-Agent" to userAgent,
                     "Accept" to "application/json; charset=utf-8,application/x-protobuf",
@@ -265,10 +262,7 @@ class PhoenixRequestSigner(private val clock: () -> Long = System::currentTimeMi
                     "x-ladon" to be32(ts).base64(),
                     "x-argus" to le32(ts).base64(),
                     "x-gorgon" to gorgon(query, body, ts, random),
-                    "x-helios" to helios(ts),
-                    "x-medusa" to medusa(url, body, ts,
-                        deviceId = values["device_id"] ?: "0",
-                        versionName = values["version_name"] ?: "7.1.3.32"))
+                    "x-helios" to helios(ts))
                 if (body != null) { headers["Content-Type"] = "application/json; charset=utf-8"; headers["x-ss-stub"] = digest("MD5", body).hex().uppercase() }
                 return Request(url, headers, body)
             }
