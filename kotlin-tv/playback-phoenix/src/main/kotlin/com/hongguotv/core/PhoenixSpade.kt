@@ -18,7 +18,7 @@ internal object PhoenixSpade {
         val length = spade.size
         if (length < 3) return null
         val typeLength = ((spade[0].u() xor spade[1].u() xor spade[2].u()) and 0xff) - 0x30
-        if (typeLength < 1) return null
+        if (typeLength < 1 || typeLength > length - 2) return null
         val workLength = length - (typeLength + 0x30) + 0x2f
         if (workLength < 1 || 1 + workLength > length) return null
         val dest = spade.copyOfRange(1, 1 + workLength)
