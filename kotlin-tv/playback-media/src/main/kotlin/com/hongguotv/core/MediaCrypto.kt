@@ -48,7 +48,9 @@ object MediaCrypto {
     fun prepare(data: ByteArray,key: ByteArray?, requireOoiUaMp4Validation: Boolean = false, moovStart: Long = 0): Prepared {
         if(key==null) {
             val samples = if (requireOoiUaMp4Validation) inspectPlainMp4(data) else emptyList()
-            return Prepared(data.copyOf(),samples, if (requireOoiUaMp4Validation) moovStart else 0)
+            val header = data.copyOf()
+            if (requireOoiUaMp4Validation) clearPssh(header)
+            return Prepared(header,samples, if (requireOoiUaMp4Validation) moovStart else 0)
         }
         if(requireOoiUaMp4Validation) return prepareSencCenc(data, key, moovStart)
         val moov=box(data,data.u32(0).toInt()) ?: throw IOException("视频索引不完整")
@@ -418,7 +420,7 @@ object MediaCrypto {
         if (moov.type != "moov" || moov.end != data.size || moov.end - moov.start > 16 * 1024 * 1024) {
             throw IOException("明文 MP4 索引布局不受支持")
         }
-        val forbidden = setOf("encv", "enca", "sinf", "schi", "senc", "saiz", "saio", "pssh", "tenc", "mvex", "moof", "traf", "stz2", "uuid")
+        val forbidden = setOf("encv", "enca", "sinf", "schi", "senc", "saiz", "saio", "tenc", "mvex", "moof", "traf", "stz2", "uuid")
         for (type in forbidden) {
             if (containsFourcc(data, moov.start, moov.end, type)) {
                 throw IOException("未声明加密的片源实际包含 MP4 加密标记")
@@ -584,6 +586,17 @@ object MediaCrypto {
         val sorted = preparedSamples.sortedBy { it.start }
         if (sorted.zipWithNext().any { it.first.end > it.second.start }) throw IOException("明文 MP4 跨轨道样本重叠")
         return sorted
+    }
+
+    private fun clearPssh(header: ByteArray) {
+        val moov = box(header, 0) ?: return
+        if (moov.type != "moov") return
+        var at = moov.body
+        while (at < moov.end) {
+            val child = box(header, at, moov.end) ?: throw IOException("MP4 moov 子框损坏")
+            if (child.type == "pssh") "free".toByteArray(Charsets.US_ASCII).copyInto(header, child.start + 4)
+            at = child.end
+        }
     }
 
     private fun directChild(data: ByteArray, parent: Box, type: String): Box? {
