@@ -38,7 +38,7 @@ internal class TheaterRepository(
     }
     private fun theaterRequest(profile:PlaybackDeviceSession.Profile,host:String,endpoint:String,body:ByteArray):JSONObject {
         val values=theaterValues(profile)
-        val signer=Signer(values)
+        val signer=Signer(device = values)
         val signedBase=signer.sign("https://$host$endpoint",values,body)
         val signed=if(profile.cookie.isBlank()) signedBase else signedBase.copy(headers=signedBase.headers + ("Cookie" to profile.cookie))
         return JSONObject(requestText(signed.url,signed))
