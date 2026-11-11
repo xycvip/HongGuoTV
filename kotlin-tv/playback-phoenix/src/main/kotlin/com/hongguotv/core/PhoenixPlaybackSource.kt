@@ -175,7 +175,8 @@ class PhoenixPlaybackSource(
             Route(true, "api5-normal-hl.fqnovel.com", false)
         )
         var identity = initialIdentity
-        var lastFailure: IOException? = null
+        var modelFailure: IOException? = null
+        var requestFailure: IOException? = null
         val legacyBody = JSONObject()
             .put("biz_param", JSONObject()
                 .put("detail_page_version", 0)
@@ -198,7 +199,7 @@ class PhoenixPlaybackSource(
                 } catch (error: java.io.InterruptedIOException) {
                     throw error
                 } catch (error: IOException) {
-                    lastFailure = error
+                    requestFailure = error
                 }
             }
             try {
@@ -246,7 +247,7 @@ class PhoenixPlaybackSource(
                 }
                 val normalized = normalizeLegacyResponse(raw, id, route.post)
                 if (normalized == null) {
-                    lastFailure = IOException("OOIUa 备用线路未返回本集有效 video_model")
+                    modelFailure = IOException("OOIUa 备用线路未返回本集有效 video_model")
                     continue
                 }
                 return try {
@@ -254,18 +255,18 @@ class PhoenixPlaybackSource(
                 } catch (error: java.io.InterruptedIOException) {
                     throw error
                 } catch (error: IOException) {
-                    lastFailure = error
+                    modelFailure = error
                     emitDiagnostic("Phoenix：备用线路 ${index + 1} 模型解析失败，继续下一线路")
                     continue
                 }
             } catch (error: java.io.InterruptedIOException) {
                 throw error
             } catch (error: IOException) {
-                lastFailure = error
+                requestFailure = error
                 emitDiagnostic("Phoenix：OOIUa 备用线路 ${index + 1} 请求失败")
             }
         }
-        return null to lastFailure
+        return null to (modelFailure ?: requestFailure)
     }
 
     private fun normalizeLegacyResponse(raw: String, id: String, post: Boolean): String? {
