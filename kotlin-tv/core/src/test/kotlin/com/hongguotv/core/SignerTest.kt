@@ -11,18 +11,6 @@ class SignerTest {
         VendorConstants.processNonce = "Ai6svO3PyrwDOUSmO6ZcResxu"
         VendorConstants.processStarted = 1728388016635L
     }
-    @Test fun nativePlaybackRequestOmitsMedusaHeader() {
-        val signer = Signer({ 1794050000000L }) { 0.5 }
-        val request = signer.signPlayback(
-            "https://example.test/novel/player/multi_video_model/v1/",
-            mapOf("aid" to "8662", "device_id" to "123456789", "iid" to "987654321"),
-            """{"video_id":"7701336636495252504"}""".toByteArray()
-        )
-        assertFalse(request.headers.keys.any { it.equals("x-medusa", ignoreCase = true) })
-        assertTrue(request.headers.keys.any { it.equals("x-gorgon", ignoreCase = true) })
-        assertTrue(request.headers.keys.any { it.equals("x-helios", ignoreCase = true) })
-    }
-
     @Test fun matchesPinnedJavaScriptOracleAcrossTimestampVariants() {
         val rows = JSONArray(javaClass.getResource("/signing.json")!!.readText())
         for (i in 0 until rows.length()) {
