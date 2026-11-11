@@ -241,7 +241,8 @@ class PhoenixPlaybackSource(
                     if (bytes.size > 16 * 1024 * 1024) throw IOException("备用播放响应过大")
                     String(bytes, Charsets.UTF_8)
                 }
-                val normalized = normalizeLegacyResponse(raw, id, route.post) ?: run {
+                val normalized = normalizeLegacyResponse(raw, id, route.post)
+                if (normalized == null) {
                     lastFailure = IOException("OOIUa 备用线路未返回本集有效 video_model")
                     continue
                 }
@@ -291,11 +292,6 @@ class PhoenixPlaybackSource(
         return JSONObject().put("code", 0).put("data", JSONObject().put("video_model", model)).toString()
     }
 
-    companion object {
-        private const val PLAYBACK_UA =
-            "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)"
-    }
-
     /**
      * Resolve the optional second-stage fallback_api endpoint before parsing media.
      * This is a plain GET with the reader UA; credentials and signed query data are not logged.
@@ -336,6 +332,8 @@ class PhoenixPlaybackSource(
     }
 
     companion object {
+        private const val PLAYBACK_UA =
+            "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)"
         private const val PHOENIX_UA =
             "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
