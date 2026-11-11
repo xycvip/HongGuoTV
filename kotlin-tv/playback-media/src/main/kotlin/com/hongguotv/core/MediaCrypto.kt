@@ -45,11 +45,12 @@ object MediaCrypto {
         if(size<8 || end>total || end>8*1024*1024) throw IOException("视频索引大小异常")
         return end.toInt()
     }
-    fun prepare(data: ByteArray,key: ByteArray?, requirePlainValidation: Boolean = false): Prepared {
+    fun prepare(data: ByteArray,key: ByteArray?, requireOoiUaMp4Validation: Boolean = false): Prepared {
         if(key==null) {
-            if(requirePlainValidation) inspectPlainMp4(data)
+            if(requireOoiUaMp4Validation) inspectPlainMp4(data)
             return Prepared(data.copyOf(),emptyList())
         }
+        if(requireOoiUaMp4Validation) return prepareSencCenc(data, key)
         val moov=box(data,data.u32(0).toInt()) ?: throw IOException("视频索引不完整")
         require(moov.type=="moov")
         val samples=mutableListOf<Sample>(); val header=data.copyOf()
@@ -134,6 +135,200 @@ object MediaCrypto {
         if(sorted.zipWithNext().any { (a,b) -> a.end>b.start }) throw IOException("视频样本重叠")
         return Prepared(header,sorted)
     }
+
+    /**
+     * P-only OOIUa-compatible CENC path. This path intentionally accepts only
+     * senc per-sample IV encryption with full-sample AES-CTR (flags == 0).
+     * Unsupported subsample/pattern layouts are rejected instead of guessed.
+     */
+    private fun prepareSencCenc(data: ByteArray, key: ByteArray): Prepared {
+        if (key.size != 16) throw IOException("CENC 内容密钥长度无效")
+        val ftyp = box(data, 0) ?: throw IOException("MP4 文件头无效")
+        if (ftyp.type != "ftyp") throw IOException("MP4 缺少 ftyp")
+        val moov = box(data, ftyp.end) ?: throw IOException("MP4 索引不完整")
+        if (moov.type != "moov" || moov.end != data.size || moov.end > 16 * 1024 * 1024) {
+            throw IOException("CENC MP4 索引布局不受支持")
+        }
+        val header = data.copyOf()
+        val samples = mutableListOf<Sample>()
+        var cursor = moov.body
+        var trackCount = 0
+        var encryptedTrackCount = 0
+        var totalSamples = 0L
+        while (cursor < moov.end) {
+            val track = box(data, cursor, moov.end) ?: throw IOException("MP4 轨道结构损坏")
+            cursor = track.end
+            if (track.type != "trak") continue
+            if (++trackCount > 8) throw IOException("MP4 轨道数量异常")
+            val mdia = directChild(data, track, "mdia") ?: throw IOException("MP4 缺少 mdia")
+            val hdlr = directChild(data, mdia, "hdlr") ?: throw IOException("MP4 缺少 hdlr")
+            if (hdlr.body + 12 > hdlr.end) throw IOException("MP4 hdlr 截断")
+            val handler = String(data, hdlr.body + 8, 4, Charsets.US_ASCII)
+            if (handler != "vide" && handler != "soun") throw IOException("MP4 存在不支持的轨道类型")
+            val minf = directChild(data, mdia, "minf") ?: throw IOException("MP4 缺少 minf")
+            val stbl = directChild(data, minf, "stbl") ?: throw IOException("MP4 缺少 stbl")
+            val stsd = directChild(data, stbl, "stsd") ?: throw IOException("MP4 缺少 stsd")
+            if (stsd.body + 8 > stsd.end || data.u32(stsd.body + 4) != 1L) throw IOException("MP4 sample description 不受支持")
+            val entry = box(data, stsd.body + 8, stsd.end) ?: throw IOException("MP4 sample entry 损坏")
+            if (entry.end != stsd.end) throw IOException("MP4 sample description 数量异常")
+            val senc = directChild(data, stbl, "senc")
+            val saiz = directChild(data, stbl, "saiz")
+            val saio = directChild(data, stbl, "saio")
+            val protected = entry.type == "encv" || entry.type == "enca"
+            if (!protected) {
+                if (senc != null || saiz != null || saio != null) throw IOException("明文轨道包含 CENC 辅助索引")
+                continue
+            }
+            if ((handler == "vide") != (entry.type == "encv")) throw IOException("受保护 sample entry 与轨道类型不匹配")
+            if (senc == null) throw IOException("CENC 缺少逐样本 IV（senc）")
+            val fixed = if (entry.type == "encv") 78 else 28
+            val sinf = directChildRange(data, entry.body + fixed, entry.end, "sinf")
+                ?: throw IOException("CENC 缺少 sinf")
+            val frma = directChild(data, sinf, "frma") ?: throw IOException("CENC 缺少 frma")
+            val schm = directChild(data, sinf, "schm") ?: throw IOException("CENC 缺少 schm")
+            if (frma.body + 4 > frma.end || schm.body + 8 > schm.end ||
+                String(data, schm.body + 4, 4, Charsets.US_ASCII) != "cenc") {
+                throw IOException("CENC 加密方案或原始编码声明无效")
+            }
+            val original = String(data, frma.body, 4, Charsets.US_ASCII)
+            val allowed = if (handler == "vide")
+                setOf("avc1", "avc3", "hvc1", "hev1", "av01", "mp4v", "vp08", "vp09", "dvav", "dva1")
+            else setOf("mp4a", "ac-3", "ec-3", "Opus", "fLaC", "samr", "sawb")
+            if (original !in allowed || entry.body + fixed > entry.end) throw IOException("CENC 原始编码格式无效")
+
+            if (senc.body + 8 > senc.end || (data.i32(senc.body) and 0x00ffffff) != 0) {
+                throw IOException("不支持 CENC subsample/pattern 加密")
+            }
+            val sencCount = data.u32(senc.body + 4)
+            if (sencCount < 1 || sencCount > 250_000) throw IOException("CENC IV 数量异常")
+            val ivBytes = senc.end - senc.body - 8
+            if (ivBytes != sencCount * 8L && ivBytes != sencCount * 16L) throw IOException("CENC IV 长度与数量不匹配")
+            val ivSize = (ivBytes / sencCount).toInt()
+
+            val stsz = directChild(data, stbl, "stsz") ?: throw IOException("MP4 缺少 stsz")
+            if (stsz.body + 12 > stsz.end) throw IOException("MP4 stsz 截断")
+            val uniformSize = data.u32(stsz.body + 4)
+            val sampleCount = data.u32(stsz.body + 8)
+            if (sampleCount != sencCount || sampleCount > 250_000 ||
+                stsz.end - stsz.body != 12L + if (uniformSize == 0L) sampleCount * 4L else 0L) {
+                throw IOException("CENC 样本数量与 stsz 不匹配")
+            }
+            val sizes = LongArray(sampleCount.toInt()) { index ->
+                val size = if (uniformSize > 0) uniformSize else data.u32(stsz.body + 12 + index * 4)
+                if (size <= 0 || size > 8L * 1024 * 1024) throw IOException("CENC 样本大小异常")
+                size
+            }
+            val chunks = directChild(data, stbl, "stco") ?: directChild(data, stbl, "co64")
+                ?: throw IOException("MP4 缺少 chunk offset")
+            val offsetWidth = if (chunks.type == "co64") 8 else 4
+            if (chunks.body + 8 > chunks.end) throw IOException("MP4 chunk offset 截断")
+            val chunkCount = data.u32(chunks.body + 4)
+            if (chunkCount < 1 || chunkCount > sampleCount ||
+                chunks.end - chunks.body != 8L + chunkCount * offsetWidth) throw IOException("MP4 chunk offset 数量异常")
+            val offsets = LongArray(chunkCount.toInt()) { index ->
+                if (offsetWidth == 8) data.i64(chunks.body + 8 + index * 8)
+                else data.u32(chunks.body + 8 + index * 4)
+            }
+            val stsc = directChild(data, stbl, "stsc") ?: throw IOException("MP4 缺少 stsc")
+            if (stsc.body + 8 > stsc.end) throw IOException("MP4 stsc 截断")
+            val mapCount = data.u32(stsc.body + 4)
+            if (mapCount < 1 || mapCount > chunkCount || stsc.end - stsc.body != 8L + mapCount * 12L) {
+                throw IOException("MP4 stsc 映射数量异常")
+            }
+            val maps = (0 until mapCount.toInt()).map { index ->
+                val at = stsc.body + 8 + index * 12
+                Triple(data.u32(at), data.u32(at + 4), data.u32(at + 8))
+            }
+            if (maps.first().first != 1L || maps.any { it.second < 1L || it.third != 1L } ||
+                maps.zipWithNext().any { it.first.first >= it.second.first } || maps.last().first > chunkCount) {
+                throw IOException("MP4 stsc 映射无效")
+            }
+            var sampleIndex = 0
+            var mapIndex = 0
+            val trackSamples = mutableListOf<Sample>()
+            for (chunkIndex in offsets.indices) {
+                val chunkNumber = chunkIndex + 1L
+                while (mapIndex + 1 < maps.size && maps[mapIndex + 1].first <= chunkNumber) mapIndex++
+                if (maps[mapIndex].first > chunkNumber) throw IOException("MP4 chunk 映射缺失")
+                var position = offsets[chunkIndex]
+                repeat(maps[mapIndex].second.toInt()) {
+                    if (sampleIndex >= sizes.size) throw IOException("MP4 样本映射超出范围")
+                    val length = sizes[sampleIndex]
+                    if (position < 0 || position > Long.MAX_VALUE - length) throw IOException("MP4 样本偏移溢出")
+                    val ivAt = senc.body + 8 + sampleIndex * ivSize
+                    val rawIv = data.copyOfRange(ivAt, ivAt + ivSize)
+                    val counterIv = if (ivSize == 8) rawIv + ByteArray(8) else rawIv
+                    trackSamples += Sample(position, position + length, counterIv, 0, handler == "vide", sampleIndex)
+                    position += length
+                    sampleIndex++
+                }
+            }
+            if (sampleIndex != sizes.size) throw IOException("MP4 样本映射不完整")
+            if (trackSamples.zipWithNext().any { it.first.end > it.second.start }) throw IOException("MP4 轨道样本重叠")
+            samples += trackSamples
+            totalSamples += sampleIndex
+            if (totalSamples > 250_000L) throw IOException("MP4 总样本数量过大")
+
+            original.toByteArray(Charsets.US_ASCII).copyInto(header, entry.start + 4)
+            "free".toByteArray(Charsets.US_ASCII).copyInto(header, sinf.start + 4)
+            "free".toByteArray(Charsets.US_ASCII).copyInto(header, senc.start + 4)
+            if (saiz != null) "free".toByteArray(Charsets.US_ASCII).copyInto(header, saiz.start + 4)
+            if (saio != null) "free".toByteArray(Charsets.US_ASCII).copyInto(header, saio.start + 4)
+            encryptedTrackCount++
+        }
+        if (trackCount == 0 || encryptedTrackCount == 0 || samples.none { it.isVideo }) {
+            throw IOException("MP4 没有可验证的 CENC 视频轨")
+        }
+        val sorted = samples.sortedBy { it.start }
+        if (sorted.zipWithNext().any { it.first.end > it.second.start }) throw IOException("MP4 加密样本重叠")
+        return Prepared(header, sorted)
+    }
+
+    private fun directChildRange(data: ByteArray, start: Int, end: Int, type: String): Box? {
+        var found: Box? = null
+        var at = start
+        while (at < end) {
+            val child = box(data, at, end) ?: throw IOException("MP4 sample entry 子框损坏")
+            if (child.type == type) {
+                if (found != null) throw IOException("MP4 存在重复的 $type 框")
+                found = child
+            }
+            at = child.end
+        }
+        return found
+    }
+
+    fun verifyVideoIv(prepared: Prepared, key: ByteArray, fetchSample: (Sample) -> ByteArray) {
+        val videoSamples = prepared.samples.filter { it.isVideo }
+        if (videoSamples.isEmpty()) throw IOException("CENC 视频样本缺失")
+        val probeIndices = listOf(0, 1, 2, videoSamples.size / 4, videoSamples.size / 2, videoSamples.lastIndex)
+            .distinct().filter { it in videoSamples.indices && videoSamples[it].end - videoSamples[it].start >= 8 }
+        if (probeIndices.isEmpty()) throw IOException("CENC 没有可自证的视频样本")
+        for (index in probeIndices) {
+            val sample = videoSamples[index]
+            val encrypted = fetchSample(sample)
+            if (encrypted.size.toLong() != sample.end - sample.start) throw IOException("CENC 自证样本读取不完整")
+            val plain = aes("CTR", key, sample.iv, encrypted)
+            if (!avccSelfOk(plain)) throw IOException("CENC 视频 IV/密钥自证失败")
+        }
+    }
+
+    private fun avccSelfOk(bytes: ByteArray): Boolean {
+        if (bytes.size < 5) return false
+        if (bytes[0].u() == 0 && bytes[1].u() == 0 &&
+            (bytes[2].u() == 1 || (bytes[2].u() == 0 && bytes[3].u() == 1))) return true
+        var offset = 0
+        var count = 0
+        while (offset + 5 <= bytes.size) {
+            val length = bytes.u32(offset)
+            if (length <= 0 || length > bytes.size - offset - 4) return false
+            if (bytes[offset + 4].u() and 0x80 != 0) return false
+            offset += 4 + length.toInt()
+            if (++count > 64) return false
+        }
+        return count > 0 && (offset == bytes.size || bytes.size - offset <= 3)
+    }
+
     /**
      * OOIUa's no-key path does not trust omitted encrypt_info: inspect the MP4 moov
      * and reject CENC/protected sample entries before allowing the bytes as plaintext.
