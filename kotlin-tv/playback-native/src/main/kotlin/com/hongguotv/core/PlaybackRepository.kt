@@ -54,6 +54,7 @@ class PlaybackRepository(
         )
         val request = Request.Builder()
             .url(signed.url)
+            .header("Accept-Language", "zh-CN,zh;q=0.9")
             .apply {
                 signed.headers.forEach { (key, value) -> header(key, value) }
             }
