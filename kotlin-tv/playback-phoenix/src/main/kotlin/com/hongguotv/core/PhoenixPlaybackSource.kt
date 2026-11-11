@@ -236,7 +236,7 @@ class PhoenixPlaybackSource(
                 if (identity.cookie.isNotBlank()) builder.header("Cookie", identity.cookie)
                 val request = if (body == null) builder.get().build()
                     else builder.post(body.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
-                val raw = RequestScope.execute(fallbackHttp.newCall(request)) { response ->
+                val raw = RequestScope.execute(playbackHttp.newCall(request)) { response ->
                     if (response.code != 200) throw IOException("OOIUa 备用播放线路 HTTP ${response.code}")
                     val responseBody = response.body ?: throw IOException("备用播放响应为空")
                     if (responseBody.contentLength() > 16L * 1024 * 1024) throw IOException("备用播放响应过大")
@@ -311,7 +311,7 @@ class PhoenixPlaybackSource(
                 .header("Accept-Encoding", "identity")
                 .get()
                 .build()
-            return RequestScope.execute(http.newCall(request)) { response ->
+            return RequestScope.execute(fallbackHttp.newCall(request)) { response ->
                 if (!response.isSuccessful) throw IOException("Phoenix fallback_api 请求失败（HTTP ${response.code}）")
                 val body = response.body ?: throw IOException("Phoenix fallback_api 正文为空")
                 if (body.contentLength() > 16L * 1024 * 1024) throw IOException("Phoenix fallback_api 响应过大")
