@@ -168,7 +168,7 @@ internal object PhoenixMediaResolver {
             inlineRows.all { (_, item) ->
                 val meta = objectOrString(item.opt("video_meta"))
                 val codec = meta.str("codec_type").ifEmpty { item.str("codec_type") }.lowercase(Locale.ROOT)
-                codec in setOf("bytevc2", "bvc2") || item.str("gear_des_key").contains("bytevc2", true)
+                codec in setOf("bytevc2", "bvc2")
             }) {
             confirmSameVideo(model, source)
             val fallbackEnvelope = JSONObject().put("code", 0)
