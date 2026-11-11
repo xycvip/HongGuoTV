@@ -102,10 +102,10 @@ class PhoenixPlaybackSourceTest {
     }
 
 
-    @Test fun `parses base64 video model and uses vwidth when vheight is absent`() {
+    @Test fun `parses base64 video model with standard video_meta dimensions`() {
         val model = """{"video_list":[
           {"main_url":"https://cdn.qznovelvod.com/portrait.mp4",
-           "video_meta":{"codec_type":"h264","vwidth":720}}
+           "video_meta":{"codec_type":"h264","vwidth":1280,"vheight":720}}
         ]}"""
         val encoded = java.util.Base64.getEncoder().encodeToString(model.toByteArray(Charsets.UTF_8))
         val raw = """{"code":0,"data":{"video_model":"$encoded"}}"""
