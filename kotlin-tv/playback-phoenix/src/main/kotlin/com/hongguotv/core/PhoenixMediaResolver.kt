@@ -112,17 +112,21 @@ internal object PhoenixMediaResolver {
             if (width > 0 && height > 0) height > width else null
         }
         val inlineTarget = PlaybackQualityMode.limit(maxQuality, inlinePortrait)
-        val inlineShortSides = inlineRows.mapNotNull { (_, item) ->
+        val inlineTracks = inlineRows.mapNotNull { (_, item) ->
             val meta = objectOrString(item.opt("video_meta"))
             val width = item.optInt("vwidth", item.optInt("width", meta.optInt("vwidth", meta.optInt("width", 0))))
             val height = item.optInt("vheight", item.optInt("height", meta.optInt("vheight", meta.optInt("height", 0))))
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
             if (width > 0 && height > 0 && codec in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) {
-                minOf(width, height)
+                codec to minOf(width, height)
             } else null
         }
-        val inlineMinimumPixels = inlineShortSides.filter { it >= inlineTarget && inlineTarget != Int.MAX_VALUE }
-            .minOrNull() ?: inlineShortSides.maxOrNull() ?: 0
+        val inlineMinimumPixels = if (maxQuality == PlaybackQualityMode.AUTO_COMPAT) {
+            inlineTracks.filter { it.first in setOf("h264", "avc", "avc1") }.maxOfOrNull { it.second }
+                ?: inlineTracks.maxOfOrNull { it.second } ?: 0
+        } else {
+            inlineTracks.map { it.second }.filter { it >= inlineTarget }.minOrNull() ?: 0
+        }
         val verifiedUndeclaredFallback = !inlineOnlyByteVc2 && inlineUndeclaredEncryption &&
             fallbackRows.isNotEmpty() && inlineMinimumPixels > 0 &&
             referenceId.isNotEmpty() && fallbackId == referenceId &&
