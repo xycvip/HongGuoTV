@@ -26,6 +26,18 @@ class PhoenixPlayerSignerTest {
         assertFalse(headers.containsKey("X-Medusa"))
     }
 
+    @Test fun legacyPhoenixRequestSignerOmitsMedusaHeader() {
+        val signer = PhoenixRequestSigner({ 1794050000000L }) { 0.5 }
+        val request = signer.signPlayback(
+            "https://example.test/novel/player/video_model/v1/",
+            mapOf("aid" to "8662", "device_id" to "123456789", "iid" to "987654321"),
+            """{"video_id":"7701336636495252504"}""".toByteArray()
+        )
+        assertFalse(request.headers.keys.any { it.equals("x-medusa", ignoreCase = true) })
+        assertTrue(request.headers.keys.any { it.equals("x-gorgon", ignoreCase = true) })
+        assertTrue(request.headers.keys.any { it.equals("x-helios", ignoreCase = true) })
+    }
+
     @Test fun ttEncryptUsesPhoenixFixedPrefixAndBlockPadding() {
         val encrypted = PhoenixDeviceRegister.ttEncrypt("phoenix-test".toByteArray())
         assertEquals("746305100000", encrypted.copyOfRange(0, 6).hex())
