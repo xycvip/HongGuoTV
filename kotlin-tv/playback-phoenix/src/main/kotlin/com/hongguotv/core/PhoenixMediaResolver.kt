@@ -230,8 +230,8 @@ internal object PhoenixMediaResolver {
                 if (nested != null) nested.opt("fallback_api")?.toString() ?: text else text
             } else text
         }
-        is JSONObject -> extractFallbackUrl(value.opt("fallback_api"))
-        is JSONArray -> if (value.length() > 0) extractFallbackUrl(value.opt(0)) else ""
+        is JSONObject -> value.opt("fallback_api")?.toString().orEmpty()
+        is JSONArray -> if (value.length() > 0) value.opt(0)?.toString().orEmpty() else ""
         else -> ""
     }
 
