@@ -96,7 +96,7 @@ internal object PhoenixMediaResolver {
             val encrypted = encryption.optBoolean("encrypt") || item.optBoolean("encrypt") ||
                 method.equals("cenc-aes-ctr", true) || spade.isNotBlank()
             val key = if (spade.isNotBlank()) {
-                try { MediaCrypto.deriveKey(spade) } catch (_: Exception) { null }
+                try { PhoenixSpade.deriveKey(spade) } catch (_: Exception) { null }
             } else null
             if (encrypted && key == null) { encryptedSkipped++; report("Phoenix资源#$name：拒绝，原因=加密资源缺少可用密钥；encryption_method=${method.ifBlank { "unknown" }}"); continue }
 
