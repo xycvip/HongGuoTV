@@ -34,7 +34,8 @@ internal object PhoenixMediaResolver {
             val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
             spade.isBlank() && !encryption.has("encrypt")
         }
-        return allByteVc2 || undeclaredEncryption
+        val hasUsableDeclaredCandidate = inlineRows.any { (_, item) -> hasUsableDeclaredCandidate(item) }
+        return allByteVc2 || (undeclaredEncryption && !hasUsableDeclaredCandidate)
     }
 
     fun needsCodecOverride(fallbackRaw: String): Boolean {
@@ -92,10 +93,10 @@ internal object PhoenixMediaResolver {
             val codec = item.str("codec_type").ifEmpty { meta.str("codec_type") }.lowercase(Locale.ROOT)
             codec in setOf("bytevc2", "bvc2")
         }
-        val inlineUndeclaredEncryption = inlineRows.any { (_, item) ->
+        val hasUsableDeclaredCandidate = inlineRows.any { (_, item) -> hasUsableDeclaredCandidate(item) }
+        val inlineUndeclaredEncryption = !hasUsableDeclaredCandidate && inlineRows.any { (_, item) ->
             val encryption = objectOrString(item.opt("encrypt_info"))
             val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
-
             spade.isBlank() && !encryption.has("encrypt")
         }
         val referenceId = model.str("video_id").trim()
@@ -314,6 +315,22 @@ internal object PhoenixMediaResolver {
 
     private fun json(raw: String, message: String) =
         runCatching { JSONObject(raw) }.getOrElse { throw IOException(message) }
+
+    /** OOIUa 先按清晰度/编码筛选，再优先返回已有有效密钥或明确声明明文的候选。 */
+    private fun hasUsableDeclaredCandidate(item: JSONObject): Boolean {
+        val encryption = objectOrString(item.opt("encrypt_info"))
+        val codec = item.str("codec_type").ifEmpty {
+            objectOrString(item.opt("video_meta")).str("codec_type")
+        }.lowercase(Locale.ROOT)
+        if (codec !in setOf("h264", "avc", "avc1", "hevc", "h265", "hvc1", "hev1", "bytevc1")) {
+            return false
+        }
+        val spade = item.str("spade_a").ifEmpty { encryption.str("spade_a") }
+        if (spade.isNotBlank()) {
+            return runCatching { PhoenixSpade.deriveKey(spade) }.isSuccess
+        }
+        return declaredPlain(encryption)
+    }
 
     /** 与 OOIUa declaredPlain 一致：只看 encrypt_info.encrypt，顶层 encrypt 不参与判断。 */
     private fun declaredPlain(encryption: JSONObject): Boolean {
