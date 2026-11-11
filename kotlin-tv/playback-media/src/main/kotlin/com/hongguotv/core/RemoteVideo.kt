@@ -108,7 +108,7 @@ class RemoteVideo(
         val first=chunkOrFetch(0L)
         val end=MediaCrypto.headerEnd(first,total)
         val header=if(end>first.size) first+range(first.size.toLong(),end-1L).bytes else first.copyOf(end)
-        prepared=MediaCrypto.prepare(header,info.key)
+        prepared=MediaCrypto.prepare(header,info.key,info.requirePlainMp4Validation)
         if(prepared.samples.any { it.end>total }) throw IOException("视频样本超出资源大小")
         return this
     }
