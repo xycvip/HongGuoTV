@@ -67,7 +67,7 @@ class OfficialCommentRepository(
     ): JSONObject {
         val identity = identity(account, body != null)
         val bytes = body?.toString()?.toByteArray(Charsets.UTF_8)
-        val signed = Signer(identity.device).sign(
+        val signed = Signer(device = identity.device).sign(
             "${apiBase.trimEnd('/')}$path",
             identity.device + params,
             bytes,
