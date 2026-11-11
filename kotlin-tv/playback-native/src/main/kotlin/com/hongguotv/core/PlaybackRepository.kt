@@ -2,6 +2,7 @@
 package com.hongguotv.core
 
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
@@ -23,14 +24,13 @@ class PlaybackRepository(
     private val site: String,
     private val requestText: (String, Signer.Request?) -> String
 ) {
-    private val playbackHosts = listOf(
-        "api5-normal-sinfonlineb.fqnovel.com",
-        "api5-normal-sinfonlinea.fqnovel.com"
-    )
+    private val playbackHosts = listOf("api5-normal-sinfonlineb.fqnovel.com")
     private val playbackLog = java.util.logging.Logger.getLogger("com.hongguotv.core.playback")
 
-    private fun tabVideoModelResponse(id: String, identity: PlaybackDeviceSession.Profile, host: String): String? {
-        val values = identity.values.toMutableMap().apply {
+    private fun tabVideoModelResponse(id: String, host: String): String? {
+        // N3urda currentStream uses the content-device profile, not the separate registered
+        // PlayerDevice identity used by the two legacy POST routes.
+        val values = VendorConstants.device.toMutableMap().apply {
             // Keep Native's endpoint-specific query fields; share Phoenix's app/device profile.
             put("version_code", "71332")
             put("manifest_version_code", "71332")
@@ -47,15 +47,15 @@ class PlaybackRepository(
             put("source", "0")
             put("from_video_id", "")
         }
-        val signed = signer.signPlayback(
+        val signed = signer.sign(
             "https://$host/reading/bookapi/video_tab/multi_video_model/v1/",
-            values, null, PLAYBACK_UA
+            values,
+            null,
         )
         val request = Request.Builder()
             .url(signed.url)
             .apply {
                 signed.headers.forEach { (key, value) -> header(key, value) }
-                if (identity.cookie.isNotBlank()) header("Cookie", identity.cookie)
             }
             .get()
             .build()
@@ -103,51 +103,58 @@ class PlaybackRepository(
     }
 
     /** Fetch a direct MP4 URL for one episode.
-     *  The player API only answers registered anonymous devices: an unregistered `device_id`/`install_id`
-     *  pair gets `HTTP 200` with a zero-byte body. So the identity from [PlaybackDeviceSession] is written
-     *  into the query together with `_rticket`, and the response's `Set-Cookie` values ride along as a
-     *  `Cookie` header. No signature headers are involved in this call. */
+     *  The preferred video_tab GET uses the content-device identity plus N3urda Signer (including
+     *  X-Medusa). If it fails, the bounded shortplay/Phoenix POST ladder uses a separate registered
+     *  PlayerDeviceSource identity and N3urda PlayerSigner (Argus/Ladon/Gorgon).
+     */
     fun stream(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
-        val primary=object: StreamSource {
-            override val name="multi-video-model"
-            override fun stream(id:String,maxQuality:Int)=streamMultiVideoModel(id,maxQuality)
-        }
-        return StreamScheduler(listOf(primary,PublicMp4StreamSource(http,VendorConstants.VIDEO_UA,site)))
-            .stream(id,maxQuality)
+        // Match N3urda registeredStream: registered player POST ladder, then signed video_tab GET.
+        return streamMultiVideoModel(id, maxQuality)
     }
 
     /** Primary App playback channel. The scheduler invokes the public MP4 fallback only on failure. */
     private fun streamMultiVideoModel(id: String, maxQuality: Int): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
-        val payload="""{"biz_param":{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
-        // Prefer the newer GET endpoint. If it is unavailable, rejected, empty or structurally
-        // incomplete, fall back to the existing POST implementation and its identity recovery.
-        val identity=playbackSession.profile(http)
-        var getResponse: String? = null
-        var getFailure: IOException? = null
-        for (host in playbackHosts) {
-            RequestScope.ensureActive()
-            try {
-                getResponse = tabVideoModelResponse(id, identity, host)
-                if (getResponse != null) {
-                    playbackLog.info("GET 播放接口命中域名 $host")
-                    break
+        // Match N3urda's registeredStream order: shortplay PlayerSigner, Phoenix PlayerSigner,
+        // then the newer video_tab GET signed by the content Signer as a compatibility fallback.
+        var responseText: String? = null
+        var playerFailure: IOException? = null
+        try {
+            responseText = playbackResponse(id)
+            playbackLog.info("PlayerSigner 播放阶梯命中")
+        } catch (error: java.io.InterruptedIOException) {
+            throw error
+        } catch (error: IOException) {
+            playerFailure = error
+            playbackLog.warning("PlayerSigner 播放阶梯不可用，准备回退 video_tab GET：${error.message}")
+        }
+        if (responseText == null) {
+            var getResponse: String? = null
+            var getFailure: IOException? = null
+            for (host in playbackHosts) {
+                RequestScope.ensureActive()
+                try {
+                    getResponse = tabVideoModelResponse(id, host)
+                    if (getResponse != null) {
+                        playbackLog.info("GET video_tab 兼容接口命中域名 $host")
+                        break
+                    }
+                    getFailure = IOException("video_tab 接口返回空响应或无效模型")
+                } catch (error: java.io.InterruptedIOException) {
+                    throw error
+                } catch (error: IOException) {
+                    getFailure = error
+                    playbackLog.warning("GET video_tab 接口域名 $host 失败：${error.message}")
+                    if (!isRetryablePlaybackFailure(error)) break
                 }
-                getFailure = IOException("新版播放接口在 $host 返回空响应或无效模型")
-            } catch (error: java.io.InterruptedIOException) {
-                throw error
-            } catch (error: IOException) {
-                getFailure = error
-                playbackLog.warning("GET 播放接口域名 $host 失败：${error.message}")
-                if (!isRetryablePlaybackFailure(error)) break
             }
+            responseText = getResponse ?: throw IOException(
+                "PlayerSigner 播放阶梯和 video_tab GET 均不可用",
+                getFailure ?: playerFailure,
+            )
         }
-        if (getResponse == null && getFailure != null) {
-            playbackLog.info("GET 播放接口不可用，切换旧 POST 兼容通道")
-        }
-        val responseText=getResponse ?: playbackResponse(id,payload)
-        val response=JSONObject(responseText)
+        val response=JSONObject(responseText ?: throw IOException("播放接口未返回响应"))
         val code=response.optInt("Code",response.optInt("code",0))
         if(code!=0) throw IOException("播放接口暂不可用（错误码 $code）")
         val data=response.optJSONObject("data") ?: throw IOException("播放信息为空")
@@ -176,17 +183,35 @@ class PlaybackRepository(
         }.let { value ->
             if(value.startsWith("{")) runCatching { JSONObject(value).str("fallback_api") }.getOrDefault(value) else value
         }
-        val info=if(fallback.startsWith("https://") || fallback.startsWith("http://")) {
-            val outer=JSONObject(requestText(fallback,null))
+        var info=if(fallback.startsWith("https://") || fallback.startsWith("http://")) {
+            val outer=JSONObject(fetchFallback(fallback))
             outer.optJSONObject("video_info")?.optJSONObject("data")
                 ?: outer.optJSONObject("data")
                 ?: outer.optJSONObject("video_info")
                 ?: outer
         } else model
-        val videoList=when(val raw=info.opt("video_list") ?: model.opt("video_list")) {
+        var videoList=when(val raw=info.opt("video_list") ?: model.opt("video_list")) {
             is JSONObject -> raw
             is JSONArray -> JSONObject().apply { for(i in 0 until raw.length()) raw.optJSONObject(i)?.let { put(i.toString(),it) } }
             else -> throw IOException("没有可用清晰度")
+        }
+        val offered=videoList.keys().asSequence().mapNotNull { videoList.optJSONObject(it) }.toList()
+        if (fallback.startsWith("https://") && offered.isNotEmpty() && offered.all { row ->
+                val codec=row.optJSONObject("video_meta")?.str("codec_type").orEmpty()
+                    .ifEmpty { row.str("codec_type") }.lowercase(Locale.ROOT)
+                row.str("main_url").isNotBlank() && codec in setOf("bytevc2","bvc2")
+            }) {
+            // Match N3urda: only request the codec override when every offered rendition is ByteVC2.
+            val compatible=fallback.toHttpUrl().newBuilder()
+                .setQueryParameter("codec_type","0")
+                .setQueryParameter("force_codec","h264")
+                .build().toString()
+            val forced=JSONObject(fetchFallback(compatible))
+            info=forced.optJSONObject("video_info")?.optJSONObject("data")
+                ?: forced.optJSONObject("data")
+                ?: forced.optJSONObject("video_info")
+                ?: forced
+            videoList=info.optJSONObject("video_list") ?: throw IOException("强制兼容编码后没有可用清晰度")
         }
         // Nested video_meta is authoritative on newer responses; retain the flat-field
         // fallback for older responses. H.264/AVC1 is preferred when any such variant exists.
@@ -252,80 +277,146 @@ class PlaybackRepository(
         val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>selectionLimit) "（兼容资源）" else "") else "自动"
         return StreamInfo(url,key,quality,mimeType)
     }
-    private fun playerRequest(id: String,payload: ByteArray,identity: PlaybackDeviceSession.Profile,host: String): Request {
-        val values = identity.values.toMutableMap().apply {
-            put("version_code", "71332")
-            put("manifest_version_code", "71332")
-            put("update_version_code", "71332")
-            put("pv_player", "71332")
-            put("version_name", "7.1.3.32")
-        }
-        val signed = signer.signPlayback(
-            "https://$host/novel/player/multi_video_model/v1/",
-            values, payload, PLAYBACK_UA
-        )
-        val builder = Request.Builder().url(signed.url)
-        signed.headers.forEach { (key, value) -> builder.header(key, value) }
-        if (identity.cookie.isNotBlank()) builder.header("Cookie", identity.cookie)
-        return builder
-            .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+    private fun fetchFallback(url: String): String {
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", PlayerDeviceSource.FALLBACK_USER_AGENT)
+            .header("Accept-Language", "zh-CN,zh;q=0.9")
+            .get()
             .build()
+        return RequestScope.execute(http.newCall(request)) { response ->
+            if (!response.isSuccessful) throw IOException("fallback_api 请求失败（HTTP ${response.code}）")
+            val body = response.body ?: throw IOException("fallback_api 响应为空")
+            if (body.contentLength() > 16L * 1024 * 1024) throw IOException("fallback_api 响应过大")
+            val bytes = body.bytes()
+            if (bytes.size > 16 * 1024 * 1024) throw IOException("fallback_api 响应过大")
+            String(bytes, Charsets.UTF_8)
+        }
     }
+
+    private data class PlayerRoute(
+        val url: String,
+        val body: ByteArray,
+        val headers: Map<String, String>,
+    )
+
     /**
-     * 旧 POST 是只读的播放模型查询，不会创建订单或写入用户数据，因此允许有限重试。
-     * 每轮最多尝试两个官方域名；只有空响应或明确身份失效（401/403）才重新注册一次。
-     * 网络/超时/服务端故障只轮换域名，不反复刷新设备身份。
+     * Keep the two registered-player requests byte-for-byte compatible in shape with N3urda:
+     * shortplay first, then Phoenix. P/phoenix playback module is not modified by this path.
      */
-    private fun playbackResponse(id: String,payload: ByteArray): String {
-        var identity=playbackSession.profile(http)
+    private fun playerRoutes(id: String, device: PlayerDevice): List<PlayerRoute> = listOf(
+        PlayerRoute(
+            PlayerDeviceSource.substituteDevice(PlayerDeviceSource.SHORTPLAY_URL, device),
+            PlayerDeviceSource.shortplayBody(id),
+            mapOf(
+                "User-Agent" to "com.dragon.read",
+                "Content-Type" to "application/json; charset=utf-8",
+            ),
+        ),
+        PlayerRoute(
+            PlayerDeviceSource.substituteDevice(PlayerDeviceSource.PHOENIX_URL, device),
+            PlayerDeviceSource.phoenixBody(id),
+            mapOf(
+                "User-Agent" to VendorConstants.VIDEO_UA,
+                "Accept" to "application/json; charset=utf-8,application/x-protobuf",
+                "Content-Type" to "application/json",
+                "x-xs-from-web" to "0",
+                "sdk-version" to "2",
+            ),
+        ),
+    )
+
+    private fun playerRequest(route: PlayerRoute): Request {
+        val query = route.url.substringAfter('?', "")
+        val signedHeaders = PlayerSigner.headers(query, route.body)
+        val builder = Request.Builder()
+            .url(route.url)
+            .header("Accept-Language", "zh-CN,zh;q=0.9")
+        route.headers.forEach { (key, value) -> builder.header(key, value) }
+        signedHeaders.forEach { (key, value) -> builder.header(key, value) }
+        return builder.post(route.body.toRequestBody("application/json; charset=UTF-8".toMediaType())).build()
+    }
+
+    private fun playerIdentityRejected(raw: String): Boolean = runCatching {
+        val root = JSONObject(raw)
+        root.optInt("code", root.optInt("Code", 0)) in setOf(10001, 10002, 110001)
+    }.getOrDefault(false)
+
+    private fun hasUsablePlayerModel(raw: String, id: String): Boolean = runCatching {
+        val root = JSONObject(raw)
+        if (root.optInt("code", root.optInt("Code", 0)) != 0) return@runCatching false
+        val data = root.optJSONObject("data") ?: return@runCatching false
+        val map = data.optJSONObject("video_model_data") ?: data
+        val entry = map.optJSONObject(id)
+            ?: map.keys().asSequence().mapNotNull { map.optJSONObject(it) }.firstOrNull()
+            ?: map
+        val rawModel = entry.opt("video_model") ?: map.opt("video_model") ?: data.opt("video_model")
+        val model = when (rawModel) {
+            is JSONObject -> rawModel
+            is String -> runCatching { JSONObject(rawModel) }.getOrNull()
+            else -> null
+        } ?: entry
+        model.has("video_list") || model.has("fallback_api") ||
+            entry.has("video_list") || entry.has("fallback_api")
+    }.getOrDefault(false)
+
+    /**
+     * N3urda's bounded legacy player ladder: shortplay first, then Phoenix multi_video_model.
+     * Each route uses its own registered player device and Argus/Ladon/Gorgon signature.
+     */
+    private fun playbackResponse(id: String): String {
+        var device = PlayerDeviceSource.obtain(http)
         var lastFailure: IOException? = null
-        var sawEmpty = false
-        repeat(2) { round ->
-            for (host in playbackHosts) {
+        var sawEmptyOrRejected = false
+        for (round in 0..1) {
+            for (route in playerRoutes(id, device)) {
                 RequestScope.ensureActive()
                 try {
-                    val body=RequestScope.execute(http.newCall(playerRequest(id,payload,identity,host))) { response ->
-                        if (!response.isSuccessful) throw PlaybackHttpException(
-                            response.code, "播放接口请求失败（HTTP ${response.code}）"
-                        )
+                    val raw = RequestScope.execute(http.newCall(playerRequest(route))) { response ->
+                        if (!response.isSuccessful) {
+                            if (response.code == 401 || response.code == 403) {
+                                sawEmptyOrRejected = true
+                            }
+                            throw PlaybackHttpException(
+                                response.code,
+                                "兼容播放器接口请求失败（HTTP ${response.code}）",
+                            )
+                        }
                         response.body?.string().orEmpty()
                     }
-                    if (body.isNotBlank()) {
-                        playbackLog.info("POST 播放接口命中域名 $host")
-                        return body
+                    if (raw.isBlank()) {
+                        sawEmptyOrRejected = true
+                        lastFailure = EmptyPlaybackResponseException()
+                        playbackLog.warning("兼容播放器路由返回空响应")
+                        continue
                     }
-                    sawEmpty = true
-                    lastFailure = EmptyPlaybackResponseException()
-                    playbackLog.warning("POST 播放接口域名 $host 返回空响应")
+                    if (playerIdentityRejected(raw)) {
+                        sawEmptyOrRejected = true
+                        lastFailure = IOException("兼容播放器设备身份被上游拒绝")
+                        continue
+                    }
+                    if (hasUsablePlayerModel(raw, id)) {
+                        playbackLog.info("兼容播放器路由命中，PlayerSigner 请求成功")
+                        return raw
+                    }
+                    lastFailure = IOException("兼容播放器路由返回了无可用模型的响应")
+                    playbackLog.warning("兼容播放器路由响应缺少可用 video_model")
                 } catch (error: java.io.InterruptedIOException) {
                     throw error
                 } catch (error: IOException) {
                     lastFailure = error
-                    playbackLog.warning("POST 播放接口域名 $host 失败：${error.message}")
-                    if (!isRetryablePlaybackFailure(error) && !isIdentityFailure(error)) throw error
+                    playbackLog.warning("兼容播放器路由失败：${error.message}")
                 }
             }
-            if (round == 0) {
-                if (sawEmpty || lastFailure?.let(::isIdentityFailure) == true) {
-                    playbackLog.info("播放身份可能失效，重新注册一次匿名设备身份")
-                    identity = playbackSession.renew(http)
-                    sawEmpty = false
-                } else if (lastFailure != null) {
-                    // 域名切换已完成；仅进行一次短退避后再试，不做无意义的身份重注册。
-                    try {
-                        Thread.sleep(250L)
-                    } catch (error: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                        throw java.io.InterruptedIOException("播放请求已取消")
-                    }
-                }
-            }
+            if (round == 0 && sawEmptyOrRejected) {
+                playbackLog.info("兼容播放器身份可能失效，重新注册一次独立 player 设备")
+                PlayerDeviceSource.invalidate()
+                device = PlayerDeviceSource.obtain(http)
+                sawEmptyOrRejected = false
+            } else break
         }
         throw lastFailure ?: EmptyPlaybackResponseException()
     }
-
-    private fun isIdentityFailure(error: IOException): Boolean =
-        error is PlaybackHttpException && error.statusCode in setOf(401, 403)
 
     private fun isRetryablePlaybackFailure(error: IOException): Boolean = when (error) {
         is java.io.InterruptedIOException -> false
@@ -337,8 +428,6 @@ class PlaybackRepository(
     }
 
     companion object {
-        // Native and Phoenix playback share the same app/device User-Agent.
-        private const val PLAYBACK_UA = VendorConstants.VIDEO_UA
     }
 }
 
