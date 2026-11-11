@@ -257,7 +257,8 @@ class PhoenixPlaybackSource(
                 }
                 val normalized = normalizeLegacyResponse(raw, id, route.post)
                 if (normalized == null) {
-                    modelFailure = IOException("OOIUa 备用线路未返回本集有效 video_model")
+                    val error = IOException("OOIUa 备用线路未返回本集有效 video_model")
+                    if (modelFailure == null) modelFailure = error else modelFailure.addSuppressed(error)
                     continue
                 }
                 return try {
@@ -265,11 +266,12 @@ class PhoenixPlaybackSource(
                 } catch (error: java.io.InterruptedIOException) {
                     throw error
                 } catch (error: IOException) {
-                    modelFailure = error
+                    if (modelFailure == null) modelFailure = error else modelFailure.addSuppressed(error)
                     emitDiagnostic("Phoenix：备用线路 ${index + 1} 模型解析失败，继续下一线路")
                     continue
                 } catch (error: Exception) {
-                    modelFailure = IOException("OOIUa 备用线路模型解析异常", error)
+                    val modelError = IOException("OOIUa 备用线路模型解析异常", error)
+                    if (modelFailure == null) modelFailure = modelError else modelFailure.addSuppressed(modelError)
                     emitDiagnostic("Phoenix：备用线路 ${index + 1} 模型解析失败，继续下一线路")
                     continue
                 }
