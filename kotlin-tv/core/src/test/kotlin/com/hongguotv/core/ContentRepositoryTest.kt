@@ -213,7 +213,8 @@ class ContentRepositoryTest {
                 .code(200).message("OK").body(respond(chain.request()).toResponseBody()).build()
         }.build(),clock,
         // 播放身份固定，测试不真的去注册设备。
-        PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586","1905892595378490") }
+        PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586","1905892595378490") },
+        PhoenixPlaybackDeviceSession { PhoenixDeviceRegister.Registered("1905892595382586","1905892595378490",klinkEgdi="test-klink-egdi") }
     )
 
     private fun rankPayload(page: Int = 1, totalPages: Int = 2) = JSONObject()
@@ -487,6 +488,59 @@ class ContentRepositoryTest {
             .put("routerDataFnName","p").put("routerDataFnArgs",JSONArray().put(recommendations.toString()))))
         val attribute=args.toString().replace("&","&amp;").replace("\"","&quot;")
         return """<script>_ROUTER_DATA={"loaderData":{"detail_page":{"seriesDetail":$series}}};</script><script data-fn-args="$attribute"></script>"""
+    }
+
+    @Test fun detailUsesPhoenixAppEndpointAndMapsEpisodeMetadata() {
+        val requests = mutableListOf<Request>()
+        val repo = repository { request ->
+            requests += request
+            assertEquals("POST", request.method)
+            assertEquals("/novel/player/video_detail/v1/", request.url.encodedPath)
+            assertEquals("123", JSONObject(okio.Buffer().also { request.body!!.writeTo(it) }.readUtf8()).optString("series_id"))
+            assertTrue(request.header("X-Gorgon").orEmpty().isNotBlank())
+            assertTrue(request.header("X-Argus").orEmpty().isNotBlank())
+            assertEquals(null, request.header("X-Medusa"))
+            assertEquals(null, request.header("X-Helios"))
+            """{"code":0,"data":{"video_data":{
+                "series_id_str":"123","series_title":"Phoenix测试剧","series_intro":"详情简介",
+                "series_cover":"https://example.com/poster.jpg","episode_cnt":2,
+                "episode_right_text":"更新至2集","category_name":"都市","final_score_v2":"9.2",
+                "related_album_id":"888","is_multi_season":true,"season_index":2,
+                "video_relate_book":{"book_info":{"book_id":"777","book_name":"原著名称"}},
+                "video_list":[
+                    {"vid":"9001","vid_index":1,"title":"第一集","duration":125.5,"vertical":true,"cover":"https://example.com/e1.jpg","series_id":"123"},
+                    {"vid":"9002","vid_index":2,"title":"第二集","duration":130,"disable_play":true,"is_newly_update":true,"comment_count":12,"digged_count":7,"series_id":"123"}
+                ]
+            }}}"""
+        }
+        val detail = repo.detail("123")
+        assertEquals(1, requests.size)
+        assertEquals("Phoenix测试剧", detail.series.title)
+        assertEquals(listOf("9001","9002"), detail.episodes)
+        assertEquals("第一集", detail.episodeDetails.first().title)
+        assertEquals(125.5, detail.episodeDetails.first().durationSeconds, 0.01)
+        assertTrue(detail.episodeDetails.first().vertical)
+        assertFalse(detail.episodeDetails.last().playable)
+        assertTrue(detail.episodeDetails.last().newlyUpdated)
+        assertEquals("888", detail.metadata.albumId)
+        assertEquals(2, detail.metadata.seasonIndex)
+        assertEquals("777", detail.metadata.novelBookId)
+        assertEquals(9.2, detail.social.rating, 0.01)
+    }
+
+    @Test fun detailFallsBackToWebsiteWhenPhoenixAppDetailIsUnusable() {
+        val paths = mutableListOf<String>()
+        val html = """<script>_ROUTER_DATA={"loaderData":{"detail_page":{"seriesDetail":{"series_id":"123","series_name":"网页兜底剧","vid_list":["900"]}}}};</script>"""
+        val repo = repository { request ->
+            paths += request.url.encodedPath
+            if (request.url.encodedPath == "/detail") html
+            else """{"code":0,"data":{"video_data":null}}"""
+        }
+        val detail = repo.detail("123")
+        assertEquals("网页兜底剧", detail.series.title)
+        assertEquals(listOf("900"), detail.episodes)
+        assertTrue(paths.contains("/novel/player/video_detail/v1/"))
+        assertTrue(paths.contains("/detail"))
     }
 
     @Test fun detailRelatedHoistsSameNameSeasonsAndSkipsCurrentSeries() {
