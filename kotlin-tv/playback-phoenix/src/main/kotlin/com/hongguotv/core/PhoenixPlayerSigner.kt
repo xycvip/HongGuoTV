@@ -120,7 +120,7 @@ internal object PhoenixPlayerSigner {
             writeLongLE(data, offset + 8, right)
             offset += 16
         }
-        val xorKey = hex("d04fffd0d04fffd0")
+        val xorKey = hex("d04ffdffd04ffdff")
         for (i in data.indices) data[i] = (data[i].u() xor xorKey[i % xorKey.size].u()).toByte()
         val combined = xorKey + data
         combined.reverse()
