@@ -1232,9 +1232,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 showSettings = false
                 activity.showSleepPicker(android.widget.TextView(activity))
             }
-            PhonePlayerSettingRow("弹幕：" + if (danmakuEnabled) "开启" else "关闭", playerPalette) {
+            PhonePlayerSettingRow("弹幕设置（总开关：" + if (danmakuEnabled) "开启）" else "关闭）", playerPalette) {
                 activity.toggleSeriesDanmaku(data?.series?.id.orEmpty())
-                danmakuEnabled = !danmakuEnabled
             }
             PhonePlayerSettingRow("跳过片头", playerPalette) {
                 showSettings = false
