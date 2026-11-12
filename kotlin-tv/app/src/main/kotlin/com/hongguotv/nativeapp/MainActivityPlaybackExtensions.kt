@@ -233,6 +233,7 @@ import java.util.concurrent.atomic.AtomicLong
         if(bootAutoPlaybackPending && !reuse) showBootSplash()
         applyClock()
         attachDebugOverlay()
+        installPhonePlayerComposeOverlay()
         playbackTitle.text="${data.series.title}  ·  第 ${episodeIndex+1} 集 / 共 ${data.episodes.size} 集"
         playbackText.text="正在获取播放地址…"; progressBar.progress=0; progressBar.visibility=View.VISIBLE; hidePlaybackOverlay()
         controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
