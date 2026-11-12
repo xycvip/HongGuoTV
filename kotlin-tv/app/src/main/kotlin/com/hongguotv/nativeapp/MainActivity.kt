@@ -407,6 +407,7 @@ class MainActivity: Activity() {
     internal var preloadManager by playbackUiState::preloadManager
     internal var video by playbackUiState::video
     internal var playbackReady by playbackUiState::playbackReady
+    internal var phoneFirstFrameRendered by playbackUiState::phoneFirstFrameRendered
     internal var pausedForLifecycle by playbackUiState::pausedForLifecycle
     internal lateinit var hud: LinearLayout
     internal lateinit var playbackText: TextView
