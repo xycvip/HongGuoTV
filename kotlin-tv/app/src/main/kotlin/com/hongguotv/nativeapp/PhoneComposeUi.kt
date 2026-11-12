@@ -911,6 +911,12 @@ private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: ()
         }
         if (loading) PhoneLoading(p)
         if (error != null) PhoneError(error, p)
+        if (text.isNotBlank() && results.isEmpty() && !loading && error == null) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("没有找到相关剧集", color = p.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text("试试缩短关键词，或换个剧名再搜索。", color = p.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            }
+        }
         LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(results, key = { it.id }) { item ->
