@@ -1439,8 +1439,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             delay(300)
         }
     }
-    LaunchedEffect(controlsVisible, playing, showEpisodes, showFavoriteOptions, showSettings, showSpeed, scrubbing, interactionTick) {
-        if (controlsVisible && playing && !showEpisodes && !showFavoriteOptions && !showSettings && !showSpeed) {
+    LaunchedEffect(controlsVisible, playing, showEpisodes, showFavoriteOptions, showSettings, showSpeed, sidePanel, scrubbing, interactionTick) {
+        if (controlsVisible && playing && !showEpisodes && !showFavoriteOptions && !showSettings && !showSpeed && sidePanel == null) {
             delay(4500)
             state.playerControlsVisible = false
             activity.hidePlaybackOverlay()
@@ -1547,6 +1547,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
         }
     }
     if (landscape && controlsVisible && sidePanel != null) {
+        Box(Modifier.fillMaxSize()) {
         Row(
             Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(340.dp)
                 .background(Color(0xF21B1B1B)).padding(horizontal = 16.dp, vertical = 18.dp)
@@ -1607,6 +1608,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     }
                 }
             }
+        }
         }
     }
     if (showSpeed) ModalBottomSheet(onDismissRequest = { showSpeed = false },
