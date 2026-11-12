@@ -9,6 +9,11 @@ on:
         required: true
         type: boolean
         default: true
+      source_ref:
+        description: 要构建的源码分支、标签或 commit SHA（手机 UI 移植版请选择 feature/phone-ui-ooiua-fresh）
+        required: true
+        type: string
+        default: main
       skip_file_check:
         description: 跳过APK文件存在性检查（包名、版本号和签名校验始终执行）
         required: true
@@ -33,7 +38,7 @@ jobs:
       - name: 检出红果TV源码
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ inputs.source_ref }}
           fetch-depth: 0
 
       - name: 配置Java环境
@@ -78,9 +83,15 @@ jobs:
       - name: 读取测试版独立版本号
         id: version
         shell: bash
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
         run: |
           set -euo pipefail
-          VERSION_FILE="kotlin-tv/test-version.properties"
+          git check-ref-format "$SOURCE_REF" >/dev/null || { echo "::error::源码 ref 格式无效：$SOURCE_REF"; exit 1; }
+          # 测试版版本号统一从 main 读取，避免功能分支的旧版本文件造成版本冲突。
+          git fetch origin main --tags
+          VERSION_FILE="$(mktemp)"
+          git show origin/main:kotlin-tv/test-version.properties > "$VERSION_FILE"
           test -s "$VERSION_FILE"
           VERSION_NAME="$(sed -n 's/^TEST_VERSION_NAME=//p' "$VERSION_FILE" | tail -n 1)"
           VERSION_CODE="$(sed -n 's/^TEST_VERSION_CODE=//p' "$VERSION_FILE" | tail -n 1)"
@@ -102,6 +113,8 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "本次测试版版本：$VERSION_NAME"
           echo "本次 versionCode：$VERSION_CODE"
+          echo "源码 ref：$SOURCE_REF"
+          echo "版本号基线：main"
 
       - name: 对比上一个测试版并自动生成更新说明
         id: notes
@@ -234,10 +247,12 @@ jobs:
           set -euo pipefail
           APK="$RUNNER_TEMP/test-release/HongguoTV-$VERSION_NAME.apk"
           SOURCE_COMMIT="$(git rev-parse HEAD)"
+          SOURCE_REF="${{ inputs.source_ref }}"
           DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/HongguoTV-$VERSION_NAME.apk"
           mkdir -p test-update
           jq -n \
             --arg sourceCommit "$SOURCE_COMMIT" \
+            --arg sourceRef "$SOURCE_REF" \
             --arg versionName "$VERSION_NAME" \
             --arg tag "$RELEASE_TAG" \
             --arg apkName "HongguoTV-$VERSION_NAME.apk" \
@@ -250,6 +265,7 @@ jobs:
               schema: 1,
               packageName: "com.x.hongguotv.bate",
               sourceCommit: $sourceCommit,
+              sourceRef: $sourceRef,
               versionCode: $versionCode,
               versionName: $versionName,
               minSdk: 26,
@@ -268,6 +284,8 @@ jobs:
           # 红果TV测试版 $VERSION_NAME
 
           - 应用包名：com.x.hongguotv.bate
+          - 源码分支/ref：$SOURCE_REF
+          - 源码 commit：$SOURCE_COMMIT
           - versionCode：$VERSION_CODE
           - APK大小：$APK_SIZE 字节
           - SHA-256：$APK_SHA256
@@ -284,13 +302,17 @@ jobs:
             --latest
           echo "测试版已发布到本源码仓库 Releases"
 
-      - name: 更新下一次测试版版本号
+      - name: 更新 main 的下一次测试版版本号
         shell: bash
         env:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           set -euo pipefail
+          # 构建可能来自功能分支；版本记录只回写 main，绝不把功能分支源码推入 main。
+          git fetch origin main
+          git checkout -B test-version-metadata origin/main
+          cp "$RUNNER_TEMP/test-release/update.json" test-update/latest.json
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NAME"
           NEXT_NAME="$MAJOR.$MINOR.$((PATCH + 1))"
           NEXT_CODE="$((VERSION_CODE + 1))"
@@ -362,3 +384,4 @@ jobs:
           echo "versionCode：$VERSION_CODE"
           echo "发布标签：$RELEASE_TAG"
           echo "发布位置：当前 HongGuoTV 仓库 Releases"
+          echo "源码 ref：${{ inputs.source_ref }}"
