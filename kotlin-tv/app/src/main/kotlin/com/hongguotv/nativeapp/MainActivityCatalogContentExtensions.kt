@@ -342,6 +342,7 @@ internal fun MainActivity.renderCatalogContent(
 }
 
 internal fun MainActivity.showCatalog(load: Boolean=false,focusNav: Boolean=false,focusType: Boolean=false,focusFilter: Boolean=false) {
+        if (isPhoneDevice) { showPhoneComposeCatalog(); return }
         // Any new catalog render supersedes an older homepage refresh request.
         refreshHomePending=false
         initialCatalogPending=false; restoreStoppedPage=false; pendingDetail=null
