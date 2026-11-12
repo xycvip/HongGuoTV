@@ -240,7 +240,7 @@ internal class MainActivityTouchGestureController(
                         val maxDelta = minOf(duration, 180_000L)
                         val fraction = (dx / screenWidthPx().coerceAtLeast(1f)).coerceIn(-1f, 1f)
                         val target = (state.touchSeekStart + (fraction * maxDelta).toLong())
-                            .coerceIn(0L, (duration - 500L).coerceAtLeast(0L))
+                            .coerceIn(0L, (duration - 1_000L).coerceAtLeast(0L))
                         state.touchSeekTarget = target
                         state.pendingSeek = target
                         showHud()
