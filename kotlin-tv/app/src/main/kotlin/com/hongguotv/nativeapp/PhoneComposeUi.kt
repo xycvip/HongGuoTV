@@ -1156,15 +1156,27 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             }
         }
     }
-    if (showSpeed) AlertDialog(
-        onDismissRequest = { showSpeed = false }, title = { Text("播放倍速") },
-        text = { Column { listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { value ->
-            Text(value.toString() + "×", modifier = Modifier.fillMaxWidth().clickable {
-                speed = value; activity.library.playbackSpeed = value; activity.player?.setPlaybackSpeed(value); showSpeed = false
-            }.padding(12.dp))
-        } } },
-        confirmButton = { TextButton(onClick = { showSpeed = false }) { Text("关闭") } }
-    )
+    if (showSpeed) ModalBottomSheet(onDismissRequest = { showSpeed = false },
+        containerColor = playerPalette.surface, contentColor = playerPalette.text) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp)) {
+            Text("播放倍速", color = playerPalette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 10.dp))
+            listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { value ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .background(if (speed == value) playerPalette.accent.copy(alpha = 0.14f) else Color.Transparent)
+                    .clickable {
+                        speed = value
+                        activity.library.playbackSpeed = value
+                        activity.player?.setPlaybackSpeed(value)
+                        showSpeed = false
+                    }.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(value.toString() + "×", color = if (speed == value) playerPalette.accent else playerPalette.text,
+                        fontWeight = if (speed == value) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f))
+                    if (speed == value) Text("✓", color = playerPalette.accent)
+                }
+            }
+        }
+    }
     if (showEpisodes) ModalBottomSheet(
         onDismissRequest = { showEpisodes = false }, containerColor = playerPalette.surface, contentColor = playerPalette.text
     ) {
@@ -1190,43 +1202,47 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             }
         }
     }
-    if (showSettings) AlertDialog(
-        onDismissRequest = { showSettings = false }, title = { Text("播放设置") },
-        text = { Column {
-            Text("画质", modifier = Modifier.fillMaxWidth().clickable {
+    if (showSettings) ModalBottomSheet(onDismissRequest = { showSettings = false },
+        containerColor = playerPalette.surface, contentColor = playerPalette.text) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp)) {
+            Text("播放设置", color = playerPalette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 10.dp))
+            @Composable fun setting(label: String, action: () -> Unit) {
+                Text(label, color = playerPalette.text, fontSize = 14.sp,
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = action).padding(vertical = 13.dp))
+            }
+            setting("画质") {
                 showSettings = false
                 activity.showQualityPicker(android.widget.TextView(activity), true)
-            }.padding(12.dp))
-            Text("画面模式", modifier = Modifier.fillMaxWidth().clickable {
+            }
+            setting("画面模式") {
                 showSettings = false
                 activity.showFramePicker(android.widget.TextView(activity), true)
-            }.padding(12.dp))
-            Text("定时停止", modifier = Modifier.fillMaxWidth().clickable {
+            }
+            setting("定时停止") {
                 showSettings = false
                 activity.showSleepPicker(android.widget.TextView(activity))
-            }.padding(12.dp))
-            Text("弹幕：" + if (activity.library.danmaku) "开启" else "关闭", modifier = Modifier.fillMaxWidth().clickable {
+            }
+            setting("弹幕：" + if (activity.library.danmaku) "开启" else "关闭") {
                 activity.toggleSeriesDanmaku(data?.series?.id.orEmpty())
-            }.padding(12.dp))
-            Text("跳过片头", modifier = Modifier.fillMaxWidth().clickable {
+            }
+            setting("跳过片头") {
                 showSettings = false
                 activity.showSkipPicker(android.widget.TextView(activity), true)
-            }.padding(12.dp))
-            Text("跳过片尾", modifier = Modifier.fillMaxWidth().clickable {
+            }
+            setting("跳过片尾") {
                 showSettings = false
                 activity.showSkipPicker(android.widget.TextView(activity), false)
-            }.padding(12.dp))
-            Text("自动连播：" + if (activity.library.autoNext) "开启" else "关闭",
-                modifier = Modifier.fillMaxWidth().clickable {
-                    activity.library.autoNext = !activity.library.autoNext
-                }.padding(12.dp))
-            Text("评论", modifier = Modifier.fillMaxWidth().clickable {
+            }
+            setting("自动连播：" + if (activity.library.autoNext) "开启" else "关闭") {
+                activity.library.autoNext = !activity.library.autoNext
+            }
+            setting("评论") {
                 showSettings = false
                 activity.openOfficialComments(activity.phoneUiState.playerHost)
-            }.padding(12.dp))
-        } },
-        confirmButton = { TextButton(onClick = { showSettings = false }) { Text("关闭") } }
-    )
+            }
+        }
+    }
 }
 
 private fun phoneTime(ms: Long): String {
