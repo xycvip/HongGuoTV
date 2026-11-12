@@ -32,7 +32,8 @@ internal class MainActivityTouchGestureController(
     private val changeEpisode: (Boolean) -> Unit,
     private val startLongPressSpeed: () -> Unit,
     private val stopLongPressSpeed: () -> Unit,
-    private val isPhoneComposeControl: (MotionEvent) -> Boolean = { false }
+    private val isPhoneComposeControl: (MotionEvent) -> Boolean = { false },
+    private val isPhoneComposeControlsVisible: () -> Boolean = { false }
 ) {
     private var verticalGesture = false
     private var verticalLeft = false
@@ -90,7 +91,7 @@ internal class MainActivityTouchGestureController(
         if(action == MotionEvent.ACTION_DOWN) {
             touchOnComposeControl = isPhoneComposeControl(event)
             touchOnCenterControl = isInside(centerControl(), event)
-            touchStartedWithHudVisible = hud()?.let { it.visibility == View.VISIBLE && it.isShown } == true
+            touchStartedWithHudVisible = isPhoneComposeControlsVisible() || hud()?.let { it.visibility == View.VISIBLE && it.isShown } == true
         }
         if(touchOnComposeControl) {
             val handled = dispatchToView(event)
