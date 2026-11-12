@@ -344,7 +344,12 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         onBack = { settingsOpen = false },
                         onTheme = { next -> style = next; preferences.edit().putString(PhoneThemeKey, next).apply() },
                         onMode = { next -> themeMode = next; preferences.edit().putString("phone_ui_theme_mode", next).apply() },
-                        onNavStyle = { next -> navStyle = next; preferences.edit().putString("phone_ui_nav_bar_style", next).apply() })
+                        onNavStyle = { next -> navStyle = next; preferences.edit().putString("phone_ui_nav_bar_style", next).apply() },
+                        onAdvancedSettings = {
+                            settingsOpen = false
+                            state.useLegacyPage = true
+                            activity.switchTab(5)
+                        })
                 } else {
                     Column(Modifier.fillMaxSize()) {
                         if (state.tab == 0 && style == "warm") PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { forceHomeRefresh = true; homePage = 1; homeLoadingMore = false; pageNumber = 1; pageItems = emptyList(); refresh++ })
@@ -1166,7 +1171,8 @@ private fun PhoneDetailActions(resumeIndex: Int?, isFavorite: Boolean, isLater: 
 @Composable
 private fun PhoneSettingsPage(
     activity: MainActivity, p: PhonePalette, style: String, themeMode: String, navStyle: String,
-    onBack: () -> Unit, onTheme: (String) -> Unit, onMode: (String) -> Unit, onNavStyle: (String) -> Unit
+    onBack: () -> Unit, onTheme: (String) -> Unit, onMode: (String) -> Unit, onNavStyle: (String) -> Unit,
+    onAdvancedSettings: () -> Unit
 ) {
     var autoNext by remember { mutableStateOf(activity.library.autoNext) }
     var autoSeason by remember { mutableStateOf(activity.library.autoSeason) }
@@ -1263,7 +1269,16 @@ private fun PhoneSettingsPage(
                     modifier = Modifier.fillMaxWidth().clickable { activity.library.videoInfoMode = (activity.library.videoInfoMode + 1) % 3 }.padding(vertical = 10.dp))
             }
         }
-        item { Text("播放引擎、P/N 播放线路、解码器与更新仍由红果TV原有模块管理。", color = p.muted,
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(p.card).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("高级设置", color = p.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("播放线路、无感连播、渲染方式、解码器、备份恢复、按键映射、调试与更新等完整功能仍保留在原生设置中。",
+                    color = p.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                PhoneAction("打开完整设置", p.accent, Color.White, onAdvancedSettings)
+            }
+        }
+        item { Text("播放器内核与接口保持红果TV原有实现。", color = p.muted,
             fontSize = 12.sp, lineHeight = 19.sp, modifier = Modifier.padding(bottom = 24.dp)) }
     }
 }
