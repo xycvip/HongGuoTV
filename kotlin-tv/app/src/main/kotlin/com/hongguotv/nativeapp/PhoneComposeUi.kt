@@ -1741,7 +1741,7 @@ private fun PhonePlayerSettingRow(label: String, p: PhonePalette, onClick: () ->
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 13.dp))
 }
 
-private fun phonePipRatio(width: Int, height: Int): Pair<Int, Int> {
+internal fun phonePipRatio(width: Int, height: Int): Pair<Int, Int> {
     if (width <= 0 || height <= 0) return 9 to 16
     val ratio = width.toDouble() / height
     return when {
