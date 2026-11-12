@@ -334,12 +334,15 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems, homeType,
                                     activity.library.history().take(8).map { it.series },
                                     activity.library.favorites().filter { activity.library.favoriteUpdate(it.id)?.hasUpdate == true }.take(8),
+                                    activity.library.favorites().map { it.id }.toSet(),
                                     activity.library.later().take(10),
                                     (if (style == "immersive") phonePalette(style, true) else palette), style, loading, error,
                                     homeHasMore, homeLoadingMore,
                                     onLoadMore = { if (homeHasMore && !homeLoadingMore) { homeLoadingMore = true; homePage++ } },
                                     onType = { homeType = it; homePage = 1; homeLoadingMore = false; refresh++ },
                                     onSelect = { openPhoneDetail(activity, it) },
+                                    onFavorite = { activity.library.toggle(it); refresh++ },
+                                    onPlay = { activity.openDetail(it, resume = true, forceFirstEpisode = true) },
                                     onRecentSelect = { activity.openDetail(it, resume = true) },
                                     onSearch = { activity.switchTab(1) }, onRank = { activity.switchTab(2) },
                                     onRefresh = { homePage = 1; homeLoadingMore = false; refresh++ },
@@ -440,11 +443,11 @@ private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (
 
 @Composable
 private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Series>, type: ContentType,
-    recent: List<Series>, updates: List<Series>, later: List<Series>, p: PhonePalette, style: String,
-    loading: Boolean, error: String?, hasMore: Boolean, loadingMore: Boolean, onLoadMore: () -> Unit,
-    onType: (ContentType) -> Unit, onSelect: (Series) -> Unit,
-    onRecentSelect: (Series) -> Unit, onSearch: () -> Unit, onRank: () -> Unit,
-    onRefresh: () -> Unit, onMore: () -> Unit) {
+    recent: List<Series>, updates: List<Series>, later: List<Series>, favoriteIds: Set<String>,
+    p: PhonePalette, style: String, loading: Boolean, error: String?, hasMore: Boolean, loadingMore: Boolean,
+    onLoadMore: () -> Unit, onType: (ContentType) -> Unit, onSelect: (Series) -> Unit,
+    onFavorite: (Series) -> Unit, onPlay: (Series) -> Unit, onRecentSelect: (Series) -> Unit,
+    onSearch: () -> Unit, onRank: () -> Unit, onRefresh: () -> Unit, onMore: () -> Unit) {
     val items = when (type) { ContentType.COMIC -> comic; ContentType.AI -> ai; else -> short }
     val homeListState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(homeListState, hasMore, loadingMore, type, items.size) {
@@ -480,7 +483,10 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
                 }
                 VerticalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth(),
                     key = { items.getOrNull(it)?.id ?: it }, beyondViewportPageCount = 1) { page ->
-                    items.getOrNull(page)?.let { PhoneImmersiveCard(it, p.copy(dark = true), onSelect, Modifier.fillMaxSize()) }
+                    items.getOrNull(page)?.let { item ->
+                        PhoneImmersiveCard(item, p.copy(dark = true), onSelect, Modifier.fillMaxSize(),
+                            favorite = item.id in favoriteIds, onFavorite = onFavorite, onPlay = onPlay)
+                    }
                 }
                 if (loadingMore) PhoneLoading(p.copy(dark = true))
                 if (error != null) PhoneError(error, p.copy(dark = true))
@@ -556,18 +562,37 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
     }
 }
 @Composable
-private fun PhoneImmersiveCard(item: Series, p: PhonePalette, onSelect: (Series) -> Unit, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize().clickable { onSelect(item) }) {
+private fun PhoneImmersiveCard(
+    item: Series, p: PhonePalette, onSelect: (Series) -> Unit, modifier: Modifier = Modifier,
+    favorite: Boolean, onFavorite: (Series) -> Unit, onPlay: (Series) -> Unit
+) {
+    Box(modifier.fillMaxSize()) {
         AsyncImage(model = item.cover, contentDescription = item.title, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000)))))
-        Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
-            if (item.badge.isNotBlank()) Text(item.badge, color = Color.White, fontSize = 11.sp)
-            Text(item.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-            if (item.tags.isNotBlank()) Text(item.tags, color = Color(0xFFDDDDDD), fontSize = 11.sp, maxLines = 1)
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x66000000), Color.Transparent, Color(0xEE000000)))))
+        Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 17.dp, end = 12.dp, bottom = 24.dp),
+            verticalAlignment = Alignment.Bottom) {
+            Column(Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (item.badge.isNotBlank()) PhoneAction(item.badge, p.accent, Color.White) {}
+                Text(item.title, color = Color.White, fontSize = 22.sp, lineHeight = 29.sp,
+                    fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(listOfNotNull(item.tags.takeIf { it.isNotBlank() }, item.episodeText.takeIf { it.isNotBlank() }).joinToString(" · "),
+                    color = Color(0xFFDDDDDD), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (item.description.isNotBlank()) Text(item.description, color = Color(0xFFE5E5E5), fontSize = 12.sp,
+                    lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("立即播放  ›", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(p.accent)
+                        .clickable { onPlay(item) }.padding(vertical = 13.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text("上滑看下一部", color = Color.White.copy(alpha = 0.58f), fontSize = 11.sp,
+                    modifier = Modifier.align(Alignment.CenterHorizontally))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                PhoneAction(if (favorite) "★ 已追" else "☆ 追剧", Color(0x77000000), Color.White) { onFavorite(item) }
+                PhoneAction("选集", Color(0x77000000), Color.White) { onSelect(item) }
+                PhoneAction("详情", Color(0x77000000), Color.White) { onSelect(item) }
+            }
         }
     }
 }
-
 @Composable
 private fun PhoneShelf(title: String, items: List<Series>, p: PhonePalette, onSelect: (Series) -> Unit, onMore: (() -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().padding(top = 16.dp)) {
