@@ -144,7 +144,7 @@ import java.util.concurrent.atomic.AtomicLong
     /** 手机触屏长按固定临时 2 倍速，松手由 stopFastForward 恢复原倍速。 */
     internal fun MainActivity.startPhoneTouchFastForward() {
         val p=player ?: return
-        if(ffActive || !playbackReady || p.duration<=0) return
+        if(ffActive || !playbackReady || !p.isPlaying || p.duration<=0) return
         ffActive=true
         ffSpeedBefore=p.playbackParameters.speed
         // 与 OOIUa 手机播放器一致：触屏长按临时 2 倍速，松手恢复原倍速。
