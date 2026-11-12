@@ -528,7 +528,8 @@ class MainActivity: Activity() {
                     val y = event.y / resources.displayMetrics.heightPixels.toFloat().coerceAtLeast(1f)
                     y <= .18f || y >= .78f || (y in .36f.. .68f && x in .16f.. .84f)
                 }
-            }
+            },
+            isPhoneComposeControlsVisible = { phoneUiState.playerControlsVisible && phoneUiState.playerHost?.parent === root }
         )
     }
     /**
