@@ -41,6 +41,12 @@ internal class MainActivityTouchGestureController(
     private var longPressSpeedActive = false
     private var touchOnCenterControl = false
     private var touchStartedWithHudVisible = false
+    private var lastTapAt = 0L
+    private var pendingTapWasHudVisible = false
+    private val singleTapRunnable = Runnable {
+        if (pendingTapWasHudVisible) hideHud() else { showHud(); showCenterControl() }
+        pendingTapWasHudVisible = false
+    }
     private val longPressSpeedRunnable = Runnable {
         if(state.touchTracking && !state.touchOnHud && !state.touchOnProgressBar &&
             !state.touchSeekGesture && !verticalGesture && !hasBlockingPanel()
@@ -251,6 +257,8 @@ internal class MainActivityTouchGestureController(
 
     private fun clearGesture() {
         main.removeCallbacks(longPressSpeedRunnable)
+        main.removeCallbacks(singleTapRunnable)
+        lastTapAt = 0L
         if(longPressSpeedActive) { longPressSpeedActive = false; stopLongPressSpeed() }
         state.touchTracking = false
         state.touchSeekGesture = false
