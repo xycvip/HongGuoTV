@@ -308,7 +308,8 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onRemove = { item ->
                                         if (state.tab == 3) activity.library.toggle(item) else activity.library.removeHistory(item.id)
                                         refresh++
-                                    }, onRefresh = { refresh++ })
+                                    }, progressLabel = { item -> activity.library.progress(item.id)?.let { "第" + it.episodeIndex + "集 · " + phoneTime(it.position) }.orEmpty() },
+                                    onRefresh = { refresh++ })
                                 else -> PhoneMinePage(palette, style, themeMode, { next ->
                                     style = next
                                     preferences.edit().putString(PhoneThemeKey, next).apply()
@@ -554,7 +555,8 @@ private fun PhoneTheaterPage(
 @Composable
 private fun PhoneLibraryPage(
     tab: Int, items: List<Series>, loading: Boolean, error: String?, p: PhonePalette,
-    onTab: (Int) -> Unit, onSelect: (Series) -> Unit, onRemove: (Series) -> Unit, onRefresh: () -> Unit
+    onTab: (Int) -> Unit, onSelect: (Series) -> Unit, onRemove: (Series) -> Unit,
+    progressLabel: (Series) -> String, onRefresh: () -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -586,10 +588,8 @@ private fun PhoneLibraryPage(
                         items.drop(row * 3).take(3).forEach { item ->
                             Column(Modifier.weight(1f)) {
                                 PhonePoster(item, p, Modifier.fillMaxWidth(), onSelect)
-                                if (tab == 4) {
-                                    val progress = remember(item.id) { item.id }
-                                    Text("继续观看", color = p.muted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
-                                }
+                                if (tab == 4) Text(progressLabel(item).ifBlank { "继续观看" }, color = p.muted,
+                                    fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                                 Text(if (tab == 3) "取消收藏" else "删除记录", color = p.accent, fontSize = 11.sp,
                                     modifier = Modifier.clickable { onRemove(item) }.padding(vertical = 5.dp))
                             }
