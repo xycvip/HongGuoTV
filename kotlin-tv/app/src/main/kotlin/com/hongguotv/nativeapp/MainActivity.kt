@@ -827,6 +827,12 @@ class MainActivity: Activity() {
 
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed() {
+        if (isPhoneDevice && phoneUiState.useLegacyPage) {
+            phoneUiState.useLegacyPage = false
+            tab = 6
+            showPhoneComposeCatalog()
+            return
+        }
         if (isPhoneDevice && phoneUiState.page == PhonePage.DETAIL && screen != "player") {
             phoneUiState.page = PhonePage.CATALOG
             phoneUiState.selectedSeries = null
