@@ -387,8 +387,14 @@ private fun PhoneShelf(title: String, items: List<Series>, p: PhonePalette, onSe
 private fun PhoneTheaterPage(
     items: List<Series>, groups: List<TheaterFilterGroup>, selections: Map<String, String>,
     type: ContentType, loading: Boolean, error: String?, p: PhonePalette,
+    hasMore: Boolean, loadingMore: Boolean, onLoadMore: () -> Unit,
     onType: (ContentType) -> Unit, onFilter: (String, String) -> Unit, onSelect: (Series) -> Unit
 ) {
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    LaunchedEffect(gridState, hasMore, loadingMore, items.size) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to gridState.layoutInfo.totalItemsCount }
+            .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
+    }
     Column(Modifier.fillMaxSize()) {
         Text("发现", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 18.dp, top = 10.dp, bottom = 8.dp))
@@ -412,7 +418,7 @@ private fun PhoneTheaterPage(
                 }
             }
         }
-        LazyVerticalGrid(columns = GridCells.Adaptive(132.dp), modifier = Modifier.fillMaxSize(),
+        LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(132.dp), modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             items(items, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
@@ -424,13 +430,19 @@ private fun PhoneTheaterPage(
 
 @Composable
 private fun PhoneGridPage(title: String, items: List<Series>, loading: Boolean, error: String?, p: PhonePalette,
+    hasMore: Boolean, loadingMore: Boolean, onLoadMore: () -> Unit,
     onSelect: (Series) -> Unit, onRefresh: () -> Unit) {
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    LaunchedEffect(gridState, hasMore, loadingMore, items.size) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to gridState.layoutInfo.totalItemsCount }
+            .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
+    }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, color = p.text, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("刷新", color = p.accent, modifier = Modifier.clickable(onClick = onRefresh).padding(8.dp))
         }
-        LazyVerticalGrid(columns = GridCells.Adaptive(132.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+        LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(132.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
             items(items, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
             if (loading) item { PhoneLoading(p) }
@@ -442,7 +454,13 @@ private fun PhoneGridPage(title: String, items: List<Series>, loading: Boolean, 
 @Composable
 private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: () -> Unit,
     suggestions: List<String>, onSuggestion: (String) -> Unit, results: List<Series>,
-    loading: Boolean, error: String?, p: PhonePalette, onSelect: (Series) -> Unit) {
+    loading: Boolean, error: String?, p: PhonePalette, hasMore: Boolean, loadingMore: Boolean,
+    onLoadMore: () -> Unit, onSelect: (Series) -> Unit) {
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    LaunchedEffect(gridState, hasMore, loadingMore, results.size) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to gridState.layoutInfo.totalItemsCount }
+            .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Text("搜索短剧", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp))
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(p.card).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -460,7 +478,7 @@ private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: ()
                 }
             }
         }
-        LazyVerticalGrid(columns = GridCells.Adaptive(132.dp), modifier = Modifier.fillMaxSize(),
+        LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(132.dp), modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
             items(results, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
