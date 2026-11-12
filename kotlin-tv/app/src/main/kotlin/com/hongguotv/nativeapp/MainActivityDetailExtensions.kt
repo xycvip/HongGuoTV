@@ -106,6 +106,7 @@ import java.util.concurrent.atomic.AtomicLong
     }
 
     internal fun MainActivity.showDetail(focusEpisode: Boolean) {
+        if (isPhoneDevice) { showPhoneComposeDetail(); return }
         debugLog("页面渲染：剧集详情 focusEpisode=$focusEpisode title=${detail?.series?.title.orEmpty()}")
         detailSeasonLine=null; detailSeasonSection=null
         detailEpisodeButtons.clear(); detailRelatedCards.clear()
