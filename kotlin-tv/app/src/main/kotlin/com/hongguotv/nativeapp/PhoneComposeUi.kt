@@ -379,7 +379,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onSearch = { activity.switchTab(1) }, onRank = { activity.switchTab(2) },
                                     onLoadMore = { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
                                     onType = { pageNumber = 1; pageItems = emptyList(); theaterType = it; theaterSelections = emptyMap(); refresh++ },
-                                    onFilter = { key, value -> pageNumber = 1; pageItems = emptyList(); theaterSelections = theaterSelections.toMutableMap().apply { if (value.isBlank()) remove(key) else put(key, value) }; refresh++ },
+                                    onApplyFilters = { values -> pageNumber = 1; pageItems = emptyList(); theaterSelections = values; refresh++ },
                                     onSelect = { openPhoneDetail(activity, it) })
                                 3, 4 -> PhoneLibraryPage(state.tab, pageItems, loading, error, palette, style,
                                     onTab = { activity.switchTab(it) },
@@ -623,13 +623,16 @@ private fun PhoneShelf(title: String, items: List<Series>, p: PhonePalette, onSe
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PhoneTheaterPage(
     items: List<Series>, groups: List<TheaterFilterGroup>, selections: Map<String, String>,
     type: ContentType, loading: Boolean, error: String?, p: PhonePalette, style: String,
     hasMore: Boolean, loadingMore: Boolean, onSearch: () -> Unit, onRank: () -> Unit, onLoadMore: () -> Unit,
-    onType: (ContentType) -> Unit, onFilter: (String, String) -> Unit, onSelect: (Series) -> Unit
+    onType: (ContentType) -> Unit, onApplyFilters: (Map<String, String>) -> Unit, onSelect: (Series) -> Unit
 ) {
+    var showFilters by remember { mutableStateOf(false) }
+    var draftSelections by remember(selections) { mutableStateOf(selections) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(listState, hasMore, loadingMore, items.size) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to listState.layoutInfo.totalItemsCount }
@@ -647,19 +650,21 @@ private fun PhoneTheaterPage(
                 PhoneAction(label, if (type == value) p.accent else p.card, if (type == value) Color.White else p.text) { onType(value) }
             }
         }
-        groups.forEach { group ->
-            Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Text(group.label, color = p.muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp))
-                LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(group.options, key = { it.id }) { option ->
-                        val selected = selections[group.type] == option.id || (option.id.isBlank() && selections[group.type].isNullOrBlank())
-                        Text(option.label, color = if (selected) Color.White else p.text, fontSize = 11.sp,
-                            modifier = Modifier.clip(RoundedCornerShape(14.dp))
-                                .background(if (selected) p.accent else p.card)
-                                .clickable { onFilter(group.type, option.id) }
-                                .padding(horizontal = 10.dp, vertical = 7.dp))
-                    }
-                }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            PhoneAction("筛选" + selections.values.count { it.isNotBlank() }.takeIf { it > 0 }?.let { " · $it" }.orEmpty(),
+                p.card, p.text) { draftSelections = selections; showFilters = true }
+            val quickGroup = groups.firstOrNull { it.type == "sort" } ?: groups.firstOrNull()
+            quickGroup?.options?.filter { it.id.isNotBlank() }?.take(8)?.forEach { option ->
+                val selected = selections[quickGroup.type] == option.id
+                Text(option.label, color = if (selected) Color.White else p.text, fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(14.dp))
+                        .background(if (selected) p.accent else p.card)
+                        .clickable {
+                            val next = selections.toMutableMap().apply {
+                                if (selected) remove(quickGroup.type) else put(quickGroup.type, option.id)
+                            }
+                            onApplyFilters(next)
+                        }.padding(horizontal = 9.dp, vertical = 7.dp))
             }
         }
         if (items.isEmpty() && !loading && error == null) {
@@ -723,6 +728,38 @@ private fun PhoneTheaterPage(
                 }
                 if (loading || loadingMore) item { PhoneLoading(p) }
                 if (error != null) item { PhoneError(error, p) }
+            }
+        }
+    }
+    if (showFilters) ModalBottomSheet(onDismissRequest = { showFilters = false; draftSelections = selections },
+        containerColor = p.surface, contentColor = p.text) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("全部筛选", color = p.text, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            groups.forEach { group ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(group.label, color = p.muted, fontSize = 12.sp)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        items(group.options, key = { it.id }) { option ->
+                            val selected = draftSelections[group.type] == option.id || (option.id.isBlank() && draftSelections[group.type].isNullOrBlank())
+                            Text(option.label, color = if (selected) Color.White else p.text, fontSize = 12.sp,
+                                modifier = Modifier.clip(RoundedCornerShape(15.dp))
+                                    .background(if (selected) p.accent else p.card)
+                                    .clickable {
+                                        draftSelections = draftSelections.toMutableMap().apply {
+                                            if (option.id.isBlank()) remove(group.type) else put(group.type, option.id)
+                                        }
+                                    }.padding(horizontal = 11.dp, vertical = 8.dp))
+                        }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PhoneAction("重置", p.card, p.text) { draftSelections = emptyMap() }
+                PhoneAction("应用", p.accent, Color.White) {
+                    onApplyFilters(draftSelections)
+                    showFilters = false
+                }
             }
         }
     }
