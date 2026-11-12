@@ -274,7 +274,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         onFavorite = { item -> activity.library.toggle(item); refresh++ })
                 } else {
                     Column(Modifier.fillMaxSize()) {
-                        if (state.tab != 1) PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
+                        if (state.tab == 0 && style == "warm") PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems, homeType,
@@ -294,10 +294,12 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     pageItems, loading, error, palette, hasMore, loadingMore, { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
                                     { openPhoneDetail(activity, it) })
                                 2 -> PhoneRankPage(pageItems, rankBoard, loading, error, palette, hasMore, loadingMore,
+                                    onBack = { activity.switchTab(0) },
                                     onBoard = { board -> pageNumber = 1; pageItems = emptyList(); rankBoard = board; refresh++ },
                                     onLoadMore = { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
                                     onSelect = { openPhoneDetail(activity, it) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
                                 7 -> PhoneTheaterPage(pageItems, theaterGroups, theaterSelections, theaterType, loading, error, palette, style, hasMore, loadingMore,
+                                    onSearch = { activity.switchTab(1) }, onRank = { activity.switchTab(2) },
                                     onLoadMore = { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
                                     onType = { pageNumber = 1; pageItems = emptyList(); theaterType = it; theaterSelections = emptyMap(); refresh++ },
                                     onFilter = { key, value -> pageNumber = 1; pageItems = emptyList(); theaterSelections = theaterSelections.toMutableMap().apply { if (value.isBlank()) remove(key) else put(key, value) }; refresh++ },
@@ -511,7 +513,7 @@ private fun PhoneShelf(title: String, items: List<Series>, p: PhonePalette, onSe
 private fun PhoneTheaterPage(
     items: List<Series>, groups: List<TheaterFilterGroup>, selections: Map<String, String>,
     type: ContentType, loading: Boolean, error: String?, p: PhonePalette, style: String,
-    hasMore: Boolean, loadingMore: Boolean, onLoadMore: () -> Unit,
+    hasMore: Boolean, loadingMore: Boolean, onSearch: () -> Unit, onRank: () -> Unit, onLoadMore: () -> Unit,
     onType: (ContentType) -> Unit, onFilter: (String, String) -> Unit, onSelect: (Series) -> Unit
 ) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -520,8 +522,12 @@ private fun PhoneTheaterPage(
             .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
     }
     Column(Modifier.fillMaxSize()) {
-        Text(if (style == "immersive") "剧场" else "发现", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 18.dp, top = 10.dp, bottom = 8.dp))
+        Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (style == "immersive") "剧场" else "发现", color = p.text, fontSize = 22.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("榜单", color = p.muted, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRank).padding(8.dp))
+            Text("⌕", color = p.text, fontSize = 25.sp, modifier = Modifier.clickable(onClick = onSearch).padding(8.dp))
+        }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(ContentType.SHORT to "短剧", ContentType.COMIC to "漫剧", ContentType.AI to "AI剧").forEach { (value, label) ->
                 PhoneAction(label, if (type == value) p.accent else p.card, if (type == value) Color.White else p.text) { onType(value) }
@@ -656,7 +662,7 @@ private fun PhoneLibraryPage(
 private fun PhoneRankPage(
     items: List<Series>, board: RankBoard, loading: Boolean, error: String?, p: PhonePalette,
     hasMore: Boolean, loadingMore: Boolean, onBoard: (RankBoard) -> Unit,
-    onLoadMore: () -> Unit, onSelect: (Series) -> Unit, onRefresh: () -> Unit
+    onBack: () -> Unit, onLoadMore: () -> Unit, onSelect: (Series) -> Unit, onRefresh: () -> Unit
 ) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(listState, hasMore, loadingMore, items.size) {
@@ -670,7 +676,8 @@ private fun PhoneRankPage(
                     if (value == board) Color.White else p.text) { onBoard(value) }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", color = p.text, fontSize = 29.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp))
             Text(board.buttonLabel, color = p.text, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("刷新", color = p.accent, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRefresh).padding(8.dp))
         }
