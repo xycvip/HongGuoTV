@@ -609,6 +609,11 @@ private fun PhoneRankPage(
     hasMore: Boolean, loadingMore: Boolean, onBoard: (RankBoard) -> Unit,
     onLoadMore: () -> Unit, onSelect: (Series) -> Unit, onRefresh: () -> Unit
 ) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(listState, hasMore, loadingMore, items.size) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to listState.layoutInfo.totalItemsCount }
+            .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
+    }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             RankBoard.entries.forEach { value ->
@@ -616,13 +621,38 @@ private fun PhoneRankPage(
                     if (value == board) Color.White else p.text) { onBoard(value) }
             }
         }
-        Box(Modifier.weight(1f)) {
-            PhoneGridPage(board.buttonLabel, items, loading, error, p, hasMore, loadingMore,
-                onLoadMore, onSelect, onRefresh)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(board.buttonLabel, color = p.text, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("刷新", color = p.accent, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRefresh).padding(8.dp))
+        }
+        LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(items.size, key = { items[it].id }) { index ->
+                val item = items[index]
+                Row(Modifier.fillMaxWidth().heightIn(min = 112.dp).clickable { onSelect(item) },
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text((index + 1).toString(), color = if (index < 3) p.accent else p.muted,
+                        fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(26.dp))
+                    AsyncImage(model = item.cover, contentDescription = item.title,
+                        modifier = Modifier.width(78.dp).height(106.dp).clip(RoundedCornerShape(11.dp)))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(item.title, color = p.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(item.tags, color = p.accent, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(item.description, color = p.muted, fontSize = 12.sp, lineHeight = 18.sp,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            if (loading || loadingMore) item { PhoneLoading(p) }
+            if (error != null) item { PhoneError(error, p) }
+            if (items.isNotEmpty() && !hasMore && !loading) item {
+                Text("已经到底了", color = p.muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
         }
     }
 }
-
 @Composable
 private fun PhoneGridPage(title: String, items: List<Series>, loading: Boolean, error: String?, p: PhonePalette,
     hasMore: Boolean, loadingMore: Boolean, onLoadMore: () -> Unit,
