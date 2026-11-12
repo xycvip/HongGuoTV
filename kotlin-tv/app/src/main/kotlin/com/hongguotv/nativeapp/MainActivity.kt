@@ -539,6 +539,21 @@ class MainActivity: Activity() {
      */
 
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // 手机播放器正在播放时离开应用，自动进入系统小窗；电视端行为保持不变。
+        if (isPhoneDevice && screen == "player" && player?.isPlaying == true &&
+            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            runCatching {
+                enterPictureInPictureMode(
+                    android.app.PictureInPictureParams.Builder()
+                        .setAspectRatio(android.util.Rational(9, 16))
+                        .build()
+                )
+            }
+        }
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) applyImmersiveFullscreen()
