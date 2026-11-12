@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -43,10 +44,13 @@ private data class PhonePalette(
     val muted: Color, val accent: Color, val dark: Boolean
 )
 
-private fun phonePalette(style: String): PhonePalette = when (style) {
-    "immersive" -> PhonePalette(Color(0xFF101114), Color(0xFF191B20), Color(0xFF24262C), Color.White, Color(0xFF9A9DA6), Color(0xFFFF7A27), true)
-    "cards" -> PhonePalette(Color(0xFFF3F5F8), Color.White, Color.White, Color(0xFF20232A), Color(0xFF777E89), Color(0xFFFF7626), false)
-    else -> PhonePalette(Color(0xFFFAF8F4), Color.White, Color(0xFFF2EEE8), Color(0xFF282522), Color(0xFF8C847B), Color(0xFFEB762D), false)
+private fun phonePalette(style: String, dark: Boolean): PhonePalette = when (style) {
+    "immersive" -> if (dark) PhonePalette(Color(0xFF0E0E11), Color(0xFF1A1A1F), Color(0xFF26262D), Color(0xFFF5F5F7), Color(0xFFA3A3AD), Color(0xFFD63A24), true)
+        else PhonePalette(Color(0xFFF6F6F8), Color.White, Color(0xFFE9E9ED), Color(0xFF17171B), Color(0xFF62626C), Color(0xFFD63A24), false)
+    "cards" -> if (dark) PhonePalette(Color(0xFF0F1012), Color(0xFF1A1B1F), Color(0xFF23252A), Color(0xFFF2F3F5), Color(0xFFA5A9B1), Color(0xFFD42E24), true)
+        else PhonePalette(Color(0xFFF3F4F6), Color.White, Color(0xFFE9EBEE), Color(0xFF17181B), Color(0xFF5F646C), Color(0xFFD42E24), false)
+    else -> if (dark) PhonePalette(Color(0xFF1A1512), Color(0xFF241E1A), Color(0xFF2C2520), Color(0xFFF5EEE8), Color(0xFFB8ACA3), Color(0xFFC94426), true)
+        else PhonePalette(Color(0xFFFCF8F4), Color.White, Color(0xFFF5EDE5), Color(0xFF292421), Color(0xFF6B625C), Color(0xFFC94426), false)
 }
 
 private const val PhoneThemeKey = "phone_ui_theme_style"
@@ -107,11 +111,16 @@ internal fun MainActivity.installPhonePlayerComposeOverlay() {
 @Composable
 private fun PhoneComposeApp(activity: MainActivity) {
     val state = activity.phoneUiState
-    var style by remember {
-        mutableStateOf(activity.getSharedPreferences("phone-ui-preferences", android.content.Context.MODE_PRIVATE)
-            .getString(PhoneThemeKey, "warm") ?: "warm")
+    val preferences = remember { activity.getSharedPreferences("phone-ui-preferences", android.content.Context.MODE_PRIVATE) }
+    var style by remember { mutableStateOf(preferences.getString(PhoneThemeKey, "warm") ?: "warm") }
+    var themeMode by remember { mutableStateOf(preferences.getString("phone_ui_theme_mode", "default") ?: "default") }
+    val dark = when (themeMode) {
+        "light" -> false
+        "dark" -> true
+        "system" -> isSystemInDarkTheme()
+        else -> style == "immersive"
     }
-    val palette = remember(style) { phonePalette(style) }
+    val palette = remember(style, dark) { phonePalette(style, dark) }
     var searchText by remember { mutableStateOf("") }
     var submittedQuery by remember { mutableStateOf("") }
     var suggestions by remember { mutableStateOf(emptyList<String>()) }
@@ -282,9 +291,12 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     { openPhoneDetail(activity, it) }, { refresh++ })
                                 4 -> PhoneGridPage("最近观看", pageItems, loading, error, palette, false, false, {},
                                     { openPhoneDetail(activity, it) }, { refresh++ })
-                                else -> PhoneMinePage(palette, style, { next ->
+                                else -> PhoneMinePage(palette, style, themeMode, { next ->
                                     style = next
-                                    activity.getSharedPreferences("phone-ui-preferences", android.content.Context.MODE_PRIVATE).edit().putString(PhoneThemeKey, next).apply()
+                                    preferences.edit().putString(PhoneThemeKey, next).apply()
+                                }, { next ->
+                                    themeMode = next
+                                    preferences.edit().putString("phone_ui_theme_mode", next).apply()
                                 }, { refresh++ },
                                     onSettings = { state.useLegacyPage = true; activity.switchTab(5) },
                                     onAccount = { state.useLegacyPage = true; activity.switchTab(6) })
@@ -571,7 +583,8 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
 }
 
 @Composable
-private fun PhoneMinePage(palette: PhonePalette, style: String, onTheme: (String) -> Unit, onRefresh: () -> Unit,
+private fun PhoneMinePage(palette: PhonePalette, style: String, themeMode: String,
+    onTheme: (String) -> Unit, onMode: (String) -> Unit, onRefresh: () -> Unit,
     onSettings: () -> Unit, onAccount: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp)) {
         item { Text("我的", color = palette.text, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
