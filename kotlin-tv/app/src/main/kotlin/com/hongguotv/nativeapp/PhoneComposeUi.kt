@@ -636,7 +636,7 @@ private fun PhoneTheaterPage(
             .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
     }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (style == "immersive") "剧场" else "发现", color = p.text, fontSize = 22.sp,
                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("榜单", color = p.muted, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRank).padding(8.dp))
@@ -735,7 +735,7 @@ private fun PhoneLibraryPage(
 ) {
     var managing by remember(tab) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (style == "immersive") "追剧" else "片单", color = p.text, fontSize = 22.sp,
                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (items.isNotEmpty()) Text(if (managing) "完成" else "管理", color = p.muted, fontSize = 12.sp,
@@ -800,7 +800,7 @@ private fun PhoneRankPage(
                     if (value == board) Color.White else p.text) { onBoard(value) }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("‹", color = p.text, fontSize = 29.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp))
             Text(board.buttonLabel, color = p.text, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("刷新", color = p.accent, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRefresh).padding(8.dp))
@@ -871,7 +871,7 @@ private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: ()
             .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
     }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             BasicTextField(value = text, onValueChange = onText, modifier = Modifier.weight(1f)
                 .clip(RoundedCornerShape(16.dp)).background(p.card).padding(horizontal = 14.dp, vertical = 13.dp),
                 singleLine = true, textStyle = LocalTextStyle.current.copy(color = p.text, fontSize = 15.sp),
@@ -1131,7 +1131,7 @@ private fun PhoneSettingsPage(
             delay(500)
         }
     }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+    LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1232,7 +1232,7 @@ private fun PhoneMinePage(palette: PhonePalette, style: String, themeMode: Strin
     favoriteCount: Int, historyCount: Int,
     onTheme: (String) -> Unit, onMode: (String) -> Unit, onRefresh: () -> Unit,
     onFavorites: () -> Unit, onHistory: () -> Unit, onSettings: () -> Unit, onAccount: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+    LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("我的", color = palette.text, fontSize = 27.sp, fontWeight = FontWeight.Bold) }
         item {
@@ -1407,7 +1407,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
                 0f to Color(0x99000000), 0.22f to Color.Transparent, 0.68f to Color.Transparent, 1f to Color(0xCC000000)
             )))
-            Column(Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 16.dp)) {
+            Column(Modifier.fillMaxSize().then(if (landscape) Modifier else Modifier.statusBarsPadding().navigationBarsPadding())
+                .padding(horizontal = 22.dp, vertical = 16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     PhoneAction("‹", Color(0x55000000), Color.White) { activity.returnToDetail(true) }
                     Column(Modifier.weight(1f).padding(start = 12.dp).clickable { activity.returnToDetail(true) }) {
