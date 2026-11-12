@@ -615,7 +615,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     }
                     Spacer(Modifier.width(22.dp))
                     Box(Modifier.size(62.dp).clip(CircleShape).background(Color(0x77000000))
-                        .clickable { activity.togglePlayback() }, contentAlignment = Alignment.Center) {
+                        .clickable { if (failed) activity.playEpisode(activity.episodeIndex, activity.retryPosition, activity.retryAutoplay) else activity.togglePlayback() }, contentAlignment = Alignment.Center) {
                         Text(if (playing) "Ⅱ" else "▶", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(22.dp))
