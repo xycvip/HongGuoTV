@@ -671,13 +671,32 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 showSettings = false
                 activity.showQualityPicker(android.widget.TextView(activity), true)
             }.padding(12.dp))
-            Text("评论", modifier = Modifier.fillMaxWidth().clickable {
-                showSettings = false
-                activity.openOfficialComments(activity.phoneUiState.playerHost)
-            }.padding(12.dp))
             Text("画面模式", modifier = Modifier.fillMaxWidth().clickable {
                 showSettings = false
                 activity.showFramePicker(android.widget.TextView(activity), true)
+            }.padding(12.dp))
+            Text("定时停止", modifier = Modifier.fillMaxWidth().clickable {
+                showSettings = false
+                activity.showSleepPicker(android.widget.TextView(activity))
+            }.padding(12.dp))
+            Text("弹幕：点击切换", modifier = Modifier.fillMaxWidth().clickable {
+                activity.toggleSeriesDanmaku(data?.series?.id.orEmpty())
+            }.padding(12.dp))
+            Text("跳过片头", modifier = Modifier.fillMaxWidth().clickable {
+                showSettings = false
+                activity.showSkipPicker(android.widget.TextView(activity), true)
+            }.padding(12.dp))
+            Text("跳过片尾", modifier = Modifier.fillMaxWidth().clickable {
+                showSettings = false
+                activity.showSkipPicker(android.widget.TextView(activity), false)
+            }.padding(12.dp))
+            Text("自动连播：" + if (activity.library.autoNext) "开启" else "关闭",
+                modifier = Modifier.fillMaxWidth().clickable {
+                    activity.library.autoNext = !activity.library.autoNext
+                }.padding(12.dp))
+            Text("评论", modifier = Modifier.fillMaxWidth().clickable {
+                showSettings = false
+                activity.openOfficialComments(activity.phoneUiState.playerHost)
             }.padding(12.dp))
         } },
         confirmButton = { TextButton(onClick = { showSettings = false }) { Text("关闭") } }
