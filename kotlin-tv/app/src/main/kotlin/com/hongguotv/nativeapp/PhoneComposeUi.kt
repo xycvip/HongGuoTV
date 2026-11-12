@@ -125,6 +125,10 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var selected by remember { mutableStateOf<Series?>(state.selectedSeries) }
     var refresh by remember { mutableIntStateOf(0) }
 
+    LaunchedEffect(state.tab) {
+        if (state.tab == 1) { searchText = ""; submittedQuery = "" }
+    }
+
     LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections) {
         if (state.page == PhonePage.DETAIL) return@LaunchedEffect
         loading = true
@@ -250,7 +254,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onAccount = { state.useLegacyPage = true; activity.switchTab(6) })
                             }
                         }
-                        PhoneBottomBar(state.tab, palette, onSelect = { target -> activity.switchTab(target) })
+                        PhoneBottomBar(state.tab, palette, style, onSelect = { target -> activity.switchTab(target) })
                     }
                 }
             }
@@ -279,11 +283,11 @@ private fun PhoneTopBar(p: PhonePalette, onSearch: () -> Unit, onRefresh: () -> 
 }
 
 @Composable
-private fun PhoneBottomBar(tab: Int, p: PhonePalette, onSelect: (Int) -> Unit) {
+private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (Int) -> Unit) {
     val active = when (tab) { 7 -> 7; 3, 4 -> 3; 6, 5 -> 6; else -> 0 }
     Row(Modifier.fillMaxWidth().background(p.surface).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
-        listOf(0 to "首页", 7 to "发现", 3 to "追剧", 6 to "我的").forEach { (id, label) ->
+        listOf(0 to "首页", 7 to if (style == "immersive") "剧场" else "发现", 3 to if (style == "immersive") "追剧" else "片单", 6 to "我的").forEach { (id, label) ->
             Column(Modifier.clip(RoundedCornerShape(18.dp)).clickable { onSelect(id) }
                 .background(if (active == id) p.accent.copy(alpha = .12f) else Color.Transparent)
                 .padding(horizontal = 18.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
