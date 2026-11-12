@@ -429,11 +429,17 @@ private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (
 @Composable
 private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Series>, type: ContentType,
     recent: List<Series>, updates: List<Series>, later: List<Series>, p: PhonePalette, style: String,
-    loading: Boolean, error: String?, onType: (ContentType) -> Unit, onSelect: (Series) -> Unit,
+    loading: Boolean, error: String?, hasMore: Boolean, loadingMore: Boolean, onLoadMore: () -> Unit,
+    onType: (ContentType) -> Unit, onSelect: (Series) -> Unit,
     onRecentSelect: (Series) -> Unit, onSearch: () -> Unit, onRank: () -> Unit, onMore: () -> Unit) {
     val items = when (type) { ContentType.COMIC -> comic; ContentType.AI -> ai; else -> short }
+    val homeListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(homeListState, hasMore, loadingMore, type, items.size) {
+        snapshotFlow { homeListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to homeListState.layoutInfo.totalItemsCount }
+            .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
+    }
     when (style) {
-        "immersive" -> LazyColumn(Modifier.fillMaxSize().background(Color.Black), contentPadding = PaddingValues(bottom = 20.dp)) {
+        "immersive" -> LazyColumn(state = homeListState, modifier = Modifier.fillMaxSize().background(Color.Black), contentPadding = PaddingValues(bottom = 20.dp)) {
             item {
                 Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -461,11 +467,11 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
             }
             if (updates.isNotEmpty()) item { PhoneShelf("收藏有更新", updates, p.copy(dark = true), onSelect) }
             items(items, key = { it.id }) { PhoneImmersiveCard(it, p.copy(dark = true), onSelect) }
-            if (loading) item { PhoneLoading(p.copy(dark = true)) }
+            if (loading || loadingMore) item { PhoneLoading(p.copy(dark = true)) }
             error?.let { item { PhoneError(it, p.copy(dark = true)) } }
             item { Text("进入排行榜 ›", color = Color.White, modifier = Modifier.clickable(onClick = onRank).padding(18.dp)) }
         }
-        "cards" -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
+        "cards" -> LazyColumn(state = homeListState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
             item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -516,17 +522,17 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
                 }
             }
             if (later.isNotEmpty()) item { PhoneShelf("稍后看", later, p, onSelect) }
-            if (loading) item { PhoneLoading(p) }
+            if (loading || loadingMore) item { PhoneLoading(p) }
             error?.let { item { PhoneError(it, p) } }
         }
-        else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
+        else -> LazyColumn(state = homeListState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
             if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onRecentSelect) }
             if (updates.isNotEmpty()) item { PhoneShelf("收藏有更新", updates, p, onSelect) }
             if (later.isNotEmpty()) item { PhoneShelf("稍后看", later, p, onSelect) }
             item { PhoneShelf("热门短剧", short, p, onSelect, onMore) }
             item { PhoneShelf("热门漫剧", comic, p, onSelect, onMore) }
             item { PhoneShelf("AI 剧", ai, p, onSelect, onMore) }
-            if (loading) item { PhoneLoading(p) }
+            if (loading || loadingMore) item { PhoneLoading(p) }
             error?.let { item { PhoneError(it, p) } }
         }
     }
