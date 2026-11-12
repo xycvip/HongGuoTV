@@ -1483,6 +1483,18 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                         interactionTick++
                         showFavoriteOptions = true
                     }
+                    PhoneAction("小窗", Color(0x55000000), Color.White) {
+                        interactionTick++
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            runCatching {
+                                activity.enterPictureInPictureMode(
+                                    android.app.PictureInPictureParams.Builder()
+                                        .setAspectRatio(android.util.Rational(9, 16))
+                                        .build()
+                                )
+                            }
+                        }
+                    }
                     Spacer(Modifier.width(6.dp))
                     PhoneAction("选集", Color(0x55000000), Color.White) { interactionTick++; showEpisodes = true }
                 }
