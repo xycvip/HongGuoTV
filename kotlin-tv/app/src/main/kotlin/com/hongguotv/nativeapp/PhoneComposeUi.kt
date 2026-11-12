@@ -19,6 +19,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -481,59 +486,62 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
                 if (error != null) PhoneError(error, p.copy(dark = true))
             }
         }
-        "cards" -> LazyColumn(state = homeListState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
-            item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Text("⌕ 搜索剧名或关键词", color = p.muted, fontSize = 13.sp,
-                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(p.card)
-                            .clickable(onClick = onSearch).padding(horizontal = 14.dp, vertical = 11.dp))
-                    Text("榜单", color = p.text, modifier = Modifier.clickable(onClick = onRank).padding(10.dp))
-                }
+        "cards" -> {
+            val gridState = rememberLazyStaggeredGridState()
+            LaunchedEffect(gridState, hasMore, loadingMore, type, items.size) {
+                snapshotFlow { (gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1) to gridState.layoutInfo.totalItemsCount }
+                    .collect { (last, total) -> if (last >= total - 4 && hasMore && !loadingMore && total > 0) onLoadMore() }
             }
-            item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(ContentType.SHORT to "热度", ContentType.COMIC to "漫剧", ContentType.AI to "推荐").forEach { (value, label) ->
-                        PhoneAction(label, if (type == value) p.accent else p.card, if (type == value) Color.White else p.text) { onType(value) }
+            LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(2), state = gridState,
+                modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalItemSpacing = 8.dp) {
+                item(span = StaggeredGridItemSpan.FullLine) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("⌕ 搜索剧名或关键词", color = p.muted, fontSize = 13.sp,
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(p.card)
+                                .clickable(onClick = onSearch).padding(horizontal = 14.dp, vertical = 11.dp))
+                        Text("榜单", color = p.text, modifier = Modifier.clickable(onClick = onRank).padding(10.dp))
                     }
                 }
-            }
-            if (recent.isNotEmpty()) item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp).clip(RoundedCornerShape(13.dp))
-                    .background(p.card).clickable { onRecentSelect(recent.first()) }.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Text("▶ 继续看", color = p.accent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Text(recent.first().title, color = p.text, fontSize = 12.sp, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                }
-            }
-            if (items.isNotEmpty()) item {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp).clip(RoundedCornerShape(15.dp))
-                    .background(p.card).padding(12.dp)) {
-                    Text(if (type == ContentType.COMIC) "漫剧榜" else if (type == ContentType.AI) "推荐榜" else "热度榜",
-                        color = p.text, fontSize = 17.sp, fontWeight = FontWeight.Black)
-                    items.take(5).forEachIndexed { index, item ->
-                        Row(Modifier.fillMaxWidth().clickable { onSelect(item) }.padding(vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Text((index + 1).toString(), color = if (index < 3) p.accent else p.muted,
-                                fontWeight = FontWeight.Bold, modifier = Modifier.width(22.dp))
-                            AsyncImage(model = item.cover, contentDescription = null,
-                                modifier = Modifier.width(38.dp).height(48.dp).clip(RoundedCornerShape(6.dp)))
-                            Text(item.title, color = p.text, fontSize = 13.sp, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 9.dp))
+                item(span = StaggeredGridItemSpan.FullLine) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(ContentType.SHORT to "热度", ContentType.COMIC to "漫剧", ContentType.AI to "推荐").forEach { (value, label) ->
+                            PhoneAction(label, if (type == value) p.accent else p.card, if (type == value) Color.White else p.text) { onType(value) }
                         }
                     }
                 }
-            }
-            items(items.drop(5).chunked(2).size) { row ->
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items.drop(5).drop(row * 2).take(2).forEach { item -> PhonePoster(item, p, Modifier.weight(1f), onSelect) }
-                    if (items.drop(5).drop(row * 2).size == 1) Spacer(Modifier.weight(1f))
+                if (recent.isNotEmpty()) item(span = StaggeredGridItemSpan.FullLine) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(p.card)
+                        .clickable { onRecentSelect(recent.first()) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("▶ 继续看", color = p.accent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(recent.first().title, color = p.text, fontSize = 12.sp, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                    }
                 }
+                if (items.isNotEmpty()) item(span = StaggeredGridItemSpan.FullLine) {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(p.card).padding(12.dp)) {
+                        Text(if (type == ContentType.COMIC) "漫剧榜" else if (type == ContentType.AI) "推荐榜" else "热度榜",
+                            color = p.text, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                        items.take(5).forEachIndexed { index, item ->
+                            Row(Modifier.fillMaxWidth().clickable { onSelect(item) }.padding(vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text((index + 1).toString(), color = if (index < 3) p.accent else p.muted,
+                                    fontWeight = FontWeight.Bold, modifier = Modifier.width(22.dp))
+                                AsyncImage(model = item.cover, contentDescription = null,
+                                    modifier = Modifier.width(38.dp).height(48.dp).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop)
+                                Text(item.title, color = p.text, fontSize = 13.sp, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 9.dp))
+                            }
+                        }
+                    }
+                }
+                itemsIndexed(items.drop(5), key = { _, item -> item.id }) { index, item ->
+                    PhoneWaterfallPoster(item, p, listOf(0.72f, 0.84f, 0.68f, 0.78f, 0.74f)[index % 5], onSelect)
+                }
+                if (later.isNotEmpty()) item(span = StaggeredGridItemSpan.FullLine) { PhoneShelf("稍后看", later, p, onSelect) }
+                if (loading || loadingMore) item(span = StaggeredGridItemSpan.FullLine) { PhoneLoading(p) }
+                error?.let { item(span = StaggeredGridItemSpan.FullLine) { PhoneError(it, p) } }
             }
-            if (later.isNotEmpty()) item { PhoneShelf("稍后看", later, p, onSelect) }
-            if (loading || loadingMore) item { PhoneLoading(p) }
-            error?.let { item { PhoneError(it, p) } }
         }
         else -> LazyColumn(state = homeListState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
             if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onRecentSelect) }
@@ -881,6 +889,18 @@ private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: ()
         }
     }
 }
+@Composable
+private fun PhoneWaterfallPoster(item: Series, p: PhonePalette, ratio: Float, onSelect: (Series) -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).clickable { onSelect(item) }) {
+        AsyncImage(model = item.cover, contentDescription = item.title,
+            modifier = Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
+        Text(item.title, color = p.text, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium,
+            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp, vertical = 5.dp))
+        if (item.tags.isNotBlank()) Text(item.tags, color = p.muted, fontSize = 10.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
+    }
+}
+
 @Composable
 private fun PhonePoster(item: Series, p: PhonePalette, modifier: Modifier, onSelect: (Series) -> Unit) {
     Column(modifier.clip(RoundedCornerShape(14.dp)).clickable { onSelect(item) }) {
