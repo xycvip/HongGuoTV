@@ -246,7 +246,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
         Surface(Modifier.fillMaxSize(), color = palette.background) {
             AnimatedContent(state.page, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "phone_page") { page ->
                 if (page == PhonePage.DETAIL) {
-                    PhoneDetailPage(detail, detailLoading, error, palette,
+                    PhoneDetailPage(detail, detailLoading, error, palette, style,
                         resumeIndex = detail?.let { d -> activity.library.progress(d.series.id)?.let { d.episodes.indexOf(it.episodeId) }?.takeIf { it >= 0 } },
                         isFavorite = detail?.let { d -> activity.library.favorites().any { it.id == d.series.id } } == true,
                         onResume = {
@@ -587,53 +587,93 @@ private fun PhonePoster(item: Series, p: PhonePalette, modifier: Modifier, onSel
 }
 
 @Composable
-private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, palette: PhonePalette,
+private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, palette: PhonePalette, style: String,
     resumeIndex: Int?, isFavorite: Boolean, onResume: () -> Unit, onRelated: (Series) -> Unit,
     onBack: () -> Unit, onPlay: (Int) -> Unit, onFavorite: (Series) -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().background(palette.surface).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().background(palette.surface).statusBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
             Text("‹", fontSize = 30.sp, color = palette.text, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
-            Text(detail?.series?.title ?: "剧集详情", color = palette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(detail?.series?.title ?: "剧集详情", color = palette.text, fontSize = 18.sp,
+                fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (loading) PhoneLoading(palette)
         if (error != null) PhoneError(error, palette)
         detail?.let { data ->
-            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 28.dp)) {
                 item {
-                    Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.Top) {
-                        AsyncImage(model = data.series.cover, contentDescription = null,
-                            modifier = Modifier.width(132.dp).aspectRatio(0.69f).clip(RoundedCornerShape(14.dp)))
-                        Spacer(Modifier.width(16.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(data.series.title, color = palette.text, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                            Text(data.episodes.size.toString() + " 集 · " + data.series.tags, color = palette.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-                            Text(data.series.description, color = palette.muted, fontSize = 13.sp, maxLines = 5,
-                                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
-                            if (!data.social.isEmpty) {
-                                val metrics = listOf(
-                                    if (data.social.rating > 0) String.format(Locale.CHINA, "%.1f 分", data.social.rating) else "",
-                                    data.social.favoriteText, data.social.heatText
-                                ).filter { it.isNotBlank() }.joinToString(" · ")
-                                Text(metrics, color = palette.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(top = 8.dp))
+                    when (style) {
+                        "immersive" -> Box(Modifier.fillMaxWidth().height(390.dp)) {
+                            AsyncImage(model = data.series.cover, contentDescription = data.series.title,
+                                modifier = Modifier.fillMaxSize())
+                            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(
+                                Color(0x22000000), Color(0x44000000), Color(0xEE000000)))))
+                            Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 22.dp)) {
+                                if (data.series.badge.isNotBlank()) PhoneAction(data.series.badge, palette.accent, Color.White) {}
+                                Text(data.series.title, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black)
+                                Text(data.episodes.size.toString() + " 集 · " + data.series.tags,
+                                    color = Color(0xFFDDDDDD), fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                                Text(data.series.description, color = Color(0xFFE5E5E5), fontSize = 13.sp,
+                                    maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 9.dp))
+                                PhoneDetailActions(resumeIndex, isFavorite, palette, onResume, { onPlay(0) }) { onFavorite(data.series) }
                             }
-                            Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (resumeIndex != null) PhoneAction("继续观看", palette.accent, Color.White, onResume)
-                                PhoneAction("▶ 立即播放", if (resumeIndex != null) palette.card else palette.accent,
-                                    if (resumeIndex != null) palette.text else Color.White) { onPlay(0) }
-                                PhoneAction(if (isFavorite) "已收藏" else "收藏", palette.card, palette.text) { onFavorite(data.series) }
+                        }
+                        "cards" -> Column(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(22.dp))
+                            .background(palette.surface).padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.Top) {
+                                AsyncImage(model = data.series.cover, contentDescription = data.series.title,
+                                    modifier = Modifier.width(138.dp).aspectRatio(0.69f).clip(RoundedCornerShape(16.dp)))
+                                Spacer(Modifier.width(15.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(data.series.title, color = palette.text, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                                    Text(data.episodes.size.toString() + " 集 · " + data.series.tags,
+                                        color = palette.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                                    Text(data.series.description, color = palette.muted, fontSize = 13.sp,
+                                        maxLines = 7, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+                                }
+                            }
+                            PhoneDetailActions(resumeIndex, isFavorite, palette, onResume, { onPlay(0) }) { onFavorite(data.series) }
+                        }
+                        else -> Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.Top) {
+                            AsyncImage(model = data.series.cover, contentDescription = data.series.title,
+                                modifier = Modifier.width(132.dp).aspectRatio(0.69f).clip(RoundedCornerShape(14.dp)))
+                            Spacer(Modifier.width(16.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(data.series.title, color = palette.text, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                                Text(data.episodes.size.toString() + " 集 · " + data.series.tags, color = palette.muted,
+                                    fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                                Text(data.series.description, color = palette.muted, fontSize = 13.sp, maxLines = 5,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+                                PhoneDetailActions(resumeIndex, isFavorite, palette, onResume, { onPlay(0) }) { onFavorite(data.series) }
                             }
                         }
                     }
+                    if (!data.social.isEmpty) {
+                        val metrics = listOf(
+                            if (data.social.rating > 0) String.format(Locale.CHINA, "%.1f 分", data.social.rating) else "",
+                            data.social.favoriteText, data.social.heatText
+                        ).filter { it.isNotBlank() }.joinToString(" · ")
+                        if (metrics.isNotBlank()) Text(metrics, color = palette.accent, fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
+                    }
                 }
-                item { Text("选集", color = palette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)) }
+                item {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("选集", color = palette.text, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(data.episodes.size.toString() + " 集", color = palette.muted, fontSize = 12.sp)
+                    }
+                }
                 items(data.episodes.chunked(4).size) { row ->
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         data.episodes.drop(row * 4).take(4).forEachIndexed { offset, _ ->
                             val index = row * 4 + offset
-                            Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(palette.card)
+                            Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                                .background(if (resumeIndex == index) palette.accent.copy(alpha = 0.16f) else palette.card)
                                 .clickable { onPlay(index) }.padding(vertical = 13.dp), contentAlignment = Alignment.Center) {
-                                Text((index + 1).toString(), color = palette.text, fontSize = 14.sp)
+                                Text((index + 1).toString(), color = if (resumeIndex == index) palette.accent else palette.text,
+                                    fontSize = 14.sp, fontWeight = if (resumeIndex == index) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                         repeat((4 - data.episodes.drop(row * 4).take(4).size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
@@ -643,6 +683,17 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                 if (data.related.isNotEmpty()) item { PhoneShelf("猜你喜欢", data.related, palette, onRelated) }
             }
         }
+    }
+}
+
+@Composable
+private fun PhoneDetailActions(resumeIndex: Int?, isFavorite: Boolean, p: PhonePalette,
+    onResume: () -> Unit, onPlay: () -> Unit, onFavorite: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        if (resumeIndex != null) PhoneAction("继续观看", p.accent, Color.White, onResume)
+        PhoneAction("▶ 播放", if (resumeIndex == null) p.accent else p.card,
+            if (resumeIndex == null) Color.White else p.text, onPlay)
+        PhoneAction(if (isFavorite) "已收藏" else "收藏", p.card, p.text, onFavorite)
     }
 }
 
