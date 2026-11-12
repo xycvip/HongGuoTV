@@ -310,13 +310,13 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                         refresh++
                                     }, progressLabel = { item -> activity.library.progress(item.id)?.let { "第" + it.episodeIndex + "集 · " + phoneTime(it.position) }.orEmpty() },
                                     onRefresh = { refresh++ })
-                                else -> PhoneMinePage(palette, style, themeMode, { next ->
-                                    style = next
-                                    preferences.edit().putString(PhoneThemeKey, next).apply()
-                                }, { next ->
-                                    themeMode = next
-                                    preferences.edit().putString("phone_ui_theme_mode", next).apply()
-                                }, { refresh++ },
+                                else -> PhoneMinePage(palette, style, themeMode,
+                                    favoriteCount = activity.library.favorites().size,
+                                    historyCount = activity.library.history().size,
+                                    onTheme = { next -> style = next; preferences.edit().putString(PhoneThemeKey, next).apply() },
+                                    onMode = { next -> themeMode = next; preferences.edit().putString("phone_ui_theme_mode", next).apply() },
+                                    onRefresh = { refresh++ },
+                                    onFavorites = { activity.switchTab(3) }, onHistory = { activity.switchTab(4) },
                                     onSettings = { state.useLegacyPage = true; activity.switchTab(5) },
                                     onAccount = { state.useLegacyPage = true; activity.switchTab(6) })
                             }
@@ -861,41 +861,86 @@ private fun PhoneDetailActions(resumeIndex: Int?, isFavorite: Boolean, p: PhoneP
 
 @Composable
 private fun PhoneMinePage(palette: PhonePalette, style: String, themeMode: String,
+    favoriteCount: Int, historyCount: Int,
     onTheme: (String) -> Unit, onMode: (String) -> Unit, onRefresh: () -> Unit,
-    onSettings: () -> Unit, onAccount: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp)) {
-        item { Text("我的", color = palette.text, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
-        item { Text("界面主题", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 24.dp, bottom = 10.dp)) }
+    onFavorites: () -> Unit, onHistory: () -> Unit, onSettings: () -> Unit, onAccount: () -> Unit) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("我的", color = palette.text, fontSize = 27.sp, fontWeight = FontWeight.Bold) }
         item {
-            listOf("warm" to "暖白精修", "immersive" to "沉浸暗场", "cards" to "内容卡片").forEach { (key, label) ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(12.dp))
-                    .background(if (style == key) palette.accent.copy(alpha = 0.12f) else palette.card)
-                    .clickable { onTheme(key) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(label, color = palette.text, modifier = Modifier.weight(1f))
-                    if (style == key) Text("✓", color = palette.accent)
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(palette.card)
+                .clickable(onClick = onAccount).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(52.dp).clip(CircleShape).background(palette.accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                    Text("果", color = palette.accent, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                }
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text("登录红果账号", color = palette.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("账号登录、云片单与账号管理", color = palette.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                }
+                Text("›", color = palette.muted, fontSize = 24.sp)
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(palette.card)
+                    .clickable(onClick = onFavorites).padding(15.dp)) {
+                    Text("本机收藏", color = palette.muted, fontSize = 12.sp)
+                    Text(favoriteCount.toString(), color = palette.text, fontSize = 25.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 5.dp))
+                }
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(palette.card)
+                    .clickable(onClick = onHistory).padding(15.dp)) {
+                    Text("本机看过", color = palette.muted, fontSize = 12.sp)
+                    Text(historyCount.toString(), color = palette.text, fontSize = 25.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 5.dp))
                 }
             }
         }
-        item { Text("明暗模式", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 22.dp, bottom = 10.dp)) }
+        item { Text("界面主题", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                listOf("warm" to "暖白精修", "immersive" to "沉浸暗场", "cards" to "内容卡片").forEach { (key, label) ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .background(if (style == key) palette.accent.copy(alpha = 0.14f) else palette.card)
+                        .clickable { onTheme(key) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, color = palette.text, modifier = Modifier.weight(1f))
+                        if (style == key) Text("✓", color = palette.accent, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+        item { Text("明暗模式", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 7.dp)) }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("default" to "主题默认", "system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (key, label) ->
                     PhoneAction(label, if (themeMode == key) palette.accent else palette.card,
                         if (themeMode == key) Color.White else palette.text) { onMode(key) }
                 }
             }
         }
-        item { Text("账号与设置", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp)) }
-        item { Text("账号中心  ›", color = palette.text, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-            .background(palette.card).clickable(onClick = onAccount).padding(16.dp)) }
-        item { Text("系统设置  ›", color = palette.text, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp))
-            .background(palette.card).clickable(onClick = onSettings).padding(16.dp)) }
-        item { Text("刷新内容与本地片单", color = palette.text, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp))
-            .background(palette.card).clickable(onClick = onRefresh).padding(16.dp)) }
-        item { Text("播放器引擎、播放线路、更新与备份继续使用红果TV原有模块。", color = palette.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 14.dp)) }
+        item { Text("账号与设置", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 7.dp)) }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(palette.card)) {
+                Row(Modifier.fillMaxWidth().clickable(onClick = onAccount).padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("账号与隐私", color = palette.text, modifier = Modifier.weight(1f))
+                    Text("›", color = palette.muted, fontSize = 20.sp)
+                }
+                Box(Modifier.fillMaxWidth().padding(start = 14.dp).height(0.5.dp).background(palette.muted.copy(alpha = 0.2f)))
+                Row(Modifier.fillMaxWidth().clickable(onClick = onSettings).padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("设置", color = palette.text, modifier = Modifier.weight(1f))
+                    Text("›", color = palette.muted, fontSize = 20.sp)
+                }
+                Box(Modifier.fillMaxWidth().padding(start = 14.dp).height(0.5.dp).background(palette.muted.copy(alpha = 0.2f)))
+                Row(Modifier.fillMaxWidth().clickable(onClick = onRefresh).padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("刷新内容与本地片单", color = palette.text, modifier = Modifier.weight(1f))
+                    Text("›", color = palette.muted, fontSize = 20.sp)
+                }
+            }
+        }
+        item { Text("播放器引擎、播放线路、更新与备份继续使用红果TV原有模块。", color = palette.muted, fontSize = 12.sp,
+            modifier = Modifier.padding(top = 8.dp, bottom = 20.dp)) }
     }
 }
-
 @Composable
 private fun PhoneAction(label: String, bg: Color, fg: Color, onClick: () -> Unit) {
     Text(label, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Bold,
