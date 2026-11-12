@@ -287,7 +287,7 @@ private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (
     val active = when (tab) { 7 -> 7; 3, 4 -> 3; 6, 5 -> 6; else -> 0 }
     Row(Modifier.fillMaxWidth().background(p.surface).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
-        listOf(0 to "首页", 7 to if (style == "immersive") "剧场" else "发现", 3 to if (style == "immersive") "追剧" else "片单", 6 to "我的").forEach { (id, label) ->
+        listOf(0 to "首页", 7 to (if (style == "immersive") "剧场" else "发现"), 3 to (if (style == "immersive") "追剧" else "片单"), 6 to "我的").forEach { (id, label) ->
             Column(Modifier.clip(RoundedCornerShape(18.dp)).clickable { onSelect(id) }
                 .background(if (active == id) p.accent.copy(alpha = .12f) else Color.Transparent)
                 .padding(horizontal = 18.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -559,6 +559,9 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(false) }
+    var ready by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    var playbackMessage by remember { mutableStateOf("") }
     var showEpisodes by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
@@ -574,6 +577,10 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             duration = p?.duration?.takeIf { it > 0 } ?: 0L
             position = activity.currentPosition().coerceAtLeast(0L)
             playing = p?.isPlaying == true
+            ready = activity.playbackReady
+            failed = activity.playError
+            if (failed) state.playerControlsVisible = true
+            playbackMessage = if (runCatching { activity.playbackText.text.toString() }.isSuccess) activity.playbackText.text.toString() else ""
             speed = activity.library.playbackSpeed
             delay(300)
         }
@@ -596,6 +603,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text(data?.series?.title.orEmpty(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         Text("第 " + (activity.episodeIndex + 1) + " 集 / 共 " + (data?.episodes?.size ?: 0) + " 集", color = Color(0xFFCCCCCC), fontSize = 11.sp)
+                        if (!ready || failed) Text(if (failed) playbackMessage.ifBlank { "播放失败" } else "正在获取播放地址…",
+                            color = if (failed) Color(0xFFFFA27B) else Color(0xFFCCCCCC), fontSize = 11.sp)
                     }
                     PhoneAction("选集", Color(0x55000000), Color.White) { showEpisodes = true }
                 }
