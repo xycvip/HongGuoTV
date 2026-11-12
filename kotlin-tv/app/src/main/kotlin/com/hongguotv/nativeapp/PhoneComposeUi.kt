@@ -344,7 +344,7 @@ private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (
         horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
         listOf(0 to "首页", 7 to (if (style == "immersive") "剧场" else "发现"), 3 to (if (style == "immersive") "追剧" else "片单"), 6 to "我的").forEach { (id, label) ->
             Column(Modifier.clip(RoundedCornerShape(18.dp)).clickable { onSelect(id) }
-                .background(if (active == id) p.accent.copy(alpha = .12f) else Color.Transparent)
+                .background(if (active == id) p.accent.copy(alpha = 0.12f) else Color.Transparent)
                 .padding(horizontal = 18.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(if (id == active) "●" else "○", color = p.accent, fontSize = 13.sp)
                 Text(label, color = if (id == active) p.accent else p.muted, fontSize = 11.sp,
@@ -566,7 +566,7 @@ private fun PhonePoster(item: Series, p: PhonePalette, modifier: Modifier, onSel
     Column(modifier.clip(RoundedCornerShape(14.dp)).clickable { onSelect(item) }) {
         Box {
             AsyncImage(model = item.cover, contentDescription = item.title,
-                modifier = Modifier.fillMaxWidth().aspectRatio(.69f).clip(RoundedCornerShape(13.dp)))
+                modifier = Modifier.fillMaxWidth().aspectRatio(0.69f).clip(RoundedCornerShape(13.dp)))
             if (item.badge.isNotBlank()) Text(item.badge, color = Color.White, fontSize = 10.sp,
                 modifier = Modifier.align(Alignment.BottomStart).padding(6.dp).clip(RoundedCornerShape(5.dp))
                     .background(p.accent).padding(horizontal = 6.dp, vertical = 3.dp))
@@ -594,7 +594,7 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                 item {
                     Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.Top) {
                         AsyncImage(model = data.series.cover, contentDescription = null,
-                            modifier = Modifier.width(132.dp).aspectRatio(.69f).clip(RoundedCornerShape(14.dp)))
+                            modifier = Modifier.width(132.dp).aspectRatio(0.69f).clip(RoundedCornerShape(14.dp)))
                         Spacer(Modifier.width(16.dp))
                         Column(Modifier.weight(1f)) {
                             Text(data.series.title, color = palette.text, fontSize = 21.sp, fontWeight = FontWeight.Bold)
@@ -648,7 +648,7 @@ private fun PhoneMinePage(palette: PhonePalette, style: String, themeMode: Strin
         item {
             listOf("warm" to "暖白精修", "immersive" to "沉浸暗场", "cards" to "内容卡片").forEach { (key, label) ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(12.dp))
-                    .background(if (style == key) palette.accent.copy(alpha = .12f) else palette.card)
+                    .background(if (style == key) palette.accent.copy(alpha = 0.12f) else palette.card)
                     .clickable { onTheme(key) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(label, color = palette.text, modifier = Modifier.weight(1f))
                     if (style == key) Text("✓", color = palette.accent)
@@ -729,7 +729,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     Box(Modifier.fillMaxSize()) {
         if (controlsVisible) {
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-                0f to Color(0x99000000), .22f to Color.Transparent, .68f to Color.Transparent, 1f to Color(0xCC000000)
+                0f to Color(0x99000000), 0.22f to Color.Transparent, 0.68f to Color.Transparent, 1f to Color(0xCC000000)
             )))
             Column(Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -778,7 +778,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     }
     if (showSpeed) AlertDialog(
         onDismissRequest = { showSpeed = false }, title = { Text("播放倍速") },
-        text = { Column { listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f).forEach { value ->
+        text = { Column { listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { value ->
             Text(value.toString() + "×", modifier = Modifier.fillMaxWidth().clickable {
                 speed = value; activity.library.playbackSpeed = value; activity.player?.setPlaybackSpeed(value); showSpeed = false
             }.padding(12.dp))
