@@ -2,6 +2,7 @@
 package com.hongguotv.nativeapp
 
 import android.os.Handler
+import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.widget.SeekBar
@@ -33,7 +34,8 @@ internal class MainActivityTouchGestureController(
     private val startLongPressSpeed: () -> Unit,
     private val stopLongPressSpeed: () -> Unit,
     private val isPhoneComposeControl: (MotionEvent) -> Boolean = { false },
-    private val isPhoneComposeControlsVisible: () -> Boolean = { false }
+    private val isPhoneComposeControlsVisible: () -> Boolean = { false },
+    private val togglePhonePlayback: () -> Unit = {}
 ) {
     private var verticalGesture = false
     private var verticalLeft = false
@@ -257,11 +259,17 @@ internal class MainActivityTouchGestureController(
                     kotlin.math.abs(event.y - state.touchStartY) <= dp(24)
                 ) {
                     // 控制栏已显示时，点击视频空白区域将其收起；隐藏时单击才唤起。
-                    if(touchStartedWithHudVisible) {
-                        hideHud()
+                    val now = SystemClock.uptimeMillis()
+                    if (lastTapAt > 0L && now - lastTapAt <= 280L) {
+                        main.removeCallbacks(singleTapRunnable)
+                        lastTapAt = 0L
+                        pendingTapWasHudVisible = false
+                        togglePhonePlayback()
                     } else {
-                        showHud()
-                        showCenterControl()
+                        lastTapAt = now
+                        pendingTapWasHudVisible = touchStartedWithHudVisible
+                        main.removeCallbacks(singleTapRunnable)
+                        main.postDelayed(singleTapRunnable, 280L)
                     }
                     touchStartedWithHudVisible = false
                     return true
