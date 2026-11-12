@@ -1335,6 +1335,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var failed by remember { mutableStateOf(false) }
     var playbackMessage by remember { mutableStateOf("") }
     var showEpisodes by remember { mutableStateOf(false) }
+    var showFavoriteOptions by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
     var speed by remember { mutableFloatStateOf(activity.library.playbackSpeed) }
@@ -1405,7 +1406,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                         }
                     }
                     if (landscape) PhoneAction(if (favorite) "★" else "☆", Color(0x55000000), Color.White) {
-                        data?.series?.let { favorite = activity.library.toggle(it) }
+                        showFavoriteOptions = true
                     }
                     Spacer(Modifier.width(6.dp))
                     PhoneAction("选集", Color(0x55000000), Color.White) { showEpisodes = true }
@@ -1432,7 +1433,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
                                 .clickable { activity.returnToDetail(true) })
                         PhoneAction(if (favorite) "★ 已收藏" else "☆ 收藏", Color(0x55000000), Color.White) {
-                            data?.series?.let { favorite = activity.library.toggle(it) }
+                            showFavoriteOptions = true
                         }
                     }
                 }
@@ -1471,6 +1472,27 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     Text(value.toString() + "×", color = if (speed == value) playerPalette.accent else playerPalette.text,
                         fontWeight = if (speed == value) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f))
                     if (speed == value) Text("✓", color = playerPalette.accent)
+                }
+            }
+        }
+    }
+    if (showFavoriteOptions) ModalBottomSheet(onDismissRequest = { showFavoriteOptions = false },
+        containerColor = playerPalette.surface, contentColor = playerPalette.text) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text("收藏这部剧", color = playerPalette.text, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text(data?.series?.title.orEmpty(), color = playerPalette.muted, fontSize = 13.sp, maxLines = 2,
+                overflow = TextOverflow.Ellipsis)
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(playerPalette.card).padding(13.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("本机收藏", color = playerPalette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("保存在当前设备的追剧片单", color = playerPalette.muted, fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 4.dp))
+                }
+                PhoneAction(if (favorite) "取消收藏" else "加入收藏", playerPalette.accent, Color.White) {
+                    data?.series?.let { favorite = activity.library.toggle(it) }
+                    showFavoriteOptions = false
                 }
             }
         }
