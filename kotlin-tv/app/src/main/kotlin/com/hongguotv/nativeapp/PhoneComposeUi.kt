@@ -654,17 +654,19 @@ private fun PhoneTheaterPage(
             PhoneAction("筛选" + selections.values.count { it.isNotBlank() }.takeIf { it > 0 }?.let { " · $it" }.orEmpty(),
                 p.card, p.text) { draftSelections = selections; showFilters = true }
             val quickGroup = groups.firstOrNull { it.type == "sort" } ?: groups.firstOrNull()
-            quickGroup?.options?.filter { it.id.isNotBlank() }?.take(8)?.forEach { option ->
-                val selected = selections[quickGroup.type] == option.id
-                Text(option.label, color = if (selected) Color.White else p.text, fontSize = 11.sp,
-                    modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(14.dp))
-                        .background(if (selected) p.accent else p.card)
-                        .clickable {
-                            val next = selections.toMutableMap().apply {
-                                if (selected) remove(quickGroup.type) else put(quickGroup.type, option.id)
-                            }
-                            onApplyFilters(next)
-                        }.padding(horizontal = 9.dp, vertical = 7.dp))
+            quickGroup?.let { group ->
+                group.options.filter { it.id.isNotBlank() }.take(8).forEach { option ->
+                    val selected = selections[group.type] == option.id
+                    Text(option.label, color = if (selected) Color.White else p.text, fontSize = 11.sp,
+                        modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(14.dp))
+                            .background(if (selected) p.accent else p.card)
+                            .clickable {
+                                val next = selections.toMutableMap().apply {
+                                    if (selected) remove(group.type) else put(group.type, option.id)
+                                }
+                                onApplyFilters(next)
+                            }.padding(horizontal = 9.dp, vertical = 7.dp))
+                }
             }
         }
         if (items.isEmpty() && !loading && error == null) {
