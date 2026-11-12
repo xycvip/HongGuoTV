@@ -3,6 +3,7 @@ package com.hongguotv.nativeapp
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -1416,6 +1417,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(false) }
     var ready by remember { mutableStateOf(false) }
+    var firstFrameRendered by remember { mutableStateOf(false) }
     var buffering by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var playbackMessage by remember { mutableStateOf("") }
@@ -1457,6 +1459,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             position = activity.currentPosition().coerceAtLeast(0L)
             playing = p?.isPlaying == true
             ready = activity.playbackReady
+            firstFrameRendered = activity.phoneFirstFrameRendered
             buffering = p?.playbackState == Player.STATE_BUFFERING
             failed = activity.playError
             if (failed) state.playerControlsVisible = true
@@ -1485,6 +1488,9 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
         onPrimary = Color.White, onBackground = playerPalette.text, onSurface = playerPalette.text
     )) {
     Box(Modifier.fillMaxSize()) {
+        AnimatedVisibility(visible = !firstFrameRendered, enter = fadeIn(), exit = fadeOut()) {
+            Box(Modifier.fillMaxSize().background(Color.Black))
+        }
         if (fastForwardHeld) Text("2× 临时加速中", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 74.dp).clip(RoundedCornerShape(20.dp))
                 .background(Color(0x99000000)).padding(horizontal = 14.dp, vertical = 8.dp))
