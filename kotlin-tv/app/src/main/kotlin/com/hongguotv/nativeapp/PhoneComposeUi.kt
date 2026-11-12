@@ -1152,8 +1152,8 @@ private fun PhoneSettingsPage(
                 }
                 Text("明暗模式", color = p.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 6.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("default" to "主题默认", "system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (key, label) ->
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(listOf("default" to "主题默认", "system" to "跟随系统", "light" to "浅色", "dark" to "深色"), key = { it.first }) { (key, label) ->
                         PhoneAction(label, if (themeMode == key) p.accent else p.surface,
                             if (themeMode == key) Color.White else p.text) { onMode(key) }
                     }
@@ -1265,8 +1265,8 @@ private fun PhoneMinePage(palette: PhonePalette, style: String, themeMode: Strin
         }
         item { Text("明暗模式", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 7.dp)) }
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("default" to "主题默认", "system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (key, label) ->
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(listOf("default" to "主题默认", "system" to "跟随系统", "light" to "浅色", "dark" to "深色"), key = { it.first }) { (key, label) ->
                     PhoneAction(label, if (themeMode == key) palette.accent else palette.card,
                         if (themeMode == key) Color.White else palette.text) { onMode(key) }
                 }
