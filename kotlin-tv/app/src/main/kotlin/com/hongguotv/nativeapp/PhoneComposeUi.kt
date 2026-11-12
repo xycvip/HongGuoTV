@@ -149,7 +149,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
 
     LaunchedEffect(state.tab) {
         pageNumber = 1
-        if (state.tab == 1) { searchText = ""; submittedQuery = "" }
+        if (state.tab == 1) { searchText = ""; submittedQuery = ""; pageItems = emptyList(); suggestions = emptyList() }
     }
 
     LaunchedEffect(searchText, state.tab) {
@@ -274,7 +274,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         onFavorite = { item -> activity.library.toggle(item); refresh++ })
                 } else {
                     Column(Modifier.fillMaxSize()) {
-                        PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
+                        if (state.tab != 1) PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems, homeType,
