@@ -1421,6 +1421,16 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     val landscape = activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val controlsVisible = state.playerControlsVisible
 
+    BackHandler(enabled = sidePanel != null || showEpisodes || showFavoriteOptions || showSettings || showSpeed) {
+        when {
+            sidePanel != null -> sidePanel = null
+            showEpisodes -> showEpisodes = false
+            showFavoriteOptions -> showFavoriteOptions = false
+            showSettings -> showSettings = false
+            showSpeed -> showSpeed = false
+        }
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             val p = activity.player
