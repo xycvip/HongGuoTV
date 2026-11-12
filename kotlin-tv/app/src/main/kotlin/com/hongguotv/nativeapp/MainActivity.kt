@@ -526,7 +526,7 @@ class MainActivity: Activity() {
                 else {
                     val x = event.x / resources.displayMetrics.widthPixels.toFloat().coerceAtLeast(1f)
                     val y = event.y / resources.displayMetrics.heightPixels.toFloat().coerceAtLeast(1f)
-                    y <= .18f || y >= .78f || (y in .36f.. .68f && x in .16f.. .84f)
+                    y <= 0.18f || y >= 0.78f || (y in 0.36f..0.68f && x in 0.16f..0.84f)
                 }
             },
             isPhoneComposeControlsVisible = { phoneUiState.playerControlsVisible && phoneUiState.playerHost?.parent === root }
