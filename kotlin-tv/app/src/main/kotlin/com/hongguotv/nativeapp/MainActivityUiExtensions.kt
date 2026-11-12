@@ -104,6 +104,13 @@ import java.util.concurrent.atomic.AtomicLong
             window.navigationBarColor = Color.TRANSPARENT
             val landscapePlayer = screen == "player" &&
                 resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val phonePrefs = getSharedPreferences("phone-ui-preferences", Context.MODE_PRIVATE)
+            val style = phonePrefs.getString("phone_ui_theme_style", "warm") ?: "warm"
+            val mode = phonePrefs.getString("phone_ui_theme_mode", "default") ?: "default"
+            val systemDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+            val darkBars = when (mode) { "light" -> false; "dark" -> true; "system" -> systemDark; else -> style == "immersive" }
+            val barIconFlags = if (darkBars) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
             if (landscapePlayer) {
                 window.decorView.systemUiVisibility =
                     View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
@@ -115,7 +122,7 @@ import java.util.concurrent.atomic.AtomicLong
                 }
             } else {
                 window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or barIconFlags
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     window.insetsController?.show(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
                     window.insetsController?.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_DEFAULT
