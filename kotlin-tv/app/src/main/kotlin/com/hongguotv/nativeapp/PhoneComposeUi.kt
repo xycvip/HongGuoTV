@@ -1394,6 +1394,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     PhoneAction("‹", Color(0x55000000), Color.White) { activity.returnToDetail(true) }
                     Column(Modifier.weight(1f).padding(start = 12.dp).clickable { activity.returnToDetail(true) }) {
+                        if (landscape) Text(data?.series?.title.orEmpty(), color = Color.White, fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("第 " + (activity.episodeIndex + 1) + " 集 / 共 " + (data?.episodes?.size ?: 0) + " 集",
                             color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         if (!ready || failed || buffering) Text(if (failed) playbackMessage.ifBlank { "播放失败" } else if (buffering) "缓冲中…" else "正在获取播放地址…",
