@@ -43,6 +43,7 @@ internal class MainActivityTouchGestureController(
     private var verticalStartValue = 0f
     private var verticalLastValue = -1
     private var longPressSpeedActive = false
+    private var holdSeekAnchorX: Float? = null
     private var touchOnCenterControl = false
     private var touchStartedWithHudVisible = false
     private var touchOnComposeControl = false
@@ -175,20 +176,39 @@ internal class MainActivityTouchGestureController(
                 verticalLastValue = -1
                 // 手机视频画面任意一侧长按均临时切换 2 倍速；控制栏/进度条区域不参与。
                 main.removeCallbacks(longPressSpeedRunnable)
-                main.postDelayed(longPressSpeedRunnable, 350L)
+                holdSeekAnchorX = null
+                main.postDelayed(longPressSpeedRunnable, 500L)
             }
             MotionEvent.ACTION_MOVE -> if(state.touchTracking) {
                 val dx = event.x - state.touchStartX
                 val dy = event.y - state.touchStartY
                 if(kotlin.math.abs(dx) > dp(24) || kotlin.math.abs(dy) > dp(24)) {
-                    main.removeCallbacks(longPressSpeedRunnable)
+                    if (!longPressSpeedActive) main.removeCallbacks(longPressSpeedRunnable)
                     main.removeCallbacks(singleTapRunnable)
                     lastTapAt = 0L
                     pendingTapWasHudVisible = false
-                    if(longPressSpeedActive) {
+                }
+                // 与 OOIUa 一致：先长按进入 2×，再横向拖动才接管为精确 seek。
+                if (longPressSpeedActive && !verticalGesture &&
+                    kotlin.math.abs(dx) > dp(24) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f
+                ) {
+                    val anchor = holdSeekAnchorX
+                    if (anchor == null) {
+                        holdSeekAnchorX = event.x
+                        state.touchStartX = event.x
+                        state.touchSeekStart = currentPosition()
+                    } else if (kotlin.math.abs(event.x - anchor) > dp(24)) {
                         longPressSpeedActive = false
                         stopLongPressSpeed()
+                        state.touchSeekGesture = true
                     }
+                }
+                if (longPressSpeedActive && kotlin.math.abs(dy) > dp(24) &&
+                    kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f
+                ) {
+                    longPressSpeedActive = false
+                    holdSeekAnchorX = null
+                    stopLongPressSpeed()
                 }
                 if(!state.touchSeekGesture && !verticalGesture &&
                     kotlin.math.abs(dy) > dp(24) &&
@@ -213,9 +233,6 @@ internal class MainActivityTouchGestureController(
                     }
                     return true
                 }
-                if(!verticalGesture && !state.touchSeekGesture && kotlin.math.abs(dx) > dp(24) &&
-                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f
-                ) state.touchSeekGesture = true
                 if(state.touchSeekGesture) {
                     val duration = playerDuration().coerceAtLeast(0L)
                     if(duration > 0L) {
@@ -308,6 +325,7 @@ internal class MainActivityTouchGestureController(
         lastTapAt = 0L
         pinchStartSpan = 0f
         pinchDecided = false
+        holdSeekAnchorX = null
         if(longPressSpeedActive) { longPressSpeedActive = false; stopLongPressSpeed() }
         state.touchTracking = false
         state.touchSeekGesture = false
