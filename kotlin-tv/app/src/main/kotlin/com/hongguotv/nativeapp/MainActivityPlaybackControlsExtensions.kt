@@ -36,6 +36,7 @@ internal fun MainActivity.hidePlaybackOverlay() {
 
     internal fun MainActivity.showHud() {
         if(screen!="player") return
+        phoneUiState.playerControlsVisible=true
         hud.visibility=View.VISIBLE
         updatePlaybackText()
         resetHudHideTimer()
