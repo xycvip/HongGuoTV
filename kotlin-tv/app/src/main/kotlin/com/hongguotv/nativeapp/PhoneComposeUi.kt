@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -549,7 +550,7 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
 @Composable
 private fun PhoneImmersiveCard(item: Series, p: PhonePalette, onSelect: (Series) -> Unit, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize().clickable { onSelect(item) }) {
-        AsyncImage(model = item.cover, contentDescription = item.title, modifier = Modifier.fillMaxSize())
+        AsyncImage(model = item.cover, contentDescription = item.title, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000)))))
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
             if (item.badge.isNotBlank()) Text(item.badge, color = Color.White, fontSize = 11.sp)
@@ -885,7 +886,7 @@ private fun PhonePoster(item: Series, p: PhonePalette, modifier: Modifier, onSel
     Column(modifier.clip(RoundedCornerShape(14.dp)).clickable { onSelect(item) }) {
         Box {
             AsyncImage(model = item.cover, contentDescription = item.title,
-                modifier = Modifier.fillMaxWidth().aspectRatio(0.69f).clip(RoundedCornerShape(13.dp)))
+                modifier = Modifier.fillMaxWidth().aspectRatio(0.69f).clip(RoundedCornerShape(13.dp)), contentScale = ContentScale.Crop)
             if (item.badge.isNotBlank()) Text(item.badge, color = Color.White, fontSize = 10.sp,
                 modifier = Modifier.align(Alignment.BottomStart).padding(6.dp).clip(RoundedCornerShape(5.dp))
                     .background(p.accent).padding(horizontal = 6.dp, vertical = 3.dp))
