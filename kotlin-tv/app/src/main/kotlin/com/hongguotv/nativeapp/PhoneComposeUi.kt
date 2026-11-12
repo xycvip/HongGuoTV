@@ -445,12 +445,18 @@ private fun PhoneTopBar(p: PhonePalette, tab: Int, onBack: () -> Unit, onRank: (
 @Composable
 private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, navStyle: String, onSelect: (Int) -> Unit) {
     val active = when (tab) { 7 -> 7; 2 -> 2; 3, 4 -> 3; 6, 5 -> 6; else -> 0 }
-    Row(Modifier.fillMaxWidth().background(p.surface).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 7.dp),
-        horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
+    val containerModifier = if (navStyle == "glass") {
+        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(28.dp)).background(p.card.copy(alpha = 0.94f)).padding(6.dp)
+    } else {
+        Modifier.fillMaxWidth().background(p.surface).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 7.dp)
+    }
+    Row(containerModifier, horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
         listOf(0 to "首页", 7 to (if (style == "immersive") "剧场" else "发现"), 3 to (if (style == "immersive") "追剧" else "片单"), 6 to "我的").forEach { (id, label) ->
-            Column(Modifier.clip(RoundedCornerShape(18.dp)).clickable { onSelect(id) }
-                .background(if (active == id) p.accent.copy(alpha = 0.12f) else Color.Transparent)
-                .padding(horizontal = 18.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.weight(1f).clip(RoundedCornerShape(18.dp))
+                .background(if (active == id) p.accent.copy(alpha = if (navStyle == "glass") 0.16f else 0.12f) else Color.Transparent)
+                .clickable { onSelect(id) }.padding(horizontal = 8.dp, vertical = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
                 val glyph = when (id) { 0 -> "⌂"; 7 -> "◈"; 3 -> "☆"; else -> "♙" }
                 Text(glyph, color = if (id == active) p.accent else p.muted, fontSize = 21.sp,
                     fontWeight = if (id == active) FontWeight.Bold else FontWeight.Normal)
