@@ -13,6 +13,7 @@ internal class PlaybackUiState {
     var preloadManager: DefaultPreloadManager? = null
     var video: RemoteVideo? = null
     var playbackReady = false
+    var phoneFirstFrameRendered = false
     var pausedForLifecycle = false
     var panel = false
     var touchTracking = false
