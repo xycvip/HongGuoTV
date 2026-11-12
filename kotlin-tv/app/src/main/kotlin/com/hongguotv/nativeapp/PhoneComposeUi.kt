@@ -127,6 +127,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
     val preferences = remember { activity.getSharedPreferences("phone-ui-preferences", android.content.Context.MODE_PRIVATE) }
     var style by remember { mutableStateOf(preferences.getString(PhoneThemeKey, "warm") ?: "warm") }
     var themeMode by remember { mutableStateOf(preferences.getString("phone_ui_theme_mode", "default") ?: "default") }
+    var navStyle by remember { mutableStateOf(preferences.getString("phone_ui_nav_bar_style", "classic") ?: "classic") }
     val dark = when (themeMode) {
         "light" -> false
         "dark" -> true
@@ -337,10 +338,11 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         },
                         onFavorite = { item -> activity.library.toggle(item); refresh++ })
                 } else if (settingsOpen) {
-                    PhoneSettingsPage(activity, palette, style, themeMode,
+                    PhoneSettingsPage(activity, palette, style, themeMode, navStyle,
                         onBack = { settingsOpen = false },
                         onTheme = { next -> style = next; preferences.edit().putString(PhoneThemeKey, next).apply() },
-                        onMode = { next -> themeMode = next; preferences.edit().putString("phone_ui_theme_mode", next).apply() })
+                        onMode = { next -> themeMode = next; preferences.edit().putString("phone_ui_theme_mode", next).apply() },
+                        onNavStyle = { next -> navStyle = next; preferences.edit().putString("phone_ui_nav_bar_style", next).apply() })
                 } else {
                     Column(Modifier.fillMaxSize()) {
                         if (state.tab == 0 && style == "warm") PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { forceHomeRefresh = true; homePage = 1; homeLoadingMore = false; pageNumber = 1; pageItems = emptyList(); refresh++ })
@@ -400,7 +402,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         }
                         if (state.tab !in setOf(1, 2)) PhoneBottomBar(state.tab,
                             if (state.tab == 0 && style == "immersive") phonePalette(style, true) else palette,
-                            style, onSelect = { target -> activity.switchTab(target) })
+                            style, navStyle, onSelect = { target -> activity.switchTab(target) })
                     }
                 }
             }
@@ -438,7 +440,7 @@ private fun PhoneTopBar(p: PhonePalette, tab: Int, onBack: () -> Unit, onRank: (
 }
 
 @Composable
-private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (Int) -> Unit) {
+private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, navStyle: String, onSelect: (Int) -> Unit) {
     val active = when (tab) { 7 -> 7; 2 -> 2; 3, 4 -> 3; 6, 5 -> 6; else -> 0 }
     Row(Modifier.fillMaxWidth().background(p.surface).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
@@ -1111,8 +1113,8 @@ private fun PhoneDetailActions(resumeIndex: Int?, isFavorite: Boolean, isLater: 
 
 @Composable
 private fun PhoneSettingsPage(
-    activity: MainActivity, p: PhonePalette, style: String, themeMode: String,
-    onBack: () -> Unit, onTheme: (String) -> Unit, onMode: (String) -> Unit
+    activity: MainActivity, p: PhonePalette, style: String, themeMode: String, navStyle: String,
+    onBack: () -> Unit, onTheme: (String) -> Unit, onMode: (String) -> Unit, onNavStyle: (String) -> Unit
 ) {
     var autoNext by remember { mutableStateOf(activity.library.autoNext) }
     var autoSeason by remember { mutableStateOf(activity.library.autoSeason) }
@@ -1157,6 +1159,18 @@ private fun PhoneSettingsPage(
                         PhoneAction(label, if (themeMode == key) p.accent else p.surface,
                             if (themeMode == key) Color.White else p.text) { onMode(key) }
                     }
+                }
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(p.card).padding(13.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("底部导航样式", color = p.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PhoneAction("经典底栏", if (navStyle == "classic") p.accent else p.surface,
+                        if (navStyle == "classic") Color.White else p.text) { onNavStyle("classic") }
+                    PhoneAction("悬浮玻璃", if (navStyle == "glass") p.accent else p.surface,
+                        if (navStyle == "glass") Color.White else p.text) { onNavStyle("glass") }
                 }
             }
         }
