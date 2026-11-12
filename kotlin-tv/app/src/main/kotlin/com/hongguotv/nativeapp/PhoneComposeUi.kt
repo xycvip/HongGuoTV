@@ -854,7 +854,7 @@ private fun PhoneRankPage(
             Text(board.buttonLabel, color = p.text, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("刷新", color = p.accent, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRefresh).padding(8.dp))
         }
-        LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        LazyColumn(state = listState, modifier = Modifier.weight(1f).navigationBarsPadding(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (items.isEmpty() && !loading && error == null) item {
                 Text("暂无榜单数据", color = p.muted, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(28.dp),
@@ -919,7 +919,7 @@ private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: ()
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to listState.layoutInfo.totalItemsCount }
             .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(Modifier.fillMaxSize().navigationBarsPadding().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             BasicTextField(value = text, onValueChange = onText, modifier = Modifier.weight(1f)
                 .clip(RoundedCornerShape(16.dp)).background(p.card).padding(horizontal = 14.dp, vertical = 13.dp),
@@ -1140,7 +1140,7 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                 val playIndex = (resumeIndex ?: 0).coerceIn(data.episodes.indices)
                 Text("▶  播放第 " + (playIndex + 1) + " 集", color = Color.White, fontSize = 16.sp,
                     fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 10.dp)
                         .clip(RoundedCornerShape(14.dp)).background(palette.accent)
                         .clickable { onPlay(playIndex) }.padding(vertical = 15.dp))
             }
@@ -1181,7 +1181,7 @@ private fun PhoneSettingsPage(
             delay(500)
         }
     }
-    LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+    LazyColumn(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
