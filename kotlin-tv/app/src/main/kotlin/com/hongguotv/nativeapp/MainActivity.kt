@@ -951,6 +951,7 @@ class MainActivity: Activity() {
             "third_source" -> openThirdSource()
             else -> showCatalog()
         }
+        applyImmersiveFullscreen()
     }
     override fun onResume() {
         super.onResume(); foreground=true; main.removeCallbacks(tick); main.post(tick)
