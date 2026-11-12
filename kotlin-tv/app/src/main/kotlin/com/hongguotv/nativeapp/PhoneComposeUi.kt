@@ -52,6 +52,7 @@ private const val PhoneThemeKey = "phone_ui_theme_style"
 
 internal fun MainActivity.showPhoneComposeCatalog() {
     if (!isPhoneDevice) return
+    phoneUiState.useLegacyPage = false
     screen = "catalog"
     applyDeviceOrientationPolicy()
     initialCatalogPending = false
@@ -244,7 +245,9 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                 else -> PhoneMinePage(palette, style, { next ->
                                     style = next
                                     activity.getSharedPreferences("phone-ui-preferences", android.content.Context.MODE_PRIVATE).edit().putString(PhoneThemeKey, next).apply()
-                                }, { refresh++ })
+                                }, { refresh++ },
+                                    onSettings = { state.useLegacyPage = true; activity.switchTab(5) },
+                                    onAccount = { state.useLegacyPage = true; activity.switchTab(6) })
                             }
                         }
                         PhoneBottomBar(state.tab, palette, onSelect = { target -> activity.switchTab(target) })
@@ -501,7 +504,8 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
 }
 
 @Composable
-private fun PhoneMinePage(palette: PhonePalette, style: String, onTheme: (String) -> Unit, onRefresh: () -> Unit) {
+private fun PhoneMinePage(palette: PhonePalette, style: String, onTheme: (String) -> Unit, onRefresh: () -> Unit,
+    onSettings: () -> Unit, onAccount: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp)) {
         item { Text("我的", color = palette.text, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
         item { Text("界面主题", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 24.dp, bottom = 10.dp)) }
@@ -515,8 +519,12 @@ private fun PhoneMinePage(palette: PhonePalette, style: String, onTheme: (String
                 }
             }
         }
-        item { Text("数据与设置", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp)) }
-        item { Text("刷新内容与本地片单", color = palette.text, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+        item { Text("账号与设置", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp)) }
+        item { Text("账号中心  ›", color = palette.text, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .background(palette.card).clickable(onClick = onAccount).padding(16.dp)) }
+        item { Text("系统设置  ›", color = palette.text, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp))
+            .background(palette.card).clickable(onClick = onSettings).padding(16.dp)) }
+        item { Text("刷新内容与本地片单", color = palette.text, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp))
             .background(palette.card).clickable(onClick = onRefresh).padding(16.dp)) }
         item { Text("播放器引擎、播放线路、更新与备份继续使用红果TV原有模块。", color = palette.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 14.dp)) }
     }
