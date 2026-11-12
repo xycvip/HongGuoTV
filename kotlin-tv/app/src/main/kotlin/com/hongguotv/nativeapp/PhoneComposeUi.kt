@@ -162,7 +162,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var refresh by remember { mutableIntStateOf(0) }
     var settingsOpen by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = settingsOpen || state.page == PhonePage.DETAIL || state.tab in setOf(1, 2)) {
+    BackHandler(enabled = settingsOpen || state.page == PhonePage.DETAIL || state.tab != 0) {
         if (settingsOpen) {
             settingsOpen = false
         } else if (state.page == PhonePage.DETAIL) {
