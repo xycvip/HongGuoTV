@@ -1,0 +1,33 @@
+name: Phone UI branch build validation
+
+on:
+  push:
+    branches:
+      - feature/phone-ui-ooiua-fresh
+
+permissions:
+  contents: read
+
+jobs:
+  assemble-debug:
+    name: Assemble Android debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/phone-ui-ooiua-fresh
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Build debug APK
+        working-directory: kotlin-tv
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug
