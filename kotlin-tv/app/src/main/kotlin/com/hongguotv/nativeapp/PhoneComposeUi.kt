@@ -309,7 +309,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onAccount = { state.useLegacyPage = true; activity.switchTab(6) })
                             }
                         }
-                        PhoneBottomBar(state.tab, palette, style, onSelect = { target -> activity.switchTab(target) })
+                        if (state.tab !in setOf(1, 2)) PhoneBottomBar(state.tab, palette, style, onSelect = { target -> activity.switchTab(target) })
                     }
                 }
             }
