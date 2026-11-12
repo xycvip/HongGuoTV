@@ -545,9 +545,11 @@ class MainActivity: Activity() {
         if (isPhoneDevice && screen == "player" && player?.isPlaying == true &&
             android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             runCatching {
+                val format = activeVideoFormat
+                val (pipWidth, pipHeight) = phonePipRatio(format?.width ?: 0, format?.height ?: 0)
                 enterPictureInPictureMode(
                     android.app.PictureInPictureParams.Builder()
-                        .setAspectRatio(android.util.Rational(9, 16))
+                        .setAspectRatio(android.util.Rational(pipWidth, pipHeight))
                         .build()
                 )
             }
