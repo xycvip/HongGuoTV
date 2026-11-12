@@ -1,5 +1,9 @@
 import java.util.Properties
-plugins { id("com.android.application"); kotlin("android") }
+plugins {
+    id("com.android.application")
+    kotlin("android")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
 val signingProperties = Properties().apply { val config = rootProject.file("keystore.properties"); if (config.exists()) config.inputStream().use { load(it) } }
 val appVersionProperties = Properties().apply { val config = rootProject.file("version.properties"); if (config.exists()) config.inputStream().use { load(it) } }
 fun signingValue(env: String, key: String): String? = System.getenv(env) ?: signingProperties.getProperty(key)
@@ -15,7 +19,7 @@ android {
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 12
         versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: appVersionProperties.getProperty("APP_VERSION", "1.0.0")
     }
-    buildFeatures { buildConfig = true }
+    buildFeatures { buildConfig = true; compose = true }
     signingConfigs {
         create("delivery") {
             storeType = "PKCS12"
@@ -34,6 +38,17 @@ android {
     packaging { resources.excludes += setOf("META-INF/versions/**", "META-INF/*.kotlin_module", "org/bouncycastle/pqc/**", "org/bouncycastle/x509/**") }
 }
 dependencies {
+    // Phone UI migration: Compose is isolated to the phone presentation layer.
+    implementation(platform("androidx.compose:compose-bom:2025.08.00"))
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.2")
+    implementation("io.coil-kt:coil-compose:2.7.0")
     // Use Android's built-in emoji font; do not bundle Emoji2's large font assets.
     implementation("androidx.core:core:1.8.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
