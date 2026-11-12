@@ -660,7 +660,13 @@ private fun PhoneTheaterPage(
                 }
             }
         }
-        if (style == "cards") {
+        if (items.isEmpty() && !loading && error == null) {
+            Column(Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center) {
+                Text("没有符合条件的剧集", color = p.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text("试试减少筛选条件，或切换类型。", color = p.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            }
+        } else if (style == "cards") {
             LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 items(items, key = { it.id }) { item ->
