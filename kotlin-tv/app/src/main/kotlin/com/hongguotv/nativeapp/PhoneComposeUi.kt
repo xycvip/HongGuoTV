@@ -358,15 +358,24 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
     onSelect: (Series) -> Unit, onRecentSelect: (Series) -> Unit, onMore: () -> Unit) {
     when (style) {
         "immersive" -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
+            if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onRecentSelect) }
+            if (updates.isNotEmpty()) item { PhoneShelf("收藏有更新", updates, p, onSelect) }
+            if (later.isNotEmpty()) item { PhoneShelf("稍后看", later, p, onSelect) }
             items((short + comic + ai).distinctBy { it.id }, key = { it.id }) { item -> PhoneImmersiveCard(item, p, onSelect) }
             if (loading) item { PhoneLoading(p) }
             error?.let { item { PhoneError(it, p) } }
         }
-        "cards" -> LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            items((short + comic + ai).distinctBy { it.id }, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
-            if (loading) item { PhoneLoading(p) }
-            if (error != null) item { PhoneError(error, p) }
+        "cards" -> Column(Modifier.fillMaxSize()) {
+            if (recent.isNotEmpty()) PhoneShelf("接着看", recent, p, onRecentSelect)
+            if (updates.isNotEmpty()) PhoneShelf("收藏有更新", updates, p, onSelect)
+            Box(Modifier.weight(1f)) {
+                LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    items((short + comic + ai + later).distinctBy { it.id }, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
+                    if (loading) item { PhoneLoading(p) }
+                    if (error != null) item { PhoneError(error, p) }
+                }
+            }
         }
         else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
             if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onRecentSelect) }
