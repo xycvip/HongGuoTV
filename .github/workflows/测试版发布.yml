@@ -243,11 +243,11 @@ jobs:
           RELEASE_NOTES: ${{ steps.notes.outputs.release_notes }}
           APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
+          SOURCE_REF: ${{ inputs.source_ref }}
         run: |
           set -euo pipefail
           APK="$RUNNER_TEMP/test-release/HongguoTV-$VERSION_NAME.apk"
           SOURCE_COMMIT="$(git rev-parse HEAD)"
-          SOURCE_REF="${{ inputs.source_ref }}"
           DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/HongguoTV-$VERSION_NAME.apk"
           mkdir -p test-update
           jq -n \
@@ -377,6 +377,7 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          SOURCE_REF: ${{ inputs.source_ref }}
         run: |
           echo "测试版发布成功"
           echo "应用包名：com.x.hongguotv.bate"
@@ -384,4 +385,4 @@ jobs:
           echo "versionCode：$VERSION_CODE"
           echo "发布标签：$RELEASE_TAG"
           echo "发布位置：当前 HongGuoTV 仓库 Releases"
-          echo "源码 ref：${{ inputs.source_ref }}"
+          echo "源码 ref：$SOURCE_REF"
