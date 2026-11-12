@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -146,6 +147,14 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var detail by remember { mutableStateOf<Detail?>(state.detail) }
     var selected by remember { mutableStateOf<Series?>(state.selectedSeries) }
     var refresh by remember { mutableIntStateOf(0) }
+
+    BackHandler(enabled = state.page == PhonePage.DETAIL || state.tab in setOf(1, 2)) {
+        if (state.page == PhonePage.DETAIL) {
+            state.page = PhonePage.CATALOG
+            state.selectedSeries = null
+            state.detail = null
+        } else activity.switchTab(0)
+    }
 
     LaunchedEffect(state.tab) {
         pageNumber = 1
