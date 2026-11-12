@@ -91,7 +91,7 @@ internal fun MainActivity.showPhoneComposeDetail() {
 
 internal fun MainActivity.installPhonePlayerComposeOverlay() {
     if (!isPhoneDevice || screen != "player") return
-    if (::hud.isInitialized) hud.visibility = android.view.View.GONE
+    hud.visibility = android.view.View.GONE
     val host = phoneUiState.playerHost ?: ComposeView(this).also {
         phoneUiState.playerHost = it
         it.setContent { PhonePlayerOverlay(this@installPhonePlayerComposeOverlay) }
