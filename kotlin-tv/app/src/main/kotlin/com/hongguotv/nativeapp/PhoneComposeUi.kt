@@ -1089,6 +1089,21 @@ private fun PhoneSettingsPage(
     activity: MainActivity, p: PhonePalette, style: String, themeMode: String,
     onBack: () -> Unit, onTheme: (String) -> Unit, onMode: (String) -> Unit
 ) {
+    var autoNext by remember { mutableStateOf(activity.library.autoNext) }
+    var autoSeason by remember { mutableStateOf(activity.library.autoSeason) }
+    var danmaku by remember { mutableStateOf(activity.library.danmaku) }
+    var showClock by remember { mutableStateOf(activity.library.showClock) }
+    var showNetworkSpeed by remember { mutableStateOf(activity.library.showNetworkSpeed) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            autoNext = activity.library.autoNext
+            autoSeason = activity.library.autoSeason
+            danmaku = activity.library.danmaku
+            showClock = activity.library.showClock
+            showNetworkSpeed = activity.library.showNetworkSpeed
+            delay(500)
+        }
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
@@ -1123,19 +1138,24 @@ private fun PhoneSettingsPage(
         item { Text("播放偏好", color = p.muted, fontSize = 13.sp) }
         item {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(p.card).padding(horizontal = 14.dp)) {
-                PhoneSwitchRow("自动连播下一集", "本集结束后自动播放下一集", activity.library.autoNext, p) {
+                PhoneSwitchRow("自动连播下一集", "本集结束后自动播放下一集", autoNext, p) {
+                    autoNext = it
                     activity.library.autoNext = it
                 }
-                PhoneSwitchRow("自动切换下一季", "当前剧集结束后接续下一季", activity.library.autoSeason, p) {
+                PhoneSwitchRow("自动切换下一季", "当前剧集结束后接续下一季", autoSeason, p) {
+                    autoSeason = it
                     activity.library.autoSeason = it
                 }
-                PhoneSwitchRow("弹幕总开关", "控制播放器弹幕显示", activity.library.danmaku, p) {
+                PhoneSwitchRow("弹幕总开关", "控制播放器弹幕显示", danmaku, p) {
+                    danmaku = it
                     activity.library.danmaku = it
                 }
-                PhoneSwitchRow("显示播放时钟", "在播放器画面显示当前时间", activity.library.showClock, p) {
+                PhoneSwitchRow("显示播放时钟", "在播放器画面显示当前时间", showClock, p) {
+                    showClock = it
                     activity.library.showClock = it
                 }
-                PhoneSwitchRow("显示网络速度", "在播放器画面显示实时网速", activity.library.showNetworkSpeed, p) {
+                PhoneSwitchRow("显示网络速度", "在播放器画面显示实时网速", showNetworkSpeed, p) {
+                    showNetworkSpeed = it
                     activity.library.showNetworkSpeed = it
                 }
             }
