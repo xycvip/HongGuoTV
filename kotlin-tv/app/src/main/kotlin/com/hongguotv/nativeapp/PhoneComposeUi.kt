@@ -1086,19 +1086,31 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
         } } },
         confirmButton = { TextButton(onClick = { showSpeed = false }) { Text("关闭") } }
     )
-    if (showEpisodes) AlertDialog(
-        onDismissRequest = { showEpisodes = false }, title = { Text("选集") },
-        text = { LazyColumn(Modifier.heightIn(max = 420.dp)) {
-            items(data?.episodes?.size ?: 0) { index ->
-                Text("第 " + (index + 1) + " 集" + if (index == activity.episodeIndex) " · 正在播放" else "",
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        showEpisodes = false
-                        if (index != activity.episodeIndex) activity.playEpisode(index)
-                    }.padding(12.dp))
+    if (showEpisodes) ModalBottomSheet(
+        onDismissRequest = { showEpisodes = false }, containerColor = playerPalette.surface, contentColor = playerPalette.text
+    ) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp)) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("选集", color = playerPalette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("共 " + (data?.episodes?.size ?: 0) + " 集", color = playerPalette.muted, fontSize = 12.sp)
             }
-        } },
-        confirmButton = { TextButton(onClick = { showEpisodes = false }) { Text("完成") } }
-    )
+            LazyVerticalGrid(columns = GridCells.Fixed(5), modifier = Modifier.heightIn(max = 380.dp),
+                contentPadding = PaddingValues(bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(data?.episodes?.size ?: 0) { index ->
+                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        .background(if (index == activity.episodeIndex) playerPalette.accent else playerPalette.card)
+                        .clickable {
+                            showEpisodes = false
+                            if (index != activity.episodeIndex) activity.playEpisode(index)
+                        }.padding(vertical = 13.dp), contentAlignment = Alignment.Center) {
+                        Text((index + 1).toString(), color = if (index == activity.episodeIndex) Color.White else playerPalette.text,
+                            fontSize = 13.sp, fontWeight = if (index == activity.episodeIndex) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+            }
+        }
+    }
     if (showSettings) AlertDialog(
         onDismissRequest = { showSettings = false }, title = { Text("播放设置") },
         text = { Column {
