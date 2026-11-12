@@ -46,14 +46,14 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
     /**
-     * 全应用统一使用横屏方向。手机播放时不再根据设备姿态或视频宽高/旋转元数据切换方向，
-     * 避免视频方向回调触发 Activity 配置变化，干扰双播放器交接和播放生命周期。
+     * 手机浏览界面默认竖屏，进入播放器后使用播放器方向偏好；
+     * 电视及电视盒子始终横屏，避免影响双播放器交接和播放生命周期。
      */
     internal fun MainActivity.applyDeviceOrientationPolicy() {
-        requestedOrientation = if (isPhoneDevice && screen == "player") {
-            phonePlaybackOrientation
-        } else {
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        requestedOrientation = when {
+            isPhoneDevice && screen == "player" -> phonePlaybackOrientation
+            isPhoneDevice -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
     }
 
