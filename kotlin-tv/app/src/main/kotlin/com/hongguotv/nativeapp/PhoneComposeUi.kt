@@ -1421,6 +1421,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     val data = activity.detail
     var favorite by remember(data?.series?.id) { mutableStateOf(data?.series?.let { activity.library.favorite(it.id) } == true) }
     val landscape = activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val sidePanelWidth = maxOf((activity.resources.configuration.screenWidthDp * 0.5f).dp, 340.dp)
+        .coerceAtMost(activity.resources.configuration.screenWidthDp.dp)
     val controlsVisible = state.playerControlsVisible
 
     BackHandler(enabled = sidePanel != null || showEpisodes || showFavoriteOptions || showSettings || showSpeed) {
@@ -1578,7 +1580,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.38f)).clickable { sidePanel = null })
         Row(
             Modifier.align(if (sidePanel == "detail") Alignment.CenterStart else Alignment.CenterEnd)
-                .fillMaxHeight().width(if (sidePanel == "detail") 360.dp else 340.dp)
+                .fillMaxHeight().width(sidePanelWidth)
                 .background(Color(0xF21B1B1B)).padding(horizontal = 16.dp, vertical = 18.dp)
         ) {
             Column(Modifier.fillMaxSize()) {
