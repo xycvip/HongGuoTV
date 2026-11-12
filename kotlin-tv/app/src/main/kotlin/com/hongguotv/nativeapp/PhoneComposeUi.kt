@@ -1406,6 +1406,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var playbackMessage by remember { mutableStateOf("") }
     var showEpisodes by remember { mutableStateOf(false) }
     var showFavoriteOptions by remember { mutableStateOf(false) }
+    var sidePanel by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
     var speed by remember { mutableFloatStateOf(activity.library.playbackSpeed) }
@@ -1481,7 +1482,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     }
                     if (landscape) PhoneAction(if (favorite) "★" else "☆", Color(0x55000000), Color.White) {
                         interactionTick++
-                        showFavoriteOptions = true
+                        sidePanel = if (sidePanel == "favorite") null else "favorite"
                     }
                     PhoneAction("小窗", Color(0x55000000), Color.White) {
                         interactionTick++
@@ -1496,7 +1497,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                         }
                     }
                     Spacer(Modifier.width(6.dp))
-                    PhoneAction("选集", Color(0x55000000), Color.White) { interactionTick++; showEpisodes = true }
+                    PhoneAction("选集", Color(0x55000000), Color.White) { interactionTick++; if (landscape) sidePanel = if (sidePanel == "episodes") null else "episodes" else showEpisodes = true }
                 }
                 Spacer(Modifier.weight(1f))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -1541,6 +1542,69 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     PhoneAction(activity.phonePlaybackOrientationLabel(), Color(0x55000000), Color.White) { interactionTick++; activity.togglePhonePlaybackOrientation() }
                     Spacer(Modifier.width(7.dp))
                     PhoneAction("更多", Color(0x55000000), Color.White) { interactionTick++; showSettings = true }
+                }
+            }
+        }
+    }
+    if (landscape && controlsVisible && sidePanel != null) {
+        Row(
+            Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(340.dp)
+                .background(Color(0xF21B1B1B)).padding(horizontal = 16.dp, vertical = 18.dp)
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("episodes" to "选集", "favorite" to "收藏", "detail" to "详情").forEach { (key, label) ->
+                        Text(label, color = if (sidePanel == key) Color.White else Color(0xFFAAAAAA),
+                            fontSize = 14.sp, fontWeight = if (sidePanel == key) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                                .background(if (sidePanel == key) playerPalette.accent else Color(0x33222222))
+                                .clickable { sidePanel = key }.padding(horizontal = 12.dp, vertical = 9.dp))
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text("✕", color = Color.White, modifier = Modifier.clickable { sidePanel = null }.padding(8.dp))
+                }
+                Spacer(Modifier.height(14.dp))
+                when (sidePanel) {
+                    "episodes" -> {
+                        Text("全部剧集 · 共 ${data?.episodes?.size ?: 0} 集", color = Color.White, fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 10.dp))
+                        LazyVerticalGrid(columns = GridCells.Fixed(4), modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            items(data?.episodes?.size ?: 0) { index ->
+                                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                    .background(if (index == activity.episodeIndex) playerPalette.accent else Color(0xFF303030))
+                                    .clickable {
+                                        sidePanel = null
+                                        if (index != activity.episodeIndex) activity.playEpisode(index)
+                                    }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                                    Text((index + 1).toString(), color = Color.White, fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+                    "favorite" -> {
+                        Text(data?.series?.title.orEmpty(), color = Color.White, fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text("将作品加入本机追剧片单，更新进度会保存在当前设备。", color = Color(0xFFBBBBBB),
+                            fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 18.dp))
+                        PhoneAction(if (favorite) "取消收藏" else "加入收藏", playerPalette.accent, Color.White) {
+                            data?.series?.let { favorite = activity.library.toggle(it) }
+                            sidePanel = null
+                        }
+                    }
+                    "detail" -> {
+                        Text(data?.series?.title.orEmpty(), color = Color.White, fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(data?.series?.tags.orEmpty(), color = playerPalette.accent, fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 8.dp))
+                        Text(data?.series?.description.orEmpty(), color = Color(0xFFDDDDDD), fontSize = 13.sp,
+                            lineHeight = 20.sp, modifier = Modifier.padding(top = 12.dp))
+                        Spacer(Modifier.height(16.dp))
+                        PhoneAction("打开剧集详情", playerPalette.accent, Color.White) {
+                            sidePanel = null
+                            activity.returnToDetail(true)
+                        }
+                    }
                 }
             }
         }
