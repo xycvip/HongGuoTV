@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "69a398500b95a4f343b852a7c238c6370e2568f6",
-  "versionCode": 81,
-  "versionName": "0.0.81",
+  "sourceCommit": "8e040a774b1c1f6740d8e1038cbee74f9908c076",
+  "versionCode": 82,
+  "versionName": "0.0.82",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.81",
+  "tag": "hongguotv-bate-v0.0.82",
   "apk": {
-    "name": "HongguoTV-0.0.81.apk",
-    "size": 2039649,
-    "sha256": "dc72612b2036be248dc4cae688aa693c592e2f14488984b0025272b063bc79df",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.81/HongguoTV-0.0.81.apk"
+    "name": "HongguoTV-0.0.82.apk",
+    "size": 2039645,
+    "sha256": "5acda19426b55f08a3209074b175fe4869436667f9bdc461aedf5848df75c987",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.82/HongguoTV-0.0.82.apk"
   },
-  "notes": "【其他功能与问题修复】\n- Remove obsolete Phoenix signer import\n- Wire Phoenix playback to OOIUa PlayerSign implementation\n- Update compatibility quality setting description"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
