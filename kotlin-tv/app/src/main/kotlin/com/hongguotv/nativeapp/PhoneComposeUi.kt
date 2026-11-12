@@ -1566,7 +1566,22 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(phoneTime(position) + " / " + phoneTime(duration), color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                    PhoneAction(String.format(Locale.US, "%.2f", speed) + "×", Color(0x55000000), Color.White) { interactionTick++; showSpeed = true }
+                    Box {
+                        PhoneAction(String.format(Locale.US, "%.2f", speed) + "×", Color(0x55000000), Color.White) { interactionTick++; showSpeed = true }
+                        DropdownMenu(expanded = showSpeed, onDismissRequest = { showSpeed = false }) {
+                            listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).asReversed().forEach { value ->
+                                DropdownMenuItem(
+                                    text = { Text(value.toString().removeSuffix(".0") + "×") },
+                                    onClick = {
+                                        speed = value
+                                        activity.library.playbackSpeed = value
+                                        activity.player?.setPlaybackSpeed(value)
+                                        showSpeed = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                     Spacer(Modifier.width(7.dp))
                     PhoneAction(activity.phonePlaybackOrientationLabel(), Color(0x55000000), Color.White) { interactionTick++; activity.togglePhonePlaybackOrientation() }
                     Spacer(Modifier.width(7.dp))
@@ -1640,27 +1655,6 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 }
             }
         }
-        }
-    }
-    if (showSpeed) ModalBottomSheet(onDismissRequest = { showSpeed = false },
-        containerColor = playerPalette.surface, contentColor = playerPalette.text) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp)) {
-            Text("播放倍速", color = playerPalette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 10.dp))
-            listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { value ->
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                    .background(if (speed == value) playerPalette.accent.copy(alpha = 0.14f) else Color.Transparent)
-                    .clickable {
-                        speed = value
-                        activity.library.playbackSpeed = value
-                        activity.player?.setPlaybackSpeed(value)
-                        showSpeed = false
-                    }.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(value.toString() + "×", color = if (speed == value) playerPalette.accent else playerPalette.text,
-                        fontWeight = if (speed == value) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f))
-                    if (speed == value) Text("✓", color = playerPalette.accent)
-                }
-            }
         }
     }
     if (showFavoriteOptions) ModalBottomSheet(onDismissRequest = { showFavoriteOptions = false },
