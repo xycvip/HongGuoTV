@@ -975,11 +975,11 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                         Text(data.episodes.size.toString() + " 集", color = palette.muted, fontSize = 12.sp)
                     }
                 }
-                items(data.episodes.chunked(4).size) { row ->
+                items(data.episodes.chunked(5).size) { row ->
                     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        data.episodes.drop(row * 4).take(4).forEachIndexed { offset, _ ->
-                            val index = row * 4 + offset
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        data.episodes.drop(row * 5).take(5).forEachIndexed { offset, _ ->
+                            val index = row * 5 + offset
                             Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
                                 .background(if (resumeIndex == index) palette.accent.copy(alpha = 0.16f) else palette.card)
                                 .clickable { onPlay(index) }.padding(vertical = 13.dp), contentAlignment = Alignment.Center) {
@@ -987,11 +987,19 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                                     fontSize = 14.sp, fontWeight = if (resumeIndex == index) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
-                        repeat((4 - data.episodes.drop(row * 4).take(4).size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
+                        repeat((5 - data.episodes.drop(row * 5).take(5).size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
                     }
                 }
                 if (data.sameName.isNotEmpty()) item { PhoneShelf("同名作品 / 续作", data.sameName, palette, onRelated) }
                 if (data.related.isNotEmpty()) item { PhoneShelf("猜你喜欢", data.related, palette, onRelated) }
+            }
+            if (data.episodes.isNotEmpty()) {
+                val playIndex = (resumeIndex ?: 0).coerceIn(data.episodes.indices)
+                Text("▶  播放第 " + (playIndex + 1) + " 集", color = Color.White, fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)
+                        .clip(RoundedCornerShape(14.dp)).background(palette.accent)
+                        .clickable { onPlay(playIndex) }.padding(vertical = 15.dp))
             }
         }
     }
