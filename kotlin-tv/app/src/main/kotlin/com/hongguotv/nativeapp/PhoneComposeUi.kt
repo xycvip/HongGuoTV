@@ -119,6 +119,9 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var theaterGroups by remember { mutableStateOf(emptyList<TheaterFilterGroup>()) }
     var theaterSelections by remember { mutableStateOf(emptyMap<String, String>()) }
     var theaterType by remember { mutableStateOf(activity.library.contentType) }
+    var pageNumber by remember { mutableIntStateOf(1) }
+    var hasMore by remember { mutableStateOf(false) }
+    var loadingMore by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var detailLoading by remember { mutableStateOf(false) }
@@ -127,6 +130,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var refresh by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(state.tab) {
+        pageNumber = 1
         if (state.tab == 1) { searchText = ""; submittedQuery = "" }
     }
 
@@ -136,7 +140,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
         suggestions = withContext(Dispatchers.IO) { runCatching { activity.repository.suggest(searchText.trim()) }.getOrDefault(emptyList()) }
     }
 
-    LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections) {
+    LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections, pageNumber) {
         if (state.page == PhonePage.DETAIL) return@LaunchedEffect
         loading = true
         error = null
@@ -144,6 +148,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
         val result = withContext(Dispatchers.IO) {
             runCatching {
                 var fetchedTheaterFilters = emptyList<TheaterFilterGroup>()
+                var fetchedHasMore = false
                 val rows = when (tabNow) {
                     0 -> {
                         val short = activity.library.cachedHome(ContentType.SHORT)?.items ?: activity.repository.home(1, ContentType.SHORT).items
@@ -151,29 +156,43 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         val ai = activity.library.cachedHome(ContentType.AI)?.items ?: activity.repository.ranking(RankBoard.AI, 1).items
                         Triple(short, comic, ai)
                     }
-                    1 -> Triple(if (submittedQuery.isNotBlank()) activity.repository.searchCombined(submittedQuery).items else emptyList(), emptyList(), emptyList())
-                    2 -> Triple(activity.repository.ranking(RankBoard.ALL, 1).items, emptyList(), emptyList())
+                    1 -> {
+                        if (submittedQuery.isBlank()) Triple(emptyList(), emptyList(), emptyList())
+                        else {
+                            val page = activity.repository.searchCombined(submittedQuery, pageNumber)
+                            fetchedHasMore = page.hasMore
+                            Triple(page.items, emptyList(), emptyList())
+                        }
+                    }
+                    2 -> {
+                        val page = activity.repository.ranking(RankBoard.ALL, pageNumber)
+                        fetchedHasMore = page.hasMore
+                        Triple(page.items, emptyList(), emptyList())
+                    }
                     7 -> {
-                        val theater = activity.repository.theater(1, theaterType, theaterSelections)
+                        val theater = activity.repository.theater(pageNumber, theaterType, theaterSelections)
                         fetchedTheaterFilters = theater.filters
+                        fetchedHasMore = theater.catalog.hasMore
                         Triple(theater.catalog.items, emptyList(), emptyList())
                     }
                     3 -> Triple(activity.library.favorites(), emptyList(), emptyList())
                     4 -> Triple(activity.library.history().map { it.series }.distinctBy { it.id }, emptyList(), emptyList())
                     else -> Triple(emptyList(), emptyList(), emptyList())
                 }
-                rows to fetchedTheaterFilters
+                (rows to fetchedTheaterFilters) to fetchedHasMore
             }
         }
         result.onSuccess { payload ->
-            val resultRows = payload.first
-            theaterGroups = payload.second
+            val resultRows = payload.first.first
+            theaterGroups = payload.first.second
+            hasMore = payload.second
             shortItems = resultRows.first
             comicItems = resultRows.second
             aiItems = resultRows.third
-            pageItems = resultRows.first
-            if (tabNow == 3) pageItems = activity.library.favorites()
-            if (tabNow == 4) pageItems = activity.library.history().map { it.series }.distinctBy { it.id }
+            if (pageNumber > 1 && tabNow in setOf(1, 2, 7)) pageItems = (pageItems + resultRows.first).distinctBy { it.id }
+            else pageItems = resultRows.first
+            if (tabNow == 3) { pageItems = activity.library.favorites(); hasMore = false }
+            if (tabNow == 4) { pageItems = activity.library.history().map { it.series }.distinctBy { it.id }; hasMore = false }
             if (tabNow == 0) {
                 activity.library.cacheHome(ContentType.SHORT, shortItems, true)
                 if (comicItems.isNotEmpty()) activity.library.cacheHome(ContentType.COMIC, comicItems, true)
@@ -181,6 +200,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
             }
         }.onFailure { error = it.message ?: "加载失败" }
         loading = false
+        loadingMore = false
     }
 
     LaunchedEffect(state.page, state.selectedSeries?.id) {
@@ -243,14 +263,17 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     activity.library.history().take(8).map { it.series }, palette, style, loading, error,
                                     onSelect = { openPhoneDetail(activity, it) }, onMore = { activity.switchTab(7) })
                                 1 -> PhoneSearchPage(searchText, { searchText = it },
-                                    { submittedQuery = searchText.trim(); if (submittedQuery.isNotBlank()) activity.library.rememberSearch(submittedQuery, ContentType.SHORT); refresh++ },
-                                    suggestions, { word -> searchText = word; submittedQuery = word; activity.library.rememberSearch(word, ContentType.SHORT); refresh++ },
-                                    pageItems, loading, error, palette, { openPhoneDetail(activity, it) })
-                                2 -> PhoneGridPage("排行榜", pageItems, loading, error, palette,
-                                    { openPhoneDetail(activity, it) }, { refresh++ })
-                                7 -> PhoneTheaterPage(pageItems, theaterGroups, theaterSelections, theaterType, loading, error, palette,
-                                    onType = { theaterType = it; theaterSelections = emptyMap(); refresh++ },
-                                    onFilter = { key, value -> theaterSelections = theaterSelections.toMutableMap().apply { if (value.isBlank()) remove(key) else put(key, value) }; refresh++ },
+                                    { pageNumber = 1; pageItems = emptyList(); submittedQuery = searchText.trim(); if (submittedQuery.isNotBlank()) activity.library.rememberSearch(submittedQuery, ContentType.SHORT); refresh++ },
+                                    suggestions, { word -> pageNumber = 1; pageItems = emptyList(); searchText = word; submittedQuery = word; activity.library.rememberSearch(word, ContentType.SHORT); refresh++ },
+                                    pageItems, loading, error, palette, hasMore, loadingMore, { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
+                                    { openPhoneDetail(activity, it) })
+                                2 -> PhoneGridPage("排行榜", pageItems, loading, error, palette, hasMore, loadingMore,
+                                    { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
+                                    { openPhoneDetail(activity, it) }, { pageNumber = 1; pageItems = emptyList(); refresh++ })
+                                7 -> PhoneTheaterPage(pageItems, theaterGroups, theaterSelections, theaterType, loading, error, palette, hasMore, loadingMore,
+                                    onLoadMore = { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
+                                    onType = { pageNumber = 1; pageItems = emptyList(); theaterType = it; theaterSelections = emptyMap(); refresh++ },
+                                    onFilter = { key, value -> pageNumber = 1; pageItems = emptyList(); theaterSelections = theaterSelections.toMutableMap().apply { if (value.isBlank()) remove(key) else put(key, value) }; refresh++ },
                                     onSelect = { openPhoneDetail(activity, it) })
                                 3 -> PhoneGridPage("我的收藏", pageItems, loading, error, palette, { openPhoneDetail(activity, it) }, { refresh++ })
                                 4 -> PhoneGridPage("最近观看", pageItems, loading, error, palette, { openPhoneDetail(activity, it) }, { refresh++ })
