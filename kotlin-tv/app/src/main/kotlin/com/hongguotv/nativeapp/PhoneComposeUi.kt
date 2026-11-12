@@ -594,9 +594,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     }
                     Spacer(Modifier.width(22.dp))
                     Box(Modifier.size(62.dp).clip(CircleShape).background(Color(0x77000000))
-                        .combinedClickable(onClick = { activity.togglePlayback() }, onLongClick = {
-                            activity.player?.setPlaybackSpeed(2f)
-                        }), contentAlignment = Alignment.Center) {
+                        .clickable { activity.togglePlayback() }, contentAlignment = Alignment.Center) {
                         Text(if (playing) "Ⅱ" else "▶", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(22.dp))
@@ -619,13 +617,6 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     PhoneAction(activity.phonePlaybackOrientationLabel(), Color(0x55000000), Color.White) { activity.togglePhonePlaybackOrientation() }
                     Spacer(Modifier.width(7.dp))
                     PhoneAction("更多", Color(0x55000000), Color.White) { showSettings = true }
-                }
-            }
-        } else {
-            Box(Modifier.align(Alignment.BottomEnd).padding(18.dp)) {
-                PhoneAction("显示控制", Color(0x88000000), Color.White) {
-                    state.playerControlsVisible = true
-                    activity.showHud()
                 }
             }
         }
