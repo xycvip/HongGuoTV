@@ -93,6 +93,10 @@ internal class MainActivityTouchGestureController(
         if(action == MotionEvent.ACTION_DOWN) {
             touchOnComposeControl = isPhoneComposeControl(event)
             touchOnCenterControl = isInside(centerControl(), event)
+            if (touchOnComposeControl || touchOnCenterControl) {
+                main.removeCallbacks(singleTapRunnable)
+                lastTapAt = 0L
+            }
             touchStartedWithHudVisible = isPhoneComposeControlsVisible() || hud()?.let { it.visibility == View.VISIBLE && it.isShown } == true
         }
         if(touchOnComposeControl) {
