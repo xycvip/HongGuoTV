@@ -297,7 +297,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onBoard = { board -> pageNumber = 1; pageItems = emptyList(); rankBoard = board; refresh++ },
                                     onLoadMore = { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
                                     onSelect = { openPhoneDetail(activity, it) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
-                                7 -> PhoneTheaterPage(pageItems, theaterGroups, theaterSelections, theaterType, loading, error, palette, hasMore, loadingMore,
+                                7 -> PhoneTheaterPage(pageItems, theaterGroups, theaterSelections, theaterType, loading, error, palette, style, hasMore, loadingMore,
                                     onLoadMore = { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
                                     onType = { pageNumber = 1; pageItems = emptyList(); theaterType = it; theaterSelections = emptyMap(); refresh++ },
                                     onFilter = { key, value -> pageNumber = 1; pageItems = emptyList(); theaterSelections = theaterSelections.toMutableMap().apply { if (value.isBlank()) remove(key) else put(key, value) }; refresh++ },
@@ -510,17 +510,17 @@ private fun PhoneShelf(title: String, items: List<Series>, p: PhonePalette, onSe
 @Composable
 private fun PhoneTheaterPage(
     items: List<Series>, groups: List<TheaterFilterGroup>, selections: Map<String, String>,
-    type: ContentType, loading: Boolean, error: String?, p: PhonePalette,
+    type: ContentType, loading: Boolean, error: String?, p: PhonePalette, style: String,
     hasMore: Boolean, loadingMore: Boolean, onLoadMore: () -> Unit,
     onType: (ContentType) -> Unit, onFilter: (String, String) -> Unit, onSelect: (Series) -> Unit
 ) {
-    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-    LaunchedEffect(gridState, hasMore, loadingMore, items.size) {
-        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to gridState.layoutInfo.totalItemsCount }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(listState, hasMore, loadingMore, items.size) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to listState.layoutInfo.totalItemsCount }
             .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
     }
     Column(Modifier.fillMaxSize()) {
-        Text("发现", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+        Text(if (style == "immersive") "剧场" else "发现", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 18.dp, top = 10.dp, bottom = 8.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(ContentType.SHORT to "短剧", ContentType.COMIC to "漫剧", ContentType.AI to "AI剧").forEach { (value, label) ->
@@ -542,16 +542,65 @@ private fun PhoneTheaterPage(
                 }
             }
         }
-        LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(132.dp), modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            items(items, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
-            if (loading) item { PhoneLoading(p) }
-            if (error != null) item { PhoneError(error, p) }
+        if (style == "cards") {
+            LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                items(items, key = { it.id }) { item ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(p.card)
+                        .clickable { onSelect(item) }.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        AsyncImage(model = item.cover, contentDescription = item.title,
+                            modifier = Modifier.width(78.dp).height(104.dp).clip(RoundedCornerShape(10.dp)))
+                        Column(Modifier.weight(1f).heightIn(min = 104.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(item.title, color = p.text, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                                overflow = TextOverflow.Ellipsis)
+                            Text(item.description, color = p.muted, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            Spacer(Modifier.weight(1f))
+                            Text(item.tags, color = p.accent, fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
+                }
+                if (loading || loadingMore) item { PhoneLoading(p) }
+                if (error != null) item { PhoneError(error, p) }
+                if (items.isNotEmpty() && !hasMore && !loading) item {
+                    Text("已经到底了", color = p.muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            }
+        } else {
+            if (style == "immersive" && items.isNotEmpty()) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).clip(RoundedCornerShape(15.dp))
+                    .background(p.card).padding(10.dp)) {
+                    Text("热播榜", color = p.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    items.take(3).forEachIndexed { index, item ->
+                        Row(Modifier.fillMaxWidth().clickable { onSelect(item) }.padding(vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text((index + 1).toString(), color = p.accent, fontSize = 18.sp, fontWeight = FontWeight.Black,
+                                modifier = Modifier.width(22.dp))
+                            AsyncImage(model = item.cover, contentDescription = null,
+                                modifier = Modifier.width(42.dp).height(56.dp).clip(RoundedCornerShape(7.dp)))
+                            Text(item.title, color = p.text, fontSize = 13.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 9.dp))
+                        }
+                    }
+                }
+            }
+            val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+            LaunchedEffect(gridState, hasMore, loadingMore, items.size) {
+                snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to gridState.layoutInfo.totalItemsCount }
+                    .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
+            }
+            LazyVerticalGrid(state = gridState, columns = if (style == "immersive") GridCells.Fixed(3) else GridCells.Adaptive(132.dp),
+                modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                items(if (style == "immersive") items.drop(3) else items, key = { it.id }) {
+                    PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect)
+                }
+                if (loading || loadingMore) item { PhoneLoading(p) }
+                if (error != null) item { PhoneError(error, p) }
+            }
         }
     }
 }
-
 @Composable
 private fun PhoneLibraryPage(
     tab: Int, items: List<Series>, loading: Boolean, error: String?, p: PhonePalette,
