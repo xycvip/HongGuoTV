@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -170,15 +169,6 @@ private fun PhoneComposeApp(activity: MainActivity) {
             activity.library.observeFavorite(series.id, it.episodes.size, System.currentTimeMillis(), acknowledge = true)
         }.onFailure { error = it.message ?: "详情加载失败" }
         detailLoading = false
-    }
-
-    BackHandler(enabled = state.page == PhonePage.DETAIL) {
-        state.page = PhonePage.CATALOG
-        state.selectedSeries = null
-        state.detail = null
-        selected = null
-        detail = null
-        activity.showPhoneComposeCatalog()
     }
 
     MaterialTheme(colorScheme = if (palette.dark) darkColorScheme(
@@ -557,7 +547,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
         text = { Column {
             Text("画质", modifier = Modifier.fillMaxWidth().clickable {
                 showSettings = false
-                activity.showQualityPicker(activity.phoneUiState.playerHost ?: activity.root, true)
+                activity.showQualityPicker(android.widget.TextView(activity), true)
             }.padding(12.dp))
             Text("评论", modifier = Modifier.fillMaxWidth().clickable {
                 showSettings = false
