@@ -81,7 +81,7 @@ internal class MainActivityTouchGestureController(
             val span = kotlin.math.sqrt(dx * dx + dy * dy)
             val scale = span / pinchStartSpan
             if (!pinchDecided && scale >= 1.18f) { pinchDecided = true; hideHud() }
-            else if (!pinchDecided && scale <= .85f) { pinchDecided = true; showHud() }
+            else if (!pinchDecided && scale <= 0.85f) { pinchDecided = true; showHud() }
             return true
         }
         if (action == MotionEvent.ACTION_POINTER_UP || action == MotionEvent.ACTION_CANCEL) {
