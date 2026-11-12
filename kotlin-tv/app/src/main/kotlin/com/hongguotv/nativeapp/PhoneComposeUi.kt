@@ -1193,6 +1193,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var speed by remember { mutableFloatStateOf(activity.library.playbackSpeed) }
     var autoNext by remember { mutableStateOf(activity.library.autoNext) }
     var danmakuEnabled by remember { mutableStateOf(activity.library.danmaku) }
+    var fastForwardHeld by remember { mutableStateOf(false) }
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
     val data = activity.detail
@@ -1214,6 +1215,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             speed = activity.library.playbackSpeed
             autoNext = activity.library.autoNext
             danmakuEnabled = activity.library.danmaku
+            fastForwardHeld = activity.ffActive
             delay(300)
         }
     }
@@ -1232,6 +1234,9 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
         onPrimary = Color.White, onBackground = playerPalette.text, onSurface = playerPalette.text
     )) {
     Box(Modifier.fillMaxSize()) {
+        if (fastForwardHeld) Text("2× 临时加速中", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 74.dp).clip(RoundedCornerShape(20.dp))
+                .background(Color(0x99000000)).padding(horizontal = 14.dp, vertical = 8.dp))
         if ((!ready || buffering) && !failed) CircularProgressIndicator(Modifier.align(Alignment.Center).size(34.dp),
             color = Color.White, strokeWidth = 2.dp)
         if (controlsVisible) {
