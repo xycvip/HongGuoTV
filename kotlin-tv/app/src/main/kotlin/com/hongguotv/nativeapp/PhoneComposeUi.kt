@@ -111,6 +111,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
     val palette = remember(style) { phonePalette(style) }
     var searchText by remember { mutableStateOf("") }
     var submittedQuery by remember { mutableStateOf("") }
+    var suggestions by remember { mutableStateOf(emptyList<String>()) }
     var shortItems by remember { mutableStateOf(emptyList<Series>()) }
     var comicItems by remember { mutableStateOf(emptyList<Series>()) }
     var aiItems by remember { mutableStateOf(emptyList<Series>()) }
@@ -127,6 +128,12 @@ private fun PhoneComposeApp(activity: MainActivity) {
 
     LaunchedEffect(state.tab) {
         if (state.tab == 1) { searchText = ""; submittedQuery = "" }
+    }
+
+    LaunchedEffect(searchText, state.tab) {
+        if (state.tab != 1 || searchText.trim().length < 1) { suggestions = emptyList(); return@LaunchedEffect }
+        delay(260)
+        suggestions = withContext(Dispatchers.IO) { runCatching { activity.repository.suggest(searchText.trim()) }.getOrDefault(emptyList()) }
     }
 
     LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections) {
@@ -237,6 +244,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onSelect = { openPhoneDetail(activity, it) }, onMore = { activity.switchTab(7) })
                                 1 -> PhoneSearchPage(searchText, { searchText = it },
                                     { submittedQuery = searchText.trim(); if (submittedQuery.isNotBlank()) activity.library.rememberSearch(submittedQuery, ContentType.SHORT); refresh++ },
+                                    suggestions, { word -> searchText = word; submittedQuery = word; activity.library.rememberSearch(word, ContentType.SHORT); refresh++ },
                                     pageItems, loading, error, palette, { openPhoneDetail(activity, it) })
                                 2 -> PhoneGridPage("排行榜", pageItems, loading, error, palette,
                                     { openPhoneDetail(activity, it) }, { refresh++ })
@@ -409,7 +417,8 @@ private fun PhoneGridPage(title: String, items: List<Series>, loading: Boolean, 
 }
 
 @Composable
-private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: () -> Unit, results: List<Series>,
+private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: () -> Unit,
+    suggestions: List<String>, onSuggestion: (String) -> Unit, results: List<Series>,
     loading: Boolean, error: String?, p: PhonePalette, onSelect: (Series) -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Text("搜索短剧", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp))
@@ -419,6 +428,14 @@ private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: ()
                 decorationBox = { inner -> if (text.isEmpty()) Text("输入剧名或关键词", color = p.muted); inner() })
             Text("搜索", color = Color.White, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(p.accent)
                 .clickable(onClick = onSearch).padding(horizontal = 18.dp, vertical = 10.dp))
+        }
+        if (suggestions.isNotEmpty() && text.isNotBlank() && results.isEmpty()) {
+            LazyRow(contentPadding = PaddingValues(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(suggestions, key = { it }) { word ->
+                    Text(word, color = p.text, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(14.dp))
+                        .background(p.card).clickable { onSuggestion(word) }.padding(horizontal = 12.dp, vertical = 8.dp))
+                }
+            }
         }
         LazyVerticalGrid(columns = GridCells.Adaptive(132.dp), modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
