@@ -805,6 +805,10 @@ private fun PhoneRankPage(
         }
         LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (items.isEmpty() && !loading && error == null) item {
+                Text("暂无榜单数据", color = p.muted, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(28.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
             items(items.size, key = { items[it].id }) { index ->
                 val item = items[index]
                 Row(Modifier.fillMaxWidth().heightIn(min = 112.dp).clickable { onSelect(item) },
