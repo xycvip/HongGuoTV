@@ -1105,6 +1105,13 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             activity.hidePlaybackOverlay()
         }
     }
+    MaterialTheme(colorScheme = if (playerPalette.dark) darkColorScheme(
+        primary = playerPalette.accent, background = playerPalette.background, surface = playerPalette.surface,
+        onPrimary = Color.White, onBackground = playerPalette.text, onSurface = playerPalette.text
+    ) else lightColorScheme(
+        primary = playerPalette.accent, background = playerPalette.background, surface = playerPalette.surface,
+        onPrimary = Color.White, onBackground = playerPalette.text, onSurface = playerPalette.text
+    )) {
     Box(Modifier.fillMaxSize()) {
         if ((!ready || buffering) && !failed) CircularProgressIndicator(Modifier.align(Alignment.Center).size(34.dp),
             color = Color.White, strokeWidth = 2.dp)
@@ -1257,6 +1264,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 activity.openOfficialComments(activity.phoneUiState.playerHost)
             }
         }
+    }
     }
 }
 
