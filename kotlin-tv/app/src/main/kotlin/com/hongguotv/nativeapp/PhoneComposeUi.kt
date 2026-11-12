@@ -13,6 +13,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -442,37 +444,39 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
             .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
     }
     when (style) {
-        "immersive" -> LazyColumn(state = homeListState, modifier = Modifier.fillMaxSize().background(Color.Black), contentPadding = PaddingValues(bottom = 20.dp)) {
-            item {
-                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Text("刷新", color = Color.White, modifier = Modifier.clickable(onClick = onRefresh).padding(9.dp))
-                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
-                        listOf(ContentType.SHORT to "热度", ContentType.COMIC to "漫剧", ContentType.AI to "AI剧").forEach { (value, label) ->
-                            Text(label, color = if (type == value) Color.White else Color(0xFFAAAAAA),
-                                fontSize = if (type == value) 16.sp else 14.sp,
-                                fontWeight = if (type == value) FontWeight.Bold else FontWeight.Normal,
-                                modifier = Modifier.clickable { onType(value) }.padding(horizontal = 11.dp, vertical = 9.dp))
-                        }
+        "immersive" -> Column(Modifier.fillMaxSize().background(Color.Black)) {
+            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text("刷新", color = Color.White, modifier = Modifier.clickable(onClick = onRefresh).padding(9.dp))
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
+                    listOf(ContentType.SHORT to "热度", ContentType.COMIC to "漫剧", ContentType.AI to "AI剧").forEach { (value, label) ->
+                        Text(label, color = if (type == value) Color.White else Color(0xFFAAAAAA),
+                            fontSize = if (type == value) 16.sp else 14.sp,
+                            fontWeight = if (type == value) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.clickable { onType(value) }.padding(horizontal = 11.dp, vertical = 9.dp))
                     }
-                    Text("⌕", color = Color.White, fontSize = 25.sp, modifier = Modifier.clickable(onClick = onSearch).padding(8.dp))
                 }
+                Text("榜单", color = Color.White, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRank).padding(7.dp))
+                Text("⌕", color = Color.White, fontSize = 25.sp, modifier = Modifier.clickable(onClick = onSearch).padding(7.dp))
             }
-            if (recent.isNotEmpty()) item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp))
-                    .background(Color(0x55222222)).clickable { onRecentSelect(recent.first()) }.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Text("继续看", color = Color.White, fontWeight = FontWeight.Bold)
-                    Text(recent.first().title, color = Color(0xFFDDDDDD), fontSize = 12.sp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 10.dp))
-                    Text("›", color = Color.White, fontSize = 22.sp)
+            if (items.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    if (loading) PhoneLoading(p.copy(dark = true)) else PhoneError(error ?: "这一组暂时没有剧集", p.copy(dark = true))
                 }
+            } else {
+                val pagerState = rememberPagerState(pageCount = { items.size })
+                LaunchedEffect(pagerState, items.size, hasMore, loadingMore) {
+                    snapshotFlow { pagerState.currentPage }.collect { page ->
+                        if (page >= items.size - 3 && hasMore && !loadingMore) onLoadMore()
+                    }
+                }
+                VerticalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth(),
+                    key = { items.getOrNull(it)?.id ?: it }, beyondViewportPageCount = 1) { page ->
+                    items.getOrNull(page)?.let { PhoneImmersiveCard(it, p.copy(dark = true), onSelect, Modifier.fillMaxSize()) }
+                }
+                if (loadingMore) PhoneLoading(p.copy(dark = true))
+                if (error != null) PhoneError(error, p.copy(dark = true))
             }
-            if (updates.isNotEmpty()) item { PhoneShelf("收藏有更新", updates, p.copy(dark = true), onSelect) }
-            items(items, key = { it.id }) { PhoneImmersiveCard(it, p.copy(dark = true), onSelect) }
-            if (loading || loadingMore) item { PhoneLoading(p.copy(dark = true)) }
-            error?.let { item { PhoneError(it, p.copy(dark = true)) } }
-            item { Text("进入排行榜 ›", color = Color.White, modifier = Modifier.clickable(onClick = onRank).padding(18.dp)) }
         }
         "cards" -> LazyColumn(state = homeListState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
             item {
@@ -541,9 +545,8 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
     }
 }
 @Composable
-private fun PhoneImmersiveCard(item: Series, p: PhonePalette, onSelect: (Series) -> Unit) {
-    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp).height(390.dp)
-        .clip(RoundedCornerShape(18.dp)).clickable { onSelect(item) }) {
+private fun PhoneImmersiveCard(item: Series, p: PhonePalette, onSelect: (Series) -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxSize().clickable { onSelect(item) }) {
         AsyncImage(model = item.cover, contentDescription = item.title, modifier = Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000)))))
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
