@@ -342,7 +342,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onType = { homeType = it; homePage = 1; homeLoadingMore = false; refresh++ },
                                     onSelect = { openPhoneDetail(activity, it) },
                                     onFavorite = { activity.library.toggle(it); refresh++ },
-                                    onPlay = { activity.openDetail(it, resume = true, forceFirstEpisode = true) },
+                                    onPlay = { activity.openDetail(it, resume = true) },
                                     onRecentSelect = { activity.openDetail(it, resume = true) },
                                     onSearch = { activity.switchTab(1) }, onRank = { activity.switchTab(2) },
                                     onRefresh = { homePage = 1; homeLoadingMore = false; refresh++ },
