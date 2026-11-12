@@ -270,7 +270,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         onFavorite = { item -> activity.library.toggle(item); refresh++ })
                 } else {
                     Column(Modifier.fillMaxSize()) {
-                        PhoneTopBar(palette, onSearch = { activity.switchTab(1) }, onRefresh = { refresh++ })
+                        PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onSearch = { activity.switchTab(1) }, onRefresh = { refresh++ })
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems,
