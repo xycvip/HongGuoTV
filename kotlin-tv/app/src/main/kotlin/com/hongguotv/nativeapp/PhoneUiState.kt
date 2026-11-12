@@ -12,6 +12,7 @@ internal enum class PhonePage { CATALOG, DETAIL }
 
 internal class PhoneUiState {
     var tab by mutableStateOf(0)
+    var useLegacyPage by mutableStateOf(false)
     var page by mutableStateOf(PhonePage.CATALOG)
     var selectedSeries by mutableStateOf<Series?>(null)
     var detail by mutableStateOf<Detail?>(null)
