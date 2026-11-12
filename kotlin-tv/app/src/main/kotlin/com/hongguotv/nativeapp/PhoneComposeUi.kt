@@ -1072,6 +1072,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var showSettings by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
     var speed by remember { mutableFloatStateOf(activity.library.playbackSpeed) }
+    var autoNext by remember { mutableStateOf(activity.library.autoNext) }
+    var danmakuEnabled by remember { mutableStateOf(activity.library.danmaku) }
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
     val data = activity.detail
@@ -1091,6 +1093,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             if (failed) state.playerControlsVisible = true
             playbackMessage = if (runCatching { activity.playbackText.text.toString() }.isSuccess) activity.playbackText.text.toString() else ""
             speed = activity.library.playbackSpeed
+            autoNext = activity.library.autoNext
+            danmakuEnabled = activity.library.danmaku
             delay(300)
         }
     }
@@ -1228,8 +1232,9 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 showSettings = false
                 activity.showSleepPicker(android.widget.TextView(activity))
             }
-            PhonePlayerSettingRow("弹幕：" + if (activity.library.danmaku) "开启" else "关闭", playerPalette) {
+            PhonePlayerSettingRow("弹幕：" + if (danmakuEnabled) "开启" else "关闭", playerPalette) {
                 activity.toggleSeriesDanmaku(data?.series?.id.orEmpty())
+                danmakuEnabled = !danmakuEnabled
             }
             PhonePlayerSettingRow("跳过片头", playerPalette) {
                 showSettings = false
@@ -1239,8 +1244,9 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 showSettings = false
                 activity.showSkipPicker(android.widget.TextView(activity), false)
             }
-            PhonePlayerSettingRow("自动连播：" + if (activity.library.autoNext) "开启" else "关闭", playerPalette) {
-                activity.library.autoNext = !activity.library.autoNext
+            PhonePlayerSettingRow("自动连播：" + if (autoNext) "开启" else "关闭", playerPalette) {
+                autoNext = !autoNext
+                activity.library.autoNext = autoNext
             }
             PhonePlayerSettingRow("评论", playerPalette) {
                 showSettings = false
