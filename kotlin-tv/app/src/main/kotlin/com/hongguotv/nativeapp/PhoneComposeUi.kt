@@ -1405,6 +1405,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var danmakuEnabled by remember { mutableStateOf(activity.library.danmaku) }
     var fastForwardHeld by remember { mutableStateOf(false) }
     var scrubbing by remember { mutableStateOf(false) }
+    var interactionTick by remember { mutableIntStateOf(0) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
     val data = activity.detail
     var favorite by remember(data?.series?.id) { mutableStateOf(data?.series?.let { activity.library.favorite(it.id) } == true) }
@@ -1429,7 +1430,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             delay(300)
         }
     }
-    LaunchedEffect(controlsVisible, playing, showEpisodes, showFavoriteOptions, showSettings, showSpeed) {
+    LaunchedEffect(controlsVisible, playing, showEpisodes, showFavoriteOptions, showSettings, showSpeed, scrubbing, interactionTick) {
         if (controlsVisible && playing && !showEpisodes && !showFavoriteOptions && !showSettings && !showSpeed) {
             delay(4500)
             state.playerControlsVisible = false
@@ -1458,7 +1459,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             Column(Modifier.fillMaxSize().then(if (landscape) Modifier else Modifier.statusBarsPadding().navigationBarsPadding())
                 .padding(horizontal = 22.dp, vertical = 16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    PhoneAction("‹", Color(0x55000000), Color.White) { activity.returnToDetail(true) }
+                    PhoneAction("‹", Color(0x55000000), Color.White) { interactionTick++; activity.returnToDetail(true) }
                     Column(Modifier.weight(1f).padding(start = 12.dp).clickable { activity.returnToDetail(true) }) {
                         if (landscape) Text(data?.series?.title.orEmpty(), color = Color.White, fontSize = 16.sp,
                             fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1471,23 +1472,26 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                         }
                     }
                     if (landscape) PhoneAction(if (favorite) "★" else "☆", Color(0x55000000), Color.White) {
+                        interactionTick++
                         showFavoriteOptions = true
                     }
                     Spacer(Modifier.width(6.dp))
-                    PhoneAction("选集", Color(0x55000000), Color.White) { showEpisodes = true }
+                    PhoneAction("选集", Color(0x55000000), Color.White) { interactionTick++; showEpisodes = true }
                 }
                 Spacer(Modifier.weight(1f))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     PhoneAction("上集", Color(0x55000000), Color.White) {
+                        interactionTick++
                         if (activity.episodeIndex > 0) activity.playEpisode(activity.episodeIndex - 1)
                     }
                     Spacer(Modifier.width(22.dp))
                     Box(Modifier.size(62.dp).clip(CircleShape).background(Color(0x77000000))
-                        .clickable { if (failed) activity.playEpisode(activity.episodeIndex, activity.retryPosition, activity.retryAutoplay) else activity.togglePlayback() }, contentAlignment = Alignment.Center) {
+                        .clickable { interactionTick++; if (failed) activity.playEpisode(activity.episodeIndex, activity.retryPosition, activity.retryAutoplay) else activity.togglePlayback() }, contentAlignment = Alignment.Center) {
                         Text(if (playing) "Ⅱ" else "▶", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(22.dp))
                     PhoneAction("下集", Color(0x55000000), Color.White) {
+                        interactionTick++
                         if (activity.episodeIndex < (data?.episodes?.lastIndex ?: -1)) activity.playEpisode(activity.episodeIndex + 1)
                     }
                 }
@@ -1496,26 +1500,27 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(data?.series?.title.orEmpty(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-                                .clickable { activity.returnToDetail(true) })
+                                .clickable { interactionTick++; activity.returnToDetail(true) })
                         PhoneAction(if (favorite) "★ 已收藏" else "☆ 收藏", Color(0x55000000), Color.White) {
+                            interactionTick++
                             showFavoriteOptions = true
                         }
                     }
                 }
                 if (duration > 0L) {
                     Slider(value = if (scrubbing) scrubValue else (position.toFloat() / duration).coerceIn(0f, 1f),
-                        onValueChange = { scrubValue = it; scrubbing = true },
-                        onValueChangeFinished = { activity.seekTo((duration * scrubValue).toLong()); scrubbing = false },
+                        onValueChange = { scrubValue = it; scrubbing = true; interactionTick++ },
+                        onValueChangeFinished = { activity.seekTo((duration * scrubValue).toLong()); scrubbing = false; interactionTick++ },
                         colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = playerPalette.accent, inactiveTrackColor = Color(0x66FFFFFF)),
                         modifier = Modifier.fillMaxWidth().height(28.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(phoneTime(position) + " / " + phoneTime(duration), color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                    PhoneAction(String.format(Locale.US, "%.2f", speed) + "×", Color(0x55000000), Color.White) { showSpeed = true }
+                    PhoneAction(String.format(Locale.US, "%.2f", speed) + "×", Color(0x55000000), Color.White) { interactionTick++; showSpeed = true }
                     Spacer(Modifier.width(7.dp))
-                    PhoneAction(activity.phonePlaybackOrientationLabel(), Color(0x55000000), Color.White) { activity.togglePhonePlaybackOrientation() }
+                    PhoneAction(activity.phonePlaybackOrientationLabel(), Color(0x55000000), Color.White) { interactionTick++; activity.togglePhonePlaybackOrientation() }
                     Spacer(Modifier.width(7.dp))
-                    PhoneAction("更多", Color(0x55000000), Color.White) { showSettings = true }
+                    PhoneAction("更多", Color(0x55000000), Color.White) { interactionTick++; showSettings = true }
                 }
             }
         }
