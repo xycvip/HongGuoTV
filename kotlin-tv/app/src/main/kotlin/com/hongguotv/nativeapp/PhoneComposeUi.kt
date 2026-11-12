@@ -183,7 +183,8 @@ private fun PhoneComposeApp(activity: MainActivity) {
                 val rows = when (tabNow) {
                     0 -> {
                         if (homePage > 1) {
-                            val page = activity.repository.home(homePage, homeType)
+                            val page = if (homeType == ContentType.AI) activity.repository.ranking(RankBoard.AI, homePage)
+                                else activity.repository.home(homePage, homeType)
                             fetchedHasMore = page.hasMore
                             when (homeType) {
                                 ContentType.COMIC -> Triple(emptyList(), page.items, emptyList())
