@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.hongguotv.core.*
+import androidx.media3.common.Player
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
@@ -691,6 +692,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(false) }
     var ready by remember { mutableStateOf(false) }
+    var buffering by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var playbackMessage by remember { mutableStateOf("") }
     var showEpisodes by remember { mutableStateOf(false) }
@@ -709,6 +711,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             position = activity.currentPosition().coerceAtLeast(0L)
             playing = p?.isPlaying == true
             ready = activity.playbackReady
+            buffering = p?.playbackState == Player.STATE_BUFFERING
             failed = activity.playError
             if (failed) state.playerControlsVisible = true
             playbackMessage = if (runCatching { activity.playbackText.text.toString() }.isSuccess) activity.playbackText.text.toString() else ""
@@ -716,8 +719,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             delay(300)
         }
     }
-    LaunchedEffect(controlsVisible, playing, showEpisodes, showSettings) {
-        if (controlsVisible && playing && !showEpisodes && !showSettings) {
+    LaunchedEffect(controlsVisible, playing, showEpisodes, showSettings, showSpeed) {
+        if (controlsVisible && playing && !showEpisodes && !showSettings && !showSpeed) {
             delay(4500)
             state.playerControlsVisible = false
             activity.hidePlaybackOverlay()
@@ -734,7 +737,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text(data?.series?.title.orEmpty(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         Text("第 " + (activity.episodeIndex + 1) + " 集 / 共 " + (data?.episodes?.size ?: 0) + " 集", color = Color(0xFFCCCCCC), fontSize = 11.sp)
-                        if (!ready || failed) Text(if (failed) playbackMessage.ifBlank { "播放失败" } else "正在获取播放地址…",
+                        if (!ready || failed || buffering) Text(if (failed) playbackMessage.ifBlank { "播放失败" } else if (buffering) "缓冲中…" else "正在获取播放地址…",
                             color = if (failed) Color(0xFFFFA27B) else Color(0xFFCCCCCC), fontSize = 11.sp)
                     }
                     PhoneAction("选集", Color(0x55000000), Color.White) { showEpisodes = true }
