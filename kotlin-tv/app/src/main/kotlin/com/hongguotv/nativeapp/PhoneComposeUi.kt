@@ -131,6 +131,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var theaterGroups by remember { mutableStateOf(emptyList<TheaterFilterGroup>()) }
     var theaterSelections by remember { mutableStateOf(emptyMap<String, String>()) }
     var theaterType by remember { mutableStateOf(activity.library.contentType) }
+    var rankBoard by remember { mutableStateOf(RankBoard.TOTAL) }
     var pageNumber by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
     var loadingMore by remember { mutableStateOf(false) }
@@ -152,7 +153,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
         suggestions = withContext(Dispatchers.IO) { runCatching { activity.repository.suggest(searchText.trim()) }.getOrDefault(emptyList()) }
     }
 
-    LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections, pageNumber) {
+    LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections, rankBoard, pageNumber) {
         if (state.page == PhonePage.DETAIL) return@LaunchedEffect
         loading = true
         error = null
@@ -177,7 +178,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         }
                     }
                     2 -> {
-                        val page = activity.repository.ranking(RankBoard.ALL, pageNumber)
+                        val page = activity.repository.ranking(rankBoard, pageNumber)
                         fetchedHasMore = page.hasMore
                         Triple(page.items, emptyList(), emptyList())
                     }
@@ -284,9 +285,10 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     suggestions, { word -> pageNumber = 1; pageItems = emptyList(); searchText = word; submittedQuery = word; activity.library.rememberSearch(word, ContentType.SHORT); refresh++ },
                                     pageItems, loading, error, palette, hasMore, loadingMore, { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
                                     { openPhoneDetail(activity, it) })
-                                2 -> PhoneGridPage("排行榜", pageItems, loading, error, palette, hasMore, loadingMore,
-                                    { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
-                                    { openPhoneDetail(activity, it) }, { pageNumber = 1; pageItems = emptyList(); refresh++ })
+                                2 -> PhoneRankPage(pageItems, rankBoard, loading, error, palette, hasMore, loadingMore,
+                                    onBoard = { board -> pageNumber = 1; pageItems = emptyList(); rankBoard = board; refresh++ },
+                                    onLoadMore = { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
+                                    onSelect = { openPhoneDetail(activity, it) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
                                 7 -> PhoneTheaterPage(pageItems, theaterGroups, theaterSelections, theaterType, loading, error, palette, hasMore, loadingMore,
                                     onLoadMore = { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
                                     onType = { pageNumber = 1; pageItems = emptyList(); theaterType = it; theaterSelections = emptyMap(); refresh++ },
@@ -458,6 +460,26 @@ private fun PhoneTheaterPage(
             items(items, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
             if (loading) item { PhoneLoading(p) }
             if (error != null) item { PhoneError(error, p) }
+        }
+    }
+}
+
+@Composable
+private fun PhoneRankPage(
+    items: List<Series>, board: RankBoard, loading: Boolean, error: String?, p: PhonePalette,
+    hasMore: Boolean, loadingMore: Boolean, onBoard: (RankBoard) -> Unit,
+    onLoadMore: () -> Unit, onSelect: (Series) -> Unit, onRefresh: () -> Unit
+) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            RankBoard.entries.forEach { value ->
+                PhoneAction(value.buttonLabel, if (value == board) p.accent else p.card,
+                    if (value == board) Color.White else p.text) { onBoard(value) }
+            }
+        }
+        Box(Modifier.weight(1f)) {
+            PhoneGridPage(board.buttonLabel, items, loading, error, p, hasMore, loadingMore,
+                onLoadMore, onSelect, onRefresh)
         }
     }
 }
