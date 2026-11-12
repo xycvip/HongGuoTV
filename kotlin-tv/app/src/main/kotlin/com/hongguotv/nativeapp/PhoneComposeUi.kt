@@ -575,7 +575,7 @@ private fun PhoneImmersiveCard(
                 if (item.badge.isNotBlank()) PhoneAction(item.badge, p.accent, Color.White) {}
                 Text(item.title, color = Color.White, fontSize = 22.sp, lineHeight = 29.sp,
                     fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(listOfNotNull(item.tags.takeIf { it.isNotBlank() }, item.episodeText.takeIf { it.isNotBlank() }).joinToString(" · "),
+                Text(item.tags,
                     color = Color(0xFFDDDDDD), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (item.description.isNotBlank()) Text(item.description, color = Color(0xFFE5E5E5), fontSize = 12.sp,
                     lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
