@@ -176,6 +176,9 @@ internal class MainActivityTouchGestureController(
                 val dy = event.y - state.touchStartY
                 if(kotlin.math.abs(dx) > dp(24) || kotlin.math.abs(dy) > dp(24)) {
                     main.removeCallbacks(longPressSpeedRunnable)
+                    main.removeCallbacks(singleTapRunnable)
+                    lastTapAt = 0L
+                    pendingTapWasHudVisible = false
                     if(longPressSpeedActive) {
                         longPressSpeedActive = false
                         stopLongPressSpeed()
