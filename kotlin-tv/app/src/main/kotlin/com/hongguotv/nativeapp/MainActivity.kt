@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.app.AlertDialog
 import android.os.Bundle
 import android.os.Build
@@ -58,7 +58,7 @@ internal const val REQUEST_EXPORT_BACKUP=7201
 internal const val REQUEST_IMPORT_BACKUP=7202
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class MainActivity: Activity() {
+class MainActivity: ComponentActivity() {
     internal val searchUiState = SearchUiState()
     internal val theaterUiState = TheaterUiState()
     internal val accountUiState = AccountUiState()
