@@ -1404,7 +1404,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                             activity.playEpisode(activity.episodeIndex, activity.retryPosition, activity.retryAutoplay)
                         }
                     }
-                    PhoneAction(if (favorite) "已收藏" else "收藏", Color(0x55000000), Color.White) {
+                    if (landscape) PhoneAction(if (favorite) "★" else "☆", Color(0x55000000), Color.White) {
                         data?.series?.let { favorite = activity.library.toggle(it) }
                     }
                     Spacer(Modifier.width(6.dp))
