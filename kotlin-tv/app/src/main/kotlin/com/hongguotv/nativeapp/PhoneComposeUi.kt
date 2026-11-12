@@ -304,7 +304,11 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onSelect = { openPhoneDetail(activity, it) })
                                 3, 4 -> PhoneLibraryPage(state.tab, pageItems, loading, error, palette,
                                     onTab = { activity.switchTab(it) },
-                                    onSelect = { openPhoneDetail(activity, it) }, onRefresh = { refresh++ })
+                                    onSelect = { openPhoneDetail(activity, it) },
+                                    onRemove = { item ->
+                                        if (state.tab == 3) activity.library.toggle(item) else activity.library.removeHistory(item.id)
+                                        refresh++
+                                    }, onRefresh = { refresh++ })
                                 else -> PhoneMinePage(palette, style, themeMode, { next ->
                                     style = next
                                     preferences.edit().putString(PhoneThemeKey, next).apply()
@@ -550,20 +554,55 @@ private fun PhoneTheaterPage(
 @Composable
 private fun PhoneLibraryPage(
     tab: Int, items: List<Series>, loading: Boolean, error: String?, p: PhonePalette,
-    onTab: (Int) -> Unit, onSelect: (Series) -> Unit, onRefresh: () -> Unit
+    onTab: (Int) -> Unit, onSelect: (Series) -> Unit, onRemove: (Series) -> Unit, onRefresh: () -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PhoneAction("收藏", if (tab == 3) p.accent else p.card, if (tab == 3) Color.White else p.text) { onTab(3) }
-            PhoneAction("最近观看", if (tab == 4) p.accent else p.card, if (tab == 4) Color.White else p.text) { onTab(4) }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("追剧", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("刷新", color = p.accent, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRefresh).padding(8.dp))
         }
-        Box(Modifier.weight(1f)) {
-            PhoneGridPage(if (tab == 3) "我的收藏" else "最近观看", items, loading, error, p,
-                false, false, {}, onSelect, onRefresh)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            listOf(4 to "历史", 3 to "收藏").forEach { (value, label) ->
+                Column(Modifier.clickable { onTab(value) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(label, color = if (tab == value) p.accent else p.muted, fontSize = 16.sp,
+                        fontWeight = if (tab == value) FontWeight.Bold else FontWeight.Medium, modifier = Modifier.padding(vertical = 11.dp))
+                    if (tab == value) Box(Modifier.width(28.dp).height(2.dp).clip(CircleShape).background(p.accent))
+                }
+            }
+        }
+        if (items.isEmpty() && !loading) {
+            Column(Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center) {
+                Text(if (tab == 4) "还没有观看记录" else "还没有收藏的剧集",
+                    color = p.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (tab == 4) "开始播放后，这里会记住集数和进度。" else "遇到喜欢的短剧，点亮收藏就能在这里找到。",
+                    color = p.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+                PhoneAction("去发现", p.accent, Color.White) { onTab(7) }
+            }
+        } else {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)) {
+                items(items.chunked(3).size) { row ->
+                    Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items.drop(row * 3).take(3).forEach { item ->
+                            Column(Modifier.weight(1f)) {
+                                PhonePoster(item, p, Modifier.fillMaxWidth(), onSelect)
+                                if (tab == 4) {
+                                    val progress = remember(item.id) { item.id }
+                                    Text("继续观看", color = p.muted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
+                                }
+                                Text(if (tab == 3) "取消收藏" else "删除记录", color = p.accent, fontSize = 11.sp,
+                                    modifier = Modifier.clickable { onRemove(item) }.padding(vertical = 5.dp))
+                            }
+                        }
+                        repeat((3 - items.drop(row * 3).take(3).size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                if (loading) item { PhoneLoading(p) }
+                if (error != null) item { PhoneError(error, p) }
+            }
         }
     }
 }
-
 @Composable
 private fun PhoneRankPage(
     items: List<Series>, board: RankBoard, loading: Boolean, error: String?, p: PhonePalette,
