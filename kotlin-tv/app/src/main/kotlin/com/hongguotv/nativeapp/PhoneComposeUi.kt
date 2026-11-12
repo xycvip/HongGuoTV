@@ -270,7 +270,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         onFavorite = { item -> activity.library.toggle(item); refresh++ })
                 } else {
                     Column(Modifier.fillMaxSize()) {
-                        PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onSearch = { activity.switchTab(1) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
+                        PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems,
@@ -325,7 +325,7 @@ private fun openPhoneDetail(activity: MainActivity, series: Series) {
 }
 
 @Composable
-private fun PhoneTopBar(p: PhonePalette, tab: Int, onBack: () -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit) {
+private fun PhoneTopBar(p: PhonePalette, tab: Int, onBack: () -> Unit, onRank: () -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit) {
     val title = when (tab) { 0 -> "红果剧场"; 7 -> "发现"; 2 -> "排行榜"; 3, 4 -> "追剧"; 1 -> "搜索"; else -> "我的" }
     Row(Modifier.fillMaxWidth().background(p.surface).statusBarsPadding().padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically) {
@@ -339,8 +339,9 @@ private fun PhoneTopBar(p: PhonePalette, tab: Int, onBack: () -> Unit, onSearch:
         }
         Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = p.text, modifier = Modifier.weight(1f))
         if (tab != 1) {
-            Text("刷新", color = p.muted, modifier = Modifier.clickable(onClick = onRefresh).padding(horizontal = 8.dp, vertical = 10.dp))
-            Text("⌕", fontSize = 27.sp, color = p.text, modifier = Modifier.clickable(onClick = onSearch).padding(horizontal = 8.dp))
+            if (tab == 0 || tab == 7) Text("榜单", color = p.muted, modifier = Modifier.clickable(onClick = onRank).padding(horizontal = 7.dp, vertical = 10.dp))
+            Text("刷新", color = p.muted, modifier = Modifier.clickable(onClick = onRefresh).padding(horizontal = 7.dp, vertical = 10.dp))
+            Text("⌕", fontSize = 27.sp, color = p.text, modifier = Modifier.clickable(onClick = onSearch).padding(horizontal = 7.dp))
         }
     }
 }
@@ -350,7 +351,7 @@ private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (
     val active = when (tab) { 7 -> 7; 2 -> 2; 3, 4 -> 3; 6, 5 -> 6; else -> 0 }
     Row(Modifier.fillMaxWidth().background(p.surface).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
-        listOf(0 to "首页", 7 to (if (style == "immersive") "剧场" else "发现"), 2 to "排行", 3 to (if (style == "immersive") "追剧" else "片单"), 6 to "我的").forEach { (id, label) ->
+        listOf(0 to "首页", 7 to (if (style == "immersive") "剧场" else "发现"), 3 to (if (style == "immersive") "追剧" else "片单"), 6 to "我的").forEach { (id, label) ->
             Column(Modifier.clip(RoundedCornerShape(18.dp)).clickable { onSelect(id) }
                 .background(if (active == id) p.accent.copy(alpha = 0.12f) else Color.Transparent)
                 .padding(horizontal = 18.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
