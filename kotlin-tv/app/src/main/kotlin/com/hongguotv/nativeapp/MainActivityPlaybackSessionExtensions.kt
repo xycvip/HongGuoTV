@@ -271,6 +271,7 @@ internal fun MainActivity.playerFailure(problem: Throwable) {
             return
         }
         playError=true; player?.pause(); progressBar.visibility=View.GONE; hud.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.VISIBLE; panel=true
+        if (isPhoneDevice && phoneUiState.playerHost?.parent === root) { phoneUiState.playerControlsVisible=true; hud.visibility=View.GONE }
         val reportedProblem = (problem as? PlaybackApiRequestException)?.cause ?: problem
         val incompatible=reportedProblem is UnplayableVideoException
         val unsupportedFormat=reportedProblem is UnsupportedVideoFormatException
