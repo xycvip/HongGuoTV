@@ -190,6 +190,15 @@ private fun PhoneComposeApp(activity: MainActivity) {
             AnimatedContent(state.page, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "phone_page") { page ->
                 if (page == PhonePage.DETAIL) {
                     PhoneDetailPage(detail, detailLoading, error, palette,
+                        resumeIndex = detail?.let { d -> activity.library.progress(d.series.id)?.let { d.episodes.indexOf(it.episodeId) }?.takeIf { it >= 0 } },
+                        isFavorite = detail?.let { d -> activity.library.favorites().any { it.id == d.series.id } } == true,
+                        onResume = {
+                            val d = detail
+                            val progress = d?.let { activity.library.progress(it.series.id) }
+                            val index = d?.episodes?.indexOf(progress?.episodeId ?: "").takeIf { it != null && it >= 0 } ?: 0
+                            if (d != null) { activity.detail = d; activity.playEpisode(index, progress?.position ?: 0L) }
+                        },
+                        onRelated = { openPhoneDetail(activity, it) },
                         onBack = {
                             state.page = PhonePage.CATALOG
                             state.selectedSeries = null
@@ -379,6 +388,7 @@ private fun PhonePoster(item: Series, p: PhonePalette, modifier: Modifier, onSel
 
 @Composable
 private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, palette: PhonePalette,
+    resumeIndex: Int?, isFavorite: Boolean, onResume: () -> Unit, onRelated: (Series) -> Unit,
     onBack: () -> Unit, onPlay: (Int) -> Unit, onFavorite: (Series) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().background(palette.surface).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -399,9 +409,19 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                             Text(data.episodes.size.toString() + " 集 · " + data.series.tags, color = palette.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                             Text(data.series.description, color = palette.muted, fontSize = 13.sp, maxLines = 5,
                                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+                            if (!data.social.isEmpty) {
+                                val metrics = listOf(
+                                    if (data.social.rating > 0) String.format(Locale.CHINA, "%.1f 分", data.social.rating) else "",
+                                    data.social.favoriteText, data.social.heatText
+                                ).filter { it.isNotBlank() }.joinToString(" · ")
+                                Text(metrics, color = palette.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(top = 8.dp))
+                            }
                             Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                PhoneAction("▶ 立即播放", palette.accent, Color.White) { onPlay(0) }
-                                PhoneAction("收藏", palette.card, palette.text) { onFavorite(data.series) }
+                                if (resumeIndex != null) PhoneAction("继续观看", palette.accent, Color.White, onResume)
+                                PhoneAction("▶ 立即播放", if (resumeIndex != null) palette.card else palette.accent,
+                                    if (resumeIndex != null) palette.text else Color.White) { onPlay(0) }
+                                PhoneAction(if (isFavorite) "已收藏" else "收藏", palette.card, palette.text) { onFavorite(data.series) }
                             }
                         }
                     }
@@ -419,7 +439,8 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                         repeat((4 - data.episodes.drop(row * 4).take(4).size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
                     }
                 }
-                if (data.related.isNotEmpty()) item { PhoneShelf("猜你喜欢", data.related, palette, { }) }
+                if (data.sameName.isNotEmpty()) item { PhoneShelf("同名作品 / 续作", data.sameName, palette, onRelated) }
+                if (data.related.isNotEmpty()) item { PhoneShelf("猜你喜欢", data.related, palette, onRelated) }
             }
         }
     }
