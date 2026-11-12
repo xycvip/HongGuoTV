@@ -529,7 +529,8 @@ class MainActivity: Activity() {
                     y <= 0.18f || y >= 0.78f || (y in 0.36f..0.68f && x in 0.16f..0.84f)
                 }
             },
-            isPhoneComposeControlsVisible = { phoneUiState.playerControlsVisible && phoneUiState.playerHost?.parent === root }
+            isPhoneComposeControlsVisible = { phoneUiState.playerControlsVisible && phoneUiState.playerHost?.parent === root },
+            togglePhonePlayback = { togglePlayback() }
         )
     }
     /**
