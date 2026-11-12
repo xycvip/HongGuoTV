@@ -173,7 +173,7 @@ internal class MainActivityTouchGestureController(
                 verticalGesture = false
                 verticalEpisode = false
                 verticalLastValue = -1
-                // 手机视频画面任意一侧长按均临时切换 3 倍速；控制栏/进度条区域不参与。
+                // 手机视频画面任意一侧长按均临时切换 2 倍速；控制栏/进度条区域不参与。
                 main.removeCallbacks(longPressSpeedRunnable)
                 main.postDelayed(longPressSpeedRunnable, 350L)
             }
