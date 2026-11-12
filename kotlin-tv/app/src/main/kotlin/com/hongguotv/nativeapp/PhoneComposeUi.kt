@@ -158,9 +158,12 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var detail by remember { mutableStateOf<Detail?>(state.detail) }
     var selected by remember { mutableStateOf<Series?>(state.selectedSeries) }
     var refresh by remember { mutableIntStateOf(0) }
+    var settingsOpen by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = state.page == PhonePage.DETAIL || state.tab in setOf(1, 2)) {
-        if (state.page == PhonePage.DETAIL) {
+    BackHandler(enabled = settingsOpen || state.page == PhonePage.DETAIL || state.tab in setOf(1, 2)) {
+        if (settingsOpen) {
+            settingsOpen = false
+        } else if (state.page == PhonePage.DETAIL) {
             state.page = PhonePage.CATALOG
             state.selectedSeries = null
             state.detail = null
@@ -326,6 +329,11 @@ private fun PhoneComposeApp(activity: MainActivity) {
                             activity.playEpisode(activity.episodeIndex)
                         },
                         onFavorite = { item -> activity.library.toggle(item); refresh++ })
+                } else if (settingsOpen) {
+                    PhoneSettingsPage(activity, palette, style, themeMode,
+                        onBack = { settingsOpen = false },
+                        onTheme = { next -> style = next; preferences.edit().putString(PhoneThemeKey, next).apply() },
+                        onMode = { next -> themeMode = next; preferences.edit().putString("phone_ui_theme_mode", next).apply() })
                 } else {
                     Column(Modifier.fillMaxSize()) {
                         if (state.tab == 0 && style == "warm") PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { homePage = 1; homeLoadingMore = false; pageNumber = 1; pageItems = emptyList(); refresh++ })
@@ -379,7 +387,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onMode = { next -> themeMode = next; preferences.edit().putString("phone_ui_theme_mode", next).apply() },
                                     onRefresh = { refresh++ },
                                     onFavorites = { activity.switchTab(3) }, onHistory = { activity.switchTab(4) },
-                                    onSettings = { state.useLegacyPage = true; activity.switchTab(5) },
+                                    onSettings = { settingsOpen = true },
                                     onAccount = { state.useLegacyPage = true; activity.switchTab(6) })
                             }
                         }
@@ -1063,6 +1071,90 @@ private fun PhoneDetailActions(resumeIndex: Int?, isFavorite: Boolean, p: PhoneP
         PhoneAction("▶ 播放", if (resumeIndex == null) p.accent else p.card,
             if (resumeIndex == null) Color.White else p.text, onPlay)
         PhoneAction(if (isFavorite) "已收藏" else "收藏", p.card, p.text, onFavorite)
+    }
+}
+
+@Composable
+private fun PhoneSettingsPage(
+    activity: MainActivity, p: PhonePalette, style: String, themeMode: String,
+    onBack: () -> Unit, onTheme: (String) -> Unit, onMode: (String) -> Unit
+) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("‹", color = p.text, fontSize = 30.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp))
+                Text("设置", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        item { Text("外观", color = p.muted, fontSize = 13.sp) }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(p.card).padding(13.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("主题样式", color = p.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                listOf("warm" to "暖白精修", "immersive" to "沉浸暗场", "cards" to "内容卡片").forEach { (key, label) ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        .background(if (style == key) p.accent.copy(alpha = 0.13f) else Color.Transparent)
+                        .clickable { onTheme(key) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, color = p.text, modifier = Modifier.weight(1f))
+                        if (style == key) Text("✓", color = p.accent, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Text("明暗模式", color = p.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 6.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("default" to "主题默认", "system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (key, label) ->
+                        PhoneAction(label, if (themeMode == key) p.accent else p.surface,
+                            if (themeMode == key) Color.White else p.text) { onMode(key) }
+                    }
+                }
+            }
+        }
+        item { Text("播放偏好", color = p.muted, fontSize = 13.sp) }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(p.card).padding(horizontal = 14.dp)) {
+                PhoneSwitchRow("自动连播下一集", "本集结束后自动播放下一集", activity.library.autoNext, p) {
+                    activity.library.autoNext = it
+                }
+                PhoneSwitchRow("自动切换下一季", "当前剧集结束后接续下一季", activity.library.autoSeason, p) {
+                    activity.library.autoSeason = it
+                }
+                PhoneSwitchRow("弹幕总开关", "控制播放器弹幕显示", activity.library.danmaku, p) {
+                    activity.library.danmaku = it
+                }
+                PhoneSwitchRow("显示播放时钟", "在播放器画面显示当前时间", activity.library.showClock, p) {
+                    activity.library.showClock = it
+                }
+                PhoneSwitchRow("显示网络速度", "在播放器画面显示实时网速", activity.library.showNetworkSpeed, p) {
+                    activity.library.showNetworkSpeed = it
+                }
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(p.card).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("画质与画面", color = p.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("最高画质：" + activity.library.maxQuality, color = p.text, fontSize = 13.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { activity.showQualityPicker(android.widget.TextView(activity), true) }.padding(vertical = 10.dp))
+                Text("画面模式：" + activity.library.frameMode.name, color = p.text, fontSize = 13.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { activity.showFramePicker(android.widget.TextView(activity), true) }.padding(vertical = 10.dp))
+                Text("播放器信息显示：" + activity.library.videoInfoMode, color = p.text, fontSize = 13.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { activity.library.videoInfoMode = (activity.library.videoInfoMode + 1) % 3 }.padding(vertical = 10.dp))
+            }
+        }
+        item { Text("播放引擎、P/N 播放线路、解码器与更新仍由红果TV原有模块管理。", color = p.muted,
+            fontSize = 12.sp, lineHeight = 19.sp, modifier = Modifier.padding(bottom = 24.dp)) }
+    }
+}
+
+@Composable
+private fun PhoneSwitchRow(label: String, description: String, checked: Boolean, p: PhonePalette, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 10.dp)) {
+            Text(label, color = p.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(description, color = p.muted, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 
