@@ -1099,7 +1099,8 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
 @Composable
 private fun PhoneDetailActions(resumeIndex: Int?, isFavorite: Boolean, isLater: Boolean, p: PhonePalette,
     onResume: () -> Unit, onPlay: () -> Unit, onFavorite: () -> Unit, onLater: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         if (resumeIndex != null) PhoneAction("继续观看", p.accent, Color.White, onResume)
         PhoneAction("▶ 播放", if (resumeIndex == null) p.accent else p.card,
             if (resumeIndex == null) Color.White else p.text, onPlay)
