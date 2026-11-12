@@ -133,6 +133,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var theaterSelections by remember { mutableStateOf(emptyMap<String, String>()) }
     var theaterType by remember { mutableStateOf(activity.library.contentType) }
     var rankBoard by remember { mutableStateOf(RankBoard.TOTAL) }
+    var homeType by remember { mutableStateOf(ContentType.SHORT) }
     var pageNumber by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
     var loadingMore by remember { mutableStateOf(false) }
@@ -273,13 +274,15 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
-                                0 -> PhoneHomePage(shortItems, comicItems, aiItems,
+                                0 -> PhoneHomePage(shortItems, comicItems, aiItems, homeType,
                                     activity.library.history().take(8).map { it.series },
                                     activity.library.favorites().filter { activity.library.favoriteUpdate(it.id)?.hasUpdate == true }.take(8),
                                     activity.library.later().take(10),
                                     palette, style, loading, error,
+                                    onType = { homeType = it },
                                     onSelect = { openPhoneDetail(activity, it) },
                                     onRecentSelect = { activity.openDetail(it, resume = true) },
+                                    onSearch = { activity.switchTab(1) }, onRank = { activity.switchTab(2) },
                                     onMore = { activity.switchTab(7) })
                                 1 -> PhoneSearchPage(searchText, { searchText = it },
                                     { pageNumber = 1; pageItems = emptyList(); submittedQuery = searchText.trim(); if (submittedQuery.isNotBlank()) activity.library.rememberSearch(submittedQuery, ContentType.SHORT); refresh++ },
@@ -364,29 +367,97 @@ private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (
 }
 
 @Composable
-private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Series>, recent: List<Series>,
-    updates: List<Series>, later: List<Series>, p: PhonePalette, style: String, loading: Boolean, error: String?,
-    onSelect: (Series) -> Unit, onRecentSelect: (Series) -> Unit, onMore: () -> Unit) {
+private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Series>, type: ContentType,
+    recent: List<Series>, updates: List<Series>, later: List<Series>, p: PhonePalette, style: String,
+    loading: Boolean, error: String?, onType: (ContentType) -> Unit, onSelect: (Series) -> Unit,
+    onRecentSelect: (Series) -> Unit, onSearch: () -> Unit, onRank: () -> Unit, onMore: () -> Unit) {
+    val items = when (type) { ContentType.COMIC -> comic; ContentType.AI -> ai; else -> short }
     when (style) {
-        "immersive" -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
-            if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onRecentSelect) }
-            if (updates.isNotEmpty()) item { PhoneShelf("收藏有更新", updates, p, onSelect) }
-            if (later.isNotEmpty()) item { PhoneShelf("稍后看", later, p, onSelect) }
-            items((short + comic + ai).distinctBy { it.id }, key = { it.id }) { item -> PhoneImmersiveCard(item, p, onSelect) }
-            if (loading) item { PhoneLoading(p) }
-            error?.let { item { PhoneError(it, p) } }
-        }
-        "cards" -> Column(Modifier.fillMaxSize()) {
-            if (recent.isNotEmpty()) PhoneShelf("接着看", recent, p, onRecentSelect)
-            if (updates.isNotEmpty()) PhoneShelf("收藏有更新", updates, p, onSelect)
-            Box(Modifier.weight(1f)) {
-                LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    items((short + comic + ai + later).distinctBy { it.id }, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
-                    if (loading) item { PhoneLoading(p) }
-                    if (error != null) item { PhoneError(error, p) }
+        "immersive" -> LazyColumn(Modifier.fillMaxSize().background(Color.Black), contentPadding = PaddingValues(bottom = 20.dp)) {
+            item {
+                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("刷新", color = Color.White, modifier = Modifier.clickable(onClick = onMore).padding(9.dp))
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
+                        listOf(ContentType.SHORT to "热度", ContentType.COMIC to "漫剧", ContentType.AI to "AI剧").forEach { (value, label) ->
+                            Text(label, color = if (type == value) Color.White else Color(0xFFAAAAAA),
+                                fontSize = if (type == value) 16.sp else 14.sp,
+                                fontWeight = if (type == value) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.clickable { onType(value) }.padding(horizontal = 11.dp, vertical = 9.dp))
+                        }
+                    }
+                    Text("⌕", color = Color.White, fontSize = 25.sp, modifier = Modifier.clickable(onClick = onSearch).padding(8.dp))
                 }
             }
+            if (recent.isNotEmpty()) item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp))
+                    .background(Color(0x55222222)).clickable { onRecentSelect(recent.first()) }.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("继续看", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(recent.first().title, color = Color(0xFFDDDDDD), fontSize = 12.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 10.dp))
+                    Text("›", color = Color.White, fontSize = 22.sp)
+                }
+            }
+            if (updates.isNotEmpty()) item { PhoneShelf("收藏有更新", updates, p.copy(dark = true), onSelect) }
+            items(items, key = { it.id }) { PhoneImmersiveCard(it, p.copy(dark = true), onSelect) }
+            if (loading) item { PhoneLoading(p.copy(dark = true)) }
+            error?.let { item { PhoneError(it, p.copy(dark = true)) } }
+            item { Text("进入排行榜 ›", color = Color.White, modifier = Modifier.clickable(onClick = onRank).padding(18.dp)) }
+        }
+        "cards" -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
+            item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("⌕ 搜索剧名或关键词", color = p.muted, fontSize = 13.sp,
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(p.card)
+                            .clickable(onClick = onSearch).padding(horizontal = 14.dp, vertical = 11.dp))
+                    Text("榜单", color = p.text, modifier = Modifier.clickable(onClick = onRank).padding(10.dp))
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(ContentType.SHORT to "热度", ContentType.COMIC to "漫剧", ContentType.AI to "推荐").forEach { (value, label) ->
+                        PhoneAction(label, if (type == value) p.accent else p.card, if (type == value) Color.White else p.text) { onType(value) }
+                    }
+                }
+            }
+            if (recent.isNotEmpty()) item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp).clip(RoundedCornerShape(13.dp))
+                    .background(p.card).clickable { onRecentSelect(recent.first()) }.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("▶ 继续看", color = p.accent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(recent.first().title, color = p.text, fontSize = 12.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                }
+            }
+            if (items.isNotEmpty()) item {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp).clip(RoundedCornerShape(15.dp))
+                    .background(p.card).padding(12.dp)) {
+                    Text(if (type == ContentType.COMIC) "漫剧榜" else if (type == ContentType.AI) "推荐榜" else "热度榜",
+                        color = p.text, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                    items.take(5).forEachIndexed { index, item ->
+                        Row(Modifier.fillMaxWidth().clickable { onSelect(item) }.padding(vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text((index + 1).toString(), color = if (index < 3) p.accent else p.muted,
+                                fontWeight = FontWeight.Bold, modifier = Modifier.width(22.dp))
+                            AsyncImage(model = item.cover, contentDescription = null,
+                                modifier = Modifier.width(38.dp).height(48.dp).clip(RoundedCornerShape(6.dp)))
+                            Text(item.title, color = p.text, fontSize = 13.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 9.dp))
+                        }
+                    }
+                }
+            }
+            items(items.drop(5).chunked(2).size) { row ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items.drop(5).drop(row * 2).take(2).forEach { item -> PhonePoster(item, p, Modifier.weight(1f), onSelect) }
+                    if (items.drop(5).drop(row * 2).size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            if (later.isNotEmpty()) item { PhoneShelf("稍后看", later, p, onSelect) }
+            if (loading) item { PhoneLoading(p) }
+            error?.let { item { PhoneError(it, p) } }
         }
         else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
             if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onRecentSelect) }
@@ -400,10 +471,9 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
         }
     }
 }
-
 @Composable
 private fun PhoneImmersiveCard(item: Series, p: PhonePalette, onSelect: (Series) -> Unit) {
-    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp).height(270.dp)
+    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp).height(390.dp)
         .clip(RoundedCornerShape(18.dp)).clickable { onSelect(item) }) {
         AsyncImage(model = item.cover, contentDescription = item.title, modifier = Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000)))))
