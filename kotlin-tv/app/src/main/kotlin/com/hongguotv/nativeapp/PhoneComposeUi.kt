@@ -1207,42 +1207,44 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp)) {
             Text("播放设置", color = playerPalette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 10.dp))
-            @Composable fun setting(label: String, action: () -> Unit) {
-                Text(label, color = playerPalette.text, fontSize = 14.sp,
-                    modifier = Modifier.fillMaxWidth().clickable(onClick = action).padding(vertical = 13.dp))
-            }
-            setting("画质") {
+            PhonePlayerSettingRow("画质", playerPalette) {
                 showSettings = false
                 activity.showQualityPicker(android.widget.TextView(activity), true)
             }
-            setting("画面模式") {
+            PhonePlayerSettingRow("画面模式", playerPalette) {
                 showSettings = false
                 activity.showFramePicker(android.widget.TextView(activity), true)
             }
-            setting("定时停止") {
+            PhonePlayerSettingRow("定时停止", playerPalette) {
                 showSettings = false
                 activity.showSleepPicker(android.widget.TextView(activity))
             }
-            setting("弹幕：" + if (activity.library.danmaku) "开启" else "关闭") {
+            PhonePlayerSettingRow("弹幕：" + if (activity.library.danmaku) "开启" else "关闭", playerPalette) {
                 activity.toggleSeriesDanmaku(data?.series?.id.orEmpty())
             }
-            setting("跳过片头") {
+            PhonePlayerSettingRow("跳过片头", playerPalette) {
                 showSettings = false
                 activity.showSkipPicker(android.widget.TextView(activity), true)
             }
-            setting("跳过片尾") {
+            PhonePlayerSettingRow("跳过片尾", playerPalette) {
                 showSettings = false
                 activity.showSkipPicker(android.widget.TextView(activity), false)
             }
-            setting("自动连播：" + if (activity.library.autoNext) "开启" else "关闭") {
+            PhonePlayerSettingRow("自动连播：" + if (activity.library.autoNext) "开启" else "关闭", playerPalette) {
                 activity.library.autoNext = !activity.library.autoNext
             }
-            setting("评论") {
+            PhonePlayerSettingRow("评论", playerPalette) {
                 showSettings = false
                 activity.openOfficialComments(activity.phoneUiState.playerHost)
             }
         }
     }
+}
+
+@Composable
+private fun PhonePlayerSettingRow(label: String, p: PhonePalette, onClick: () -> Unit) {
+    Text(label, color = p.text, fontSize = 14.sp,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 13.dp))
 }
 
 private fun phoneTime(ms: Long): String {
