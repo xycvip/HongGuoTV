@@ -97,6 +97,27 @@ import java.util.concurrent.atomic.AtomicLong
 
     @Suppress("DEPRECATION")
     internal fun MainActivity.applyImmersiveFullscreen() {
+        if (isPhoneDevice) {
+            val landscapePlayer = screen == "player" &&
+                resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            if (landscapePlayer) {
+                window.decorView.systemUiVisibility =
+                    View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    window.insetsController?.hide(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
+                    window.insetsController?.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            } else {
+                window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    window.insetsController?.show(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
+                    window.insetsController?.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_DEFAULT
+                }
+            }
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val params = window.attributes
             params.layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
