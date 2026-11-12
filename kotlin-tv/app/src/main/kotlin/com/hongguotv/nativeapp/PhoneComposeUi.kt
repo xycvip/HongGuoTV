@@ -138,6 +138,9 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var theaterType by remember { mutableStateOf(activity.library.contentType) }
     var rankBoard by remember { mutableStateOf(RankBoard.TOTAL) }
     var homeType by remember { mutableStateOf(ContentType.SHORT) }
+    var homePage by remember { mutableIntStateOf(1) }
+    var homeHasMore by remember { mutableStateOf(true) }
+    var homeLoadingMore by remember { mutableStateOf(false) }
     var pageNumber by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
     var loadingMore by remember { mutableStateOf(false) }
@@ -158,6 +161,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
 
     LaunchedEffect(state.tab) {
         pageNumber = 1
+        if (state.tab == 0) { homePage = 1; homeLoadingMore = false }
         if (state.tab == 1) { searchText = ""; submittedQuery = ""; pageItems = emptyList(); suggestions = emptyList() }
     }
 
@@ -167,7 +171,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
         suggestions = withContext(Dispatchers.IO) { runCatching { activity.repository.suggest(searchText.trim()) }.getOrDefault(emptyList()) }
     }
 
-    LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections, rankBoard, pageNumber) {
+    LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections, rankBoard, pageNumber, homePage, homeType) {
         if (state.page == PhonePage.DETAIL) return@LaunchedEffect
         loading = true
         error = null
@@ -178,10 +182,25 @@ private fun PhoneComposeApp(activity: MainActivity) {
                 var fetchedHasMore = false
                 val rows = when (tabNow) {
                     0 -> {
-                        val short = activity.library.cachedHome(ContentType.SHORT)?.items ?: activity.repository.home(1, ContentType.SHORT).items
-                        val comic = activity.library.cachedHome(ContentType.COMIC)?.items ?: activity.repository.home(1, ContentType.COMIC).items
-                        val ai = activity.library.cachedHome(ContentType.AI)?.items ?: activity.repository.ranking(RankBoard.AI, 1).items
-                        Triple(short, comic, ai)
+                        if (homePage > 1) {
+                            val page = activity.repository.home(homePage, homeType)
+                            fetchedHasMore = page.hasMore
+                            when (homeType) {
+                                ContentType.COMIC -> Triple(emptyList(), page.items, emptyList())
+                                ContentType.AI -> Triple(emptyList(), emptyList(), page.items)
+                                else -> Triple(page.items, emptyList(), emptyList())
+                            }
+                        } else {
+                            val shortPage = activity.library.cachedHome(ContentType.SHORT) ?: activity.repository.home(1, ContentType.SHORT)
+                            val comicPage = activity.library.cachedHome(ContentType.COMIC) ?: activity.repository.home(1, ContentType.COMIC)
+                            val aiPage = activity.library.cachedHome(ContentType.AI) ?: activity.repository.ranking(RankBoard.AI, 1)
+                            fetchedHasMore = when (homeType) {
+                                ContentType.COMIC -> comicPage.hasMore
+                                ContentType.AI -> aiPage.hasMore
+                                else -> shortPage.hasMore
+                            }
+                            Triple(shortPage.items, comicPage.items, aiPage.items)
+                        }
                     }
                     1 -> {
                         if (submittedQuery.isBlank()) Triple(emptyList(), emptyList(), emptyList())
@@ -213,21 +232,38 @@ private fun PhoneComposeApp(activity: MainActivity) {
             val resultRows = payload.first.first
             theaterGroups = payload.first.second
             hasMore = payload.second
-            shortItems = resultRows.first
-            comicItems = resultRows.second
-            aiItems = resultRows.third
+            if (tabNow == 0) {
+                homeHasMore = payload.second
+                if (homePage > 1) {
+                    when (homeType) {
+                        ContentType.COMIC -> comicItems = (comicItems + resultRows.second).distinctBy { it.id }
+                        ContentType.AI -> aiItems = (aiItems + resultRows.third).distinctBy { it.id }
+                        else -> shortItems = (shortItems + resultRows.first).distinctBy { it.id }
+                    }
+                } else {
+                    shortItems = resultRows.first
+                    comicItems = resultRows.second
+                    aiItems = resultRows.third
+                }
+                homeLoadingMore = false
+            } else {
+                shortItems = resultRows.first
+                comicItems = resultRows.second
+                aiItems = resultRows.third
+            }
             if (pageNumber > 1 && tabNow in setOf(1, 2, 7)) pageItems = (pageItems + resultRows.first).distinctBy { it.id }
             else pageItems = resultRows.first
             if (tabNow == 3) { pageItems = activity.library.favorites(); hasMore = false }
             if (tabNow == 4) { pageItems = activity.library.history().map { it.series }.distinctBy { it.id }; hasMore = false }
-            if (tabNow == 0) {
-                activity.library.cacheHome(ContentType.SHORT, shortItems, true)
+            if (tabNow == 0 && homePage == 1) {
+                activity.library.cacheHome(ContentType.SHORT, shortItems, homeHasMore)
                 if (comicItems.isNotEmpty()) activity.library.cacheHome(ContentType.COMIC, comicItems, true)
                 if (aiItems.isNotEmpty()) activity.library.cacheHome(ContentType.AI, aiItems, true)
             }
         }.onFailure { error = it.message ?: "加载失败" }
         loading = false
         loadingMore = false
+        if (tabNow == 0) homeLoadingMore = false
     }
 
     LaunchedEffect(state.page, state.selectedSeries?.id) {
@@ -283,7 +319,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         onFavorite = { item -> activity.library.toggle(item); refresh++ })
                 } else {
                     Column(Modifier.fillMaxSize()) {
-                        if (state.tab == 0 && style == "warm") PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
+                        if (state.tab == 0 && style == "warm") PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { homePage = 1; homeLoadingMore = false; pageNumber = 1; pageItems = emptyList(); refresh++ })
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems, homeType,
@@ -291,7 +327,9 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     activity.library.favorites().filter { activity.library.favoriteUpdate(it.id)?.hasUpdate == true }.take(8),
                                     activity.library.later().take(10),
                                     (if (style == "immersive") phonePalette(style, true) else palette), style, loading, error,
-                                    onType = { homeType = it },
+                                    homeHasMore, homeLoadingMore,
+                                    onLoadMore = { if (homeHasMore && !homeLoadingMore) { homeLoadingMore = true; homePage++ } },
+                                    onType = { homeType = it; homePage = 1; homeLoadingMore = false; refresh++ },
                                     onSelect = { openPhoneDetail(activity, it) },
                                     onRecentSelect = { activity.openDetail(it, resume = true) },
                                     onSearch = { activity.switchTab(1) }, onRank = { activity.switchTab(2) },
