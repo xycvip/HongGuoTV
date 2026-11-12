@@ -54,6 +54,8 @@ private const val PhoneThemeKey = "phone_ui_theme_style"
 internal fun MainActivity.showPhoneComposeCatalog() {
     if (!isPhoneDevice) return
     phoneUiState.useLegacyPage = false
+    invalidatePage()
+    releaseCatalogViews()
     screen = "catalog"
     applyDeviceOrientationPolicy()
     initialCatalogPending = false
