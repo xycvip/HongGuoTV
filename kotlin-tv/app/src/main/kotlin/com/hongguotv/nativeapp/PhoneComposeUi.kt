@@ -294,10 +294,9 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onType = { pageNumber = 1; pageItems = emptyList(); theaterType = it; theaterSelections = emptyMap(); refresh++ },
                                     onFilter = { key, value -> pageNumber = 1; pageItems = emptyList(); theaterSelections = theaterSelections.toMutableMap().apply { if (value.isBlank()) remove(key) else put(key, value) }; refresh++ },
                                     onSelect = { openPhoneDetail(activity, it) })
-                                3 -> PhoneGridPage("我的收藏", pageItems, loading, error, palette, false, false, {},
-                                    { openPhoneDetail(activity, it) }, { refresh++ })
-                                4 -> PhoneGridPage("最近观看", pageItems, loading, error, palette, false, false, {},
-                                    { openPhoneDetail(activity, it) }, { refresh++ })
+                                3, 4 -> PhoneLibraryPage(state.tab, pageItems, loading, error, palette,
+                                    onTab = { activity.switchTab(it) },
+                                    onSelect = { openPhoneDetail(activity, it) }, onRefresh = { refresh++ })
                                 else -> PhoneMinePage(palette, style, themeMode, { next ->
                                     style = next
                                     preferences.edit().putString(PhoneThemeKey, next).apply()
@@ -460,6 +459,23 @@ private fun PhoneTheaterPage(
             items(items, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
             if (loading) item { PhoneLoading(p) }
             if (error != null) item { PhoneError(error, p) }
+        }
+    }
+}
+
+@Composable
+private fun PhoneLibraryPage(
+    tab: Int, items: List<Series>, loading: Boolean, error: String?, p: PhonePalette,
+    onTab: (Int) -> Unit, onSelect: (Series) -> Unit, onRefresh: () -> Unit
+) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PhoneAction("收藏", if (tab == 3) p.accent else p.card, if (tab == 3) Color.White else p.text) { onTab(3) }
+            PhoneAction("最近观看", if (tab == 4) p.accent else p.card, if (tab == 4) Color.White else p.text) { onTab(4) }
+        }
+        Box(Modifier.weight(1f)) {
+            PhoneGridPage(if (tab == 3) "我的收藏" else "最近观看", items, loading, error, p,
+                false, false, {}, onSelect, onRefresh)
         }
     }
 }
