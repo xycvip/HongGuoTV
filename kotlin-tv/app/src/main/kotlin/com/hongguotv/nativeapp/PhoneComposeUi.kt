@@ -446,7 +446,7 @@ private fun PhoneGridPage(title: String, items: List<Series>, loading: Boolean, 
             Text("刷新", color = p.accent, modifier = Modifier.clickable(onClick = onRefresh).padding(8.dp))
         }
         LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(132.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
+            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.weight(1f)) {
             items(items, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
             if (loading) item { PhoneLoading(p) }
             if (error != null) item { PhoneError(error, p) }
@@ -481,7 +481,7 @@ private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: ()
                 }
             }
         }
-        LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(132.dp), modifier = Modifier.fillMaxSize(),
+        LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(132.dp), modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
             items(results, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
@@ -520,7 +520,7 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
         if (loading) PhoneLoading(palette)
         if (error != null) PhoneError(error, palette)
         detail?.let { data ->
-            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 item {
                     Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.Top) {
                         AsyncImage(model = data.series.cover, contentDescription = null,
