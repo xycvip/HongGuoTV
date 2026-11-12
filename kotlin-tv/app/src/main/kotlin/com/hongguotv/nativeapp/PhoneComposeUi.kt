@@ -393,7 +393,6 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     accountName = activity.cloudAccount.accountLabel,
                                     accountStatus = if (activity.cloudAccount.signedIn) "红果账号已登录" else "登录后可同步云端记录",
                                     accountAvatar = activity.cloudAccount.accountAvatarUrl,
-                                    accountRevision = activity.cloudAccount.accountProfileRevision,
                                     favoriteCount = activity.library.favorites().size,
                                     historyCount = activity.library.history().size,
                                     onTheme = { next -> style = next; preferences.edit().putString(PhoneThemeKey, next).apply() },
@@ -1274,7 +1273,7 @@ private fun PhoneSwitchRow(label: String, description: String, checked: Boolean,
 
 @Composable
 private fun PhoneMinePage(palette: PhonePalette, style: String, themeMode: String,
-    accountName: String, accountStatus: String, accountAvatar: String, accountRevision: Long,
+    accountName: String, accountStatus: String, accountAvatar: String,
     favoriteCount: Int, historyCount: Int,
     onTheme: (String) -> Unit, onMode: (String) -> Unit, onRefresh: () -> Unit,
     onFavorites: () -> Unit, onHistory: () -> Unit, onSettings: () -> Unit, onAccount: () -> Unit) {
