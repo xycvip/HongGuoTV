@@ -1477,7 +1477,9 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 Text("选集", color = playerPalette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text("共 " + (data?.episodes?.size ?: 0) + " 集", color = playerPalette.muted, fontSize = 12.sp)
             }
-            LazyVerticalGrid(columns = GridCells.Fixed(5), modifier = Modifier.heightIn(max = 380.dp),
+            val episodeGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(
+                initialFirstVisibleItemIndex = (activity.episodeIndex / 5) * 5)
+            LazyVerticalGrid(state = episodeGridState, columns = GridCells.Fixed(5), modifier = Modifier.heightIn(max = 380.dp),
                 contentPadding = PaddingValues(bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(data?.episodes?.size ?: 0) { index ->
