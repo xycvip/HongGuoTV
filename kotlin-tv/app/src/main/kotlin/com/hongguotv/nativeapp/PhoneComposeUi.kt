@@ -281,7 +281,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     activity.library.history().take(8).map { it.series },
                                     activity.library.favorites().filter { activity.library.favoriteUpdate(it.id)?.hasUpdate == true }.take(8),
                                     activity.library.later().take(10),
-                                    palette, style, loading, error,
+                                    (if (style == "immersive") phonePalette(style, true) else palette), style, loading, error,
                                     onType = { homeType = it },
                                     onSelect = { openPhoneDetail(activity, it) },
                                     onRecentSelect = { activity.openDetail(it, resume = true) },
@@ -323,7 +323,9 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onAccount = { state.useLegacyPage = true; activity.switchTab(6) })
                             }
                         }
-                        if (state.tab !in setOf(1, 2)) PhoneBottomBar(state.tab, palette, style, onSelect = { target -> activity.switchTab(target) })
+                        if (state.tab !in setOf(1, 2)) PhoneBottomBar(state.tab,
+                            if (state.tab == 0 && style == "immersive") phonePalette(style, true) else palette,
+                            style, onSelect = { target -> activity.switchTab(target) })
                     }
                 }
             }
