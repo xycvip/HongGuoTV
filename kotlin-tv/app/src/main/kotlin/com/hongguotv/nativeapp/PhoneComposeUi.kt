@@ -208,7 +208,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems,
-                                    activity.library.history().take(8).map { it.series }, palette, loading, error,
+                                    activity.library.history().take(8).map { it.series }, palette, style, loading, error,
                                     onSelect = { openPhoneDetail(activity, it) }, onMore = { activity.switchTab(7) })
                                 1 -> PhoneSearchPage(searchText, { searchText = it },
                                     { submittedQuery = searchText.trim(); if (submittedQuery.isNotBlank()) activity.library.rememberSearch(submittedQuery, ContentType.SHORT); refresh++ },
@@ -270,14 +270,41 @@ private fun PhoneBottomBar(tab: Int, p: PhonePalette, onSelect: (Int) -> Unit) {
 
 @Composable
 private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Series>, recent: List<Series>,
-    p: PhonePalette, loading: Boolean, error: String?, onSelect: (Series) -> Unit, onMore: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
-        if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onSelect) }
-        item { PhoneShelf("热门短剧", short, p, onSelect, onMore) }
-        item { PhoneShelf("热门漫剧", comic, p, onSelect, onMore) }
-        item { PhoneShelf("AI 剧", ai, p, onSelect, onMore) }
-        if (loading) item { PhoneLoading(p) }
-        error?.let { item { PhoneError(it, p) } }
+    p: PhonePalette, style: String, loading: Boolean, error: String?, onSelect: (Series) -> Unit, onMore: () -> Unit) {
+    when (style) {
+        "immersive" -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
+            items((short + comic + ai).distinctBy { it.id }, key = { it.id }) { item -> PhoneImmersiveCard(item, p, onSelect) }
+            if (loading) item { PhoneLoading(p) }
+            error?.let { item { PhoneError(it, p) } }
+        }
+        "cards" -> LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            items((short + comic + ai).distinctBy { it.id }, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
+            if (loading) item { PhoneLoading(p) }
+            if (error != null) item { PhoneError(error, p) }
+        }
+        else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
+            if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onSelect) }
+            item { PhoneShelf("热门短剧", short, p, onSelect, onMore) }
+            item { PhoneShelf("热门漫剧", comic, p, onSelect, onMore) }
+            item { PhoneShelf("AI 剧", ai, p, onSelect, onMore) }
+            if (loading) item { PhoneLoading(p) }
+            error?.let { item { PhoneError(it, p) } }
+        }
+    }
+}
+
+@Composable
+private fun PhoneImmersiveCard(item: Series, p: PhonePalette, onSelect: (Series) -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp).height(270.dp)
+        .clip(RoundedCornerShape(18.dp)).clickable { onSelect(item) }) {
+        AsyncImage(model = item.cover, contentDescription = item.title, modifier = Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000)))))
+        Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+            if (item.badge.isNotBlank()) Text(item.badge, color = Color.White, fontSize = 11.sp)
+            Text(item.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+            if (item.tags.isNotBlank()) Text(item.tags, color = Color(0xFFDDDDDD), fontSize = 11.sp, maxLines = 1)
+        }
     }
 }
 
