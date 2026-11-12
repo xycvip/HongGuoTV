@@ -346,6 +346,45 @@ private fun PhoneShelf(title: String, items: List<Series>, p: PhonePalette, onSe
 }
 
 @Composable
+private fun PhoneTheaterPage(
+    items: List<Series>, groups: List<TheaterFilterGroup>, selections: Map<String, String>,
+    type: ContentType, loading: Boolean, error: String?, p: PhonePalette,
+    onType: (ContentType) -> Unit, onFilter: (String, String) -> Unit, onSelect: (Series) -> Unit
+) {
+    Column(Modifier.fillMaxSize()) {
+        Text("发现", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 18.dp, top = 10.dp, bottom = 8.dp))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(ContentType.SHORT to "短剧", ContentType.COMIC to "漫剧", ContentType.AI to "AI剧").forEach { (value, label) ->
+                PhoneAction(label, if (type == value) p.accent else p.card, if (type == value) Color.White else p.text) { onType(value) }
+            }
+        }
+        groups.forEach { group ->
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text(group.label, color = p.muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp))
+                LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(group.options, key = { it.id }) { option ->
+                        val selected = selections[group.type] == option.id || (option.id.isBlank() && selections[group.type].isNullOrBlank())
+                        Text(option.label, color = if (selected) Color.White else p.text, fontSize = 11.sp,
+                            modifier = Modifier.clip(RoundedCornerShape(14.dp))
+                                .background(if (selected) p.accent else p.card)
+                                .clickable { onFilter(group.type, option.id) }
+                                .padding(horizontal = 10.dp, vertical = 7.dp))
+                    }
+                }
+            }
+        }
+        LazyVerticalGrid(columns = GridCells.Adaptive(132.dp), modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            items(items, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
+            if (loading) item { PhoneLoading(p) }
+            if (error != null) item { PhoneError(error, p) }
+        }
+    }
+}
+
+@Composable
 private fun PhoneGridPage(title: String, items: List<Series>, loading: Boolean, error: String?, p: PhonePalette,
     onSelect: (Series) -> Unit, onRefresh: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
