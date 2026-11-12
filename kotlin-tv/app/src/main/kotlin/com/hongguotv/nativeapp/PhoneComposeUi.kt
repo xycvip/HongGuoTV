@@ -270,7 +270,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         onFavorite = { item -> activity.library.toggle(item); refresh++ })
                 } else {
                     Column(Modifier.fillMaxSize()) {
-                        PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onSearch = { activity.switchTab(1) }, onRefresh = { refresh++ })
+                        PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onSearch = { activity.switchTab(1) }, onRefresh = { pageNumber = 1; pageItems = emptyList(); refresh++ })
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems,
@@ -325,24 +325,32 @@ private fun openPhoneDetail(activity: MainActivity, series: Series) {
 }
 
 @Composable
-private fun PhoneTopBar(p: PhonePalette, onSearch: () -> Unit, onRefresh: () -> Unit) {
-    Row(Modifier.fillMaxWidth().background(p.surface).padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(p.accent), contentAlignment = Alignment.Center) {
-            Text("果", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+private fun PhoneTopBar(p: PhonePalette, tab: Int, onBack: () -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit) {
+    val title = when (tab) { 0 -> "红果剧场"; 7 -> "发现"; 2 -> "排行榜"; 3, 4 -> "追剧"; 1 -> "搜索"; else -> "我的" }
+    Row(Modifier.fillMaxWidth().background(p.surface).statusBarsPadding().padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        if (tab == 1 || tab == 2) {
+            Text("‹", fontSize = 29.sp, color = p.text, modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp))
+        } else {
+            Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(p.accent), contentAlignment = Alignment.Center) {
+                Text("果", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            }
+            Spacer(Modifier.width(10.dp))
         }
-        Spacer(Modifier.width(10.dp))
-        Text("红果剧场", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = p.text, modifier = Modifier.weight(1f))
-        Text("刷新", color = p.muted, modifier = Modifier.clickable(onClick = onRefresh).padding(10.dp))
-        Text("⌕", fontSize = 27.sp, color = p.text, modifier = Modifier.clickable(onClick = onSearch).padding(horizontal = 8.dp))
+        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = p.text, modifier = Modifier.weight(1f))
+        if (tab != 1) {
+            Text("刷新", color = p.muted, modifier = Modifier.clickable(onClick = onRefresh).padding(horizontal = 8.dp, vertical = 10.dp))
+            Text("⌕", fontSize = 27.sp, color = p.text, modifier = Modifier.clickable(onClick = onSearch).padding(horizontal = 8.dp))
+        }
     }
 }
 
 @Composable
 private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (Int) -> Unit) {
-    val active = when (tab) { 7 -> 7; 3, 4 -> 3; 6, 5 -> 6; else -> 0 }
+    val active = when (tab) { 7 -> 7; 2 -> 2; 3, 4 -> 3; 6, 5 -> 6; else -> 0 }
     Row(Modifier.fillMaxWidth().background(p.surface).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
-        listOf(0 to "首页", 7 to (if (style == "immersive") "剧场" else "发现"), 3 to (if (style == "immersive") "追剧" else "片单"), 6 to "我的").forEach { (id, label) ->
+        listOf(0 to "首页", 7 to (if (style == "immersive") "剧场" else "发现"), 2 to "排行", 3 to (if (style == "immersive") "追剧" else "片单"), 6 to "我的").forEach { (id, label) ->
             Column(Modifier.clip(RoundedCornerShape(18.dp)).clickable { onSelect(id) }
                 .background(if (active == id) p.accent.copy(alpha = 0.12f) else Color.Transparent)
                 .padding(horizontal = 18.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -652,6 +660,15 @@ private fun PhoneMinePage(palette: PhonePalette, style: String, themeMode: Strin
                     .clickable { onTheme(key) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(label, color = palette.text, modifier = Modifier.weight(1f))
                     if (style == key) Text("✓", color = palette.accent)
+                }
+            }
+        }
+        item { Text("明暗模式", color = palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 22.dp, bottom = 10.dp)) }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                listOf("default" to "主题默认", "system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (key, label) ->
+                    PhoneAction(label, if (themeMode == key) palette.accent else palette.card,
+                        if (themeMode == key) Color.White else palette.text) { onMode(key) }
                 }
             }
         }
