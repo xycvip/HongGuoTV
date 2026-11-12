@@ -33,7 +33,7 @@ jobs:
       - name: 检出红果TV源码
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: 配置Java环境
