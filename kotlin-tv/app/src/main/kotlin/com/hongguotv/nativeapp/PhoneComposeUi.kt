@@ -1328,6 +1328,7 @@ private fun PhoneError(message: String, p: PhonePalette) {
     Text(message, color = p.muted, fontSize = 12.sp, modifier = Modifier.padding(18.dp))
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PhonePlayerOverlay(activity: MainActivity) {
     val state = activity.phoneUiState
