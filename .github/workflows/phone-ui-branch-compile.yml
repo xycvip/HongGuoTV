@@ -14,8 +14,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
       - name: Compile debug APK
         working-directory: kotlin-tv
         run: |
