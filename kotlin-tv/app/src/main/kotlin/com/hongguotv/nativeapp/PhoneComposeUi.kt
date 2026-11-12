@@ -1413,6 +1413,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var autoNext by remember { mutableStateOf(activity.library.autoNext) }
     var danmakuEnabled by remember { mutableStateOf(activity.library.danmaku) }
     var fastForwardHeld by remember { mutableStateOf(false) }
+    var seekDragTarget by remember { mutableStateOf<Long?>(null) }
+    var seekDragActive by remember { mutableStateOf(false) }
     var scrubbing by remember { mutableStateOf(false) }
     var interactionTick by remember { mutableIntStateOf(0) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
@@ -1446,6 +1448,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             autoNext = activity.library.autoNext
             danmakuEnabled = activity.library.danmaku
             fastForwardHeld = activity.ffActive
+            seekDragTarget = activity.touchSeekTarget
+            seekDragActive = activity.touchSeekGesture
             delay(300)
         }
     }
@@ -1467,6 +1471,17 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
         if (fastForwardHeld) Text("2× 临时加速中", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 74.dp).clip(RoundedCornerShape(20.dp))
                 .background(Color(0x99000000)).padding(horizontal = 14.dp, vertical = 8.dp))
+        if (seekDragActive && seekDragTarget != null) {
+            val target = seekDragTarget!!.coerceAtLeast(0L)
+            val direction = if (target >= position) "快进" else "快退"
+            Column(Modifier.align(Alignment.Center).clip(RoundedCornerShape(14.dp))
+                .background(Color(0xCC171717)).padding(horizontal = 22.dp, vertical = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(direction, color = Color.White.copy(alpha = 0.82f), fontSize = 12.sp)
+                Text(phoneTime(target), color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                Text("目标播放位置", color = Color.White.copy(alpha = 0.65f), fontSize = 10.sp)
+            }
+        }
         if ((!ready || buffering) && !failed) CircularProgressIndicator(Modifier.align(Alignment.Center).size(34.dp),
             color = Color.White, strokeWidth = 2.dp)
         if (!playing && ready && !controlsVisible) Text("▶", color = Color.White.copy(alpha = 0.82f), fontSize = 52.sp,
