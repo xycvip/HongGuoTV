@@ -53,8 +53,14 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
         tab=targetTab; val saved=tabState[targetTab]; page=saved?.page ?: 1; catalog=saved?.items ?: emptyList(); hasMore=saved?.hasMore ?: false; ranking=saved?.ranking; catalogFocus=tabFocus[targetTab].orEmpty()
         rankBoard=saved?.board ?: rankBoard; genre=saved?.genre ?: genre
         aiCatalog=false; aiGenre=null
-        if(targetTab==0) {
-            // 点击首页后刷新内容，但重建页面时焦点固定恢复到“首页”导航项。
+        if(isPhoneDevice && !phoneUiState.useLegacyPage) {
+            // 手机端导航由 Compose 状态驱动；不能走 TV 主页 refreshHomePending 的早退分支，
+            // 否则 tab 已改变但 Compose 页面没有收到更新，底部“首页”会表现为点击无反应。
+            phoneUiState.tab=targetTab
+            showPhoneComposeCatalog()
+            if(targetTab==0 && !apiStatusCheckStarted) main.post { runAutomaticApiChecks() }
+        } else if(targetTab==0) {
+            // TV 端沿用原有首页刷新和焦点恢复逻辑。
             refreshAllHome(focusNav=true)
             if(!apiStatusCheckStarted) main.post { runAutomaticApiChecks() }
         } else {
