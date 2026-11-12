@@ -334,6 +334,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onSelect = { openPhoneDetail(activity, it) },
                                     onRecentSelect = { activity.openDetail(it, resume = true) },
                                     onSearch = { activity.switchTab(1) }, onRank = { activity.switchTab(2) },
+                                    onRefresh = { homePage = 1; homeLoadingMore = false; refresh++ },
                                     onMore = { activity.switchTab(7) })
                                 1 -> PhoneSearchPage(searchText, { searchText = it },
                                     { pageNumber = 1; pageItems = emptyList(); submittedQuery = searchText.trim(); if (submittedQuery.isNotBlank()) activity.library.rememberSearch(submittedQuery, ContentType.SHORT); refresh++ },
@@ -432,7 +433,8 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
     recent: List<Series>, updates: List<Series>, later: List<Series>, p: PhonePalette, style: String,
     loading: Boolean, error: String?, hasMore: Boolean, loadingMore: Boolean, onLoadMore: () -> Unit,
     onType: (ContentType) -> Unit, onSelect: (Series) -> Unit,
-    onRecentSelect: (Series) -> Unit, onSearch: () -> Unit, onRank: () -> Unit, onMore: () -> Unit) {
+    onRecentSelect: (Series) -> Unit, onSearch: () -> Unit, onRank: () -> Unit,
+    onRefresh: () -> Unit, onMore: () -> Unit) {
     val items = when (type) { ContentType.COMIC -> comic; ContentType.AI -> ai; else -> short }
     val homeListState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(homeListState, hasMore, loadingMore, type, items.size) {
@@ -444,7 +446,7 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
             item {
                 Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text("刷新", color = Color.White, modifier = Modifier.clickable(onClick = onMore).padding(9.dp))
+                    Text("刷新", color = Color.White, modifier = Modifier.clickable(onClick = onRefresh).padding(9.dp))
                     Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
                         listOf(ContentType.SHORT to "热度", ContentType.COMIC to "漫剧", ContentType.AI to "AI剧").forEach { (value, label) ->
                             Text(label, color = if (type == value) Color.White else Color(0xFFAAAAAA),
