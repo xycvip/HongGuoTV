@@ -987,6 +987,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
     val data = activity.detail
+    var favorite by remember(data?.series?.id) { mutableStateOf(data?.series?.let { activity.library.favorite(it.id) } == true) }
+    val landscape = activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val controlsVisible = state.playerControlsVisible
 
     LaunchedEffect(Unit) {
@@ -1019,12 +1021,16 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             Column(Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     PhoneAction("‹", Color(0x55000000), Color.White) { activity.returnToDetail(true) }
-                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                        Text(data?.series?.title.orEmpty(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        Text("第 " + (activity.episodeIndex + 1) + " 集 / 共 " + (data?.episodes?.size ?: 0) + " 集", color = Color(0xFFCCCCCC), fontSize = 11.sp)
+                    Column(Modifier.weight(1f).padding(start = 12.dp).clickable { activity.returnToDetail(true) }) {
+                        Text("第 " + (activity.episodeIndex + 1) + " 集 / 共 " + (data?.episodes?.size ?: 0) + " 集",
+                            color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         if (!ready || failed || buffering) Text(if (failed) playbackMessage.ifBlank { "播放失败" } else if (buffering) "缓冲中…" else "正在获取播放地址…",
                             color = if (failed) Color(0xFFFFA27B) else Color(0xFFCCCCCC), fontSize = 11.sp)
                     }
+                    PhoneAction(if (favorite) "已收藏" else "收藏", Color(0x55000000), Color.White) {
+                        data?.series?.let { favorite = activity.library.toggle(it) }
+                    }
+                    Spacer(Modifier.width(6.dp))
                     PhoneAction("选集", Color(0x55000000), Color.White) { showEpisodes = true }
                 }
                 Spacer(Modifier.weight(1f))
@@ -1043,6 +1049,16 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     }
                 }
                 Spacer(Modifier.weight(1f))
+                if (!landscape) {
+                    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(data?.series?.title.orEmpty(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                                .clickable { activity.returnToDetail(true) })
+                        PhoneAction(if (favorite) "★ 已收藏" else "☆ 收藏", Color(0x55000000), Color.White) {
+                            data?.series?.let { favorite = activity.library.toggle(it) }
+                        }
+                    }
+                }
                 if (duration > 0L) {
                     Slider(value = if (scrubbing) scrubValue else (position.toFloat() / duration).coerceIn(0f, 1f),
                         onValueChange = { scrubValue = it; scrubbing = true },
@@ -1098,7 +1114,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 showSettings = false
                 activity.showSleepPicker(android.widget.TextView(activity))
             }.padding(12.dp))
-            Text("弹幕：点击切换", modifier = Modifier.fillMaxWidth().clickable {
+            Text("弹幕：" + if (activity.library.danmaku) "开启" else "关闭", modifier = Modifier.fillMaxWidth().clickable {
                 activity.toggleSeriesDanmaku(data?.series?.id.orEmpty())
             }.padding(12.dp))
             Text("跳过片头", modifier = Modifier.fillMaxWidth().clickable {
