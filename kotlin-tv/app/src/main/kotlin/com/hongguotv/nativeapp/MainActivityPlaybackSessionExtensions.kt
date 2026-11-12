@@ -20,6 +20,8 @@ internal fun MainActivity.closeActiveVideo() {
     }
 
     internal fun MainActivity.releasePlayer(resetOrientation: Boolean = true) {
+        phoneUiState.playerHost?.let { if (it.parent === root) root.removeView(it) }
+        phoneUiState.playerControlsVisible=false
         commentGeneration++
         commentListScope?.cancel(); commentListScope=null
         commentPanel?.let { if(it.parent===root) root.removeView(it) }
