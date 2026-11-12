@@ -310,6 +310,8 @@ private fun PhoneComposeApp(activity: MainActivity) {
                     PhoneDetailPage(detail, detailLoading, error, palette, style,
                         resumeIndex = detail?.let { d -> activity.library.progress(d.series.id)?.let { d.episodes.indexOf(it.episodeId) }?.takeIf { it >= 0 } },
                         isFavorite = detail?.let { d -> activity.library.favorites().any { it.id == d.series.id } } == true,
+                        isLater = detail?.let { d -> activity.library.queued(d.series.id) } == true,
+                        onLater = { item -> activity.library.toggleLater(item); refresh++ },
                         onResume = {
                             val d = detail
                             val progress = d?.let { activity.library.progress(it.series.id) }
@@ -957,7 +959,8 @@ private fun PhonePoster(item: Series, p: PhonePalette, modifier: Modifier, onSel
 
 @Composable
 private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, palette: PhonePalette, style: String,
-    resumeIndex: Int?, isFavorite: Boolean, onResume: () -> Unit, onRelated: (Series) -> Unit,
+    resumeIndex: Int?, isFavorite: Boolean, isLater: Boolean, onLater: (Series) -> Unit,
+    onResume: () -> Unit, onRelated: (Series) -> Unit,
     onBack: () -> Unit, onPlay: (Int) -> Unit, onFavorite: (Series) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().background(palette.surface).statusBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp),
@@ -984,7 +987,9 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                                     color = Color(0xFFDDDDDD), fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
                                 Text(data.series.description, color = Color(0xFFE5E5E5), fontSize = 13.sp,
                                     maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 9.dp))
-                                PhoneDetailActions(resumeIndex, isFavorite, palette, onResume, { onPlay(0) }) { onFavorite(data.series) }
+                                PhoneDetailActions(resumeIndex, isFavorite, isLater, palette, onResume, { onPlay(0) }, { onFavorite(data.series) }) {
+                                onLater(data.series)
+                            }
                             }
                         }
                         "cards" -> Column(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(22.dp))
@@ -1064,13 +1069,14 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
 }
 
 @Composable
-private fun PhoneDetailActions(resumeIndex: Int?, isFavorite: Boolean, p: PhonePalette,
-    onResume: () -> Unit, onPlay: () -> Unit, onFavorite: () -> Unit) {
+private fun PhoneDetailActions(resumeIndex: Int?, isFavorite: Boolean, isLater: Boolean, p: PhonePalette,
+    onResume: () -> Unit, onPlay: () -> Unit, onFavorite: () -> Unit, onLater: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         if (resumeIndex != null) PhoneAction("继续观看", p.accent, Color.White, onResume)
         PhoneAction("▶ 播放", if (resumeIndex == null) p.accent else p.card,
             if (resumeIndex == null) Color.White else p.text, onPlay)
         PhoneAction(if (isFavorite) "已收藏" else "收藏", p.card, p.text, onFavorite)
+        PhoneAction(if (isLater) "已稍后看" else "稍后看", p.card, p.text, onLater)
     }
 }
 
