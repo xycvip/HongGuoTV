@@ -1387,6 +1387,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                 .background(Color(0x99000000)).padding(horizontal = 14.dp, vertical = 8.dp))
         if ((!ready || buffering) && !failed) CircularProgressIndicator(Modifier.align(Alignment.Center).size(34.dp),
             color = Color.White, strokeWidth = 2.dp)
+        if (!playing && ready && !controlsVisible) Text("▶", color = Color.White.copy(alpha = 0.82f), fontSize = 52.sp,
+            modifier = Modifier.align(Alignment.Center))
         if (controlsVisible) {
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
                 0f to Color(0x99000000), 0.22f to Color.Transparent, 0.68f to Color.Transparent, 1f to Color(0xCC000000)
