@@ -19,6 +19,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -287,6 +290,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                 1 -> PhoneSearchPage(searchText, { searchText = it },
                                     { pageNumber = 1; pageItems = emptyList(); submittedQuery = searchText.trim(); if (submittedQuery.isNotBlank()) activity.library.rememberSearch(submittedQuery, ContentType.SHORT); refresh++ },
                                     suggestions, { word -> pageNumber = 1; pageItems = emptyList(); searchText = word; submittedQuery = word; activity.library.rememberSearch(word, ContentType.SHORT); refresh++ },
+                                    activity.library.searches(), shortItems.take(8), { activity.library.clearSearches(); refresh++ },
                                     pageItems, loading, error, palette, hasMore, loadingMore, { if (hasMore && !loadingMore) { loadingMore = true; pageNumber++ } },
                                     { openPhoneDetail(activity, it) })
                                 2 -> PhoneRankPage(pageItems, rankBoard, loading, error, palette, hasMore, loadingMore,
@@ -605,41 +609,89 @@ private fun PhoneGridPage(title: String, items: List<Series>, loading: Boolean, 
 
 @Composable
 private fun PhoneSearchPage(text: String, onText: (String) -> Unit, onSearch: () -> Unit,
-    suggestions: List<String>, onSuggestion: (String) -> Unit, results: List<Series>,
-    loading: Boolean, error: String?, p: PhonePalette, hasMore: Boolean, loadingMore: Boolean,
-    onLoadMore: () -> Unit, onSelect: (Series) -> Unit) {
-    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-    LaunchedEffect(gridState, hasMore, loadingMore, results.size) {
-        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to gridState.layoutInfo.totalItemsCount }
+    suggestions: List<String>, onSuggestion: (String) -> Unit, recent: List<RecentSearch>, hot: List<Series>,
+    onClearRecent: () -> Unit, results: List<Series>, loading: Boolean, error: String?, p: PhonePalette,
+    hasMore: Boolean, loadingMore: Boolean, onLoadMore: () -> Unit, onSelect: (Series) -> Unit) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(listState, hasMore, loadingMore, results.size) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to listState.layoutInfo.totalItemsCount }
             .collect { (last, total) -> if (last != null && hasMore && !loadingMore && total > 0 && last >= total - 4) onLoadMore() }
     }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text("搜索短剧", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp))
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(p.card).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            BasicTextField(text, onText, Modifier.weight(1f).padding(10.dp), singleLine = true,
-                textStyle = LocalTextStyle.current.copy(color = p.text, fontSize = 15.sp),
-                decorationBox = { inner -> if (text.isEmpty()) Text("输入剧名或关键词", color = p.muted); inner() })
-            Text("搜索", color = Color.White, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(p.accent)
-                .clickable(onClick = onSearch).padding(horizontal = 18.dp, vertical = 10.dp))
+        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            BasicTextField(value = text, onValueChange = onText, modifier = Modifier.weight(1f)
+                .clip(RoundedCornerShape(16.dp)).background(p.card).padding(horizontal = 14.dp, vertical = 13.dp),
+                singleLine = true, textStyle = LocalTextStyle.current.copy(color = p.text, fontSize = 15.sp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                decorationBox = { inner -> if (text.isEmpty()) Text("搜索剧名或关键词", color = p.muted); inner() })
+            Spacer(Modifier.width(8.dp))
+            PhoneAction("搜索", p.accent, Color.White, onSearch)
         }
         if (suggestions.isNotEmpty() && text.isNotBlank() && results.isEmpty()) {
-            LazyRow(contentPadding = PaddingValues(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(suggestions, key = { it }) { word ->
-                    Text(word, color = p.text, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(14.dp))
-                        .background(p.card).clickable { onSuggestion(word) }.padding(horizontal = 12.dp, vertical = 8.dp))
+            Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp)).background(p.card)) {
+                suggestions.take(8).forEach { word ->
+                    Text("⌕  " + word, color = p.text, fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth().clickable { onSuggestion(word) }.padding(horizontal = 14.dp, vertical = 10.dp))
                 }
             }
         }
-        LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(132.dp), modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            items(results, key = { it.id }) { PhonePoster(it, p, Modifier.fillMaxWidth(), onSelect) }
-            if (loading) item { PhoneLoading(p) }
-            if (error != null) item { PhoneError(error, p) }
+        if (text.isBlank() && results.isEmpty()) {
+            if (recent.isNotEmpty()) {
+                Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("最近搜索", color = p.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("清空", color = p.muted, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onClearRecent).padding(8.dp))
+                }
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(recent, key = { it.query }) { item ->
+                        Text(item.query, color = p.text, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(18.dp))
+                            .background(p.card).clickable { onSuggestion(item.query) }.padding(horizontal = 12.dp, vertical = 8.dp))
+                    }
+                }
+            }
+            if (hot.isNotEmpty()) {
+                Text("热门推荐", color = p.text, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(hot, key = { it.id }) { item ->
+                        Column(Modifier.width(104.dp).clickable { onSelect(item) }) {
+                            AsyncImage(model = item.cover, contentDescription = item.title,
+                                modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp)))
+                            Text(item.title, color = p.text, fontSize = 12.sp, maxLines = 2,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
+                        }
+                    }
+                }
+            }
+        }
+        if (text.isNotBlank() && results.isNotEmpty()) {
+            Text("搜索结果 · " + results.size + " 部", color = p.text, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(vertical = 9.dp))
+        }
+        if (loading) PhoneLoading(p)
+        if (error != null) PhoneError(error, p)
+        LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(results, key = { it.id }) { item ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onSelect(item) }.padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(model = item.cover, contentDescription = item.title,
+                        modifier = Modifier.width(82.dp).height(110.dp).clip(RoundedCornerShape(10.dp)))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(item.title, color = p.text, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                            overflow = TextOverflow.Ellipsis)
+                        Text(item.tags, color = p.muted, fontSize = 12.sp)
+                        Text(item.description, color = p.muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text("查看选集 ›", color = p.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            if (loadingMore) item { PhoneLoading(p) }
+            if (results.isNotEmpty() && !hasMore && !loading && !loadingMore)
+                item { Text("已经到底了", color = p.muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(14.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
         }
     }
 }
-
 @Composable
 private fun PhonePoster(item: Series, p: PhonePalette, modifier: Modifier, onSelect: (Series) -> Unit) {
     Column(modifier.clip(RoundedCornerShape(14.dp)).clickable { onSelect(item) }) {
