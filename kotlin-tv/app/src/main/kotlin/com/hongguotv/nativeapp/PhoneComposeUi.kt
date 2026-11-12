@@ -149,6 +149,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
     var homePage by remember { mutableIntStateOf(1) }
     var homeHasMore by remember { mutableStateOf(true) }
     var homeLoadingMore by remember { mutableStateOf(false) }
+    var forceHomeRefresh by remember { mutableStateOf(false) }
     var pageNumber by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
     var loadingMore by remember { mutableStateOf(false) }
@@ -182,7 +183,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
         suggestions = withContext(Dispatchers.IO) { runCatching { activity.repository.suggest(searchText.trim()) }.getOrDefault(emptyList()) }
     }
 
-    LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections, rankBoard, pageNumber, homePage, homeType) {
+    LaunchedEffect(state.tab, state.catalogRevision, submittedQuery, refresh, theaterType, theaterSelections, rankBoard, pageNumber, homePage, homeType, forceHomeRefresh) {
         if (state.page == PhonePage.DETAIL) return@LaunchedEffect
         loading = true
         error = null
@@ -203,9 +204,12 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                 else -> Triple(page.items, emptyList(), emptyList())
                             }
                         } else {
-                            val shortPage = activity.library.cachedHome(ContentType.SHORT) ?: activity.repository.home(1, ContentType.SHORT)
-                            val comicPage = activity.library.cachedHome(ContentType.COMIC) ?: activity.repository.home(1, ContentType.COMIC)
-                            val aiPage = activity.library.cachedHome(ContentType.AI) ?: activity.repository.ranking(RankBoard.AI, 1)
+                            val shortPage = if (forceHomeRefresh) activity.repository.home(1, ContentType.SHORT)
+                                else activity.library.cachedHome(ContentType.SHORT) ?: activity.repository.home(1, ContentType.SHORT)
+                            val comicPage = if (forceHomeRefresh) activity.repository.home(1, ContentType.COMIC)
+                                else activity.library.cachedHome(ContentType.COMIC) ?: activity.repository.home(1, ContentType.COMIC)
+                            val aiPage = if (forceHomeRefresh) activity.repository.ranking(RankBoard.AI, 1)
+                                else activity.library.cachedHome(ContentType.AI) ?: activity.repository.ranking(RankBoard.AI, 1)
                             fetchedHasMore = when (homeType) {
                                 ContentType.COMIC -> comicPage.hasMore
                                 ContentType.AI -> aiPage.hasMore
@@ -258,6 +262,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                     aiItems = resultRows.third
                 }
                 homeLoadingMore = false
+                forceHomeRefresh = false
             } else {
                 shortItems = resultRows.first
                 comicItems = resultRows.second
@@ -338,7 +343,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         onMode = { next -> themeMode = next; preferences.edit().putString("phone_ui_theme_mode", next).apply() })
                 } else {
                     Column(Modifier.fillMaxSize()) {
-                        if (state.tab == 0 && style == "warm") PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { homePage = 1; homeLoadingMore = false; pageNumber = 1; pageItems = emptyList(); refresh++ })
+                        if (state.tab == 0 && style == "warm") PhoneTopBar(palette, state.tab, onBack = { activity.switchTab(0) }, onRank = { activity.switchTab(2) }, onSearch = { activity.switchTab(1) }, onRefresh = { forceHomeRefresh = true; homePage = 1; homeLoadingMore = false; pageNumber = 1; pageItems = emptyList(); refresh++ })
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems, homeType,
@@ -355,7 +360,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onPlay = { activity.openDetail(it, resume = true) },
                                     onRecentSelect = { activity.openDetail(it, resume = true) },
                                     onSearch = { activity.switchTab(1) }, onRank = { activity.switchTab(2) },
-                                    onRefresh = { homePage = 1; homeLoadingMore = false; refresh++ },
+                                    onRefresh = { forceHomeRefresh = true; homePage = 1; homeLoadingMore = false; refresh++ },
                                     onMore = { activity.switchTab(7) })
                                 1 -> PhoneSearchPage(searchText, { searchText = it },
                                     { pageNumber = 1; pageItems = emptyList(); submittedQuery = searchText.trim(); if (submittedQuery.isNotBlank()) activity.library.rememberSearch(submittedQuery, ContentType.SHORT); refresh++ },
