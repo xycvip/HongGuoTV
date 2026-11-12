@@ -370,7 +370,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onRemove = { item ->
                                         if (state.tab == 3) activity.library.toggle(item) else activity.library.removeHistory(item.id)
                                         refresh++
-                                    }, progressLabel = { item -> activity.library.progress(item.id)?.let { "第" + it.episodeIndex + "集 · " + phoneTime(it.position) }.orEmpty() },
+                                    }, progressLabel = { item -> activity.library.progress(item.id)?.let { "第" + (it.episodeIndex + 1) + "集 · " + phoneTime(it.position) }.orEmpty() },
                                     onRefresh = { refresh++ })
                                 else -> PhoneMinePage(palette, style, themeMode,
                                     favoriteCount = activity.library.favorites().size,
