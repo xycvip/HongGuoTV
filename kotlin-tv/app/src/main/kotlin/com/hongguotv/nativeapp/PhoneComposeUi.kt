@@ -589,7 +589,8 @@ private fun PhoneImmersiveCard(
         Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 17.dp, end = 12.dp, bottom = 24.dp),
             verticalAlignment = Alignment.Bottom) {
             Column(Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (item.badge.isNotBlank()) PhoneAction(item.badge, p.accent, Color.White) {}
+                if (item.badge.isNotBlank()) Text(item.badge, color = Color.White, fontSize = 11.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(p.accent).padding(horizontal = 7.dp, vertical = 4.dp))
                 Text(item.title, color = Color.White, fontSize = 22.sp, lineHeight = 29.sp,
                     fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(item.tags,
@@ -1046,7 +1047,8 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(
                                 Color(0x22000000), Color(0x44000000), Color(0xEE000000)))))
                             Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 22.dp)) {
-                                if (data.series.badge.isNotBlank()) PhoneAction(data.series.badge, palette.accent, Color.White) {}
+                                if (data.series.badge.isNotBlank()) Text(data.series.badge, color = Color.White, fontSize = 11.sp,
+                                    modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(palette.accent).padding(horizontal = 7.dp, vertical = 4.dp))
                                 Text(data.series.title, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black)
                                 Text(data.episodes.size.toString() + " 集 · " + data.series.tags,
                                     color = Color(0xFFDDDDDD), fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
