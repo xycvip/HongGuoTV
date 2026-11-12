@@ -520,7 +520,15 @@ class MainActivity: Activity() {
                 }
             },
             startLongPressSpeed = { startPhoneTouchFastForward() },
-            stopLongPressSpeed = { stopPhoneTouchFastForward() }
+            stopLongPressSpeed = { stopPhoneTouchFastForward() },
+            isPhoneComposeControl = { event ->
+                if (!phoneUiState.playerControlsVisible || phoneUiState.playerHost?.parent !== root) false
+                else {
+                    val x = event.x / resources.displayMetrics.widthPixels.toFloat().coerceAtLeast(1f)
+                    val y = event.y / resources.displayMetrics.heightPixels.toFloat().coerceAtLeast(1f)
+                    y <= .18f || y >= .78f || (y in .36f.. .68f && x in .16f.. .84f)
+                }
+            }
         )
     }
     /**
