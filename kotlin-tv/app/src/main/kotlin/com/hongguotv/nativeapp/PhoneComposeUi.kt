@@ -272,8 +272,13 @@ private fun PhoneComposeApp(activity: MainActivity) {
                         Box(Modifier.weight(1f)) {
                             when (state.tab) {
                                 0 -> PhoneHomePage(shortItems, comicItems, aiItems,
-                                    activity.library.history().take(8).map { it.series }, palette, style, loading, error,
-                                    onSelect = { openPhoneDetail(activity, it) }, onMore = { activity.switchTab(7) })
+                                    activity.library.history().take(8).map { it.series },
+                                    activity.library.favorites().filter { activity.library.favoriteUpdate(it.id)?.hasUpdate == true }.take(8),
+                                    activity.library.later().take(10),
+                                    palette, style, loading, error,
+                                    onSelect = { openPhoneDetail(activity, it) },
+                                    onRecentSelect = { activity.openDetail(it, resume = true) },
+                                    onMore = { activity.switchTab(7) })
                                 1 -> PhoneSearchPage(searchText, { searchText = it },
                                     { pageNumber = 1; pageItems = emptyList(); submittedQuery = searchText.trim(); if (submittedQuery.isNotBlank()) activity.library.rememberSearch(submittedQuery, ContentType.SHORT); refresh++ },
                                     suggestions, { word -> pageNumber = 1; pageItems = emptyList(); searchText = word; submittedQuery = word; activity.library.rememberSearch(word, ContentType.SHORT); refresh++ },
@@ -349,7 +354,8 @@ private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (
 
 @Composable
 private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Series>, recent: List<Series>,
-    p: PhonePalette, style: String, loading: Boolean, error: String?, onSelect: (Series) -> Unit, onMore: () -> Unit) {
+    updates: List<Series>, later: List<Series>, p: PhonePalette, style: String, loading: Boolean, error: String?,
+    onSelect: (Series) -> Unit, onRecentSelect: (Series) -> Unit, onMore: () -> Unit) {
     when (style) {
         "immersive" -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
             items((short + comic + ai).distinctBy { it.id }, key = { it.id }) { item -> PhoneImmersiveCard(item, p, onSelect) }
@@ -363,7 +369,9 @@ private fun PhoneHomePage(short: List<Series>, comic: List<Series>, ai: List<Ser
             if (error != null) item { PhoneError(error, p) }
         }
         else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 18.dp)) {
-            if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onSelect) }
+            if (recent.isNotEmpty()) item { PhoneShelf("接着看", recent, p, onRecentSelect) }
+            if (updates.isNotEmpty()) item { PhoneShelf("收藏有更新", updates, p, onSelect) }
+            if (later.isNotEmpty()) item { PhoneShelf("稍后看", later, p, onSelect) }
             item { PhoneShelf("热门短剧", short, p, onSelect, onMore) }
             item { PhoneShelf("热门漫剧", comic, p, onSelect, onMore) }
             item { PhoneShelf("AI 剧", ai, p, onSelect, onMore) }
