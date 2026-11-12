@@ -827,6 +827,13 @@ class MainActivity: Activity() {
 
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed() {
+        if (isPhoneDevice && phoneUiState.page == PhonePage.DETAIL && screen != "player") {
+            phoneUiState.page = PhonePage.CATALOG
+            phoneUiState.selectedSeries = null
+            phoneUiState.detail = null
+            showPhoneComposeCatalog()
+            return
+        }
         if(pushPlaybackCandidateDialog?.isShowing==true) {
             pushPlaybackCandidateDialog?.dismiss()
             pushPlaybackCandidateDialog=null
