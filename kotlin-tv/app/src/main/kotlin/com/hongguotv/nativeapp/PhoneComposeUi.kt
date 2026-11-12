@@ -688,6 +688,16 @@ private fun PhoneError(message: String, p: PhonePalette) {
 @Composable
 private fun PhonePlayerOverlay(activity: MainActivity) {
     val state = activity.phoneUiState
+    val playerPrefs = remember { activity.getSharedPreferences("phone-ui-preferences", android.content.Context.MODE_PRIVATE) }
+    val playerStyle = remember { playerPrefs.getString(PhoneThemeKey, "warm") ?: "warm" }
+    val playerMode = remember { playerPrefs.getString("phone_ui_theme_mode", "default") ?: "default" }
+    val playerDark = when (playerMode) {
+        "light" -> false
+        "dark" -> true
+        "system" -> isSystemInDarkTheme()
+        else -> playerStyle == "immersive"
+    }
+    val playerPalette = remember(playerStyle, playerDark) { phonePalette(playerStyle, playerDark) }
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(false) }
@@ -762,7 +772,7 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                     Slider(value = if (scrubbing) scrubValue else (position.toFloat() / duration).coerceIn(0f, 1f),
                         onValueChange = { scrubValue = it; scrubbing = true },
                         onValueChangeFinished = { activity.seekTo((duration * scrubValue).toLong()); scrubbing = false },
-                        colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color(0xFFFF792A), inactiveTrackColor = Color(0x66FFFFFF)),
+                        colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = playerPalette.accent, inactiveTrackColor = Color(0x66FFFFFF)),
                         modifier = Modifier.fillMaxWidth().height(28.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
