@@ -993,7 +993,10 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
         if (loading) PhoneLoading(palette)
         if (error != null) PhoneError(error, palette)
         detail?.let { data ->
-            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 28.dp)) {
+            val detailListState = androidx.compose.foundation.lazy.rememberLazyListState(
+                initialFirstVisibleItemIndex = if (resumeIndex != null) 2 + resumeIndex / 5 else 0)
+            LazyColumn(state = detailListState, modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(bottom = 28.dp)) {
                 item {
                     when (style) {
                         "immersive" -> Box(Modifier.fillMaxWidth().height(390.dp)) {
