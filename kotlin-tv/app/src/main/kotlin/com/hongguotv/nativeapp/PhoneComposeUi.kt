@@ -1498,9 +1498,11 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                         interactionTick++
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                             runCatching {
+                                val format = activity.activeVideoFormat
+                                val (pipWidth, pipHeight) = phonePipRatio(format?.width ?: 0, format?.height ?: 0)
                                 activity.enterPictureInPictureMode(
                                     android.app.PictureInPictureParams.Builder()
-                                        .setAspectRatio(android.util.Rational(9, 16))
+                                        .setAspectRatio(android.util.Rational(pipWidth, pipHeight))
                                         .build()
                                 )
                             }
@@ -1737,6 +1739,16 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
 private fun PhonePlayerSettingRow(label: String, p: PhonePalette, onClick: () -> Unit) {
     Text(label, color = p.text, fontSize = 14.sp,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 13.dp))
+}
+
+private fun phonePipRatio(width: Int, height: Int): Pair<Int, Int> {
+    if (width <= 0 || height <= 0) return 9 to 16
+    val ratio = width.toDouble() / height
+    return when {
+        ratio > 2.39 -> 239 to 100
+        ratio < 1.0 / 2.39 -> 100 to 239
+        else -> width to height
+    }
 }
 
 private fun phoneTime(ms: Long): String {
