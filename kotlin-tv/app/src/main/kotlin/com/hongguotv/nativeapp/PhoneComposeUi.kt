@@ -422,7 +422,9 @@ private fun PhoneBottomBar(tab: Int, p: PhonePalette, style: String, onSelect: (
             Column(Modifier.clip(RoundedCornerShape(18.dp)).clickable { onSelect(id) }
                 .background(if (active == id) p.accent.copy(alpha = 0.12f) else Color.Transparent)
                 .padding(horizontal = 18.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(if (id == active) "●" else "○", color = p.accent, fontSize = 13.sp)
+                val glyph = when (id) { 0 -> "⌂"; 7 -> "◈"; 3 -> "☆"; else -> "♙" }
+                Text(glyph, color = if (id == active) p.accent else p.muted, fontSize = 21.sp,
+                    fontWeight = if (id == active) FontWeight.Bold else FontWeight.Normal)
                 Text(label, color = if (id == active) p.accent else p.muted, fontSize = 11.sp,
                     fontWeight = if (id == active) FontWeight.Bold else FontWeight.Normal)
             }
