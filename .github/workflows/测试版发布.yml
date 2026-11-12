@@ -285,6 +285,7 @@ jobs:
           echo "测试版已发布到本源码仓库 Releases"
 
       - name: 更新下一次测试版版本号
+        if: github.ref == 'refs/heads/main'
         shell: bash
         env:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
