@@ -1548,8 +1548,10 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
     }
     if (landscape && controlsVisible && sidePanel != null) {
         Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.38f)).clickable { sidePanel = null })
         Row(
-            Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(340.dp)
+            Modifier.align(if (sidePanel == "detail") Alignment.CenterStart else Alignment.CenterEnd)
+                .fillMaxHeight().width(if (sidePanel == "detail") 360.dp else 340.dp)
                 .background(Color(0xF21B1B1B)).padding(horizontal = 16.dp, vertical = 18.dp)
         ) {
             Column(Modifier.fillMaxSize()) {
