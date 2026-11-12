@@ -43,6 +43,8 @@ internal class MainActivityTouchGestureController(
     private var touchStartedWithHudVisible = false
     private var lastTapAt = 0L
     private var pendingTapWasHudVisible = false
+    private var pinchStartSpan = 0f
+    private var pinchDecided = false
     private val singleTapRunnable = Runnable {
         if (pendingTapWasHudVisible) hideHud() else { showHud(); showCenterControl() }
         pendingTapWasHudVisible = false
@@ -62,6 +64,27 @@ internal class MainActivityTouchGestureController(
             return dispatchToView(event)
         }
 
+        if (action == MotionEvent.ACTION_POINTER_DOWN && event.pointerCount >= 2) {
+            val dx = event.getX(0) - event.getX(1)
+            val dy = event.getY(0) - event.getY(1)
+            pinchStartSpan = kotlin.math.sqrt(dx * dx + dy * dy)
+            pinchDecided = false
+            main.removeCallbacks(longPressSpeedRunnable)
+            return true
+        }
+        if (event.pointerCount >= 2 && pinchStartSpan > 0f && action == MotionEvent.ACTION_MOVE) {
+            val dx = event.getX(0) - event.getX(1)
+            val dy = event.getY(0) - event.getY(1)
+            val span = kotlin.math.sqrt(dx * dx + dy * dy)
+            val scale = span / pinchStartSpan
+            if (!pinchDecided && scale >= 1.18f) { pinchDecided = true; hideHud() }
+            else if (!pinchDecided && scale <= .85f) { pinchDecided = true; showHud() }
+            return true
+        }
+        if (action == MotionEvent.ACTION_POINTER_UP || action == MotionEvent.ACTION_CANCEL) {
+            pinchStartSpan = 0f
+            pinchDecided = false
+        }
         if(action == MotionEvent.ACTION_DOWN) {
             touchOnCenterControl = isInside(centerControl(), event)
             touchStartedWithHudVisible = hud()?.let { it.visibility == View.VISIBLE && it.isShown } == true
@@ -259,6 +282,8 @@ internal class MainActivityTouchGestureController(
         main.removeCallbacks(longPressSpeedRunnable)
         main.removeCallbacks(singleTapRunnable)
         lastTapAt = 0L
+        pinchStartSpan = 0f
+        pinchDecided = false
         if(longPressSpeedActive) { longPressSpeedActive = false; stopLongPressSpeed() }
         state.touchTracking = false
         state.touchSeekGesture = false
