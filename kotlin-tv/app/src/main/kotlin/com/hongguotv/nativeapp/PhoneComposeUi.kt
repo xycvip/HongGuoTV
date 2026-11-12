@@ -1367,8 +1367,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
             delay(300)
         }
     }
-    LaunchedEffect(controlsVisible, playing, showEpisodes, showSettings, showSpeed) {
-        if (controlsVisible && playing && !showEpisodes && !showSettings && !showSpeed) {
+    LaunchedEffect(controlsVisible, playing, showEpisodes, showFavoriteOptions, showSettings, showSpeed) {
+        if (controlsVisible && playing && !showEpisodes && !showFavoriteOptions && !showSettings && !showSpeed) {
             delay(4500)
             state.playerControlsVisible = false
             activity.hidePlaybackOverlay()
