@@ -190,6 +190,7 @@ internal class MainActivityTouchGestureController(
                 }
                 // 与 OOIUa 一致：先长按进入 2×，再横向拖动才接管为精确 seek。
                 if (longPressSpeedActive && !verticalGesture &&
+                    state.touchStartY >= dp(48) && state.touchStartY <= screenHeightPx() - dp(32) &&
                     kotlin.math.abs(dx) > dp(24) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f
                 ) {
                     val anchor = holdSeekAnchorX
