@@ -78,6 +78,7 @@ class MainActivity: Activity() {
     internal val playbackPipelineState = PlaybackPipelineState()
     internal var playbackRecoveryRouteLocked by playbackPipelineState::playbackRecoveryRouteLocked
     internal val asyncWorkState = AsyncWorkState()
+    internal val phoneUiState = PhoneUiState()
     // Read the active theme dynamically so the settings page can redraw without recreating the Activity.
     internal val isTelevisionDevice: Boolean by lazy {
         packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) ||
