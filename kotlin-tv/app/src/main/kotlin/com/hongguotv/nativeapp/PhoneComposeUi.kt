@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.hongguotv.core.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -275,8 +276,10 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onType = { pageNumber = 1; pageItems = emptyList(); theaterType = it; theaterSelections = emptyMap(); refresh++ },
                                     onFilter = { key, value -> pageNumber = 1; pageItems = emptyList(); theaterSelections = theaterSelections.toMutableMap().apply { if (value.isBlank()) remove(key) else put(key, value) }; refresh++ },
                                     onSelect = { openPhoneDetail(activity, it) })
-                                3 -> PhoneGridPage("我的收藏", pageItems, loading, error, palette, { openPhoneDetail(activity, it) }, { refresh++ })
-                                4 -> PhoneGridPage("最近观看", pageItems, loading, error, palette, { openPhoneDetail(activity, it) }, { refresh++ })
+                                3 -> PhoneGridPage("我的收藏", pageItems, loading, error, palette, false, false, {},
+                                    { openPhoneDetail(activity, it) }, { refresh++ })
+                                4 -> PhoneGridPage("最近观看", pageItems, loading, error, palette, false, false, {},
+                                    { openPhoneDetail(activity, it) }, { refresh++ })
                                 else -> PhoneMinePage(palette, style, { next ->
                                     style = next
                                     activity.getSharedPreferences("phone-ui-preferences", android.content.Context.MODE_PRIVATE).edit().putString(PhoneThemeKey, next).apply()
