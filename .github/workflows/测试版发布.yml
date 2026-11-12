@@ -10,7 +10,7 @@ on:
         type: boolean
         default: true
       source_ref:
-        description: 要构建的源码分支、标签或 commit SHA（手机 UI 移植版请选择 feature/phone-ui-ooiua-fresh）
+        description: 要构建的源码分支或标签（手机 UI 移植版请选择 feature/phone-ui-ooiua-fresh）
         required: true
         type: string
         default: main
