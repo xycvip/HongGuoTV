@@ -849,6 +849,10 @@ class MainActivity: Activity() {
             showPhoneComposeCatalog()
             return
         }
+        if (isPhoneDevice && !phoneUiState.useLegacyPage && screen == "catalog" && phoneUiState.page == PhonePage.CATALOG) {
+            if (tab != 0) switchTab(0) else showExitConfirm()
+            return
+        }
         if(pushPlaybackCandidateDialog?.isShowing==true) {
             pushPlaybackCandidateDialog?.dismiss()
             pushPlaybackCandidateDialog=null
