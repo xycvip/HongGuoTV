@@ -52,6 +52,11 @@ private const val PhoneThemeKey = "phone_ui_theme_style"
 
 internal fun MainActivity.showPhoneComposeCatalog() {
     if (!isPhoneDevice) return
+    screen = "catalog"
+    applyDeviceOrientationPolicy()
+    initialCatalogPending = false
+    restoreStoppedPage = false
+    pendingDetail = null
     phoneUiState.page = PhonePage.CATALOG
     phoneUiState.selectedSeries = null
     phoneUiState.detail = null
@@ -69,6 +74,8 @@ internal fun MainActivity.showPhoneComposeCatalog() {
 
 internal fun MainActivity.showPhoneComposeDetail() {
     if (!isPhoneDevice) return
+    screen = "detail"
+    applyDeviceOrientationPolicy()
     phoneUiState.page = PhonePage.DETAIL
     phoneUiState.selectedSeries = detail?.series ?: phoneUiState.selectedSeries
     phoneUiState.detail = detail
@@ -89,6 +96,7 @@ internal fun MainActivity.installPhonePlayerComposeOverlay() {
     }
     if (host.parent !== root) root.addView(host, android.widget.FrameLayout.LayoutParams(-1, -1))
     host.bringToFront()
+    debugOverlayText?.bringToFront()
     phoneUiState.playerControlsVisible = true
 }
 
