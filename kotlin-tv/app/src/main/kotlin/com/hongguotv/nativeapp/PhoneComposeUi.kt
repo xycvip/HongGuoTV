@@ -1106,6 +1106,8 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
         }
     }
     Box(Modifier.fillMaxSize()) {
+        if ((!ready || buffering) && !failed) CircularProgressIndicator(Modifier.align(Alignment.Center).size(34.dp),
+            color = Color.White, strokeWidth = 2.dp)
         if (controlsVisible) {
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
                 0f to Color(0x99000000), 0.22f to Color.Transparent, 0.68f to Color.Transparent, 1f to Color(0xCC000000)
@@ -1118,6 +1120,9 @@ private fun PhonePlayerOverlay(activity: MainActivity) {
                             color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         if (!ready || failed || buffering) Text(if (failed) playbackMessage.ifBlank { "播放失败" } else if (buffering) "缓冲中…" else "正在获取播放地址…",
                             color = if (failed) Color(0xFFFFA27B) else Color(0xFFCCCCCC), fontSize = 11.sp)
+                        if (failed) PhoneAction("重新播放", Color(0x66C94426), Color.White) {
+                            activity.playEpisode(activity.episodeIndex, activity.retryPosition, activity.retryAutoplay)
+                        }
                     }
                     PhoneAction(if (favorite) "已收藏" else "收藏", Color(0x55000000), Color.White) {
                         data?.series?.let { favorite = activity.library.toggle(it) }
