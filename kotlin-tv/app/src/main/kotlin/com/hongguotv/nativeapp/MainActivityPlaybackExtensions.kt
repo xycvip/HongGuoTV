@@ -54,6 +54,7 @@ import java.util.concurrent.atomic.AtomicLong
         updater.interrupt()
         val data=detail ?: return
         val playbackStarted=android.os.SystemClock.elapsedRealtime()
+        phoneFirstFrameRendered=false
         debugPlaybackStartedAt=playbackStarted; debugPlaybackReadyAt=0L; debugFirstFrameAt=0L
         debugLog("开始播放 index=${index+1} position=$position autoplay=$autoplay recovering=$recovering")
         val selectedIndex=index.coerceIn(0,data.episodes.lastIndex)
@@ -324,6 +325,7 @@ import java.util.concurrent.atomic.AtomicLong
                 override fun onRenderedFirstFrame() {
                     if(active() && firstFrame) {
                         firstFrame=false
+                        phoneFirstFrameRendered=true
                         hideBootSplash()
                         markStartupRecommendationPlaying()
                         // 不在首帧后立即保存：开机推荐必须累计真实播放 30 秒，才允许写入观看历史。
