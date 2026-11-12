@@ -390,6 +390,10 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     }, progressLabel = { item -> activity.library.progress(item.id)?.let { "第" + (it.episodeIndex + 1) + "集 · " + phoneTime(it.position) }.orEmpty() },
                                     onRefresh = { refresh++ })
                                 else -> PhoneMinePage(palette, style, themeMode,
+                                    accountName = activity.cloudAccount.accountLabel,
+                                    accountStatus = if (activity.cloudAccount.signedIn) "红果账号已登录" else "登录后可同步云端记录",
+                                    accountAvatar = activity.cloudAccount.accountAvatarUrl,
+                                    accountRevision = activity.cloudAccount.accountProfileRevision,
                                     favoriteCount = activity.library.favorites().size,
                                     historyCount = activity.library.history().size,
                                     onTheme = { next -> style = next; preferences.edit().putString(PhoneThemeKey, next).apply() },
@@ -1270,6 +1274,7 @@ private fun PhoneSwitchRow(label: String, description: String, checked: Boolean,
 
 @Composable
 private fun PhoneMinePage(palette: PhonePalette, style: String, themeMode: String,
+    accountName: String, accountStatus: String, accountAvatar: String, accountRevision: Long,
     favoriteCount: Int, historyCount: Int,
     onTheme: (String) -> Unit, onMode: (String) -> Unit, onRefresh: () -> Unit,
     onFavorites: () -> Unit, onHistory: () -> Unit, onSettings: () -> Unit, onAccount: () -> Unit) {
@@ -1280,11 +1285,13 @@ private fun PhoneMinePage(palette: PhonePalette, style: String, themeMode: Strin
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(palette.card)
                 .clickable(onClick = onAccount).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(52.dp).clip(CircleShape).background(palette.accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                    Text("果", color = palette.accent, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                    if (accountAvatar.isNotBlank()) AsyncImage(model = accountAvatar, contentDescription = "账号头像",
+                        modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop)
+                    else Text("果", color = palette.accent, fontSize = 24.sp, fontWeight = FontWeight.Black)
                 }
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text("登录红果账号", color = palette.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text("账号登录、云片单与账号管理", color = palette.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                    Text(accountName, color = palette.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(accountStatus, color = palette.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
                 }
                 Text("›", color = palette.muted, fontSize = 24.sp)
             }
