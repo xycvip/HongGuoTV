@@ -361,7 +361,7 @@ private fun PhoneComposeApp(activity: MainActivity) {
                                     onType = { pageNumber = 1; pageItems = emptyList(); theaterType = it; theaterSelections = emptyMap(); refresh++ },
                                     onFilter = { key, value -> pageNumber = 1; pageItems = emptyList(); theaterSelections = theaterSelections.toMutableMap().apply { if (value.isBlank()) remove(key) else put(key, value) }; refresh++ },
                                     onSelect = { openPhoneDetail(activity, it) })
-                                3, 4 -> PhoneLibraryPage(state.tab, pageItems, loading, error, palette,
+                                3, 4 -> PhoneLibraryPage(state.tab, pageItems, loading, error, palette, style,
                                     onTab = { activity.switchTab(it) },
                                     onSelect = { openPhoneDetail(activity, it) },
                                     onRemove = { item ->
@@ -681,13 +681,17 @@ private fun PhoneTheaterPage(
 }
 @Composable
 private fun PhoneLibraryPage(
-    tab: Int, items: List<Series>, loading: Boolean, error: String?, p: PhonePalette,
+    tab: Int, items: List<Series>, loading: Boolean, error: String?, p: PhonePalette, style: String,
     onTab: (Int) -> Unit, onSelect: (Series) -> Unit, onRemove: (Series) -> Unit,
     progressLabel: (Series) -> String, onRefresh: () -> Unit
 ) {
+    var managing by remember(tab) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("追剧", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(if (style == "immersive") "追剧" else "片单", color = p.text, fontSize = 22.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (items.isNotEmpty()) Text(if (managing) "完成" else "管理", color = p.muted, fontSize = 12.sp,
+                modifier = Modifier.clickable { managing = !managing }.padding(8.dp))
             Text("刷新", color = p.accent, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRefresh).padding(8.dp))
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
