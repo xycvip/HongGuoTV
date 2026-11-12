@@ -1006,7 +1006,9 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                                         maxLines = 7, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
                                 }
                             }
-                            PhoneDetailActions(resumeIndex, isFavorite, palette, onResume, { onPlay(0) }) { onFavorite(data.series) }
+                            PhoneDetailActions(resumeIndex, isFavorite, isLater, palette, onResume, { onPlay(0) }, { onFavorite(data.series) }) {
+                                onLater(data.series)
+                            }
                         }
                         else -> Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.Top) {
                             AsyncImage(model = data.series.cover, contentDescription = data.series.title,
@@ -1018,7 +1020,9 @@ private fun PhoneDetailPage(detail: Detail?, loading: Boolean, error: String?, p
                                     fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                                 Text(data.series.description, color = palette.muted, fontSize = 13.sp, maxLines = 5,
                                     overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
-                                PhoneDetailActions(resumeIndex, isFavorite, palette, onResume, { onPlay(0) }) { onFavorite(data.series) }
+                                PhoneDetailActions(resumeIndex, isFavorite, isLater, palette, onResume, { onPlay(0) }, { onFavorite(data.series) }) {
+                                onLater(data.series)
+                            }
                             }
                         }
                     }
