@@ -58,8 +58,6 @@ internal object ActorRankParser {
                 val name = firstString(base, "user_name", "nickname", "name", "nick_name")
                     .ifBlank { firstString(info, "user_name", "nickname", "name", "nick_name") }
                     .ifBlank { firstString(node, "user_name", "nickname", "name", "nick_name") }
-                    .ifBlank { firstString(info, "user_name", "nickname", "name", "nick_name") }
-                    .ifBlank { firstString(node, "user_name", "nickname", "name", "nick_name") }
                 if (!userId.matches(Regex("[0-9]{1,30}")) || name.isBlank() || !seen.add(userId)) continue
 
                 val detailsArray = node.optJSONArray("sub_title_list")
