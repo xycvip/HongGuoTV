@@ -79,6 +79,7 @@ import com.hongguotv.core.*
 
 internal fun MainActivity.localCatalog()=tab==3 || tab==4 || collection!=null
 internal fun MainActivity.localItems(): List<Series> = when(collection) {
+    "actor-works" -> actorWorksItems
     "hot" -> collectionReturn?.items.orEmpty().filterNot { it.id in library.hidden() }
     "hot-short" -> library.cachedHome(ContentType.SHORT)?.items.orEmpty().filterNot { it.id in library.hidden() }
     "hot-comic" -> library.cachedHome(ContentType.COMIC)?.items.orEmpty().filterNot { it.id in library.hidden() }
