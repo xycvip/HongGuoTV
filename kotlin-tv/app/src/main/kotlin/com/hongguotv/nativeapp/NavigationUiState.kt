@@ -3,7 +3,6 @@ package com.hongguotv.nativeapp
 
 import android.view.View
 import com.hongguotv.core.ComicRanking
-import com.hongguotv.core.Genre
 import com.hongguotv.core.RankBoard
 import com.hongguotv.core.Series
 
@@ -36,6 +35,5 @@ internal data class CatalogState(
     val hasMore: Boolean,
     val ranking: ComicRanking?,
     val board: RankBoard? = null,
-    val genre: Genre? = null,
     val actorRanking: Boolean = false
 )
