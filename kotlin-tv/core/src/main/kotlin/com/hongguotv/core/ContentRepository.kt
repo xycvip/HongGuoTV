@@ -86,14 +86,16 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
             "is_android_pad_screen" to identity.getValue("is_android_pad_screen"),
             "openudid" to identity.getValue("openudid"),
             "cell_id" to "7470092475068071998",
-            "tab_type" to "26",
+            // 红果客户端首次进入演员榜使用 tab_type=26；同一 session 翻页使用 18。
+            "tab_type" to if(offset > 0) "18" else "26",
             "selected_items" to "ranklist_celebrity",
             "sub_selected_items" to subBoard,
             "offset" to offset.toString(),
-            "limit" to "0",
+            "limit" to "20",
             "client_req_type" to "2",
             "client_template" to "2",
-            "unlimited_selector_change_type" to if(offset > 0) "2" else "1",
+            "gender" to "2",
+            "unlimited_selector_change_type" to "0",
         )
         if (sessionId.isNotBlank()) values["session_id"] = sessionId
         values["user_is_login"] = "0"
