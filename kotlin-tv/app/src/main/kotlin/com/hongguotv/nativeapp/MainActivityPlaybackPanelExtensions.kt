@@ -143,7 +143,7 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
             if(anchor.isAttachedToWindow) anchor.text=skipButtonLabel(intro,options[index])
             Toast.makeText(this,"已保存，仅对《${data.series.title}》生效",Toast.LENGTH_SHORT).show()
             showHud()
-        },"当前 ${if(current>0) "$current 秒" else "关闭"}") {}
+        },"当前 ${if(current>0) "$current 秒" else "关闭"}") {},selectedIndex=options.indexOf(current))
     }
 
     internal fun MainActivity.showSpeedPicker(anchor: TextView,inPlayer: Boolean=true) {
@@ -153,7 +153,7 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
             if(inPlayer) player?.setPlaybackSpeed(library.playbackSpeed)
             if(anchor.tag!="playback-settings") anchor.text=String.format(java.util.Locale.US,"%.2f",library.playbackSpeed.toDouble()) else "默认倍速  ·  "+PlaybackSpeed.label(library.playbackSpeed)
             if(inPlayer) updatePlaybackText()
-        })
+        },selectedIndex=speeds.indexOf(library.playbackSpeed))
     }
 
     internal fun MainActivity.showQualityPicker(anchor: TextView,inPlayer: Boolean) {
@@ -164,7 +164,7 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
             library.maxQuality=target
             if(anchor.tag!="playback-settings") anchor.text=if(inPlayer) "画质" else "画质  ·  ${PlaybackQuality.label(target)}"
             if(inPlayer && changed) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
-        })
+        },selectedIndex=options.indexOf(library.maxQuality))
     }
 
     internal fun MainActivity.showEpisodePanel(anchor: View) {
