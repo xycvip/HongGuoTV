@@ -265,7 +265,8 @@ internal fun MainActivity.renderCatalogContent(
                     }
                     return@work
                 }
-                catalog=emptyList(); hasMore=false; ranking=null; rankSubtitle?.text=if(requestAi) "AI剧分类加载失败" else "榜单加载失败"
+                catalog=emptyList(); hasMore=false; ranking=null
+                if(requestTab==2) rankSubtitle?.text=if(requestActor) "演员榜加载失败" else "榜单加载失败"
                 pendingRefreshFocus?.let { restore ->
                     pendingRefreshFocus=null
                     root.post {
