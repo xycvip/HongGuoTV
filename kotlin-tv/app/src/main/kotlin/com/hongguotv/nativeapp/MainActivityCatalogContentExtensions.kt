@@ -150,6 +150,7 @@ internal fun MainActivity.renderCatalogContent(
             val requestAggregate=requestTab==1 && aggregateSearch
             val requestBoard=rankBoard; val requestGenre=if(requestTab==0) genre else null
             val requestActor=requestTab==2 && actorRanking
+            val requestActorSubBoard=actorRankSubBoard
             val requestTheaterType=theaterContentType; val requestTheaterSelection=theaterSelections.toMap()
             var responseActorPage:ActorRankPage? = null
             var responseTheaterFilters:List<TheaterFilterGroup> = emptyList()
@@ -157,7 +158,7 @@ internal fun MainActivity.renderCatalogContent(
                 when(requestTab) {
                     0 -> repository.home(requestPage,requestType,requestGenre)
                     7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).let { responseTheaterFilters=it.filters; it.catalog }
-                    2 -> if(requestActor) repository.actorRanking(0,"").let { actorPage ->
+                    2 -> if(requestActor) repository.actorRanking(0,"",requestActorSubBoard).let { actorPage ->
                         responseActorPage=actorPage
                         CatalogPage(actorPage.items.map { it.toSeries() },actorPage.hasMore)
                     } else repository.ranking(requestBoard,requestPage)
@@ -209,7 +210,7 @@ internal fun MainActivity.renderCatalogContent(
                     // 手机输入的精确剧名搜索零结果时自动恢复联想，帮助用户纠正剧名
                     if(requestTab==1 && result.items.isEmpty()) { phoneSearched=false; scheduleSuggest() }
                     val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
-                    if(requestTab==2) rankSubtitle?.text=if(requestActor) "来源：红果演员剧星榜" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
+                    if(requestTab==2) rankSubtitle?.text=if(requestActor) if(requestActorSubBoard=="ranklist_actor_fans") "来源：红果演员星光榜" else "来源：红果演员剧星榜" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
                     if(requestTab==2 || requestTab==7) {
                         // 首屏数据到达后重建一次页面，让筛选头与海报网格在同一 RecyclerView 中组装。
                         val restore=pendingRefreshFocus
