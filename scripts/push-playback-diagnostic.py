@@ -110,7 +110,7 @@ def detail(sid):
 def main():
  raw=os.getenv("PUSH_SHARE_TEXT","")
  if not raw.strip():raise RuntimeError("请在 Actions 输入框粘贴完整分享文案")
- shares=parse(raw);L=["# 推送播放模拟诊断报告","",f"- 时间：{datetime.now(timezone.utc).isoformat()}",f"- 输入字符数：{len(raw)}",f"- 识别条数：{len(shares)}","- 本报告会真实请求分享解析、红果搜索和详情接口；不启动 Android 播放器，不能证明设备实际播放。",""]
+ shares=parse(raw);L=["# 推送播放模拟诊断报告","",f"- 时间：{datetime.now(timezone.utc).isoformat()}",f"- 输入字符数：{len(raw)}",f"- 识别条数：{len(shares)}","- 本报告会真实请求抖音分享解析、红果官网搜索兜底接口和详情接口；未执行需设备身份签名的 App 搜索接口，也不启动 Android 播放器。",""]
  if not shares:L += ["## 未识别","没有识别到 App 当前支持的红果/抖音分享格式。"]
  for i,s in enumerate(shares[:4],1):
   t=s["title"];direct=False;L += [f"## 分享 {i}：{s['source']}",f"- 标题：{t or '未提取'}",f"- 链接：{s['url'] or '无'}"]
