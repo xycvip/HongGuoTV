@@ -43,7 +43,7 @@ private object PushShareParser {
     private val bracketTitle=Regex("[《【〖]([^》】〗]{1,100})[》】〗]")
     private val authorWorkSuffix=Regex("(?:的作品|作品)$")
     private val explicitTitle=Regex("(?:短剧|漫剧)?《([^》]{2,80})》")
-    private val hashtag=Regex("#([^#\\s]+)")
+    private val hashtag=Regex("#\\s*([^#\\s]+)")
     private val descriptionStart=Regex("\\s+(?=(?:为(?:了)?|讲述|讲的是|故事讲述|剧情简介|剧情是|本剧讲述))")
     private val adPhrases=listOf(
         "红果海量","海量库存","库存全免费","免费短剧APP","来红果","热门爆款天天更",
