@@ -172,7 +172,7 @@ def douyin(url):
    if not next_info:next_info=mi.get("next_info") if isinstance(mi.get("next_info"),dict) else {}
    share_info=a.get("share_info") if isinstance(a.get("share_info"),dict) else {}
    share_desc=str(share_info.get("share_desc") or "")
-   bracket=re.search(r"[【〖]([^】〖]{1,100})[】〗]",share_desc)
+   bracket=re.search(r"[【〖]([^】〗]{1,100})[】〗]",share_desc)
    title=(si.get("series_name") or mi.get("mix_name") or next_info.get("name") or (bracket.group(1) if bracket else "")).strip()
    title=re.sub(r"^(?:短剧|漫剧)\\s*[·・]\\s*","",title).strip()
    if not title:raise RuntimeError(f"HTTP {status}；作品 ID 已在 {path} 匹配，但 Feed 没有短剧名称；{diagnostic}")
