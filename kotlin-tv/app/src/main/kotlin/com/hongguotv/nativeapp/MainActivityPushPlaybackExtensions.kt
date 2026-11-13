@@ -81,7 +81,33 @@ private object PushShareParser {
     private val redTitle=Regex("(?:漫剧|短剧)《([^》]{1,80})》")
     private val urlToken=Regex("""https?://[^\s<>\"'，。]+""",RegexOption.IGNORE_CASE)
     private val bracketTitle=Regex("[《【〖]([^》】〗]{1,100})[》】〗]")
+    private val authorWorkSuffix=Regex("(?:的作品|作品)$")
+    private val descriptionStart=Regex("\\s+(?=(?:为|讲述|讲的是|故事讲述|女主|男主|剧情|本剧|这部|一场|一段))")
     private fun clean(v:String)=v.replace(Regex("#[^\\n]*"),"").replace(Regex("\\s+")," ").trim().trimEnd('！','!','。','，',',','…')
+    /** 抖音常见格式：看看【作者的作品】剧名 + 剧情描述。括号里的作者名不能误当剧名。 */
+    private fun extractDouyinTitle(block:String):String {
+        var text=clean(block)
+            .replace(Regex("^\\d+(?:\\.\\d+)?\\s*"),"")
+            .replace(Regex("^复制打开抖音[，,、：: ]*"),"")
+            .replace(Regex("^看看[，,、：: ]*"),"")
+            .trim()
+        val bracket=bracketTitle.find(text)
+        if(bracket!=null) {
+            val bracketValue=bracket.groupValues[1].trim()
+            if(authorWorkSuffix.containsMatchIn(bracketValue)) {
+                // 作者标记后面的文字才是作品标题，后续通常是剧情简介。
+                text=text.substring(bracket.range.last+1).trim()
+            } else {
+                return bracketValue.takeIf { it.isNotBlank() && !authorWorkSuffix.containsMatchIn(it) }.orEmpty()
+            }
+        }
+        text=text.replace(Regex("^(?:短剧|漫剧)[：:，,、 ]*"),"").trim()
+        // 分享标题通常是连续文本；空格后若进入剧情描述，则截断描述。
+        text=descriptionStart.split(text,limit=2).firstOrNull().orEmpty().trim()
+        text=text.substringBefore(' ').trim()
+        return clean(text).trim('《','》','【','】','〖','〗','：',':','，',',','。','！','!')
+            .takeIf { it.isNotBlank() && !authorWorkSuffix.containsMatchIn(it) }.orEmpty()
+    }
     private fun classifyUrl(rawUrl:String):String? {
         val candidate=rawUrl.trim().trimEnd('！','!','。','，',',','；',';','）',')','】',']','>','"','\'')
         val uri=runCatching { URI(candidate) }.getOrNull() ?: return null
@@ -113,8 +139,7 @@ private object PushShareParser {
             val marker=raw.lastIndexOf("复制打开抖音",item.first)
             val lineStart=if(marker<0) 0 else (raw.lastIndexOf('\n',marker).takeIf { it>=0 }?.plus(1) ?: 0)
             val block=raw.substring(lineStart,item.first)
-            val title=bracketTitle.find(block)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
-                ?: clean(block).removePrefix(Regex("^\\d+(?:\\.\\d+)?\\s*").find(clean(block))?.value.orEmpty()).removePrefix("复制打开抖音").removePrefix("看看").trim()
+            val title=extractDouyinTitle(block)
             if(title.isNotBlank() || item.third=="抖音短剧") result+=PushShareItem(title,item.second,item.third)
         }
         return result.distinctBy { it.source+"|"+it.url+"|"+it.title }
