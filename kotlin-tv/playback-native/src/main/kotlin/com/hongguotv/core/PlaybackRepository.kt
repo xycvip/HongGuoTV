@@ -128,8 +128,8 @@ class PlaybackRepository(
     /** Primary App playback channel. The scheduler invokes the public MP4 fallback only on failure. */
     private fun streamMultiVideoModel(id: String, maxQuality: Int): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
-        // Keep the same active order as N3urda: video_tab GET is primary. Only an empty/invalid
-        // playback model or HTTP 401/403 permits the legacy registered-player POST compatibility path.
+        // Keep the same active order as N3urda: video_tab GET is primary. Only an empty response
+        // or HTTP 401/403 permits the legacy registered-player POST compatibility path.
         val responseText = try {
             var getResponse: String? = null
             for (host in playbackHosts) {
