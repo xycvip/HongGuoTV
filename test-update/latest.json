@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "1518bdcafd3c62ba2b9c3af6bd5337a18fb90f45",
-  "versionCode": 89,
-  "versionName": "0.0.89",
+  "sourceCommit": "162da87b0b44ad67099fc72f9882d3501e1d4c6f",
+  "versionCode": 90,
+  "versionName": "0.0.90",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.89",
+  "tag": "hongguotv-bate-v0.0.90",
   "apk": {
-    "name": "HongguoTV-0.0.89.apk",
-    "size": 2047969,
-    "sha256": "a7328d3ff74db9ce0f252010b5cdec3e51874a9d2c65433512403bb39f20bc59",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.89/HongguoTV-0.0.89.apk"
+    "name": "HongguoTV-0.0.90.apk",
+    "size": 2048373,
+    "sha256": "78ed39a8430d74f5b947375724021bb673eb8a34919cc41652d0c1260f256558",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.90/HongguoTV-0.0.90.apk"
   },
-  "notes": "【焦点与遥控器】\n- 进入演员作品页时清除旧榜单焦点标记\n- 完善演员作品页遥控器焦点导航\n- 修正演员作品页海报焦点返回\n【网络与接口】\n- 将演员作品请求接入排行榜页面路由\n【界面与交互】\n- 新增演员作品列表页面入口\n- 接入演员作品页界面状态\n【其他功能与问题修复】\n- 演员作品页加载和失败时保留返回入口\n- 返回演员榜时清理作品页临时状态\n- 演员作品页支持返回和分页加载\n- 演员榜卡片点击进入演员作品列表\n- 将演员作品页接入目录海报列表\n- 增加演员作品页状态\n- 为演员榜卡片增加资料查看反馈"
+  "notes": "【其他功能与问题修复】\n- 演员榜卡片按演员ID关联真实数据"
 }
