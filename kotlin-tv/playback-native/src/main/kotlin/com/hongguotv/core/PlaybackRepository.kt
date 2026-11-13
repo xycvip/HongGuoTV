@@ -110,50 +110,45 @@ class PlaybackRepository(
      */
     fun stream(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
-        // Match N3urda registeredStream: registered player POST ladder, then signed video_tab GET.
+        // Match N3urda's active streamLadderWithCompatibility path: signed video_tab GET first,
+        // then the registered shortplay/Phoenix POST ladder only for an empty model or HTTP 401/403.
         return streamMultiVideoModel(id, maxQuality)
     }
 
     /** Primary App playback channel. The scheduler invokes the public MP4 fallback only on failure. */
     private fun streamMultiVideoModel(id: String, maxQuality: Int): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
-        // Match N3urda's registeredStream order: shortplay PlayerSigner, Phoenix PlayerSigner,
-        // then the newer video_tab GET signed by the content Signer as a compatibility fallback.
-        var responseText: String? = null
-        var playerFailure: IOException? = null
-        try {
-            responseText = playbackResponse(id)
-            playbackLog.info("PlayerSigner 播放阶梯命中")
+        // Keep the same active order as N3urda: video_tab GET is primary. Only an empty/invalid
+        // playback model or HTTP 401/403 permits the legacy registered-player POST compatibility path.
+        val responseText = try {
+            var getResponse: String? = null
+            for (host in playbackHosts) {
+                RequestScope.ensureActive()
+                getResponse = tabVideoModelResponse(id, host)
+                if (getResponse != null) {
+                    playbackLog.info("GET video_tab 主播放接口命中域名 $host")
+                    break
+                }
+            }
+            getResponse ?: throw EmptyPlaybackResponseException()
         } catch (error: java.io.InterruptedIOException) {
             throw error
         } catch (error: IOException) {
-            playerFailure = error
-            playbackLog.warning("PlayerSigner 播放阶梯不可用，准备回退 video_tab GET：${error.message}")
-        }
-        if (responseText == null) {
-            var getResponse: String? = null
-            var getFailure: IOException? = null
-            for (host in playbackHosts) {
-                RequestScope.ensureActive()
-                try {
-                    getResponse = tabVideoModelResponse(id, host)
-                    if (getResponse != null) {
-                        playbackLog.info("GET video_tab 兼容接口命中域名 $host")
-                        break
-                    }
-                    getFailure = IOException("video_tab 接口返回空响应或无效模型")
-                } catch (error: java.io.InterruptedIOException) {
-                    throw error
-                } catch (error: IOException) {
-                    getFailure = error
-                    playbackLog.warning("GET video_tab 接口域名 $host 失败：${error.message}")
-                    if (!isRetryablePlaybackFailure(error)) break
+            val eligibleForPostFallback =
+                error is EmptyPlaybackResponseException ||
+                    error is PlaybackHttpException && error.statusCode in setOf(401, 403)
+            if (!eligibleForPostFallback) throw error
+            RequestScope.ensureActive()
+            playbackLog.warning("GET video_tab 返回空模型或 HTTP 401/403，启用 POST 兼容阶梯：${error.message}")
+            try {
+                playbackResponse(id).also {
+                    playbackLog.info("POST 兼容播放阶梯命中")
                 }
+            } catch (fallback: IOException) {
+                RequestScope.ensureActive()
+                fallback.addSuppressed(error)
+                throw fallback
             }
-            responseText = getResponse ?: throw IOException(
-                "PlayerSigner 播放阶梯和 video_tab GET 均不可用",
-                getFailure ?: playerFailure,
-            )
         }
         val response=JSONObject(responseText ?: throw IOException("播放接口未返回响应"))
         val code=response.optInt("Code",response.optInt("code",0))
@@ -420,14 +415,6 @@ class PlaybackRepository(
         throw lastFailure ?: EmptyPlaybackResponseException()
     }
 
-    private fun isRetryablePlaybackFailure(error: IOException): Boolean = when (error) {
-        is java.io.InterruptedIOException -> false
-        is PlaybackHttpException -> error.statusCode == 408 || error.statusCode == 429 || error.statusCode >= 500
-        is java.net.SocketTimeoutException,
-        is java.net.ConnectException,
-        is java.net.UnknownHostException -> true
-        else -> error !is PlaybackHttpException
-    }
 
     companion object {
     }
