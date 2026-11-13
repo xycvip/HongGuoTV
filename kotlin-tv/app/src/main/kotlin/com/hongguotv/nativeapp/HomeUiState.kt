@@ -2,7 +2,6 @@ package com.hongguotv.nativeapp
 
 import com.hongguotv.core.CloudProgress
 import com.hongguotv.core.ContentType
-import com.hongguotv.core.Genre
 import com.hongguotv.core.Series
 import android.view.View
 import android.widget.TextView
@@ -20,9 +19,6 @@ internal class HomeUiState {
     var clockView: TextView? = null
     var clockTick: Runnable? = null
     val typeButtons = mutableMapOf<ContentType, View>()
-    var genre: Genre? = null
-    var genreButton: View? = null
-    var genreClear: View? = null
     val homeShelfLoads = mutableSetOf<ContentType>()
     val queuedHomeShelfRefresh = mutableSetOf<ContentType>()
     var initialCatalogPending = true
