@@ -152,12 +152,17 @@ object TvDialog {
         labels: List<String>,
         onChoice: (Int) -> Unit,
         extra: String? = null,
-        onExtra: () -> Unit = {}
+        onExtra: () -> Unit = {},
+        selectedIndex: Int = -1
     ): AlertDialog {
         val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         content.addView(title(activity, title))
         val list = android.widget.ListView(activity).apply {
-            adapter = listAdapter(activity, labels)
+            adapter = if(selectedIndex in labels.indices) {
+                choiceAdapter(activity,labels,selectedIndex=selectedIndex)
+            } else {
+                listAdapter(activity,labels)
+            }
         }
         capHeight(activity, list)
         content.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
