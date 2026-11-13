@@ -50,8 +50,9 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
     }
 
     /** 红果短剧排行榜中的演员榜；分页游标必须与同一次榜单会话配对。 */
-    open fun actorRanking(offset: Int = 0, sessionId: String = ""): ActorRankPage {
+    open fun actorRanking(offset: Int = 0, sessionId: String = "", subBoard: String = "ranklist_series_actor"): ActorRankPage {
         require(offset >= 0)
+        require(subBoard == "ranklist_series_actor" || subBoard == "ranklist_actor_fans") { "未知演员榜类型" }
         val profile = playbackSession.profile(http)
         val identity = profile.values
         val values = linkedMapOf(
@@ -87,7 +88,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
             "cell_id" to "7470092475068071998",
             "tab_type" to "26",
             "selected_items" to "ranklist_celebrity",
-            "sub_selected_items" to "ranklist_series_actor",
+            "sub_selected_items" to subBoard,
             "offset" to offset.toString(),
             "limit" to "0",
             "client_req_type" to "2",
