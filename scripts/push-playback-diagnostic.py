@@ -109,11 +109,15 @@ def douyin(url):
  for host in FEED_HOSTS:
   try:
    _,_,b=get(f"https://{host}/aweme/v1/feed/?aweme_id={aid}&aid=1128",{"User-Agent":"com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7)"})
-   a=nested(json.loads(b),lambda x:(
-    str(x.get("aweme_id",""))==aid
-    or str((x.get("status") or {}).get("aweme_id",""))==aid
-    or str((x.get("statistics") or {}).get("aweme_id",""))==aid
-   ))
+   def matches_aweme(x):
+    status=x.get("status") if isinstance(x.get("status"),dict) else {}
+    statistics=x.get("statistics") if isinstance(x.get("statistics"),dict) else {}
+    return (
+     str(x.get("aweme_id",""))==aid
+     or str(status.get("aweme_id",""))==aid
+     or str(statistics.get("aweme_id",""))==aid
+    )
+   a=nested(json.loads(b),matches_aweme)
    if not a:raise RuntimeError("HTTP 响应成功，但 Feed JSON 未找到对应作品 ID")
    si=a.get("series_info") or {};mi=a.get("mix_info") or {}
    next_info=si.get("next_info") or mi.get("next_info") or {}
