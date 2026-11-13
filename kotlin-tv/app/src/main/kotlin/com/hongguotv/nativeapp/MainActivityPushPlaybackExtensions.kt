@@ -37,6 +37,51 @@ private data class PushShareItem(
     val titleCandidates:List<String> = emptyList()
 )
 private data class RedShareIds(val seriesId:String?,val videoId:String?)
+
+/** 抖音短剧分享页使用 playlet_id/series_id，不是 aweme_id；单独请求短剧详情接口取剧名。 */
+private object DouyinPlayletResolver {
+    private fun text(obj:JSONObject?,key:String):String =
+        obj?.opt(key)?.takeUnless { it==JSONObject.NULL }?.toString()?.trim().orEmpty().takeUnless { it=="null" }.orEmpty()
+    private fun findDetail(value:Any?,playletId:String,depth:Int=0):JSONObject? {
+        if(depth>24) return null
+        when(value) {
+            is JSONObject -> {
+                val id=listOf("playlet_id","series_id","seriesId","id").map { text(value,it) }.firstOrNull { it.isNotBlank() }
+                val hasTitle=listOf("playlet_name","series_name","title","name","mix_name").any { text(value,it).isNotBlank() }
+                if(id==playletId && hasTitle) return value
+                val keys=value.keys()
+                while(keys.hasNext()) findDetail(value.opt(keys.next()),playletId,depth+1)?.let { return it }
+                if(depth<=2 && hasTitle) return value
+            }
+            is JSONArray -> for(i in 0 until value.length()) findDetail(value.opt(i),playletId,depth+1)?.let { return it }
+        }
+        return null
+    }
+    fun resolveTitle(playletId:String):String {
+        require(Regex("^\\d{8,25}$").matches(playletId)) { "抖音短剧 ID 格式不正确" }
+        val endpoint="https://www.iesdouyin.com/web/api/playlet/detail/?playlet_id=$playletId"
+        val connection=(URL(endpoint).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects=true
+            connectTimeout=8000
+            readTimeout=10000
+            requestMethod="GET"
+            setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36")
+            setRequestProperty("Accept","application/json, text/plain, */*")
+            setRequestProperty("Referer","https://www.iesdouyin.com/")
+        }
+        try {
+            val status=connection.responseCode
+            if(status !in 200..299) throw java.io.IOException("抖音短剧详情 HTTP $status")
+            val body=connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(2*1024*1024) }
+            val root=JSONObject(body)
+            val detail=findDetail(root,playletId) ?: root.optJSONObject("data") ?: root
+            val title=listOf("playlet_name","series_name","title","name","mix_name")
+                .map { text(detail,it) }.firstOrNull { it.isNotBlank() }.orEmpty()
+            if(title.isBlank()) throw java.io.IOException("短剧详情接口未返回可识别的剧名")
+            return title
+        } finally { connection.disconnect() }
+    }
+}
 private object PushShareParser {
     private val redTitle=Regex("(?:漫剧|短剧)《([^》]{1,80})》")
     private val urlToken=Regex("""https?://[^\s<>\"'，。]+""",RegexOption.IGNORE_CASE)
