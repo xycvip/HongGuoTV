@@ -48,7 +48,12 @@ import com.hongguotv.core.*
 
     internal fun MainActivity.loadHomeShelf(type: ContentType,force: Boolean) {
         if(type!=ContentType.SHORT && type!=ContentType.COMIC && type!=ContentType.AI) return
-        if(!force && !library.cachedHome(type)?.items.isNullOrEmpty()) return
+        // 旧版本把热播/分类缓存与新剧榜共用同一缓存键。首次升级时必须绕过旧缓存，
+        // 成功拿到新榜数据后再记录来源版本；否则旧缓存会让新榜请求永远不执行。
+        val rankCacheKey="home-rank-source-${type.storedValue}"
+        val rankCacheVersion=getSharedPreferences("native-home-cache-v1", MODE_PRIVATE)
+            .getString(rankCacheKey, null)
+        if(!force && rankCacheVersion=="new-drama-v1" && !library.cachedHome(type)?.items.isNullOrEmpty()) return
         if(!homeShelfLoads.add(type)) { if(force) queuedHomeShelfRefresh.add(type); return }
         io.execute {
             val newBoard=when(type) { ContentType.SHORT -> RankBoard.NEW_REAL; ContentType.COMIC -> RankBoard.NEW_COMIC; ContentType.AI -> RankBoard.NEW_AI }
@@ -58,7 +63,11 @@ import com.hongguotv.core.*
                 if(isDestroyed || resettingAllData) return@post
                 val refreshAgain=queuedHomeShelfRefresh.remove(type)
                 result.onSuccess { loaded ->
-                    library.cacheHome(type,loaded.items,loaded.hasMore)
+                    if(loaded.items.isNotEmpty()) {
+                        library.cacheHome(type,loaded.items,loaded.hasMore)
+                        getSharedPreferences("native-home-cache-v1", MODE_PRIVATE).edit()
+                            .putString(rankCacheKey,"new-drama-v1").apply()
+                    }
                     if(screen=="catalog" && tab==0 && collection==null) {
                         homeScreen?.updateShelves(homeShelves(),requestFocus=false)
                     }
