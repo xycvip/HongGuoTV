@@ -450,13 +450,19 @@ def extract_episode_ids(eps):
  def walk(node):
   if isinstance(node,dict):
    for key,value in node.items():
-    if key in keys and value is not None:
-     value=str(value).strip()
-     if value.isdigit():ids.append(value)
-    elif isinstance(value,(dict,list)):
-     walk(value)
+    normalized=str(key).lower()
+    is_id_key=(normalized in keys or
+               (normalized.endswith("_id") and any(word in normalized for word in ("vid","video","episode","item"))))
+    if is_id_key and value is not None and not isinstance(value,(dict,list)):
+     candidate=str(value).strip()
+     if candidate.isdigit():ids.append(candidate)
+    if isinstance(value,(dict,list)):walk(value)
   elif isinstance(node,list):
    for value in node:walk(value)
+  elif isinstance(node,(str,int)) and not isinstance(node,bool):
+   # 部分官网 vid_list 直接返回字符串/数字数组，而不是对象数组。
+   candidate=str(node).strip()
+   if candidate.isdigit():ids.append(candidate)
  walk(eps)
  return list(dict.fromkeys(ids))
 
@@ -641,7 +647,9 @@ def main():
      t=real
      episode_ids=extract_episode_ids(eps)
      direct=(not eid or eid in episode_ids)
-     L += ["- 红果官网详情：成功",f"- 剧名：**{real}**",f"- 总集数：{len(eps)}",f"- 官网分集 ID 提取：{len(episode_ids)} 个；样例：{', '.join(episode_ids[:8]) or '未提取'}"]
+     sample_types=", ".join(type(x).__name__ for x in eps[:5]) or "空列表"
+     sample_values=repr(eps[:2])[:360]
+     L += ["- 红果官网详情：成功",f"- 剧名：**{real}**",f"- 总集数：{len(eps)}",f"- vid_list 元素类型：{sample_types}",f"- vid_list 原始样例：{sample_values}",f"- 官网分集 ID 提取：{len(episode_ids)} 个；样例：{', '.join(episode_ids[:8]) or '未提取'}"]
      if eid and eid in episode_ids:
       L.append(f"- 分享单集 ID：精确命中第 {episode_ids.index(eid)+1} 集")
      elif eid:
