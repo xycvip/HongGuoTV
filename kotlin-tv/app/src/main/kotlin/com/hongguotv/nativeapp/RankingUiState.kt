@@ -21,6 +21,7 @@ internal class RankingUiState {
     var actorRankNextOffset: Int = 0
     var actorRankSessionId: String = ""
     var actorRankVersion: String = ""
+    var actorRankSubBoard: String = "ranklist_series_actor"
     var genre: Genre? = null
     var genreButton: View? = null
     var genreClear: View? = null
