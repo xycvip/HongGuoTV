@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "ab10c3e150b085c40d8647fc2a39808e8427484e",
-  "versionCode": 83,
-  "versionName": "0.0.83",
+  "sourceCommit": "32d049791ded5da9a2ca7c89067dfaf78f2bea74",
+  "versionCode": 87,
+  "versionName": "0.0.87",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.83",
+  "tag": "hongguotv-bate-v0.0.87",
   "apk": {
-    "name": "HongguoTV-0.0.83.apk",
-    "size": 2039649,
-    "sha256": "22e86e388c64b6565308079e582388222ba66583411532fab643042241c833b2",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.83/HongguoTV-0.0.83.apk"
+    "name": "HongguoTV-0.0.87.apk",
+    "size": 2044049,
+    "sha256": "aa02243eb13fdeb1cbbc3d85480394701321b8db9635de6f56d9def4d6264a9c",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.87/HongguoTV-0.0.87.apk"
   },
-  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
+  "notes": "【播放与播放器】\n- 移除自动渲染选项并更新无感连播说明\n- 播放选项弹窗标记当前选择\n【焦点与遥控器】\n- 修复排行榜题材筛选后页面跳转与焦点丢失\n- 遥控器按键设置标记当前动作\n【片源与数据管理】\n- 恢复抖音短剧详情解析器并保留新标题识别\n【界面与交互】\n- 修正跳过片头片尾选择弹窗调用\n- 修正选择弹窗调用参数顺序\n- 修正选择弹窗参数顺序\n- 记录首页导航双击时间\n- 调整首页导航为双击刷新\n- 弹幕设置弹窗标记当前选择\n- 画面模式弹窗标记当前选择\n- 选择弹窗支持当前选项勾选\n【其他功能与问题修复】\n- 修复抖音 Feed DNS 与异常链类型\n- 修正首页双击时间范围类型\n- 兼容抖音话题标签井号后的空格\n- 优化抖音分享剧名候选识别与搜索兜底\n- 修复抖音分享文案剧名提取\n- 修复抖音备用 Feed 节点 DNS 异常"
 }
