@@ -86,6 +86,10 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
             "is_android_pad_screen" to identity.getValue("is_android_pad_screen"),
             "openudid" to identity.getValue("openudid"),
             "cell_id" to "7470092475068071998",
+            // 演员榜两个子榜共用官方 cell，但请求必须补齐 cell 子项及筛选上下文。
+            // 缺少这些字段时，接口可能只返回外层 cell 元数据而不下发可展示的演员卡片。
+            "cell_sub_id" to "0",
+            "category_id" to "0",
             // 红果客户端首次进入演员榜使用 tab_type=26；同一 session 翻页使用 18。
             "tab_type" to if(offset > 0) "18" else "26",
             "selected_items" to "ranklist_celebrity",
@@ -95,6 +99,9 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
             "client_req_type" to "2",
             "client_template" to "2",
             "gender" to "2",
+            "background_selected_items" to "",
+            "panel_selected_items" to "",
+            "filter_ids" to "",
             "unlimited_selector_change_type" to "0",
         )
         if (sessionId.isNotBlank()) values["session_id"] = sessionId
