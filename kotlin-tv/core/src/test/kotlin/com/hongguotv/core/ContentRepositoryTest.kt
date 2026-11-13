@@ -496,6 +496,25 @@ class ContentRepositoryTest {
         assertFalse(page.hasMore)
     }
 
+    @Test fun actorStarBoardAcceptsAlternateListAndNestedAvatarShape() {
+        val repo = ContentRepository(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                val body = """{"code":0,"data":{"has_more":false,"next_offset":1,"rank_list":[{"user_id":"7100000000001304","user_name":"巨星榜演员","avatar_thumb":{"url_list":["https://example.com/star.jpg"]},"fans_count_text":"900万人气","intro":"测试演员介绍"}]}}"""
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("OK").body(body.toResponseBody()).build()
+            }.build(),
+            System::currentTimeMillis,
+            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586", "1905892595378490") }
+        )
+
+        val page = repo.actorRanking(0, "", "ranklist_actor_fans")
+        assertEquals("巨星榜演员", page.items.single().name)
+        assertEquals("https://example.com/star.jpg", page.items.single().avatar)
+        assertEquals("900万人气", page.items.single().popularity)
+        assertEquals("测试演员介绍", page.items.single().intro)
+        assertFalse(page.hasMore)
+    }
+
     private fun searchTab(type: Int,id: String) = JSONObject().put("tab_type",type).put("has_more",true)
         .put("data",JSONArray().put(JSONObject().put("video_data",JSONArray().put(JSONObject()
             .put("series_id",id).put("title","测试剧集").put("episode_cnt",8)))))
