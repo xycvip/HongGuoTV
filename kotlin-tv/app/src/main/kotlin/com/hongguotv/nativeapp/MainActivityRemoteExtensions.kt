@@ -201,10 +201,6 @@ import java.util.concurrent.atomic.AtomicLong
                         switchTab(0)
                         navByTab[0]?.requestFocus()
                     } else showExitConfirm()
-                } else if(tab==0 && genre!=null) {
-                    genre=null; page=1; catalogFocus=""
-                    tabState.remove(0); tabFocus.remove(0)
-                    showCatalog(true,focusNav=true)
                 } else if(collection!=null) {
                     leaveCollection()
                     showCatalog()
