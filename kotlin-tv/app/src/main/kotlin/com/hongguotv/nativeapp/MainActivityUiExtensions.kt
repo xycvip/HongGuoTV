@@ -204,7 +204,7 @@ import java.util.concurrent.atomic.AtomicLong
         nav.clear(); navByTab.clear(); searchNavShortcut=null; theaterFilterHost=null; typeButtons.clear(); aggregateButton=null; searchInput=null; searchButton=null; searchActions.clear()
         azFirst=null; azLastRow.clear(); suggestRow=null; suggestFirst=null; suggestTicket++; main.removeCallbacks(pendingSuggest)
         suggestVertical=false; searchBody=null; keyboardKeys=emptyMap(); keyboardRows=emptyList(); historyFirst=null; historyItems=emptyList(); suggestScrollRef=null; resultFirstCard=null
-        historyManage=null; rankSwitch=null; rankRefresh=null; rankSubtitle=null; genreButton=null; genreClear=null; collectionBack=null; favoriteBadges.clear()
+        historyManage=null; rankSwitch=null; actorRankButton=null; rankRefresh=null; rankSubtitle=null; genreButton=null; genreClear=null; collectionBack=null; favoriteBadges.clear()
         favoriteStatus=null; favoriteCheck=null; favoriteFilterFirst=null; favoriteFilterButtons=emptyList(); homeUpdates=null; resumeCards.clear()
     }
 
