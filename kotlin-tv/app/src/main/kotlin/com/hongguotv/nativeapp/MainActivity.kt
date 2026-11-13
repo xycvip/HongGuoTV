@@ -330,6 +330,7 @@ class MainActivity: Activity() {
     internal var actorRankNextOffset by rankingUiState::actorRankNextOffset
     internal var actorRankSessionId by rankingUiState::actorRankSessionId
     internal var actorRankVersion by rankingUiState::actorRankVersion
+    internal var actorRankSubBoard by rankingUiState::actorRankSubBoard
     internal var genre by rankingUiState::genre
     internal var genreButton by rankingUiState::genreButton
     internal var genreClear by rankingUiState::genreClear
