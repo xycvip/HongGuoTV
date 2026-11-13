@@ -134,7 +134,7 @@ def main():
   if direct:L += ["- 播放入口判断：可定位到红果剧目/分集（未验证设备播放器）",""];continue
   if t.strip():
    try:
-    rows=search(t);norm=lambda x:re.sub(r"[^a-z0-9]","",x.lower());exact=[x for x in rows if norm(x[1])==norm(t)]
+    rows=search(t);norm=lambda x:"".join(c for c in x.lower() if c.isalnum());exact=[x for x in rows if norm(x[1])==norm(t)]
     L += [f"- 红果搜索：成功，候选 {len(rows)} 个",f"- 精确匹配：{len(exact)} 个"]
     L += [f"  - {'【精确】' if x in exact else '【候选】'} {x[1]}（ID：{x[0]}）" for x in rows[:8]]
     if len(exact)==1:
