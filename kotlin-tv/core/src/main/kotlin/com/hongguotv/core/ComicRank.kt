@@ -19,7 +19,10 @@ enum class RankBoard(
     TOTAL("hot-drama","rank_hot-drama/page","","综合","综合榜","来源：红果热播榜"),
     REAL("hot-real-drama","rank_hot-real-drama/page","real","短剧"),
     AI("hot-ai-drama","rank_hot-ai-drama/page","ai","AI剧"),
-    COMIC("hot-comic-drama","rank_hot-comic-drama/page","comic","漫剧");
+    COMIC("hot-comic-drama","rank_hot-comic-drama/page","comic","漫剧"),
+    NEW_REAL("new-real-drama","rank_new-real-drama/page","real","短剧","短剧新剧榜","来源：红果短剧新剧榜"),
+    NEW_AI("new-ai-drama","rank_new-ai-drama/page","ai","AI剧","AI剧新剧榜","来源：红果AI剧新剧榜"),
+    NEW_COMIC("new-comic-drama","rank_new-comic-drama/page","comic","漫剧","漫剧新剧榜","来源：红果漫剧新剧榜");
 }
 
 /** Read the website's serialized data only; never execute its scripts. */
