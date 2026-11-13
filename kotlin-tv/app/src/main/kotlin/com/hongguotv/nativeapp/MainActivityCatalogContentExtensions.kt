@@ -148,7 +148,7 @@ internal fun MainActivity.renderCatalogContent(
             }
             val requestTab=tab; val requestPage=page; val requestQuery=query; val requestType=library.contentType
             val requestAggregate=requestTab==1 && aggregateSearch
-            val requestBoard=rankBoard; val requestGenre=if(requestTab==0) genre else null
+            val requestBoard=rankBoard
             val requestActor=requestTab==2 && actorRanking
             val requestActorSubBoard=actorRankSubBoard
             val requestTheaterType=theaterContentType; val requestTheaterSelection=theaterSelections.toMap()
@@ -156,7 +156,7 @@ internal fun MainActivity.renderCatalogContent(
             var responseTheaterFilters:List<TheaterFilterGroup> = emptyList()
             work({
                 when(requestTab) {
-                    0 -> repository.home(requestPage,requestType,requestGenre)
+                    0 -> repository.home(requestPage,requestType,null)
                     7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).let { responseTheaterFilters=it.filters; it.catalog }
                     2 -> if(requestActor) repository.actorRanking(0,"",requestActorSubBoard).let { actorPage ->
                         responseActorPage=actorPage
@@ -363,7 +363,7 @@ internal fun MainActivity.showCatalog(load: Boolean=false,focusNav: Boolean=fals
         initialCatalogPending=false; restoreStoppedPage=false; pendingDetail=null
         // Never cache a new page number with the previous page's results while a request is pending.
         if(load) {
-            val cached=if(tab==0 && page==1 && genre==null) library.cachedHome(library.contentType) else null
+            val cached=if(tab==0 && page==1) library.cachedHome(library.contentType) else null
             catalog=cached?.items ?: emptyList(); hasMore=cached?.hasMore ?: false; ranking=null; homeFromCache=cached!=null
         }
         invalidatePage(); screen="catalog"; applyDeviceOrientationPolicy(); releaseCatalogViews(); val container=base()
