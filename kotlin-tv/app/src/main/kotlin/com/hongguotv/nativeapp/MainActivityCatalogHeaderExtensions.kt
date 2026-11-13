@@ -319,6 +319,34 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 tag="rank:actor"
                 nextFocusUpId=navForTab().id
             }.also { boardFocusItems+=it }
+            if(actorRanking) {
+                listOf(
+                    "ranklist_series_actor" to "剧星榜",
+                    "ranklist_actor_fans" to "星光榜",
+                ).forEach { (subBoard,label) ->
+                    val focusTag="rank:actor:$subBoard"
+                    val button=addButton(boardRow,label,actorRankSubBoard==subBoard) {
+                        if(actorRankSubBoard!=subBoard) {
+                            pendingRefreshFocus=focusTag
+                            rankFocusTag=focusTag
+                            actorRankSubBoard=subBoard
+                            actorRankItems=emptyList()
+                            actorRankNextOffset=0
+                            actorRankSessionId=""
+                            actorRankVersion=""
+                            page=1
+                            catalogFocus=""
+                            tabState.remove(2)
+                            tabFocus.remove(2)
+                            showCatalog(true)
+                        }
+                    }.apply {
+                        tag=focusTag
+                        nextFocusUpId=navForTab().id
+                    }
+                    boardFocusItems+=button
+                }
+            }
             rankRefresh=addButton(boardRow,"刷新") {
                 pendingRefreshFocus="rank:refresh"
                 rankFocusTag="rank:refresh"
@@ -340,7 +368,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 view.nextFocusRightId=boardFocusItems.getOrNull(index+1)?.id ?: view.id
             }
             container.addView(boardRow)
-            val defaultSource=if(actorRanking) "来源：红果演员剧星榜" else rankBoard.sourceText
+            val defaultSource=if(actorRanking) if(actorRankSubBoard=="ranklist_actor_fans") "来源：红果演员星光榜" else "来源：红果演员剧星榜" else rankBoard.sourceText
             rankSubtitle=text(if(loading) "正在读取最新榜单…" else if(actorRanking) defaultSource else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,13f,muted).apply { setPadding(0,0,0,dp(8)) }
             container.addView(rankSubtitle)
             nav.forEach { it.nextFocusDownId=boardRow.getChildAt(0)?.id ?: View.NO_ID }
