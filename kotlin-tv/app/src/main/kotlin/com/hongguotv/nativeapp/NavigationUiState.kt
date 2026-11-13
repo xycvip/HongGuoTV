@@ -37,6 +37,5 @@ internal data class CatalogState(
     val ranking: ComicRanking?,
     val board: RankBoard? = null,
     val genre: Genre? = null,
-    val aiCatalog: Boolean = false,
-    val aiGenre: Genre? = null
+    val actorRanking: Boolean = false
 )
