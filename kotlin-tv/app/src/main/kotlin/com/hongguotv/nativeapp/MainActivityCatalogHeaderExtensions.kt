@@ -301,7 +301,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 boardFocusItems+=boardButton
                 if(index==0) rankSwitch=boardButton
             }
-            genreButton=addButton(boardRow,genre?.let { "题材 · ${it.name}" } ?: "题材") { showGenrePicker() }.apply {
+            genreButton=addButton(boardRow,(if(aiCatalog) aiGenre else genre)?.let { "题材 · ${it.name}" } ?: "题材") { showGenrePicker() }.apply {
                 tag="rank:genre"
                 nextFocusUpId=navForTab().id
             }.also { boardFocusItems+=it }
