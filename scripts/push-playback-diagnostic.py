@@ -384,13 +384,9 @@ def decode_scheme_params(values):
  # 分享链接常把真正的单集 video_id 放在 schemeParams 中；
  # 参数可能经过 URL 编码、HTML 转义，甚至嵌套编码/JSON 字符串。
  found=[]
- seen=set()
  def visit(value,depth=0):
   if depth>6 or value is None:return
   if isinstance(value,(dict,list)):
-   marker=id(value)
-   if marker in seen:return
-   seen.add(marker)
    if isinstance(value,dict):
     for key,item in value.items():
      normalized=str(key).lower()
