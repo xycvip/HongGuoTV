@@ -443,6 +443,22 @@ def detail(sid):
  if not eps:raise RuntimeError("详情页没有分集列表")
  return o.get("series_name") or o.get("series_title") or "未知剧名",eps
 
+def extract_episode_ids(eps):
+ # vid_list 通常是对象数组，不能直接用字符串 eid 判断是否属于 eps。
+ ids=[]
+ keys=("vid","video_id","episode_id","item_id","id","vid_str","video_id_str","episode_id_str")
+ def walk(node):
+  if isinstance(node,dict):
+   for key,value in node.items():
+    if key in keys and value is not None:
+     value=str(value).strip()
+     if value.isdigit():ids.append(value)
+    elif isinstance(value,(dict,list)):
+     walk(value)
+  elif isinstance(node,list):
+   for value in node:walk(value)
+ walk(eps)
+ return list(dict.fromkeys(ids))
 
 
 def post_hongguo_json(host,path,body):
@@ -623,12 +639,13 @@ def main():
      L += probe_detail_pages(sid,eid)
      real,eps=detail(sid)
      t=real
-     direct=(not eid or eid in eps)
-     L += ["- 红果官网详情：成功",f"- 剧名：**{real}**",f"- 总集数：{len(eps)}"]
-     if eid and eid in eps:
-      L.append(f"- 分享单集 ID：精确命中第 {eps.index(eid)+1} 集")
+     episode_ids=extract_episode_ids(eps)
+     direct=(not eid or eid in episode_ids)
+     L += ["- 红果官网详情：成功",f"- 剧名：**{real}**",f"- 总集数：{len(eps)}",f"- 官网分集 ID 提取：{len(episode_ids)} 个；样例：{', '.join(episode_ids[:8]) or '未提取'}"]
+     if eid and eid in episode_ids:
+      L.append(f"- 分享单集 ID：精确命中第 {episode_ids.index(eid)+1} 集")
      elif eid:
-      L.append(f"- 分享单集 ID：未在官网 vid_list 中命中（{eid}）；剧目详情仍然成功，不中断后续标题搜索")
+      L.append(f"- 分享单集 ID：未在官网 vid_list 提取的 ID 中命中（{eid}）；剧目详情仍然成功，不中断后续标题搜索")
      else:
       L.append("- 分享单集 ID：未从分享链接提取；剧目详情成功")
   except Exception as e:L += ["- 分享解析/详情：失败",f"- 原因：{e}"]
