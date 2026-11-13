@@ -291,8 +291,21 @@ def extract_router_json(page):
 
 def search_ssr(title):
  url="https://hongguoduanju.com/search/"+urllib.parse.quote(title,safe="")+"?page=1"
- _,final,page=get(url,{"Accept":"text/html,application/xhtml+xml"})
- payload=extract_router_json(page)
+ status,final,page=get(url,{"Accept":"text/html,application/xhtml+xml"})
+ try:
+  payload=extract_router_json(page)
+ except Exception as e:
+  page_title=re.search(r"<title[^>]*>(.*?)</title>",page,re.I|re.S)
+  page_title=html.unescape(re.sub(r"\\s+"," ",page_title.group(1))).strip()[:160] if page_title else "未找到"
+  scripts=[]
+  for tag in re.findall(r"<script\\b[^>]*>",page,re.I)[:12]:
+   sid=re.search(r"""\\bid=["']([^"']+)["']""",tag,re.I)
+   stype=re.search(r"""\\btype=["']([^"']+)["']""",tag,re.I)
+   scripts.append("id="+(sid.group(1) if sid else "无")+",type="+(stype.group(1) if stype else "默认"))
+  markers=[x for x in ("_ROUTER_DATA","__NEXT_DATA__","__staticRouterHydrationData","__reactRouterContext","__INITIAL_STATE__","searchList","captcha","challenge","verify") if x.lower() in page.lower()]
+  preview=re.sub(r"<[^>]+>"," ",page[:700])
+  preview=html.unescape(re.sub(r"\\s+"," ",preview)).strip()[:260]
+  raise RuntimeError(f"HTTP {status}；最终地址：{final}；Content-Length(实际读取)：{len(page)} 字符；页面标题：{page_title}；脚本标签：{'；'.join(scripts) or '无'}；关键标记：{','.join(markers) or '无'}；页面预览：{preview or '空'}；解析异常：{e}")
  loader=payload.get("loaderData") or payload
  if not isinstance(loader,dict):raise RuntimeError("官网 SSR loaderData 结构异常")
  found=[]
