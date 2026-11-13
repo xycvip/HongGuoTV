@@ -71,7 +71,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         val card=holder.card
         card.tag=item.id; card.contentDescription=item.title
         loadCover(holder.image,item.cover)
-        // AI 剧分类复用的是片库卡片，没有名次与热度，按普通片库卡片展示
+        // 演员榜复用卡片网格布局，但数据与可播放短剧保持独立。
         val actorRanked=tab==2 && actorRanking
         val actor=if(actorRanked) actorRankItems.firstOrNull { it.userId==item.id } else null
         val ranked=tab==2 && ranking!=null
@@ -142,11 +142,12 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             catalogFocus=item.id
             if(actorRanked) true else { quickActions(item,card); true }
         }
-        card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
+        card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP && !actorRanked) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
         card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(host,focused); if(focused) { catalogFocus=item.id; loadCover(holder.image,item.cover); if(!actorRanked) selectionPreview?.show(item,selectionStatus(item)) } }
         card.nextFocusUpId=if(position<cols) {
             // 搜索页右侧海报栏的首行向上直接回到顶部“搜索”导航，避免被中栏联想/历史区截走。
             if(tab==1) searchNavShortcut?.id ?: View.NO_ID
+            else if(tab==2 && actorRanking) actorRankButton?.id ?: rankSwitch?.id ?: rankRefresh?.id ?: navForTab().id
             else suggestFirst?.id ?: historyFirst?.id ?: azLastRow.firstOrNull()?.id ?: searchInput?.id ?: collectionBack?.id ?: genreClear?.id ?: typeButtons[library.contentType]?.id ?: rankSwitch?.id ?: rankRefresh?.id ?: favoriteFilterFirst?.id ?: favoriteCheck?.id ?: historyManage?.id ?: navForTab().id
         } else View.NO_ID
         if(position>=displayed.size-12) catalogRecycler?.post { maybeLoadMore() }
