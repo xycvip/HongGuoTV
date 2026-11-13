@@ -109,10 +109,19 @@ def douyin(url):
  for host in FEED_HOSTS:
   try:
    _,_,b=get(f"https://{host}/aweme/v1/feed/?aweme_id={aid}&aid=1128",{"User-Agent":"com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7)"})
-   a=nested(json.loads(b),lambda x:str(x.get("aweme_id",""))==aid)
+   a=nested(json.loads(b),lambda x:(
+    str(x.get("aweme_id",""))==aid
+    or str((x.get("status") or {}).get("aweme_id",""))==aid
+    or str((x.get("statistics") or {}).get("aweme_id",""))==aid
+   ))
    if not a:raise RuntimeError("HTTP 响应成功，但 Feed JSON 未找到对应作品 ID")
    si=a.get("series_info") or {};mi=a.get("mix_info") or {}
-   title=(si.get("series_name") or mi.get("mix_name") or "").strip()
+   next_info=si.get("next_info") or mi.get("next_info") or {}
+   share_info=a.get("share_info") or {}
+   share_desc=str(share_info.get("share_desc") or "")
+   bracket=re.search(r"[【〖]([^】〗]{1,100})[】〗]",share_desc)
+   title=(si.get("series_name") or mi.get("mix_name") or next_info.get("name") or (bracket.group(1) if bracket else "")).strip()
+   title=re.sub(r"^(?:短剧|漫剧)\\s*[·・]\\s*","",title).strip()
    if not title:raise RuntimeError("作品 ID 已匹配，但 Feed 没有短剧名称")
    return aid,title,(a.get("author") or {}).get("nickname",""),attempts
   except Exception as e:attempts.append(host+"："+str(e))
