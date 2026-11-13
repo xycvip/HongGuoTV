@@ -1,0 +1,41 @@
+name: 推送播放模拟诊断
+
+on:
+  workflow_dispatch:
+    inputs:
+      share_text:
+        description: "粘贴红果或抖音 App 的完整分享文案/链接（支持多行）"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: push-playback-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: 分享解析与播放入口诊断
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: 检出当前测试分支
+        uses: actions/checkout@v4
+      - name: 准备 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 执行推送播放模拟
+        env:
+          PUSH_SHARE_TEXT: ${{ inputs.share_text }}
+        run: python3 scripts/push-playback-diagnostic.py
+      - name: 保存中文诊断报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 推送播放诊断报告
+          path: 推送播放诊断报告.md
+          if-no-files-found: ignore
+          retention-days: 14
