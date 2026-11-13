@@ -63,7 +63,7 @@ import java.util.concurrent.atomic.AtomicLong
             library.danmakuOpacity=options[choice]; applyDanmakuPrefs()
             if(anchor.tag!="playback-settings") anchor.text="弹幕不透明度  ·  ${library.danmakuOpacity}%"
             done?.invoke()
-        })
+        },selectedIndex=options.indexOf(library.danmakuOpacity))
     }
 
     internal fun MainActivity.showDanmakuFontPicker(anchor: TextView,done: (()->Unit)?=null) {
@@ -71,7 +71,7 @@ import java.util.concurrent.atomic.AtomicLong
             library.danmakuFont=choice; applyDanmakuPrefs()
             if(anchor.tag!="playback-settings") anchor.text="弹幕字体大小  ·  ${DanmakuPrefs.fontLabel(library.danmakuFont)}"
             done?.invoke()
-        })
+        },selectedIndex=DanmakuPrefs.font(library.danmakuFont))
     }
 
     internal fun MainActivity.showDanmakuSpeedPicker(anchor: TextView,done: (()->Unit)?=null) {
@@ -79,7 +79,7 @@ import java.util.concurrent.atomic.AtomicLong
             library.danmakuSpeed=choice; applyDanmakuPrefs()
             if(anchor.tag!="playback-settings") anchor.text="弹幕移动速度  ·  ${DanmakuPrefs.speedLabel(library.danmakuSpeed)}"
             done?.invoke()
-        })
+        },selectedIndex=DanmakuPrefs.speed(library.danmakuSpeed))
     }
 
     internal fun MainActivity.showDanmakuColorPicker(anchor: TextView,done: (()->Unit)?=null) {
@@ -95,6 +95,10 @@ import java.util.concurrent.atomic.AtomicLong
             danmakuView?.setColorMode(mode)
             if(anchor.tag!="playback-settings") anchor.text="弹幕颜色  ·  ${danmakuColorModeLabel(mode)}"
             done?.invoke()
+        },selectedIndex=when(danmakuColorMode) {
+            DanmakuView.COLOR_MODE_COLORFUL -> 1
+            in DanmakuView.COLOR_MODE_FIRST..(DanmakuView.COLOR_MODE_FIRST+DanmakuView.COLOR_NAMES.lastIndex) -> danmakuColorMode-DanmakuView.COLOR_MODE_FIRST+2
+            else -> 0
         })
     }
 
@@ -103,7 +107,7 @@ import java.util.concurrent.atomic.AtomicLong
             library.danmakuRows=choice+DanmakuPrefs.ROWS_MIN; applyDanmakuPrefs()
             if(anchor.tag!="playback-settings") anchor.text="弹幕展示行数  ·  ${library.danmakuRows} 行"
             done?.invoke()
-        })
+        },selectedIndex=library.danmakuRows-DanmakuPrefs.ROWS_MIN)
     }
 
     internal fun MainActivity.showDanmakuPrefsDialog(anchor: TextView) {
