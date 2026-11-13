@@ -39,7 +39,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
         val targetTab=if(next==9) 4 else next
         val now=android.os.SystemClock.elapsedRealtime()
         val doubleTapHome=targetTab==0 && tab==0 && navigationUiState.lastHomeNavTapAt>0L &&
-            now-navigationUiState.lastHomeNavTapAt in 1..650
+            now-navigationUiState.lastHomeNavTapAt in 1L..650L
         navigationUiState.lastHomeNavTapAt=if(targetTab==0 && !doubleTapHome) now else 0L
         debugLog("页面导航：主导航页签 $tab -> $targetTab；首页双击刷新=$doubleTapHome")
         if(pushPlaybackPageActive || pushPlaybackServer!=null) {
