@@ -45,7 +45,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.showGenrePicker() {
-        if (tab != 0 && tab != 2) return
+        if (tab != 0) return
         val pickerTab = tab
         val anchor = genreButton ?: return
         var selectedType = library.contentType
@@ -115,30 +115,15 @@ import java.util.concurrent.atomic.AtomicLong
                         loading.text = if (genres.isEmpty()) "暂无可选题材" else "选择${type.label}题材"
                         val labels = listOf("全部题材") + genres.map { it.name }
                         labels.forEachIndexed { index, name ->
-                            val activeGenre = if (pickerTab == 2 && aiCatalog) aiGenre else genre
-                            val chosen = if (type == library.contentType && type == selectedType) (if (index == 0) activeGenre == null else activeGenre?.name == name) else index == 0
+                            val chosen = if (type == library.contentType && type == selectedType) (if (index == 0) genre == null else genre?.name == name) else index == 0
                             val item = button(name, chosen) {
                                 library.contentType = type
                                 val selectedGenre = if (index == 0) null else genres[index - 1]
-                                if (pickerTab == 2) {
-                                    // 排行榜题材筛选使用当前内容类型目录，页面仍停留在排行榜。
-                                    aiCatalog = index != 0
-                                    aiGenre = selectedGenre
-                                    genre = null
-                                    pendingRefreshFocus = "rank:genre"
-                                    rankFocusTag = "rank:genre"
-                                    tab = 2
-                                    tabState.remove(2); tabFocus.remove(2)
-                                    page = 1; catalogFocus = ""
-                                    dialog.dismiss()
-                                    showCatalog(true)
-                                } else {
-                                    genre = selectedGenre
-                                    tab = 0
-                                    page = 1; catalogFocus = ""; tabState.remove(0); tabFocus.remove(0)
-                                    dialog.dismiss()
-                                    showCatalog(true, focusType = true)
-                                }
+                                genre = selectedGenre
+                                tab = 0
+                                page = 1; catalogFocus = ""; tabState.remove(0); tabFocus.remove(0)
+                                dialog.dismiss()
+                                showCatalog(true, focusType = true)
                             }
                             grid.addView(item, GridLayout.LayoutParams(GridLayout.spec(index / 3), GridLayout.spec(index % 3, 1f)).apply {
                                 width = 0
