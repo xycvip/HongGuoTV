@@ -150,13 +150,13 @@ internal fun MainActivity.renderCatalogContent(
             val requestAggregate=requestTab==1 && aggregateSearch
             val requestBoard=rankBoard; val requestGenre=if(requestTab==0) genre else null
             val requestTheaterType=theaterContentType; val requestTheaterSelection=theaterSelections.toMap()
-            val requestAi=if(requestTab==2) aiCatalog else false; val requestAiGenre=if(requestAi) aiGenre else null
+            val requestAi=if(requestTab==2) aiCatalog else false; val requestAiGenre=if(requestAi) aiGenre else null; val requestAiType=requestType
             var responseTheaterFilters:List<TheaterFilterGroup> = emptyList()
             work({
                 when(requestTab) {
                     0 -> repository.home(requestPage,requestType,requestGenre)
                     7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).let { responseTheaterFilters=it.filters; it.catalog }
-                    2 -> if(requestAi) repository.home(requestPage,ContentType.AI,requestAiGenre) else repository.ranking(requestBoard,requestPage)
+                    2 -> if(requestAi) repository.home(requestPage,requestAiType,requestAiGenre) else repository.ranking(requestBoard,requestPage)
                     else -> if(requestAggregate) repository.searchCombined(requestQuery,requestPage) else repository.search(requestQuery,requestPage,requestType)
                 }
             }, { result ->
@@ -194,7 +194,7 @@ internal fun MainActivity.renderCatalogContent(
                     // 手机输入的精确剧名搜索零结果时自动恢复联想，帮助用户纠正剧名
                     if(requestTab==1 && result.items.isEmpty()) { phoneSearched=false; scheduleSuggest() }
                     val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
-                    if(requestTab==2) rankSubtitle?.text=if(requestAi) "来源：红果AI剧分类" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
+                    if(requestTab==2) rankSubtitle?.text=if(requestAi) "来源：红果${requestAiType.label}题材" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
                     if(requestTab==2 || requestTab==7) {
                         // 首屏数据到达后重建一次页面，让筛选头与海报网格在同一 RecyclerView 中组装。
                         val restore=pendingRefreshFocus
