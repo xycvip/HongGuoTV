@@ -143,7 +143,7 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
             if(anchor.isAttachedToWindow) anchor.text=skipButtonLabel(intro,options[index])
             Toast.makeText(this,"已保存，仅对《${data.series.title}》生效",Toast.LENGTH_SHORT).show()
             showHud()
-        },"当前 ${if(current>0) "$current 秒" else "关闭"}") {},selectedIndex=options.indexOf(current))
+        },"当前 ${if(current>0) "$current 秒" else "关闭"}",selectedIndex=options.indexOf(current))
     }
 
     internal fun MainActivity.showSpeedPicker(anchor: TextView,inPlayer: Boolean=true) {
