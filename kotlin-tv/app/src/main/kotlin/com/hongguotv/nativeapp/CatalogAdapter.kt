@@ -149,7 +149,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         card.nextFocusUpId=if(position<cols) {
             // 搜索页右侧海报栏的首行向上直接回到顶部“搜索”导航，避免被中栏联想/历史区截走。
             if(tab==1) searchNavShortcut?.id ?: View.NO_ID
-            else if(tab==2 && actorRanking) actorRankButton?.id ?: rankSwitch?.id ?: rankRefresh?.id ?: navForTab().id
+            else if(tab==2 && actorRanking && collection!="actor-works") actorRankButton?.id ?: rankSwitch?.id ?: rankRefresh?.id ?: navForTab().id
             else suggestFirst?.id ?: historyFirst?.id ?: azLastRow.firstOrNull()?.id ?: searchInput?.id ?: collectionBack?.id ?: typeButtons[library.contentType]?.id ?: rankSwitch?.id ?: rankRefresh?.id ?: favoriteFilterFirst?.id ?: favoriteCheck?.id ?: historyManage?.id ?: navForTab().id
         } else View.NO_ID
         if(position>=displayed.size-12) catalogRecycler?.post { maybeLoadMore() }
