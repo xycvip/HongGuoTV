@@ -47,7 +47,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
             closePushPlaybackService()
         }
         leaveCollection()
-        tabState[tab]=CatalogState(page,catalog,hasMore,ranking,rankBoard,genre,aiCatalog,aiGenre); tabFocus[tab]=catalogFocus
+        tabState[tab]=CatalogState(page,catalog,hasMore,ranking,rankBoard,genre,actorRanking); tabFocus[tab]=catalogFocus
         // 从其他模块切回搜索页时重置为全新搜索状态，不保留上次的搜索词与结果
         if(targetTab==1) {
             query=""; aggregateSearch=true; phoneSearched=false; lastSuggestWords=emptyList<String>(); lastSuggestKey=""; suggestFocusIndex=-1; keyboardLastLabel=null
@@ -56,7 +56,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
         }
         tab=targetTab; val saved=tabState[targetTab]; page=saved?.page ?: 1; catalog=saved?.items ?: emptyList(); hasMore=saved?.hasMore ?: false; ranking=saved?.ranking; catalogFocus=tabFocus[targetTab].orEmpty()
         rankBoard=saved?.board ?: rankBoard; genre=saved?.genre ?: genre
-        aiCatalog=false; aiGenre=null
+        actorRanking=saved?.actorRanking ?: false
         if(targetTab==0) {
             if(doubleTapHome) {
                 // 首页连续双击才执行强制刷新；单击仅进入/停留首页，不打断当前内容。
