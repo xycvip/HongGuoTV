@@ -477,6 +477,25 @@ class ContentRepositoryTest {
         assertEquals(2, requests.size)
     }
 
+    @Test fun actorRankingCanRequestStarBoardAsAnInlineSubBoard() {
+        var requestedSubBoard = ""
+        val repo = ContentRepository(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                requestedSubBoard = chain.request().url.queryParameter("sub_selected_items").orEmpty()
+                val body = """{"code":0,"data":{"has_more":false,"next_offset":1,"cell_view":{"cell_data":[{"ugc_user_data":[{"user_info":{"base_info":{"user_id":"7100000000001303","user_name":"星光榜演员"}}}]}]}}}"""
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("OK").body(body.toResponseBody()).build()
+            }.build(),
+            System::currentTimeMillis,
+            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586", "1905892595378490") }
+        )
+
+        val page = repo.actorRanking(0, "", "ranklist_actor_fans")
+        assertEquals("ranklist_actor_fans", requestedSubBoard)
+        assertEquals("星光榜演员", page.items.single().name)
+        assertFalse(page.hasMore)
+    }
+
     private fun searchTab(type: Int,id: String) = JSONObject().put("tab_type",type).put("has_more",true)
         .put("data",JSONArray().put(JSONObject().put("video_data",JSONArray().put(JSONObject()
             .put("series_id",id).put("title","测试剧集").put("episode_cnt",8)))))
