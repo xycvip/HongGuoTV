@@ -40,7 +40,6 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.preload.DefaultPreloadManager
 import androidx.media3.ui.PlayerView
 import com.hongguotv.core.*
-import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
@@ -236,7 +235,7 @@ import java.util.concurrent.atomic.AtomicLong
             page=requestPage
             hasMore=result.hasMore
             if(requestActor) {
-                val actorPage=responseActorPage ?: throw IOException("演员榜分页响应丢失")
+                val actorPage=responseActorPage ?: error("演员榜分页响应丢失")
                 val knownActors=actorRankItems.mapTo(HashSet()) { it.userId }
                 actorRankItems=actorRankItems+actorPage.items.filter { it.userId !in knownActors }
                 actorRankNextOffset=actorPage.nextOffset
