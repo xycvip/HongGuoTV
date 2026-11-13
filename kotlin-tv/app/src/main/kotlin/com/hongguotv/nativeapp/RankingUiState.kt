@@ -2,6 +2,7 @@ package com.hongguotv.nativeapp
 
 import android.view.View
 import android.widget.TextView
+import com.hongguotv.core.ActorRankEntry
 import com.hongguotv.core.ComicRanking
 import com.hongguotv.core.Genre
 import com.hongguotv.core.RankBoard
@@ -14,11 +15,12 @@ internal class RankingUiState {
     var rankSwitch: View? = null
     var rankRefresh: View? = null
     var rankSubtitle: TextView? = null
-    var aiCatalog: Boolean = false
-    var aiGenre: Genre? = null
-    var aiEntry: View? = null
-    var aiBack: View? = null
-    var aiGenreButton: View? = null
+    var actorRanking: Boolean = false
+    var actorRankButton: View? = null
+    var actorRankItems: List<ActorRankEntry> = emptyList()
+    var actorRankNextOffset: Int = 0
+    var actorRankSessionId: String = ""
+    var actorRankVersion: String = ""
     var genre: Genre? = null
     var genreButton: View? = null
     var genreClear: View? = null
