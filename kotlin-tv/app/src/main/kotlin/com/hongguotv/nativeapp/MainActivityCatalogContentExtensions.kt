@@ -140,7 +140,7 @@ internal fun MainActivity.renderCatalogContent(
             catalog=localItems(); ranking=null; page=1; hasMore=false
         }
         if(load) {
-            if(tab==0 || tab==7) catalogGrid(body,focusNav,focusType,loading=true)
+            if(tab==0 || tab==7 || (tab==2 && collection=="actor-works")) catalogGrid(body,focusNav,focusType,loading=true)
             else {
                 message(body,"正在加载…")
                 if(focusType) (if(tab==1) searchInput else navForTab())?.requestFocus()
@@ -298,6 +298,13 @@ internal fun MainActivity.renderCatalogContent(
                     showCatalog(true)
                 } else {
                     body.removeAllViews()
+                    if(requestActorWorks) {
+                        val heading=row()
+                        collectionBack=addButton(heading,"‹ 返回演员榜") { leaveCollection(); showCatalog() }
+                        heading.addView(text("${actorWorksActor?.name ?: "演员"} · 参演作品",22f))
+                        body.addView(heading)
+                        collectionBack?.requestFocus()
+                    }
                     error(body,problem) { showCatalog(true) }
                     if(resumeCards.isNotEmpty()) resumeCards.first().requestFocus()
                 }
