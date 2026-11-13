@@ -192,7 +192,7 @@ internal fun MainActivity.renderCatalogContent(
                         }
                     }
                 }
-                if(requestTab==0 && requestPage==1 && requestGenre==null) {
+                if(requestTab==0 && requestPage==1) {
                     library.cacheHome(requestType,result.items,result.hasMore)
                 }
                     catalog=result.items; hasMore=result.hasMore
