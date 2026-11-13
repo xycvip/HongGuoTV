@@ -367,7 +367,7 @@ import java.util.concurrent.atomic.AtomicLong
                     update(remoteActions[index])
                     sync()
                     item.requestFocus()
-                }).show()
+                },selectedIndex=remoteActions.indexOf(current())).show()
             }
             return item
         }
