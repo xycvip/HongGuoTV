@@ -214,10 +214,12 @@ def douyin(url, target_title=""):
     for label,term in (("原文",direct_phrase),("JSON Unicode 转义", "".join("\\u%04x" % ord(ch) for ch in direct_phrase))):
      pos=body.find(term)
      if pos>=0:
-      direct_hits.append(f"{label}命中位置 {pos}，出现 {body.count(term)} 次；上下文：{re.sub(r'\\s+',' ',body[max(0,pos-100):pos+len(term)+160])}")
+      context=re.sub(r"\\s+"," ",body[max(0,pos-100):pos+len(term)+160])
+      direct_hits.append(f"{label}命中位置 {pos}，出现 {body.count(term)} 次；上下文：{context}")
+   direct_summary="；".join(direct_hits) if direct_hits else f"未找到“{direct_phrase}”原文或 Unicode 转义"
    a,path,diagnostic=inspect_feed_json(body,aid)
    title_matches,title_candidates=scan_feed_titles(body,target_title)
-   meta=f"HTTP {status}；Content-Type：{content_type}；最终地址：{final}；响应长度：{len(body)} 字符；{diagnostic}"
+   meta=f"HTTP {status}；Content-Type：{content_type}；最终地址：{final}；响应长度：{len(body)} 字符；原始响应全文直接搜索：{direct_summary}；{diagnostic}"
    if not a and title_matches:
     hit=title_matches[0]
     attempts.append(f"{host}：未命中 aweme_id，但在整个 Feed JSON 的 {hit['path']}（字段 {hit['field']}）发现分享剧名文本：{hit['value']}")
