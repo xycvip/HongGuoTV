@@ -478,11 +478,12 @@ def red(url):
   for value in scheme_values:
    sid=find_series(value)
    if sid:break
- return sid or (explicit_video_id if explicit_video_id and not eid else None),eid,(
+ toast_vid=first(r"""["']?share_toast_vid["']?\s*[=:]\s*["']?(\d{1,30})""")
+ return sid,eid,(
   f"schemeParams.video_id候选={','.join(scheme_video_ids) or '无'}；"
   f"独立video_id字段={explicit_video_id or '无'}；"
   f"播放路径单集ID={path_episode or '无'}；"
-  f"share_toast_vid仅作诊断字段={first(r"""["']?share_toast_vid["']?\s*[=:]\s*["']?(\d{1,30})""") or '无'}"
+  f"share_toast_vid仅作诊断字段={toast_vid or '无'}"
  )
 
 def red_id_regression_test():
