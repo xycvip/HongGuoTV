@@ -5,7 +5,7 @@ from datetime import datetime,timezone
 
 UA="Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36"
 URLS=re.compile(r"""https?://[^\s<>"'，。]+""",re.I)
-FEED_HOSTS=("aweme.snssdk.com","api5-normal-c-hl.amemv.com")
+FEED_HOSTS=("api5-normal-c-hl.amemv.com","aweme.snssdk.com")
 
 def get(url,headers=None):
  h={"User-Agent":UA,"Accept":"text/html,application/xhtml+xml,application/json,*/*"};h.update(headers or {})
@@ -163,7 +163,7 @@ def douyin(url):
  attempts=[]
  for host in FEED_HOSTS:
   try:
-   req=urllib.request.Request(f"https://{host}/aweme/v1/feed/?aweme_id={aid}&aid=1128",headers={"User-Agent":"com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7)","Accept":"application/json,*/*"})
+   req=urllib.request.Request(f"https://{host}/aweme/v1/feed/?aweme_id={aid}&aid=1128",headers={"User-Agent":"com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7; Build/TQ3A.230805.001; Cronet/TTNetVersion)","Accept":"application/json, text/plain, */*","Referer":"https://www.douyin.com/"})
    with urllib.request.urlopen(req,timeout=18) as response:
     status=response.status;final=response.geturl();content_type=response.headers.get("Content-Type","未提供")
     body=response.read(3145728).decode("utf-8","replace")
