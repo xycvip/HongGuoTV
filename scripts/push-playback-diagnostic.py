@@ -214,7 +214,7 @@ def douyin(url, target_title=""):
     for label,term in (("原文",direct_phrase),("JSON Unicode 转义", "".join("\\u%04x" % ord(ch) for ch in direct_phrase))):
      pos=body.find(term)
      if pos>=0:
-      context=re.sub(r"\\s+"," ",body[max(0,pos-100):pos+len(term)+160])
+      context=re.sub(r"\s+"," ",body[max(0,pos-100):pos+len(term)+160])
       direct_hits.append(f"{label}命中位置 {pos}，出现 {body.count(term)} 次；上下文：{context}")
    direct_summary="；".join(direct_hits) if direct_hits else f"未找到“{direct_phrase}”原文或 Unicode 转义"
    a,path,diagnostic=inspect_feed_json(body,aid)
