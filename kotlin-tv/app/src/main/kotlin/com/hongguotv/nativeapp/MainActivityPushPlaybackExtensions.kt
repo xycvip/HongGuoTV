@@ -21,6 +21,7 @@ import com.hongguotv.core.PhoneForm
 import com.hongguotv.core.PhoneInputServer
 import com.hongguotv.core.Series
 import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URI
@@ -130,6 +131,117 @@ private data class DouyinShareInfo(
     val updatedEpisodes:Int?
 )
 private object DouyinShareResolver {
+    /**
+     * api5-normal-c-hl.amemv.com 在部分网络环境下会被系统 DNS 污染为 127.0.0.1。
+     * 这里仅在该节点系统连接失败时，递归查询公共 DoH 的 CNAME/A/AAAA，
+     * 再通过 OkHttp 自定义 Dns 连接公网 IP；请求 URL 主机名不变，因此 TLS SNI、
+     * 证书校验和 HTTP Host 仍然使用 api5-normal-c-hl.amemv.com。
+     */
+    private fun isPublicAddress(address:InetAddress):Boolean {
+        if(address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress) return false
+        val bytes=address.address
+        if(bytes.size==4) {
+            val a=bytes[0].toInt() and 255
+            val b=bytes[1].toInt() and 255
+            val c=bytes[2].toInt() and 255
+            if(a==0 || a==10 || a==127 || a>=224) return false
+            if(a==100 && b in 64..127) return false
+            if(a==169 && b==254) return false
+            if(a==172 && b in 16..31) return false
+            if(a==192 && (b==168 || (b==0 && c==0))) return false
+            if(a==198 && b in 18..19) return false
+            if(a==198 && b==51 && c==100) return false
+            if(a==203 && b==0 && c==113) return false
+        } else if(bytes.size==16) {
+            val first=bytes[0].toInt() and 255
+            val second=bytes[1].toInt() and 255
+            if((first and 0xfe)==0xfc) return false
+            if(first==0x20 && second==0x01 &&
+                (bytes[2].toInt() and 255)==0x0d &&
+                (bytes[3].toInt() and 255)==0xb8) return false
+        }
+        return true
+    }
+    private fun publicDnsAddresses(host:String):List<InetAddress> {
+        val resolvers=listOf(
+            "https://cloudflare-dns.com/dns-query?",
+            "https://dns.google/resolve?"
+        )
+        val addresses=linkedSetOf<String>()
+        resolvers.forEach { base ->
+            val pending=java.util.ArrayDeque<Pair<String,Int>>()
+            val visited=linkedSetOf<String>()
+            pending.add(host to 0)
+            while(pending.isNotEmpty() && visited.size<12) {
+                val (name,depth)=pending.removeFirst()
+                val normalized=name.trimEnd('.').lowercase(Locale.ROOT)
+                if(!visited.add(normalized)) continue
+                listOf(1,28,5).forEach { type ->
+                    val query=base+"name="+java.net.URLEncoder.encode(normalized,"UTF-8")+"&type="+type
+                    val connection=(URL(query).openConnection() as HttpURLConnection).apply {
+                        connectTimeout=5000
+                        readTimeout=6000
+                        requestMethod="GET"
+                        setRequestProperty("Accept","application/dns-json")
+                        setRequestProperty("User-Agent","HongGuoTV/1.0 DNS-Fallback")
+                    }
+                    try {
+                        if(connection.responseCode !in 200..299) return@forEach
+                        val root=JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+                        if(root.optInt("Status",-1)!=0) return@forEach
+                        val answers=root.optJSONArray("Answer") ?: return@forEach
+                        for(index in 0 until answers.length()) {
+                            val answer=answers.optJSONObject(index) ?: continue
+                            when(answer.optInt("type")) {
+                                1,28 -> {
+                                    val raw=answer.optString("data").trim()
+                                    val ip=runCatching { InetAddress.getByName(raw) }.getOrNull()
+                                    if(ip!=null && isPublicAddress(ip)) addresses.add(raw)
+                                }
+                                5 -> {
+                                    val alias=answer.optString("data").trim().trimEnd('.')
+                                    if(alias.isNotBlank() && depth<8 &&
+                                        alias.lowercase(Locale.ROOT) !in visited) pending.add(alias to depth+1)
+                                }
+                            }
+                        }
+                    } catch(_:Exception) {
+                        // 单个 DNS 服务或记录类型失败时，继续尝试其他记录和备用解析器。
+                    } finally {
+                        connection.disconnect()
+                    }
+                }
+            }
+        }
+        return addresses.mapNotNull { raw ->
+            runCatching { InetAddress.getByName(raw) }.getOrNull()?.takeIf { isPublicAddress(it) }
+        }
+    }
+    private fun feedWithPublicDns(awemeId:String,host:String):String {
+        val addresses=publicDnsAddresses(host)
+        if(addresses.isEmpty()) throw java.io.IOException("公共 DNS 未解析到 $host 的公网 A/AAAA 地址")
+        val endpoint="https://$host/aweme/v1/feed/?aweme_id=$awemeId&aid=1128"
+        val client=okhttp3.OkHttpClient.Builder()
+            .dns { requestedHost ->
+                if(requestedHost.equals(host,true)) addresses
+                else okhttp3.Dns.SYSTEM.lookup(requestedHost)
+            }
+            .connectTimeout(8,java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(10,java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        val request=okhttp3.Request.Builder()
+            .url(endpoint)
+            .header("User-Agent","com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7; Build/TQ3A.230805.001; Cronet/TTNetVersion)")
+            .header("Accept","application/json, text/plain, */*")
+            .header("Referer","https://www.douyin.com/")
+            .build()
+        client.newCall(request).execute().use { response ->
+            if(!response.isSuccessful) throw java.io.IOException("备用 DNS Feed HTTP ${response.code}")
+            return response.body?.string().orEmpty()
+        }
+    }
     private val videoIdPattern=Regex("""/(?:share/video|video)/(\d{8,25})""",RegexOption.IGNORE_CASE)
     private val queryIdPattern=Regex("""(?:[?&]|^)aweme_id=(\d{8,25})""",RegexOption.IGNORE_CASE)
     private val shareTitlePattern=Regex("""[【〖]([^】〗]{1,100})[】〗]""")
@@ -175,10 +287,12 @@ private object DouyinShareResolver {
             setRequestProperty("Accept","application/json, text/plain, */*")
             setRequestProperty("Referer","https://www.douyin.com/")
         }
+        var body:String?=null
+        var networkProblem:Exception?=null
         try {
             val status=connection.responseCode
             if(status !in 200..299) throw java.io.IOException("Feed HTTP $status")
-            val body=connection.inputStream.use { input ->
+            body=connection.inputStream.use { input ->
                 val out=java.io.ByteArrayOutputStream()
                 val buffer=ByteArray(8192)
                 while(out.size()<3*1024*1024) {
@@ -188,21 +302,40 @@ private object DouyinShareResolver {
                 }
                 String(out.toByteArray(),Charsets.UTF_8)
             }
-            val root=JSONObject(body)
-            val aweme=findAweme(root,awemeId) ?: throw java.io.IOException("Feed 返回成功，但没有找到匹配作品 ID")
-            val series=aweme.optJSONObject("series_info")
-            val mix=aweme.optJSONObject("mix_info")
-            val title=(titleFrom(series).ifBlank { titleFrom(mix) })
-                .removePrefix("短剧 · ").removePrefix("短剧·").removePrefix("漫剧 · ").trim()
-            if(title.isBlank()) throw java.io.IOException("作品 ID 已匹配，但 Feed 中没有短剧名称")
-            val stats=series?.optJSONObject("stats") ?: mix?.optJSONObject("stats")
-            val author=text(aweme.optJSONObject("author"),"nickname")
-            return DouyinShareInfo(                awemeId,title,author,
-                (text(series,"series_id").ifBlank { text(mix,"mix_id") }).takeIf { it.isNotBlank() },
-                stats?.optInt("total_episode")?.takeIf { it>0 },
-                stats?.optInt("updated_to_episode")?.takeIf { it>0 }
-            )
+        } catch(problem:Exception) {
+            networkProblem=problem
         } finally { connection.disconnect() }
+        if(body==null) {
+            val dnsFailure=generateSequence(networkProblem) { it.cause }
+                .any { it is java.net.UnknownHostException || it is java.net.ConnectException ||
+                    it is java.net.NoRouteToHostException || it is java.net.SocketTimeoutException }
+            if(host!="api5-normal-c-hl.amemv.com" || !dnsFailure) {
+                throw java.io.IOException("Feed 请求失败：${networkProblem?.message ?: "未知错误"}",networkProblem)
+            }
+            body=try {
+                feedWithPublicDns(awemeId,host)
+            } catch(fallback:Exception) {
+                throw java.io.IOException(
+                    "系统 DNS 连接失败（${networkProblem?.message ?: "未知错误"}）；公共 DNS 备用连接也失败（${fallback.message ?: "未知错误"}）",
+                    fallback
+                )
+            }
+        }
+        val root=JSONObject(body!!)
+        val aweme=findAweme(root,awemeId) ?: throw java.io.IOException("Feed 返回成功，但没有找到匹配作品 ID")
+        val series=aweme.optJSONObject("series_info")
+        val mix=aweme.optJSONObject("mix_info")
+        val title=(titleFrom(series).ifBlank { titleFrom(mix) })
+            .removePrefix("短剧 · ").removePrefix("短剧·").removePrefix("漫剧 · ").trim()
+        if(title.isBlank()) throw java.io.IOException("作品 ID 已匹配，但 Feed 中没有短剧名称")
+        val stats=series?.optJSONObject("stats") ?: mix?.optJSONObject("stats")
+        val author=text(aweme.optJSONObject("author"),"nickname")
+        return DouyinShareInfo(
+            awemeId,title,author,
+            (text(series,"series_id").ifBlank { text(mix,"mix_id") }).takeIf { it.isNotBlank() },
+            stats?.optInt("total_episode")?.takeIf { it>0 },
+            stats?.optInt("updated_to_episode")?.takeIf { it>0 }
+        )
     }
     fun resolve(shortUrl:String):DouyinShareInfo {
         val parsed=URI(shortUrl)
