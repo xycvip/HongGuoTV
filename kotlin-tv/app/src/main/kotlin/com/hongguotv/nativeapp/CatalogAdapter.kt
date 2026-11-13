@@ -72,7 +72,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         card.tag=item.id; card.contentDescription=item.title
         loadCover(holder.image,item.cover)
         // 演员榜复用卡片网格布局，但数据与可播放短剧保持独立。
-        val actorRanked=tab==2 && actorRanking
+        val actorRanked=tab==2 && actorRanking && collection!="actor-works"
         val actor=if(actorRanked) actorRankItems.firstOrNull { it.userId==item.id } else null
         val ranked=tab==2 && ranking!=null
         val rankPosition=if(ranked) ranking?.positions?.get(item.id) else null
@@ -137,18 +137,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             catalogFocus=item.id
             if(actorRanked) {
                 val entry=actor ?: return@setOnClickListener
-                val detail=buildString {
-                    append("第 ${entry.position} 名")
-                    if(entry.popularity.isNotBlank()) append("\n人气：${entry.popularity}")
-                    if(entry.intro.isNotBlank()) append("\n\n${entry.intro}")
-                    if(entry.details.isNotEmpty()) append("\n\n${entry.details.joinToString(" · ")}")
-                    if(entry.actorId.isNotBlank()) append("\n\n演员编号：${entry.actorId}")
-                }
-                android.app.AlertDialog.Builder(host)
-                    .setTitle(entry.name)
-                    .setMessage(detail)
-                    .setPositiveButton("关闭", null)
-                    .show()
+                openActorWorks(entry)
             } else openDetail(item,tab==4 || collection=="resume" || collection=="updates")
         }
         card.setOnLongClickListener {
