@@ -51,8 +51,8 @@ def clean_title(value):
 
 def extract_douyin_title(raw,url_start):
  segment=raw[:url_start]
- marker=segment.rfind("复制打开抖音")
- if marker>=0:segment=segment[:marker]
+ # “复制打开抖音”可能出现在标题之前，不能直接截断整段分享文案。
+ segment=re.sub(r"复制打开抖音[，,]?\\s*"," ",segment)
  # 常见单行分享格式：时间/口令 + “看看【作者的作品】” + 剧名/简介 + 链接。
  # 优先截取作者提示之后的正文，避免把前面的“8.79”等分享口令误判成标题。
  m=re.search(r"看看[【〖\[][^】〗\]]{1,60}(?:的作品|作品)[】〗\]]\s*(.*)$",segment)
