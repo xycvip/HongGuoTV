@@ -482,7 +482,7 @@ def red(url):
   f"schemeParams.video_id候选={','.join(scheme_video_ids) or '无'}；"
   f"独立video_id字段={explicit_video_id or '无'}；"
   f"播放路径单集ID={path_episode or '无'}；"
-  f"share_toast_vid仅作诊断字段={first(r'["']?share_toast_vid["']?\s*[=:]\s*["']?(\d{1,30})') or '无'}"
+  f"share_toast_vid仅作诊断字段={first(r"""["']?share_toast_vid["']?\s*[=:]\s*["']?(\d{1,30})""") or '无'}"
  )
 
 def red_id_regression_test():
@@ -715,6 +715,7 @@ def main():
  if not raw.strip():raise RuntimeError("请在 Actions 输入框粘贴完整分享文案")
  shares=parse(raw)
  L=["# 推送播放模拟诊断报告","",f"- 时间：{datetime.now(timezone.utc).isoformat()}",f"- 输入字符数：{len(raw)}",f"- 识别条数：{len(shares)}","- 诊断任务执行成功仅表示报告已生成，不代表分享解析或播放入口验证成功。","- 本报告请求公开网页/接口，不执行需设备身份签名的 App 接口，也不启动 Android 播放器。",""]
+ L += ["## 分享参数回归测试", "- "+red_id_regression_test(), ""]
  probes={}
  for host in FEED_HOSTS:probes[host]=probe_host(host)
  L += ["## Feed 网络连通性（独立于接口业务结果）"]
