@@ -90,7 +90,7 @@ import java.util.concurrent.atomic.AtomicLong
                 if(isDestroyed || resettingAllData) return@post
                 loaded.onSuccess { resultPage ->
                     library.cacheHome(type,resultPage.items,resultPage.hasMore)
-                    if(library.contentType==type && tab==0 && collection==null && genre==null && screen=="catalog") {
+                    if(library.contentType==type && tab==0 && collection==null && screen=="catalog") {
                         if(page==1) {
                             catalog=resultPage.items; hasMore=resultPage.hasMore; homeFromCache=false
                             homeScreen?.updateShelves(homeShelves(),requestFocus=false)
