@@ -80,26 +80,36 @@ class PlaybackRepository(
             String(bytes, Charsets.UTF_8)
         }
         if (raw.isBlank()) return null
-        val root = runCatching { JSONObject(raw) }.getOrNull() ?: return null
-        if (root.optInt("code", root.optInt("Code", -1)) != 0) return null
-        val data = root.optJSONObject("data") ?: return null
+        val root = try {
+            JSONObject(raw)
+        } catch (_: Exception) {
+            throw IOException("video_tab 播放信息格式异常")
+        }
+        if (root.optInt("code", root.optInt("Code", -1)) != 0) {
+            throw IOException("video_tab 播放接口暂不可用")
+        }
+        val data = root.optJSONObject("data") ?: throw IOException("video_tab 播放信息为空")
         val rows = data.optJSONObject("video_model_data") ?: data
         val row = rows.optJSONObject(id)
             ?: rows.keys().asSequence().mapNotNull { rows.optJSONObject(it) }.firstOrNull()
-            ?: return null
-        val rawModel = row.opt("video_model") ?: return null
+            ?: throw IOException("video_tab 播放信息为空")
+        val rawModel = row.opt("video_model") ?: throw IOException("video_tab 播放模型缺失")
         val model = when (rawModel) {
             is JSONObject -> rawModel
-            is String -> runCatching { JSONObject(rawModel) }.getOrNull()
-            else -> null
-        } ?: return null
+            is String -> runCatching { JSONObject(rawModel) }.getOrElse {
+                throw IOException("video_tab 播放模型格式异常")
+            }
+            else -> throw IOException("video_tab 播放模型格式异常")
+        }
         val list = model.opt("video_list")
         val hasVideoRows = when (list) {
             is JSONObject -> list.length() > 0
             is JSONArray -> list.length() > 0
             else -> false
         }
-        if (!hasVideoRows) return null
+        if (!hasVideoRows && !model.has("fallback_api")) {
+            throw IOException("video_tab 播放模型没有可用片源")
+        }
         return raw
     }
 
