@@ -20,9 +20,10 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
         ContentType.SHORT -> "real-drama"
         ContentType.AI -> "ai-drama"
     }
-    private fun text(url: String, signed: Signer.Request? = null): String {
+    private fun text(url: String, signed: Signer.Request? = null, cookie: String? = null): String {
         val request = Request.Builder().url(url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
         signed?.headers?.forEach { (k,v) -> request.header(k,v) }
+        cookie?.takeIf { it.isNotBlank() }?.let { request.header("Cookie",it) }
         signed?.body?.let { request.post(it.toRequestBody("application/json; charset=utf-8".toMediaType())) }
         return RequestScope.execute(http.newCall(request.build())) { response ->
             if (!response.isSuccessful) throw IOException("内容请求失败（HTTP ${response.code}）")
@@ -47,6 +48,59 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
         require(page in 1..100)
         return ComicRank.parse(text("$site/rank/${board.path}?page=$page"),page,board)
     }
+
+    /** 红果短剧排行榜中的演员榜；分页游标必须与同一次榜单会话配对。 */
+    open fun actorRanking(offset: Int = 0, sessionId: String = ""): ActorRankPage {
+        require(offset >= 0)
+        val profile = playbackSession.profile(http)
+        val identity = profile.values
+        val values = linkedMapOf(
+            "iid" to identity.getValue("iid"),
+            "device_id" to identity.getValue("device_id"),
+            "ac" to "wifi",
+            "channel" to identity.getValue("channel"),
+            "aid" to identity.getValue("aid"),
+            "app_name" to identity.getValue("app_name"),
+            "cdid" to identity.getValue("cdid"),
+            "version_code" to identity.getValue("version_code"),
+            "version_name" to identity.getValue("version_name"),
+            "device_platform" to identity.getValue("device_platform"),
+            "os" to identity.getValue("os"),
+            "ssmix" to identity.getValue("ssmix"),
+            "device_type" to identity.getValue("device_type"),
+            "device_brand" to identity.getValue("device_brand"),
+            "language" to identity.getValue("language"),
+            "os_api" to identity.getValue("os_api"),
+            "os_version" to identity.getValue("os_version"),
+            "manifest_version_code" to identity.getValue("manifest_version_code"),
+            "resolution" to identity.getValue("resolution"),
+            "dpi" to identity.getValue("dpi"),
+            "update_version_code" to identity.getValue("update_version_code"),
+            "host_abi" to identity.getValue("host_abi"),
+            "dragon_device_type" to identity.getValue("dragon_device_type"),
+            "pv_player" to identity.getValue("pv_player"),
+            "compliance_status" to identity.getValue("compliance_status"),
+            "need_personal_recommend" to identity.getValue("need_personal_recommend"),
+            "player_so_load" to identity.getValue("player_so_load"),
+            "is_android_pad_screen" to identity.getValue("is_android_pad_screen"),
+            "openudid" to identity.getValue("openudid"),
+            "cell_id" to "7470092475068071998",
+            "tab_type" to "26",
+            "selected_items" to "ranklist_celebrity",
+            "sub_selected_items" to "ranklist_series_actor",
+            "offset" to offset.toString(),
+            "limit" to "0",
+            "client_req_type" to "2",
+            "client_template" to "2",
+            "unlimited_selector_change_type" to if(offset > 0) "2" else "1",
+        )
+        if (sessionId.isNotBlank()) values["session_id"] = sessionId
+        values["user_is_login"] = "0"
+        val base = "https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/bookmall/cell/change/v1/"
+        val signed = signer.sign(base,values,identity=identity)
+        return ActorRankParser.parse(text(signed.url,signed,profile.cookie),offset)
+    }
+
     fun comicRanking(page: Int = 1)=ranking(RankBoard.COMIC,page)
     fun realRanking(page: Int = 1)=ranking(RankBoard.REAL,page)
     private val theaterRepository by lazy { TheaterRepository(http,playbackSession) { url,signed -> text(url,signed) } }
