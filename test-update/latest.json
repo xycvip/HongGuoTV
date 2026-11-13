@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "68e0c017c1ad06913c8b01cbfcc0f4319d72868f",
-  "versionCode": 93,
-  "versionName": "0.0.93",
+  "sourceCommit": "dcc781ba82b2eb33beba81069cd6d65f0d9b89b1",
+  "versionCode": 94,
+  "versionName": "0.0.94",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.93",
+  "tag": "hongguotv-bate-v0.0.94",
   "apk": {
-    "name": "HongguoTV-0.0.93.apk",
-    "size": 2048605,
-    "sha256": "25a06c04ac9c698d58e832bc743c4de9960fbcc2f410d51b36946f22afdb624a",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.93/HongguoTV-0.0.93.apk"
+    "name": "HongguoTV-0.0.94.apk",
+    "size": 2048845,
+    "sha256": "0679cceb09c30d41d6e401dde02b3774d28554ca4d8cd9150a0ef713f4beb0ab",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.94/HongguoTV-0.0.94.apk"
   },
-  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
+  "notes": "【其他功能与问题修复】\n- 首页热门发现改用官网对应新剧榜"
 }
