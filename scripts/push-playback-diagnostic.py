@@ -443,6 +443,37 @@ def detail(sid):
  if not eps:raise RuntimeError("详情页没有分集列表")
  return o.get("series_name") or o.get("series_title") or "未知剧名",eps
 
+def probe_detail_pages(sid,eid):
+ # 同一组分享 ID 并行验证不同公开详情/播放页面，避免把“剧目详情成功”
+ # 与“分享单集 ID 命中”混为一个结果。
+ candidates=[
+  ("红果官网查询参数详情",f"https://hongguoduanju.com/detail?series_id={sid}"),
+  ("红果官网路径详情",f"https://hongguoduanju.com/detail/{sid}"),
+ ]
+ if eid:
+  candidates += [
+   ("novelquickapp 单集播放页",f"https://novelquickapp.com/player/{sid}/{eid}"),
+   ("红果官网单集播放页",f"https://hongguoduanju.com/player/{sid}/{eid}"),
+  ]
+ lines=["- 多路详情页接口实测："]
+ for label,url in candidates:
+  try:
+   status,final,body=get(url)
+   title_match=re.search(r"<title[^>]*>(.*?)</title>",body,re.I|re.S)
+   page_title=html.unescape(re.sub(r"\\s+"," ",title_match.group(1))).strip() if title_match else ""
+   sid_hit=sid in body
+   eid_hit=bool(eid and re.search(r"(?<!\\d)"+re.escape(eid)+r"(?!\\d)",body))
+   lines.append(f"  - {label}：HTTP {status}；剧目ID命中={'是' if sid_hit else '否'}；分享单集ID命中={'是' if eid_hit else '否'}；页面标题={page_title[:100] or '未提取'}；链接={final}")
+  except Exception as e:
+   lines.append(f"  - {label}：请求失败 {type(e).__name__}: {e}；链接={url}")
+ lines += [
+  "- 第三方详情接口候选（本次仅登记文档入口，需配置各自密钥后才能实测）：",
+  "  - 小影API红果详情：GET /api/dramas/hongguo/detail?series_id=...；需要项目签名；文档：https://www.xiaoyingapi.com/docs/drama/",
+  "  - SocialDataX红果详情：支持 series_id 或 novelquickapp 分享链接；需要 API Key；文档：https://socialdatax.com/api-docs/hongguo/",
+  "  - 红果新版 App video_detail/v1：需要设备参数及 X-Gorgon/X-Khronos 签名；参考：https://github.com/gybeyond1/hongguo-dl",
+ ]
+ return lines
+
 def main():
  raw=os.getenv("PUSH_SHARE_TEXT","")
  if not raw.strip():raise RuntimeError("请在 Actions 输入框粘贴完整分享文案")
@@ -481,6 +512,7 @@ def main():
    elif s["source"]=="红果" and s["url"]:
     sid,eid=red(s["url"]);L += [f"- 红果剧目 ID：{sid or '未提取'}",f"- 红果单集 ID：{eid or '未提取'}"]
     if sid:
+     L += probe_detail_pages(sid,eid)
      real,eps=detail(sid)
      if eid and eid not in eps:raise RuntimeError("分享集数 ID 不在详情分集列表")
      t=real;direct=True;L += ["- 红果详情：成功",f"- 剧名：**{real}**",f"- 总集数：{len(eps)}",f"- 分享集数：{eps.index(eid)+1 if eid else 1}"]
