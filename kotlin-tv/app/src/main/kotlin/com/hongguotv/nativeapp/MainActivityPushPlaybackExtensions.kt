@@ -306,10 +306,11 @@ private object DouyinShareResolver {
         if(addresses.isEmpty()) throw java.io.IOException("公共 DNS 未解析到 $host 的公网 A/AAAA 地址")
         val endpoint="https://$host/aweme/v1/feed/?aweme_id=$awemeId&aid=1128"
         val client=okhttp3.OkHttpClient.Builder()
-            .dns { requestedHost ->
-                if(requestedHost.equals(host,true)) addresses
-                else okhttp3.Dns.SYSTEM.lookup(requestedHost)
-            }
+            .dns(object : okhttp3.Dns {
+                override fun lookup(requestedHost: String): List<InetAddress> =
+                    if(requestedHost.equals(host,true)) addresses
+                    else okhttp3.Dns.SYSTEM.lookup(requestedHost)
+            })
             .connectTimeout(8,java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(10,java.util.concurrent.TimeUnit.SECONDS)
             .build()
@@ -388,7 +389,7 @@ private object DouyinShareResolver {
             networkProblem=problem
         } finally { connection.disconnect() }
         if(body==null) {
-            val dnsFailure=generateSequence(networkProblem) { it.cause }
+            val dnsFailure=generateSequence<Throwable>(networkProblem) { it.cause }
                 .any { it is java.net.UnknownHostException || it is java.net.ConnectException ||
                     it is java.net.NoRouteToHostException || it is java.net.SocketTimeoutException }
             if(host!="api5-normal-c-hl.amemv.com" || !dnsFailure) {
