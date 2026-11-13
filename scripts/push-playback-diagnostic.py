@@ -203,7 +203,7 @@ def douyin_web_detail(aid):
  try:o=json.loads(body)
  except Exception as e:
   challenge=any(x in body.lower() for x in ("captcha","challenge","verify","安全验证"))
-  return {"meta":meta+f"；JSON 解码失败：{type(e).__name__}；响应预览："+re.sub(r"\\s+"," ",body[:180]),"result":"疑似验证页/非 JSON" if challenge else "非 JSON 响应","title":""}
+  return {"meta":meta+f"；JSON 解码失败：{type(e).__name__}；响应预览："+re.sub(r"\s+"," ",body[:180]),"result":"疑似验证页/非 JSON" if challenge else "非 JSON 响应","title":""}
  if not isinstance(o,(dict,list)):
   return {"meta":meta+"；JSON 根节点不是对象/数组","result":"JSON 结构异常","title":""}
  detail=nested(o,lambda x: str(x.get("aweme_id",""))==aid)
