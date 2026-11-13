@@ -208,7 +208,7 @@ def douyin(url, target_title=""):
     status=response.status;final=response.geturl();content_type=response.headers.get("Content-Type","未提供")
     body=response.read(3145728).decode("utf-8","replace")
    # 在原始响应全文中直接搜索分享剧名片段，不依赖 JSON 字段名或 aweme_id。
-   direct_phrase=(target_title or "")[:10]
+   direct_phrase=(target_title or "")[:9]
    direct_hits=[]
    if direct_phrase:
     for label,term in (("原文",direct_phrase),("JSON Unicode 转义", "".join("\\u%04x" % ord(ch) for ch in direct_phrase))):
