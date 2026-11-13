@@ -135,8 +135,15 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         if(tab==3) favoriteBadges[item.id]=holder.badge
         card.setOnClickListener {
             catalogFocus=item.id
-            if(actorRanked) Toast.makeText(host,"演员：${actor?.name ?: item.title} · ${actor?.popularity.orEmpty()}",Toast.LENGTH_SHORT).show()
-            else openDetail(item,tab==4 || collection=="resume" || collection=="updates")
+            if(actorRanked) {
+                val entry=actor ?: return@setOnClickListener
+                rankSubtitle?.text=buildString {
+                    append("第 ${entry.position} 名 · ${entry.name}")
+                    if(entry.popularity.isNotBlank()) append(" · ${entry.popularity}")
+                    if(entry.intro.isNotBlank()) append("\\n${entry.intro}")
+                    if(entry.details.isNotEmpty()) append("\\n${entry.details.joinToString(" · ")}")
+                }
+            } else openDetail(item,tab==4 || collection=="resume" || collection=="updates")
         }
         card.setOnLongClickListener {
             catalogFocus=item.id
