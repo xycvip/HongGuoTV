@@ -15,7 +15,7 @@ data class ActorRankPage(
     val sessionId: String, val version: String,
 )
 fun ActorRankEntry.toSeries() = Series(
-    id = userId, title = name, cover = avatar, description = intro,
+    id = actorId.ifBlank { userId }, title = name, cover = avatar, description = intro,
     badge = popularity, tags = details.joinToString(" · "),
 )
 
@@ -40,7 +40,10 @@ internal object ActorRankParser {
             for (node in candidates) {
                 val info = node.optJSONObject("user_info") ?: node.optJSONObject("user") ?: node
                 val base = info.optJSONObject("base_info") ?: info.optJSONObject("user_base_info") ?: info
-                val userId = firstString(base, "user_id", "uid", "userId", "id")
+                // 官方结构：user_id 位于 user_info，演员作品查询 ID 位于 base_info.actor_id_str。
+                // 不能把 user_id 错当成 base_info 的字段，否则星光榜会把整页演员全部过滤掉。
+                val userId = firstString(info, "user_id", "uid", "userId", "id")
+                    .ifBlank { firstString(base, "user_id", "uid", "userId", "id") }
                 val actorId = firstString(base, "actor_id_str", "actor_id", "star_id", "author_id")
                 val name = firstString(base, "user_name", "nickname", "name", "nick_name")
                 if (!userId.matches(Regex("[0-9]{1,30}")) || name.isBlank() || !seen.add(userId)) continue
@@ -123,10 +126,27 @@ internal object ActorRankParser {
         return ""
     }
 
+    /**
+     * BitmapFactory on our Android 8+ artwork loader cannot decode the HEIC avatar
+     * URLs returned by the app API. The official image CDN supports the same image
+     * through its shrink transform; use that URL rather than passing HEIC bytes to
+     * the bitmap decoder.
+     */
+    private fun normalizeAvatarUrl(value: String): String {
+        val uri = runCatching { java.net.URI(value) }.getOrNull() ?: return value
+        val host = uri.host?.lowercase() ?: return value
+        if (!(host.endsWith("fqnovelpic.com") || host.endsWith("byteimg.com"))) return value
+        val path = uri.path ?: return value
+        if (!path.startsWith("/novel-pic/")) return value
+        val basePath = path.substringBefore("~")
+            .replace(Regex("\\.(heic|jpeg|jpg|png|webp)$", RegexOption.IGNORE_CASE), "")
+        return "https://p3-novel.byteimg.com${basePath}~tplv-shrink:640:0.image"
+    }
+
     private fun imageValue(value: Any?): String {
         when (value) {
             is String -> {
-                val url = cleanUrl(value.trim())
+                val url = normalizeAvatarUrl(cleanUrl(value.trim()))
                 if (url.startsWith("https://") || url.startsWith("http://")) return url
             }
             is JSONArray -> for (i in 0 until value.length()) {
