@@ -443,19 +443,20 @@ class ContentRepositoryTest {
                 assertEquals("GET", request.method)
                 assertEquals("/reading/bookapi/bookmall/cell/change/v1/", request.url.encodedPath)
                 assertEquals("7470092475068071998", request.url.queryParameter("cell_id"))
-                assertEquals("26", request.url.queryParameter("tab_type"))
+                assertEquals(if (requests.size == 1) "26" else "18", request.url.queryParameter("tab_type"))
+                assertEquals("20", request.url.queryParameter("limit"))
+                assertEquals("2", request.url.queryParameter("gender"))
+                assertEquals("0", request.url.queryParameter("unlimited_selector_change_type"))
                 assertEquals("ranklist_celebrity", request.url.queryParameter("selected_items"))
                 assertEquals("ranklist_series_actor", request.url.queryParameter("sub_selected_items"))
                 assertEquals("0", request.url.queryParameter("user_is_login"))
                 val offset = request.url.queryParameter("offset")
                 val body = if (offset == "0") {
-                    assertEquals("1", request.url.queryParameter("unlimited_selector_change_type"))
-                    """{"code":0,"data":{"has_more":true,"next_offset":1,"session_id":"actor-session","rank_version":"v1","cell_view":{"cell_data":[{"ugc_user_data":[{"user_info":{"base_info":{"user_id":"7100000000001301","actor_id_str":"7100000000001401","user_name":"首屏演员","user_avatar":"https://example.com/actor.jpg"}},"rec_text_item":{"RecommendText":"700万人气"}}]}]}}}"""
+                    """{"code":0,"data":{"has_more":true,"next_offset":1,"session_id":"actor-session","rank_version":"v1","cell_view":{"cell_data":[{"ugc_user_data":[{"user_info":{"user_id":"7100000000001301","base_info":{"actor_id_str":"7100000000001401","user_name":"首屏演员","user_avatar":"https://example.com/actor.jpg"}},"rec_text_item":{"RecommendText":"700万人气"}}]}]}}}"""
                 } else {
                     assertEquals("1", offset)
-                    assertEquals("2", request.url.queryParameter("unlimited_selector_change_type"))
                     assertEquals("actor-session", request.url.queryParameter("session_id"))
-                    """{"code":0,"data":{"has_more":false,"next_offset":2,"session_id":"actor-session","rank_version":"v1","cell_view":{"cell_data":[{"ugc_user_data":[{"user_info":{"base_info":{"user_id":"7100000000001302","user_name":"第二页演员"}}}] }]}}}"""
+                    """{"code":0,"data":{"has_more":false,"next_offset":2,"session_id":"actor-session","rank_version":"v1","cell_view":{"cell_data":[{"ugc_user_data":[{"user_info":{"user_id":"7100000000001302","base_info":{"actor_id_str":"7100000000001402","user_name":"第二页演员"}}}] }]}}}"""
                 }
                 Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
                     .code(200).message("OK").body(body.toResponseBody()).build()
@@ -482,7 +483,10 @@ class ContentRepositoryTest {
         val repo = ContentRepository(
             OkHttpClient.Builder().addInterceptor { chain ->
                 requestedSubBoard = chain.request().url.queryParameter("sub_selected_items").orEmpty()
-                val body = """{"code":0,"data":{"has_more":false,"next_offset":1,"cell_view":{"cell_data":[{"ugc_user_data":[{"user_info":{"base_info":{"user_id":"7100000000001303","user_name":"星光榜演员"}}}]}]}}}"""
+                val request = chain.request()
+                assertEquals("ranklist_celebrity", request.url.queryParameter("selected_items"))
+                assertEquals("ranklist_actor_fans", request.url.queryParameter("sub_selected_items"))
+                val body = """{"code":0,"data":{"has_more":false,"next_offset":1,"cell_view":{"cell_data":[{"ugc_user_data":[{"user_info":{"user_id":"7100000000001303","base_info":{"actor_id_str":"7100000000001403","user_name":"星光榜演员","user_avatar":"https://p3-reading-sign.fqnovelpic.com/novel-pic/star-avatar~tplv-81nmtwyey9.heic"}},"rec_text_item":{"RecommendText":"900万人气"},"intro":"星光榜演员简介"}]}]}}}"""
                 Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                     .code(200).message("OK").body(body.toResponseBody()).build()
             }.build(),
@@ -493,6 +497,11 @@ class ContentRepositoryTest {
         val page = repo.actorRanking(0, "", "ranklist_actor_fans")
         assertEquals("ranklist_actor_fans", requestedSubBoard)
         assertEquals("星光榜演员", page.items.single().name)
+        assertEquals("7100000000001303", page.items.single().userId)
+        assertEquals("7100000000001403", page.items.single().actorId)
+        assertEquals("https://p3-novel.byteimg.com/novel-pic/star-avatar~tplv-shrink:640:0.image", page.items.single().avatar)
+        assertEquals("900万人气", page.items.single().popularity)
+        assertEquals("星光榜演员简介", page.items.single().intro)
         assertFalse(page.hasMore)
     }
 
