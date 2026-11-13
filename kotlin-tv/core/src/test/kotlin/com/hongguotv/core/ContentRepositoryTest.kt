@@ -431,6 +431,52 @@ class ContentRepositoryTest {
         assertFalse(result.hasMore)
     }
 
+    @Test fun actorRankingUsesSignedCellChangeAndCarriesSessionAcrossPages() {
+        val requests = mutableListOf<Request>()
+        val session = PlaybackDeviceSession {
+            DeviceRegister.Registered("1905892595382586", "1905892595378490")
+        }
+        val repo = ContentRepository(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                val request = chain.request()
+                requests += request
+                assertEquals("GET", request.method)
+                assertEquals("/reading/bookapi/bookmall/cell/change/v1/", request.url.encodedPath)
+                assertEquals("7470092475068071998", request.url.queryParameter("cell_id"))
+                assertEquals("26", request.url.queryParameter("tab_type"))
+                assertEquals("ranklist_celebrity", request.url.queryParameter("selected_items"))
+                assertEquals("ranklist_series_actor", request.url.queryParameter("sub_selected_items"))
+                assertEquals("0", request.url.queryParameter("user_is_login"))
+                val offset = request.url.queryParameter("offset")
+                val body = if (offset == "0") {
+                    assertEquals("1", request.url.queryParameter("unlimited_selector_change_type"))
+                    """{"code":0,"data":{"has_more":true,"next_offset":1,"session_id":"actor-session","rank_version":"v1","cell_view":{"cell_data":[{"ugc_user_data":[{"user_info":{"base_info":{"user_id":"7100000000001301","actor_id_str":"7100000000001401","user_name":"首屏演员","user_avatar":"https://example.com/actor.jpg"}},"rec_text_item":{"RecommendText":"700万人气"}}]}]}}}"""
+                } else {
+                    assertEquals("1", offset)
+                    assertEquals("2", request.url.queryParameter("unlimited_selector_change_type"))
+                    assertEquals("actor-session", request.url.queryParameter("session_id"))
+                    """{"code":0,"data":{"has_more":false,"next_offset":2,"session_id":"actor-session","rank_version":"v1","cell_view":{"cell_data":[{"ugc_user_data":[{"user_info":{"base_info":{"user_id":"7100000000001302","user_name":"第二页演员"}}}] }]}}}"""
+                }
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("OK").body(body.toResponseBody()).build()
+            }.build(),
+            System::currentTimeMillis,
+            session
+        )
+
+        val first = repo.actorRanking()
+        assertEquals("首屏演员", first.items.single().name)
+        assertTrue(first.hasMore)
+        assertEquals(1, first.nextOffset)
+        assertEquals("actor-session", first.sessionId)
+
+        val second = repo.actorRanking(first.nextOffset, first.sessionId)
+        assertEquals("第二页演员", second.items.single().name)
+        assertFalse(second.hasMore)
+        assertEquals(2, second.nextOffset)
+        assertEquals(2, requests.size)
+    }
+
     private fun searchTab(type: Int,id: String) = JSONObject().put("tab_type",type).put("has_more",true)
         .put("data",JSONArray().put(JSONObject().put("video_data",JSONArray().put(JSONObject()
             .put("series_id",id).put("title","测试剧集").put("episode_cnt",8)))))
