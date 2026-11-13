@@ -1,0 +1,134 @@
+# 红果TV扫码推送播放测试构建：仅手动触发，不发布 Release、不写回任何分支
+name: 红果TV扫码推送播放测试
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hongguotv-push-qr-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建扫码推送测试 APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: 检出当前选择的测试分支
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+
+      - name: 配置 Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: 检查签名凭据
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$KEYSTORE_B64" ] || missing+=("HONGGUOTV_KEYSTORE_B64")
+          [ -n "$STORE_PASSWORD" ] || missing+=("HONGGUOTV_STORE_PASSWORD")
+          [ -n "$KEY_ALIAS" ] || missing+=("HONGGUOTV_KEY_ALIAS")
+          [ -n "$KEY_PASSWORD" ] || missing+=("HONGGUOTV_KEY_PASSWORD")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::缺少签名凭据：%s\n' "$(IFS='、'; echo "${missing[*]}")"
+            exit 1
+          fi
+          echo "签名凭据检查通过"
+
+      - name: 准备产品签名文件
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/hongguotv-qr-test.p12"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+          echo "HONGGUOTV_KEYSTORE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: 生成独立测试版本号
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_NAME="0.0.${GITHUB_RUN_NUMBER}"
+          DATE_CODE="$(date -u +%y%m%d)"
+          VERSION_CODE="$((10#$DATE_CODE * 1000 + GITHUB_RUN_NUMBER % 1000))"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "本次扫码测试版本：$VERSION_NAME（$VERSION_CODE）"
+
+      - name: 运行推送输入服务单元测试并构建 APK
+        working-directory: kotlin-tv
+        shell: bash
+        env:
+          HONGGUOTV_APPLICATION_ID: com.x.hongguotv.bate
+          HONGGUOTV_APP_LABEL: 红果扫码测试版
+          HONGGUOTV_STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
+          HONGGUOTV_KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
+          HONGGUOTV_KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
+          HONGGUOTV_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          HONGGUOTV_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace :core:test :app:assembleRelease
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          test -x "$AAPT"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          BADGING="$("$AAPT" dump badging "$APK")"
+          echo "$BADGING" | grep -F "package: name='com.x.hongguotv.bate' versionCode='${HONGGUOTV_VERSION_CODE}' versionName='${HONGGUOTV_VERSION_NAME}'"
+          mkdir -p "$RUNNER_TEMP/push-qr-test"
+          cp "$APK" "$RUNNER_TEMP/push-qr-test/HongguoTV-扫码推送测试-${HONGGUOTV_VERSION_NAME}.apk"
+          {
+            echo "测试分支：${GITHUB_REF_NAME}"
+            echo "源码提交：${GITHUB_SHA}"
+            echo "应用包名：com.x.hongguotv.bate"
+            echo "版本：${HONGGUOTV_VERSION_NAME}"
+            echo "versionCode：${HONGGUOTV_VERSION_CODE}"
+            echo "扫码服务端口：3309"
+            echo "扫码测试：安装 APK 后，电视与手机连接同一 Wi-Fi，进入「推送播放」扫码提交分享文案。"
+            echo "注意：CI 只负责构建与服务单元测试，真实摄像头扫码和电视端播放需在设备上验证。"
+          } > "$RUNNER_TEMP/push-qr-test/测试说明.txt"
+
+      - name: 上传扫码测试 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HongGuoTV-推送播放扫码测试-${{ steps.version.outputs.version_name }}
+          path: |
+            ${{ runner.temp }}/push-qr-test/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 输出测试构建信息
+        if: success()
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          echo "扫码推送播放测试 APK 构建成功"
+          echo "测试分支：$GITHUB_REF_NAME"
+          echo "版本：$VERSION_NAME"
+          echo "versionCode：$VERSION_CODE"
+          echo "未创建 Release，未修改 main，未推送任何代码。"
