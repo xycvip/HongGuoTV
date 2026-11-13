@@ -12,26 +12,32 @@ def get(url,headers=None):
  q=urllib.request.Request(url,headers=h)
  with urllib.request.urlopen(q,timeout=18) as r:return r.status,r.geturl(),r.read(3145728).decode("utf-8","replace")
 
-def public_dns_ips(host):
- # 系统 DNS 若被污染为 127.0.0.1，使用独立 DoH 解析器取得真实公网地址。
- endpoints=(
-  ("Cloudflare DoH","https://cloudflare-dns.com/dns-query?"+urllib.parse.urlencode({"name":host,"type":"A"})),
-  ("Google DoH","https://dns.google/resolve?"+urllib.parse.urlencode({"name":host,"type":"A"})),
- )
+def public_dns_records(host):
+ # 同时查询 A/AAAA/CNAME，并保留 DNS RCODE/Answer，区分 NXDOMAIN、无记录和解析器故障。
+ endpoints=("Cloudflare DoH","https://cloudflare-dns.com/dns-query?","Google DoH","https://dns.google/resolve?")
  results=[]
- for label,url in endpoints:
-  try:
-   req=urllib.request.Request(url,headers={"User-Agent":"HongGuoTV-Diagnostic/1.0","Accept":"application/dns-json"})
-   with urllib.request.urlopen(req,timeout=8) as r:data=json.loads(r.read(65536).decode("utf-8","replace"))
-   ips=[]
-   for answer in data.get("Answer",[]):
-    if answer.get("type")==1:
-     try:
-      ip=ipaddress.ip_address(answer.get("data",""))
-      if ip.is_global:ips.append(str(ip))
-     except ValueError:pass
-   results.append((label,list(dict.fromkeys(ips))))
-  except Exception as e:results.append((label,["查询失败："+str(e)]))
+ for resolver,base in ((endpoints[0],endpoints[1]),(endpoints[2],endpoints[3])):
+  ips=[];details=[]
+  for qtype in ("A","AAAA","CNAME"):
+   url=base+urllib.parse.urlencode({"name":host,"type":qtype})
+   try:
+    req=urllib.request.Request(url,headers={"User-Agent":"HongGuoTV-Diagnostic/1.0","Accept":"application/dns-json"})
+    with urllib.request.urlopen(req,timeout=8) as r:data=json.loads(r.read(65536).decode("utf-8","replace"))
+    status=data.get("Status","未知")
+    answers=[]
+    for answer in data.get("Answer",[]):
+     typ=answer.get("type");value=str(answer.get("data","")).rstrip(".")
+     if typ==1 or typ==28:
+      try:
+       ip=ipaddress.ip_address(value)
+       if ip.is_global:
+        ips.append(str(ip));answers.append(str(ip))
+       else:answers.append(value+"（非公网）")
+      except ValueError:answers.append(value)
+     elif typ==5:answers.append("CNAME "+value)
+    details.append(f"{qtype}: RCODE={status}, "+(" | ".join(answers[:8]) if answers else "无 Answer"))
+   except Exception as e:details.append(f"{qtype}: 查询失败 {type(e).__name__}: {e}")
+  results.append((resolver,list(dict.fromkeys(ips)),"；".join(details)))
  return results
 
 class PinnedHTTPSConnection(http.client.HTTPSConnection):
@@ -65,10 +71,9 @@ def request_feed(host,path,headers):
   except Exception as e:errors.append("系统 DNS 请求失败："+str(e))
  else:
   errors.append("系统 DNS 返回非公网地址："+(", ".join(system_ips) if system_ips else "无可用地址"))
- for resolver,values in public_dns_ips(host):
+ for resolver,values,dns_detail in public_dns_records(host):
+  if not values:errors.append(resolver+"："+dns_detail)
   for address in values:
-   if address.startswith("查询失败："):
-    errors.append(resolver+"："+address);continue
    try:
     conn=PinnedHTTPSConnection(host,address,timeout=18)
     conn.request("GET",path,headers={**headers,"Host":host})
@@ -89,15 +94,15 @@ def probe_host(host):
   result["dns"]="成功："+", ".join(system_ips)
  except Exception as e:
   system_ips=[];result["dns"]="失败："+str(e)
- public=public_dns_ips(host)
- result["public_dns"]="；".join(label+"："+(", ".join(values) if values else "无公网 A 记录") for label,values in public)
+ public=public_dns_records(host)
+ result["public_dns"]="；".join(label+"："+detail+"；可用公网 IP："+(", ".join(values) if values else "无") for label,values,detail in public)
  candidates=[]
  for value in system_ips:
   try:
    if ipaddress.ip_address(value).is_global:candidates.append(value)
   except ValueError:pass
- for _,values in public:
-  candidates.extend(x for x in values if not x.startswith("查询失败："))
+ for _,values,_ in public:
+  candidates.extend(values)
  candidates=list(dict.fromkeys(candidates))
  if not candidates:
   result["tcp"]="未测试（没有可用公网 IP）";result["tls"]="未测试";return result
