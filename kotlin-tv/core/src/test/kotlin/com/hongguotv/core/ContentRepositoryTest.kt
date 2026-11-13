@@ -496,6 +496,37 @@ class ContentRepositoryTest {
         assertFalse(page.hasMore)
     }
 
+    @Test fun actorWorksUsesOfficialCelebrityWorksEndpointAndPagesCumulativeResults() {
+        val requests = mutableListOf<Request>()
+        val repo = ContentRepository(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                val request = chain.request()
+                requests += request
+                assertEquals("GET", request.method)
+                assertEquals("/reading/user/celebrity/works/v1/", request.url.encodedPath)
+                assertEquals("7100000000001401", request.url.queryParameter("encrypted_celebrity_ids"))
+                assertEquals("0", request.url.queryParameter("offset"))
+                assertEquals("0", request.url.queryParameter("req_scene"))
+                val body = """{"code":0,"data":{"works":{"7100000000001401":{"total_count":2,"has_more":true,"video_list":[{"series_id":"7700000000000001","title":"演员作品甲","cover":"https://example.com/a.jpg"},{"series_id":"7700000000000002","title":"演员作品乙","cover":"https://example.com/b.jpg"}]}}}}"""
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("OK").body(body.toResponseBody()).build()
+            }.build(),
+            System::currentTimeMillis,
+            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586", "1905892595378490") }
+        )
+
+        val first = repo.actorWorks("7100000000001401", 0, 1)
+        assertEquals("演员作品甲", first.items.single().title)
+        assertEquals(1, first.nextOffset)
+        assertTrue(first.hasMore)
+
+        val second = repo.actorWorks("7100000000001401", first.nextOffset, 1)
+        assertEquals("演员作品乙", second.items.single().title)
+        assertEquals(2, second.nextOffset)
+        assertFalse(second.hasMore)
+        assertEquals(2, requests.size)
+    }
+
     @Test fun actorStarBoardAcceptsAlternateListAndNestedAvatarShape() {
         val repo = ContentRepository(
             OkHttpClient.Builder().addInterceptor { chain ->
