@@ -95,38 +95,87 @@ def nested(o,pred):
    z=nested(v,pred)
    if z:return z
 
+def inspect_feed_json(body, aid):
+ try:
+  payload=json.loads(body)
+ except Exception as e:
+  return None,"",f"JSON 解码失败：{type(e).__name__}: {e}；响应长度 {len(body)} 字符"
+ def kind(v):
+  if isinstance(v,dict):return "object"
+  if isinstance(v,list):return "array"
+  if v is None:return "null"
+  if isinstance(v,bool):return "boolean"
+  if isinstance(v,(int,float)):return "number"
+  return "string"
+ def keys(v):
+  return ",".join(list(v.keys())[:35]) if isinstance(v,dict) else "无"
+ summary=[f"JSON 根节点类型：{kind(payload)}",f"JSON 根节点字段：{keys(payload)}"]
+ if isinstance(payload,dict):
+  for key in ("aweme_list","data","aweme_detail","status","extra","filter_detail"):
+   if key in payload:
+    val=payload[key]
+    summary.append(f"{key} 类型：{kind(val)}"+(f"，数量：{len(val)}" if isinstance(val,(list,dict,str)) else ""))
+ if not isinstance(payload,(dict,list)):
+  summary.append("响应不是对象/数组，无法按 Feed 结构查找作品")
+  return None,"","；".join(summary)
+ found=None;found_path="";visited=0;id_fields=0;exact_fields=0;sample_paths=[]
+ def walk(node,path="$"):
+  nonlocal found,found_path,visited,id_fields,exact_fields
+  if found is not None:return
+  if isinstance(node,dict):
+   visited+=1
+   for key,val in node.items():
+    if key=="aweme_id":
+     id_fields+=1
+     if str(val)==aid:
+      exact_fields+=1;found=node;found_path=path;return
+     if len(sample_paths)<5:sample_paths.append(f"{path}.aweme_id({kind(val)})")
+   for key in ("status","statistics"):
+    val=node.get(key)
+    if isinstance(val,dict) and str(val.get("aweme_id",""))==aid:
+     exact_fields+=1;found=node;found_path=path;return
+   for key,val in node.items():
+    if isinstance(val,(dict,list)):walk(val,f"{path}.{key}")
+    if found is not None:return
+  elif isinstance(node,list):
+   for idx,val in enumerate(node):
+    if isinstance(val,(dict,list)):walk(val,f"{path}[{idx}]")
+    if found is not None:return
+ walk(payload)
+ summary += [f"遍历对象节点：{visited}",f"发现 aweme_id 字段：{id_fields}",f"精确 ID 匹配：{'是' if found else '否'}"]
+ if sample_paths:summary.append("aweme_id 字段示例位置："+", ".join(sample_paths))
+ return found,found_path,"；".join(summary)
+
 def douyin(url):
  u=urllib.parse.urlsplit(url)
  if u.hostname=="v.douyin.com":
-  _,final,_=get(url);m=re.search(r"/(?:share/video|video)/(\d{8,25})",final) or re.search(r"[?&]aweme_id=(\d{8,25})",final)
+  _,final,_=get(url);m=re.search(r"/(?:share/video|video)/(\\d{8,25})",final) or re.search(r"[?&]aweme_id=(\\d{8,25})",final)
   if not m:raise RuntimeError("短链跳转后没有提取到作品 ID："+final)
   aid=m.group(1)
  else:
-  m=re.search(r"/(?:share/video|video)/(\d{8,25})",u.path)
+  m=re.search(r"/(?:share/video|video)/(\\d{8,25})",u.path)
   if not m:raise RuntimeError("作品链接中没有 aweme_id")
   aid=m.group(1)
  attempts=[]
  for host in FEED_HOSTS:
   try:
-   _,_,b=get(f"https://{host}/aweme/v1/feed/?aweme_id={aid}&aid=1128",{"User-Agent":"com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7)"})
-   def matches_aweme(x):
-    status=x.get("status") if isinstance(x.get("status"),dict) else {}
-    statistics=x.get("statistics") if isinstance(x.get("statistics"),dict) else {}
-    return (
-     str(x.get("aweme_id",""))==aid
-     or str(status.get("aweme_id",""))==aid
-     or str(statistics.get("aweme_id",""))==aid
-    )
-   a=nested(json.loads(b),matches_aweme)
-   if not a:raise RuntimeError("HTTP 响应成功，但 Feed JSON 未找到对应作品 ID")
-   si=a.get("series_info") or {};mi=a.get("mix_info") or {}
-   next_info=si.get("next_info") or mi.get("next_info") or {}
-   share_info=a.get("share_info") or {}
+   req=urllib.request.Request(f"https://{host}/aweme/v1/feed/?aweme_id={aid}&aid=1128",headers={"User-Agent":"com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7)","Accept":"application/json,*/*"})
+   with urllib.request.urlopen(req,timeout=18) as response:
+    status=response.status;final=response.geturl();content_type=response.headers.get("Content-Type","未提供")
+    body=response.read(3145728).decode("utf-8","replace")
+   a,path,diagnostic=inspect_feed_json(body,aid)
+   meta=f"HTTP {status}；Content-Type：{content_type}；最终地址：{final}；响应长度：{len(body)} 字符；{diagnostic}"
+   if not a:raise RuntimeError(meta)
+   si=a.get("series_info") if isinstance(a.get("series_info"),dict) else {}
+   mi=a.get("mix_info") if isinstance(a.get("mix_info"),dict) else {}
+   next_info=si.get("next_info") if isinstance(si.get("next_info"),dict) else {}
+   if not next_info:next_info=mi.get("next_info") if isinstance(mi.get("next_info"),dict) else {}
+   share_info=a.get("share_info") if isinstance(a.get("share_info"),dict) else {}
    share_desc=str(share_info.get("share_desc") or "")
-   bracket=re.search(r"[【〖]([^】〗]{1,100})[】〗]",share_desc)
+   bracket=re.search(r"[【〖]([^】〖]{1,100})[】〗]",share_desc)
    title=(si.get("series_name") or mi.get("mix_name") or next_info.get("name") or (bracket.group(1) if bracket else "")).strip()
-   title=re.sub(r"^(?:短剧|漫剧)\s*[·・]\s*","",title).strip()
-   if not title:raise RuntimeError("作品 ID 已匹配，但 Feed 没有短剧名称")
+   title=re.sub(r"^(?:短剧|漫剧)\\s*[·・]\\s*","",title).strip()
+   if not title:raise RuntimeError(f"HTTP {status}；作品 ID 已在 {path} 匹配，但 Feed 没有短剧名称；{diagnostic}")
    return aid,title,(a.get("author") or {}).get("nickname",""),attempts
   except Exception as e:attempts.append(host+"："+str(e))
  return aid,"","",attempts
