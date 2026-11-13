@@ -17,7 +17,9 @@ import com.hongguotv.core.*
         // 首页导航按下方向固定进入首页首排第一张海报。
         nav.forEach { it.nextFocusDownId=home.firstId() }
         if(focusNav) navByTab[0]?.requestFocus() else if(focusType) home.firstId().takeIf { it!=View.NO_ID }?.let { root.findViewById<View>(it)?.requestFocus() }
-        loadHomeShelf(if(library.contentType==ContentType.SHORT) ContentType.COMIC else ContentType.SHORT,false)
+        // 三个热门发现货架均独立加载官网新剧榜，不能复用当前分类页 catalog。
+        loadHomeShelf(ContentType.SHORT,false)
+        loadHomeShelf(ContentType.COMIC,false)
         loadHomeShelf(ContentType.AI,false)
         if(hot.isNotEmpty() && !homeContentLogged) {
             homeContentLogged=true
@@ -38,7 +40,8 @@ import com.hongguotv.core.*
         showCatalog(true,focusNav=focusNav)
         refreshHomePending=true
         homeScreen?.reloadArtwork()
-        loadHomeShelf(if(library.contentType==ContentType.SHORT) ContentType.COMIC else ContentType.SHORT,true)
+        loadHomeShelf(ContentType.SHORT,true)
+        loadHomeShelf(ContentType.COMIC,true)
         loadHomeShelf(ContentType.AI,true)
         main.post { if(screen=="catalog" && tab==0) runAutomaticApiChecks() }
     }
@@ -71,8 +74,8 @@ import com.hongguotv.core.*
         val recent=library.history().filterNot { library.watched(it.series.id) }
         val updates=library.favorites().filter { library.favoriteUpdate(it.id)?.hasUpdate == true }
         val later=library.later(); val hidden=library.hidden()
-        val shortItems=(if(library.contentType==ContentType.SHORT) catalog else library.cachedHome(ContentType.SHORT)?.items.orEmpty()).filterNot { it.id in hidden }
-        val comicItems=(if(library.contentType==ContentType.COMIC) catalog else library.cachedHome(ContentType.COMIC)?.items.orEmpty()).filterNot { it.id in hidden }
+        val shortItems=library.cachedHome(ContentType.SHORT)?.items.orEmpty().filterNot { it.id in hidden }
+        val comicItems=library.cachedHome(ContentType.COMIC)?.items.orEmpty().filterNot { it.id in hidden }
         val aiItems=library.cachedHome(ContentType.AI)?.items.orEmpty().filterNot { it.id in hidden }
         return listOf(
             HomeScreen.Shelf("resume","接着看",recent.take(8).map { p -> HomeScreen.Entry(p.series,
