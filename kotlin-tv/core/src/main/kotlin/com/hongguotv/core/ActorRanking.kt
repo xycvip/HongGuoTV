@@ -135,7 +135,9 @@ internal object ActorRankParser {
     private fun normalizeAvatarUrl(value: String): String {
         val uri = runCatching { java.net.URI(value) }.getOrNull() ?: return value
         val host = uri.host?.lowercase() ?: return value
-        if (!(host.endsWith("fqnovelpic.com") || host.endsWith("byteimg.com"))) return value
+        val supportedHost = host == "fqnovelpic.com" || host.endsWith(".fqnovelpic.com") ||
+            host == "byteimg.com" || host.endsWith(".byteimg.com")
+        if (!supportedHost) return value
         val path = uri.path ?: return value
         if (!path.startsWith("/novel-pic/")) return value
         val basePath = path.substringBefore("~")
