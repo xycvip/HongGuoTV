@@ -56,7 +56,9 @@ internal object ActorWorksParser {
                     tags = first(row, "rec_text", "score"),
                 )
             }
-            val nextOffset = requestedOffset + items.size
+            // Advance by consumed upstream rows, not only valid mapped rows, so malformed
+            // entries cannot pin the cursor and cause the same page to be requested forever.
+            val nextOffset = requestedOffset + (end - start)
             val hasMore = actor.optBoolean("has_more", false) || nextOffset < total ||
                 (videos.length() > end)
             return ActorWorksPage(items, nextOffset, hasMore, total)
