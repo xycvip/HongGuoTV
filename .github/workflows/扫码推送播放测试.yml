@@ -86,6 +86,10 @@ jobs:
           HONGGUOTV_VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           set -euo pipefail
+          # 防止扫码测试分支意外偏离既定推送服务参数：固定 3309 端口、无令牌、长驻且允许连续提交。
+          PUSH_SOURCE="app/src/main/kotlin/com/hongguotv/nativeapp/MainActivityPushPlaybackExtensions.kt"
+          grep -F 'ttlMillis=0,fixedPort=3309,tokenRequired=false,singleUse=false' "$PUSH_SOURCE"
+          grep -F 'QRCodeWriter()' "$PUSH_SOURCE"
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace :core:test :app:assembleRelease
           APK="app/build/outputs/apk/release/app-release.apk"
