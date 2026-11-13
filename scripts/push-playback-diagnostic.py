@@ -149,11 +149,11 @@ def inspect_feed_json(body, aid):
 def douyin(url):
  u=urllib.parse.urlsplit(url)
  if u.hostname=="v.douyin.com":
-  _,final,_=get(url);m=re.search(r"/(?:share/video|video)/(\\d{8,25})",final) or re.search(r"[?&]aweme_id=(\\d{8,25})",final)
+  _,final,_=get(url);m=re.search(r"/(?:share/video|video)/(\d{8,25})",final) or re.search(r"[?&]aweme_id=(\d{8,25})",final)
   if not m:raise RuntimeError("短链跳转后没有提取到作品 ID："+final)
   aid=m.group(1)
  else:
-  m=re.search(r"/(?:share/video|video)/(\\d{8,25})",u.path)
+  m=re.search(r"/(?:share/video|video)/(\d{8,25})",u.path)
   if not m:raise RuntimeError("作品链接中没有 aweme_id")
   aid=m.group(1)
  attempts=[]
@@ -174,7 +174,7 @@ def douyin(url):
    share_desc=str(share_info.get("share_desc") or "")
    bracket=re.search(r"[【〖]([^】〗]{1,100})[】〗]",share_desc)
    title=(si.get("series_name") or mi.get("mix_name") or next_info.get("name") or (bracket.group(1) if bracket else "")).strip()
-   title=re.sub(r"^(?:短剧|漫剧)\\s*[·・]\\s*","",title).strip()
+   title=re.sub(r"^(?:短剧|漫剧)\s*[·・]\s*","",title).strip()
    if not title:raise RuntimeError(f"HTTP {status}；作品 ID 已在 {path} 匹配，但 Feed 没有短剧名称；{diagnostic}")
    return aid,title,(a.get("author") or {}).get("nickname",""),attempts
   except Exception as e:attempts.append(host+"："+str(e))
