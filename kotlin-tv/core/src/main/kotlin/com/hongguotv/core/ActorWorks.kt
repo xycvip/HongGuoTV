@@ -46,14 +46,14 @@ internal object ActorWorksParser {
                         ?.groupValues?.getOrNull(1)?.toIntOrNull()
                     ?: 0
                 val subtitle = first(row, "sub_title", "subtitle", "episode_right_text")
-                val badge = subtitle.ifBlank { if (episodeCount > 0) "全 $episodeCount 集" else first(row, "rec_text", "score") }
+                val badge = if (episodeCount > 0) "全 $episodeCount 集" else first(row, "rec_text", "score")
                 items += Series(
                     id = id,
                     title = title,
-                    cover = cleanUrl(first(row, "cover", "series_cover", "cover_url")),
+                    cover = cleanUrl(first(row, "cover", "cover_url", "series_cover")),
                     description = first(row, "video_desc", "description", "series_intro"),
                     badge = badge,
-                    tags = first(row, "rec_text", "score"),
+                    tags = subtitle,
                 )
             }
             // Advance by consumed upstream rows, not only valid mapped rows, so malformed
