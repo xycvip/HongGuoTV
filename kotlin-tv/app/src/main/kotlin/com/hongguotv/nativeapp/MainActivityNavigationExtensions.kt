@@ -104,7 +104,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
         lastSuggestWords=emptyList<String>(); lastSuggestKey=""; phoneSearched=false
         for(index in 0..1) { tabState.remove(index); tabFocus.remove(index) }
         releaseCatalogViews()
-        page=1; catalog=emptyList(); hasMore=false; ranking=null; catalogFocus=""; homePosition=null; genre=null
+        page=1; catalog=emptyList(); hasMore=false; ranking=null; catalogFocus=""; homePosition=null
         showCatalog(load=query.isNotBlank(),focusType=true)
     }
 
