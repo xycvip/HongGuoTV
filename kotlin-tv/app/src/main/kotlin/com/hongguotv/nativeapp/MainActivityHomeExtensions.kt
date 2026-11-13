@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
+import android.content.Context
 import android.view.View
 import android.widget.LinearLayout
 import com.hongguotv.core.*
@@ -51,7 +52,7 @@ import com.hongguotv.core.*
         // 旧版本把热播/分类缓存与新剧榜共用同一缓存键。首次升级时必须绕过旧缓存，
         // 成功拿到新榜数据后再记录来源版本；否则旧缓存会让新榜请求永远不执行。
         val rankCacheKey="home-rank-source-${type.storedValue}"
-        val rankCacheVersion=getSharedPreferences("native-home-cache-v1", MODE_PRIVATE)
+        val rankCacheVersion=getSharedPreferences("native-home-cache-v1", Context.MODE_PRIVATE)
             .getString(rankCacheKey, null)
         if(!force && rankCacheVersion=="new-drama-v1" && !library.cachedHome(type)?.items.isNullOrEmpty()) return
         if(!homeShelfLoads.add(type)) { if(force) queuedHomeShelfRefresh.add(type); return }
@@ -65,7 +66,7 @@ import com.hongguotv.core.*
                 result.onSuccess { loaded ->
                     if(loaded.items.isNotEmpty()) {
                         library.cacheHome(type,loaded.items,loaded.hasMore)
-                        getSharedPreferences("native-home-cache-v1", MODE_PRIVATE).edit()
+                        getSharedPreferences("native-home-cache-v1", Context.MODE_PRIVATE).edit()
                             .putString(rankCacheKey,"new-drama-v1").apply()
                     }
                     if(screen=="catalog" && tab==0 && collection==null) {
