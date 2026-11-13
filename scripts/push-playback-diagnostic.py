@@ -306,115 +306,12 @@ def search_api(title):
    if sid.isdigit() and t:out.append({"id":sid,"title":str(t),"source":"官方搜索 API"})
  return out
 
-def extract_router_json(page):
- # 官网前端实现可能变化：兼容旧版 _ROUTER_DATA、Next.js 数据及 React Router hydration 数据。
- markers=("_ROUTER_DATA","__NEXT_DATA__","__staticRouterHydrationData","__reactRouterContext")
- starts=[]
- for marker in markers:
-  pos=page.find(marker)
-  if pos>=0:
-   start=page.find("{",pos)
-   if start>=0:starts.append(start)
- # 对没有显式状态变量名、但直接内嵌 JSON 的页面，尝试解析纯 JSON script。
- for match in re.finditer(r"<script[^>]*>(.*?)</script>",page,re.I|re.S):
-  raw=match.group(1).strip()
-  if raw.startswith("{"): 
-   try:
-    obj=json.loads(raw)
-    if isinstance(obj,dict):return obj
-   except Exception:pass
- for start in sorted(set(starts)):
-  depth=0;quoted=False;escaped=False
-  for i,ch in enumerate(page[start:],start):
-   if quoted:
-    if escaped:escaped=False
-    elif ch=="\\":escaped=True
-    elif ch=='"':quoted=False
-    continue
-   if ch=='"':quoted=True
-   elif ch in "{[":depth+=1
-   elif ch in "}]":
-    depth-=1
-    if depth==0:
-     try:
-      obj=json.loads(page[start:i+1])
-      if isinstance(obj,dict):return obj
-     except Exception:break
-     break
- raise RuntimeError("官网搜索页未找到可解析的 SSR/hydration JSON（页面结构可能已调整）")
-
-def search_ssr(title):
- url="https://hongguoduanju.com/search/"+urllib.parse.quote(title,safe="")+"?page=1"
- status,final,page=get(url,{"Accept":"text/html,application/xhtml+xml"})
- try:
-  payload=extract_router_json(page)
- except Exception as e:
-  page_title=re.search(r"<title[^>]*>(.*?)</title>",page,re.I|re.S)
-  page_title=html.unescape(re.sub(r"\s+"," ",page_title.group(1))).strip()[:160] if page_title else "未找到"
-  scripts=[]
-  for tag in re.findall(r"<script\\b[^>]*>",page,re.I)[:12]:
-   sid=re.search(r"""\\bid=["']([^"']+)["']""",tag,re.I)
-   stype=re.search(r"""\\btype=["']([^"']+)["']""",tag,re.I)
-   scripts.append("id="+(sid.group(1) if sid else "无")+",type="+(stype.group(1) if stype else "默认"))
-  markers=[x for x in ("_ROUTER_DATA","__NEXT_DATA__","__staticRouterHydrationData","__reactRouterContext","__INITIAL_STATE__","searchList","captcha","challenge","verify") if x.lower() in page.lower()]
-  preview=re.sub(r"<[^>]+>"," ",page[:700])
-  preview=html.unescape(re.sub(r"\s+"," ",preview)).strip()[:260]
-  raise RuntimeError(f"HTTP {status}；最终地址：{final}；Content-Length(实际读取)：{len(page)} 字符；页面标题：{page_title}；脚本标签：{'；'.join(scripts) or '无'}；关键标记：{','.join(markers) or '无'}；页面预览：{preview or '空'}；解析异常：{e}")
- loader=payload.get("loaderData") or payload
- if not isinstance(loader,dict):raise RuntimeError("官网 SSR loaderData 结构异常")
- found=[]
- def add_row(row):
-  if not isinstance(row,dict):return
-  values=row.get("video_data") or row
-  if isinstance(values,dict):values=[values]
-  if not isinstance(values,list):return
-  for v in values:
-   if not isinstance(v,dict):continue
-   highlight=row.get("search_high_light") or {}
-   htitle=highlight.get("title") if isinstance(highlight,dict) else {}
-   if isinstance(htitle,dict):htitle=htitle.get("text")
-   title_value=htitle or v.get("title") or v.get("series_name") or v.get("cell_name") or row.get("cell_name") or ""
-   sid=str(v.get("series_id") or v.get("book_id") or v.get("search_result_id") or row.get("series_id") or row.get("book_id") or row.get("search_result_id") or "")
-   if sid.isdigit() and title_value:
-    found.append({"id":sid,"title":str(title_value),"source":"官网 SSR"})
- for key,value in loader.items():
-  if not isinstance(value,dict):continue
-  # route key 在不同构建版本中会包含关键词，也可能统一为 search_page。
-  if "search" not in str(key).lower() and "searchList" not in value:continue
-  rows=value.get("searchList")
-  if isinstance(rows,list):
-   for row in rows:add_row(row)
- if not found:
-  # 某些 Next.js 页面会把 searchList 放在 loaderData 的更深层对象。
-  def walk(node):
-   if isinstance(node,dict):
-    rows=node.get("searchList")
-    if isinstance(rows,list):
-     for row in rows:add_row(row)
-    for child in node.values():
-     if isinstance(child,(dict,list)):walk(child)
-   elif isinstance(node,list):
-    for child in node:
-     if isinstance(child,(dict,list)):walk(child)
-  walk(loader)
- return found,final
-
-def merge_search_results(api_rows,ssr_rows):
- merged={}
- for row in api_rows+ssr_rows:
-  key=row["id"]
-  if key in merged:
-   if row["source"] not in merged[key]["source"]:merged[key]["source"]+=" + "+row["source"]
-  else:merged[key]=dict(row)
- return list(merged.values())
-
 def search(title):
- api_rows=[];ssr_rows=[];errors=[]
- try:api_rows=search_api(title)
- except Exception as e:errors.append("官方搜索 API："+str(e))
- try:ssr_rows,_=search_ssr(title)
- except Exception as e:errors.append("官网 SSR 搜索："+str(e))
- return api_rows,ssr_rows,merge_search_results(api_rows,ssr_rows),errors
+ try:
+  rows=search_api(title)
+  return rows,[]
+ except Exception as e:
+  return [],["官方搜索 API："+str(e)]
 
 def detail(sid):
  _,_,b=get("https://hongguoduanju.com/detail?series_id="+sid);mark=b.find("_ROUTER_DATA");start=b.find("{",mark)
@@ -482,12 +379,10 @@ def main():
   if direct:L += ["- 播放入口判断：可定位到红果剧目/分集（未验证设备播放器）",""];continue
   if t.strip():
    try:
-    api_rows,ssr_rows,rows,search_errors=search(t)
+    rows,search_errors=search(t)
     norm=lambda x:"".join(c for c in x.lower() if c.isalnum())
     exact=[x for x in rows if norm(x["title"])==norm(t)]
-    L += [f"- 红果官方搜索 API：{'成功' if not any(x.startswith('官方搜索 API：') for x in search_errors) else '失败'}，候选 {len(api_rows)} 个",
-          f"- 红果官网 SSR 搜索：{'成功' if not any(x.startswith('官网 SSR 搜索：') for x in search_errors) else '失败'}，候选 {len(ssr_rows)} 个",
-          f"- 两路合并去重：{len(rows)} 个，按剧目 ID 去重",
+    L += [f"- 红果官方搜索 API：{'成功' if not search_errors else '失败'}，候选 {len(rows)} 个",
           f"- 精确匹配：{len(exact)} 个"]
     L += [f"  - {'【精确】' if norm(x['title'])==norm(t) else '【候选】'} {x['title']}（ID：{x['id']}；来源：{x['source']}）" for x in rows[:10]]
     L += [f"- 搜索异常：{x}" for x in search_errors]
