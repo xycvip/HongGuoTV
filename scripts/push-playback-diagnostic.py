@@ -107,10 +107,44 @@ def detail(sid):
  eps=o.get("vid_list") or []
  if not eps:raise RuntimeError("详情页没有分集列表")
  return o.get("series_name") or o.get("series_title") or "未知剧名",eps
+def third_party_detail(sid,eid=None):
+ url="https://api-v2.cenguigui.cn/api/duanju/api.php?book_id="+urllib.parse.quote(sid)
+ try:
+  status,final,body=get(url,{"Accept":"application/json"})
+  data=json.loads(body)
+  def walk(o):
+   if isinstance(o,dict):
+    title=next((str(o[k]) for k in ("series_name","book_name","title","name","剧名") if o.get(k)), "")
+    eps=next((o[k] for k in ("episodes","episode_list","video_list","vid_list","list","data_list") if isinstance(o.get(k),list)),None)
+    if eps is not None:return title,eps
+    for v in o.values():
+     z=walk(v)
+     if z:return z
+   elif isinstance(o,list):
+    for v in o:
+     z=walk(v)
+     if z:return z
+   return None
+  found=walk(data)
+  if not found: return f"HTTP {status}，JSON 已返回，但未识别到详情/分集字段",url
+  title,eps=found
+  ids=[]
+  for ep in eps:
+   if isinstance(ep,dict):
+    for k in ("video_id","vid","episode_id","id"):
+     if ep.get(k) is not None:ids.append(str(ep[k]));break
+   elif isinstance(ep,(str,int)):ids.append(str(ep))
+  match=(ids.index(str(eid))+1) if eid and str(eid) in ids else None
+  msg=f"HTTP {status}，识别到 {len(eps)} 条分集"
+  if title:msg+=f"，剧名：{title}"
+  if eid:msg+=f"，分享单集ID{'匹配第'+str(match)+'集' if match else '未匹配'}"
+  return msg,url
+ except Exception as e:
+  return f"请求失败：{type(e).__name__}: {e}",url
 def main():
  raw=os.getenv("PUSH_SHARE_TEXT","")
  if not raw.strip():raise RuntimeError("请在 Actions 输入框粘贴完整分享文案")
- shares=parse(raw);L=["# 推送播放模拟诊断报告","",f"- 时间：{datetime.now(timezone.utc).isoformat()}",f"- 输入字符数：{len(raw)}",f"- 识别条数：{len(shares)}","- 本报告会真实请求抖音分享解析、红果官网搜索兜底接口和详情接口；未执行需设备身份签名的 App 搜索接口，也不启动 Android 播放器。",""]
+ shares=parse(raw);L=["# 推送播放模拟诊断报告","",f"- 时间：{datetime.now(timezone.utc).isoformat()}",f"- 输入字符数：{len(raw)}",f"- 识别条数：{len(shares)}","- 本报告会请求分享解析、红果官网 SSR、笒鬼鬼第三方详情接口，并输出可点击的剧情详情/单集链接；需项目签名或 Token 的接口只列出入口、不擅自调用；不启动 Android 播放器。",""]
  if not shares:L += ["## 未识别","没有识别到 App 当前支持的红果/抖音分享格式。"]
  for i,s in enumerate(shares[:4],1):
   t=s["title"];direct=False;L += [f"## 分享 {i}：{s['source']}",f"- 标题：{t or '未提取'}",f"- 链接：{s['url'] or '无'}"]
@@ -125,9 +159,18 @@ def main():
    elif s["source"]=="红果" and s["url"]:
     sid,eid=red(s["url"]);L += [f"- 红果剧目 ID：{sid or '未提取'}",f"- 红果单集 ID：{eid or '未提取'}"]
     if sid:
-     real,eps=detail(sid)
-     if eid and eid not in eps:raise RuntimeError("分享集数 ID 不在详情分集列表")
-     t=real;direct=True;L += ["- 红果详情：成功",f"- 剧名：**{real}**",f"- 总集数：{len(eps)}",f"- 分享集数：{eps.index(eid)+1 if eid else 1}"]
+     official_url="https://hongguoduanju.com/detail?series_id="+urllib.parse.quote(sid)
+     episode_url="https://hongguoduanju.com/player/"+urllib.parse.quote(sid)+(("/"+urllib.parse.quote(eid)) if eid else "")
+     third_result,third_url=third_party_detail(sid,eid)
+     L += [f"- [红果官网剧情详情页]({official_url})",f"- [红果官网单集播放页]({episode_url})",f"- [笒鬼鬼第三方详情接口]({third_url})",f"- 笒鬼鬼接口结果：{third_result}","- [小影 API 详情接口文档](https://www.xiaoyingapi.com/docs/drama/)（需项目签名，当前未调用）","- [Apify 分享链接详情接口](https://apify.com/socialdatax/socialdatax-hongguo-data-api)（需 Apify Token，且页面标记维护中，当前未调用）"]
+     try:
+      real,eps=detail(sid)
+      matched=(not eid) or (str(eid) in [str(x) for x in eps])
+      L += ["- 红果官网 SSR 详情：成功",f"- 剧名：**{real}**",f"- 总集数：{len(eps)}",f"- 分享集数：{([str(x) for x in eps].index(str(eid))+1) if eid and matched else ('未匹配' if eid else 1)}"]
+      if matched:t=real;direct=True
+      else:L.append("- 官网 SSR 判断：剧目存在，但分享单集 ID 不在详情分集列表")
+     except Exception as e:
+      L += ["- 红果官网 SSR 详情：失败",f"- 原因：{e}"]
   except Exception as e:
    L += ["- 分享解析/详情：失败",f"- 原因：{e}"]
    if s["source"]=="抖音" and "的作品" in t:t=""
