@@ -342,7 +342,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                         }
                     }.apply {
                         tag=focusTag
-                        nextFocusUpId=navForTab().id
+                        nextFocusUpId=actorRankButton?.id ?: navForTab().id
                     }
                     boardFocusItems+=button
                 }
