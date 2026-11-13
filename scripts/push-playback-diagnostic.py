@@ -380,18 +380,124 @@ def douyin_web_detail(aid):
  code=o.get("status_code",o.get("status", "未提供")) if isinstance(o,dict) else "未提供"
  return {"meta":meta+f"；JSON 根节点：{'object' if isinstance(o,dict) else 'array'}；字段：{keys}；状态码：{code}；目标 aweme_id 精确匹配：否","result":"返回 JSON，但未匹配目标作品","title":""}
 
+def decode_scheme_params(values):
+ # 分享链接常把真正的单集 video_id 放在 schemeParams 中；
+ # 参数可能经过 URL 编码、HTML 转义，甚至嵌套编码/JSON 字符串。
+ found=[]
+ seen=set()
+ def visit(value,depth=0):
+  if depth>6 or value is None:return
+  if isinstance(value,(dict,list)):
+   marker=id(value)
+   if marker in seen:return
+   seen.add(marker)
+   if isinstance(value,dict):
+    for key,item in value.items():
+     normalized=str(key).lower()
+     if normalized in ("video_id","videoid","video_id_str") and item is not None and not isinstance(item,(dict,list)):
+      candidate=str(item).strip()
+      if candidate.isdigit():found.append(candidate)
+     # series id 只用于 sid，不混入 episode id。
+     if isinstance(item,(dict,list)):visit(item,depth+1)
+     elif isinstance(item,str) and depth<5:visit(item,depth+1)
+   else:
+    for item in value:visit(item,depth+1)
+   return
+  if not isinstance(value,str):return
+  text=value.strip()
+  if not text:return
+  for _ in range(3):
+   decoded=html.unescape(urllib.parse.unquote(text))
+   if decoded==text:break
+   text=decoded
+  try:
+   visit(json.loads(text),depth+1)
+   return
+  except Exception:pass
+  # 某些版本将 schemeParams 序列化成 query string，而不是 JSON。
+  try:
+   query=urllib.parse.parse_qs(text,keep_blank_values=True)
+   if query:
+    for key,items in query.items():
+     if key.lower() in ("video_id","videoid","video_id_str"):
+      for item in items:
+       if item.isdigit():found.append(item)
+     for item in items:visit(item,depth+1)
+  except Exception:pass
+ return list(dict.fromkeys(found))
+
 def red(url):
- st,final,b=get(url);dec=urllib.parse.unquote(urllib.parse.unquote(final));src=(final,dec,b,html.unescape(b))
- def f(p):
-  for s in src:
-   m=re.search(p,s,re.I)
+ st,final,b=get(url)
+ # 保留原始跳转地址、解码后的地址及 HTML；优先解析最终 URL 的 schemeParams。
+ sources=(final,html.unescape(final),urllib.parse.unquote(html.unescape(final)),b,html.unescape(b))
+ def first(pattern,source_list=sources):
+  for source in source_list:
+   m=re.search(pattern,source,re.I)
    if m:return m.group(1)
- sid=f(r"""["']?(?:video_series_id|series_id|seriesId|series_id_str)["']?\s*[=:]\s*["']?(\d{1,30})""")
- eid=f(r"""["']?(?:share_toast_vid|vid|episode_id|episodeId)["']?\s*[=:]\s*["']?(\d{1,30})""")
- vid=f(r"""["']?video_id["']?\s*[=:]\s*["']?(\d{1,30})""")
+ sid=first(r"""["']?(?:video_series_id|series_id|seriesId|series_id_str)["']?\s*[=:]\s*["']?(\d{1,30})""")
+ # 解析所有 schemeParams 值，避免先命中的 share_toast_vid 污染真实单集 ID。
+ scheme_values=[]
+ for source in sources:
+  try:
+   parsed=urllib.parse.urlsplit(source)
+   for value in urllib.parse.parse_qs(parsed.query,keep_blank_values=True).get("schemeParams",[]):
+    scheme_values.append(value)
+  except Exception:pass
+  for match in re.finditer(r"""schemeParams(?:%3D|=|&quot;?\s*:\s*&quot;?)([^&#"'<>]+)""",source,re.I):
+   scheme_values.append(match.group(1))
+ scheme_video_ids=decode_scheme_params(scheme_values)
+ # 仅把明确的 video_id 字段作为分享单集 ID；share_toast_vid 只是提示/埋点字段。
+ explicit_video_id=first(r"""["']?video_id["']?\s*[=:]\s*["']?(\d{1,30})""")
  p=re.search(r"/player/(\d{1,30})(?:/(\d{1,30}))?",final)
- if p:sid=sid or p.group(1);eid=eid or p.group(2)
- return sid or vid,eid or (vid if vid!=sid else None)
+ if p:
+  sid=sid or p.group(1)
+  # 只有最终播放路径里的第二段才是可接受的路径级 episode ID。
+  path_episode=p.group(2)
+ else:path_episode=None
+ eid=(scheme_video_ids[0] if scheme_video_ids else None) or explicit_video_id or path_episode
+ if not sid and scheme_values:
+  # schemeParams 的 series_id 可能是内层 JSON 字段。
+  def find_series(value,depth=0):
+   if depth>5:return None
+   if isinstance(value,dict):
+    for key,item in value.items():
+     if str(key).lower() in ("series_id","video_series_id","seriesid") and str(item).isdigit():return str(item)
+     got=find_series(item,depth+1)
+     if got:return got
+   elif isinstance(value,list):
+    for item in value:
+     got=find_series(item,depth+1)
+     if got:return got
+   elif isinstance(value,str):
+    text=value
+    for _ in range(3):
+     text=urllib.parse.unquote(html.unescape(text))
+    try:return find_series(json.loads(text),depth+1)
+    except Exception:pass
+   return None
+  for value in scheme_values:
+   sid=find_series(value)
+   if sid:break
+ return sid or (explicit_video_id if explicit_video_id and not eid else None),eid,(
+  f"schemeParams.video_id候选={','.join(scheme_video_ids) or '无'}；"
+  f"独立video_id字段={explicit_video_id or '无'}；"
+  f"播放路径单集ID={path_episode or '无'}；"
+  f"share_toast_vid仅作诊断字段={first(r'["']?share_toast_vid["']?\s*[=:]\s*["']?(\d{1,30})') or '无'}"
+ )
+
+def red_id_regression_test():
+ # 回归测试：不同剧集即使 share_toast_vid 相同，也必须选择各自 schemeParams.video_id。
+ samples=[
+  ('{"series_id":"7706004220599618584","video_id":"7706004220599618585","share_toast_vid":"91082451"}',"7706004220599618584","7706004220599618585"),
+  ('{"series_id":"7704150431571643454","video_id":"7704150431571643455","share_toast_vid":"91082451"}',"7704150431571643454","7704150431571643455"),
+ ]
+ for raw,sid,eid in samples:
+  encoded=urllib.parse.quote(raw,safe="")
+  values=urllib.parse.parse_qs("schemeParams="+encoded).get("schemeParams",[])
+  actual=decode_scheme_params(values)
+  assert actual and actual[0]==eid,(sid,eid,actual)
+ assert samples[0][2]!=samples[1][2]
+ return "通过：两个不同剧目的 schemeParams.video_id 均优先于相同 share_toast_vid"
 
 def search_api(title):
  _,_,b=get("https://hongguoduanju.com/api/search/result/?query="+urllib.parse.quote(title)+"&page=1")
@@ -613,6 +719,7 @@ def main():
  for host in FEED_HOSTS:probes[host]=probe_host(host)
  L += ["## Feed 网络连通性（独立于接口业务结果）"]
  for host,p in probes.items():L += [f"- {host}：系统 DNS {p.get('dns')}；公共 DNS 对照 {p.get('public_dns','未查询')}；测试 IP {p.get('test_ip','无')}；TCP 443 {p.get('tcp')}；TLS {p.get('tls')}"]
+ if not shares:L += ["## 分享参数回归测试", "- "+red_id_regression_test(), ""]
  if not shares:L += ["## 未识别","没有识别到 App 当前支持的红果/抖音分享格式。"]
  for i,s in enumerate(shares[:4],1):
   t=s["title"];direct=False;feed_ok=None
@@ -640,7 +747,7 @@ def main():
     if not t:raise RuntimeError("短剧详情接口未返回剧名")
     L += [f"- playlet_id：{pid}",f"- 接口剧名：**{t}**"]
    elif s["source"]=="红果" and s["url"]:
-    sid,eid=red(s["url"]);L += [f"- 红果剧目 ID：{sid or '未提取'}",f"- 红果单集 ID：{eid or '未提取'}"]
+    sid,eid,red_meta=red(s["url"]);L += [f"- 红果剧目 ID：{sid or '未提取'}",f"- 红果单集 ID：{eid or '未提取'}",f"- 分享参数解析：{red_meta}"]
     if sid:
      L += probe_detail_pages(sid,eid)
      real,eps=detail(sid)
