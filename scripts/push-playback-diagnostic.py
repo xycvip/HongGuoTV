@@ -184,6 +184,39 @@ def douyin(url):
   except Exception as e:attempts.append(host+"："+str(e))
  return aid,"","",attempts
 
+
+def douyin_web_detail(aid):
+ # 仅做无登录、无签名的公开 Web 详情接口探测；不作为正式解析链路。
+ params=urllib.parse.urlencode({"device_platform":"webapp","aid":"6383","channel":"channel_pc_web","aweme_id":aid,"request_source":"600","origin_type":"quick_player"})
+ url="https://www.douyin.com/aweme/v1/web/aweme/detail/?"+params
+ headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36","Accept":"application/json, text/plain, */*","Referer":"https://www.douyin.com/"}
+ status=0;ctype="未提供";final=url;body=""
+ try:
+  req=urllib.request.Request(url,headers=headers)
+  with urllib.request.urlopen(req,timeout=18) as r:
+   status=r.status;ctype=r.headers.get("Content-Type","未提供");final=r.geturl();body=r.read(3145728).decode("utf-8","replace")
+ except urllib.error.HTTPError as e:
+  status=e.code;ctype=e.headers.get("Content-Type","未提供");final=e.geturl();body=e.read(3145728).decode("utf-8","replace")
+ meta=f"HTTP {status}；Content-Type：{ctype}；响应长度：{len(body)} 字符"
+ if not body.strip():
+  return {"meta":meta+"；响应体为空","result":"空响应/可能受风控或签名保护","title":""}
+ try:o=json.loads(body)
+ except Exception as e:
+  challenge=any(x in body.lower() for x in ("captcha","challenge","verify","安全验证"))
+  return {"meta":meta+f"；JSON 解码失败：{type(e).__name__}；响应预览："+re.sub(r"\\s+"," ",body[:180]),"result":"疑似验证页/非 JSON" if challenge else "非 JSON 响应","title":""}
+ if not isinstance(o,(dict,list)):
+  return {"meta":meta+"；JSON 根节点不是对象/数组","result":"JSON 结构异常","title":""}
+ detail=nested(o,lambda x: str(x.get("aweme_id",""))==aid)
+ if detail:
+  desc=str(detail.get("desc") or "").strip()
+  si=detail.get("series_info") if isinstance(detail.get("series_info"),dict) else {}
+  mi=detail.get("mix_info") if isinstance(detail.get("mix_info"),dict) else {}
+  title=str(si.get("series_name") or mi.get("mix_name") or "")
+  return {"meta":meta+f"；JSON 根节点：{'object' if isinstance(o,dict) else 'array'}；目标 aweme_id 精确匹配：是","result":"成功取得目标作品详情","title":title,"desc":desc}
+ keys=",".join(list(o.keys())[:25]) if isinstance(o,dict) else "无"
+ code=o.get("status_code",o.get("status", "未提供")) if isinstance(o,dict) else "未提供"
+ return {"meta":meta+f"；JSON 根节点：{'object' if isinstance(o,dict) else 'array'}；字段：{keys}；状态码：{code}；目标 aweme_id 精确匹配：否","result":"返回 JSON，但未匹配目标作品","title":""}
+
 def red(url):
  st,final,b=get(url);dec=urllib.parse.unquote(urllib.parse.unquote(final));src=(final,dec,b,html.unescape(b))
  def f(p):
@@ -254,6 +287,12 @@ def main():
     else:
      feed_ok=False
      L += ["- Feed 业务解析：失败（已继续执行标题兜底）"]+[f"- Feed 节点 {x}" for x in attempts]
+     try:
+      wd=douyin_web_detail(aid)
+      L += ["- Web 单作品详情诊断："+wd["result"],f"- Web 详情响应：{wd['meta']}"]
+      if wd.get("title"):L.append("- Web 详情短剧名称："+wd["title"])
+      if wd.get("desc"):L.append("- Web 详情作品描述："+wd["desc"][:160])
+     except Exception as e:L += ["- Web 单作品详情诊断：请求异常",f"- 原因：{type(e).__name__}: {e}"]
    elif s["source"]=="抖音短剧":
     pid=re.search(r"/share/playlet/detail/(\d{8,25})",urllib.parse.urlsplit(s["url"]).path).group(1)
     _,_,b=get(f"https://www.iesdouyin.com/web/api/playlet/detail/?playlet_id={pid}");d=json.loads(b).get("data") or {};t=d.get("playlet_name") or d.get("series_name") or ""
