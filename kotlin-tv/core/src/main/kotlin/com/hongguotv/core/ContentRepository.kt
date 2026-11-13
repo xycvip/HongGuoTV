@@ -106,7 +106,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
         )
         if (sessionId.isNotBlank()) values["session_id"] = sessionId
         values["user_is_login"] = "0"
-        val base = "https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/bookmall/cell/change/v1/"
+        val base = "https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/bookmall/cell/change/v"
         val signed = signer.sign(base,values,identity=identity)
         return ActorRankParser.parse(text(signed.url,signed,profile.cookie),offset)
     }
