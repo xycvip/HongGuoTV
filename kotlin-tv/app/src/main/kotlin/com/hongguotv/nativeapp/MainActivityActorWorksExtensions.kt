@@ -19,5 +19,6 @@ internal fun MainActivity.openActorWorks(actor: ActorRankEntry) {
     actorWorksHasMore = false
     page = 1
     catalogFocus = ""
+    rankFocusTag = null
     showCatalog(load = true)
 }
