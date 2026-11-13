@@ -115,6 +115,10 @@ def inspect_feed_json(body, aid):
    if key in payload:
     val=payload[key]
     summary.append(f"{key} 类型：{kind(val)}"+(f"，数量：{len(val)}" if isinstance(val,(list,dict,str)) else ""))
+  for key in ("status_code","code","error_code","message","msg","has_more","cursor"):
+   if key in payload and not isinstance(payload[key],(dict,list)):
+    val=str(payload[key]).replace("\\n"," ")[:100]
+    summary.append(f"顶层 {key}：{val}")
  if not isinstance(payload,(dict,list)):
   summary.append("响应不是对象/数组，无法按 Feed 结构查找作品")
   return None,"","；".join(summary)
