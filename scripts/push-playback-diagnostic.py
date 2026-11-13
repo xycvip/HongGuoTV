@@ -460,9 +460,9 @@ def probe_detail_pages(sid,eid):
   try:
    status,final,body=get(url)
    title_match=re.search(r"<title[^>]*>(.*?)</title>",body,re.I|re.S)
-   page_title=html.unescape(re.sub(r"\\s+"," ",title_match.group(1))).strip() if title_match else ""
+   page_title=html.unescape(re.sub(r"\s+"," ",title_match.group(1))).strip() if title_match else ""
    sid_hit=sid in body
-   eid_hit=bool(eid and re.search(r"(?<!\\d)"+re.escape(eid)+r"(?!\\d)",body))
+   eid_hit=bool(eid and re.search(r"(?<!\d)"+re.escape(eid)+r"(?!\d)",body))
    lines.append(f"  - {label}：HTTP {status}；剧目ID命中={'是' if sid_hit else '否'}；分享单集ID命中={'是' if eid_hit else '否'}；页面标题={page_title[:100] or '未提取'}；链接={final}")
   except Exception as e:
    lines.append(f"  - {label}：请求失败 {type(e).__name__}: {e}；链接={url}")
