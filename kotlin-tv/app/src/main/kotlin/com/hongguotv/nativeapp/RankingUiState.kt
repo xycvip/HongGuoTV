@@ -21,4 +21,8 @@ internal class RankingUiState {
     var actorRankSessionId: String = ""
     var actorRankVersion: String = ""
     var actorRankSubBoard: String = "ranklist_series_actor"
+    var actorWorksActor: ActorRankEntry? = null
+    var actorWorksItems: List<com.hongguotv.core.Series> = emptyList()
+    var actorWorksNextOffset: Int = 0
+    var actorWorksHasMore: Boolean = false
 }
