@@ -57,7 +57,7 @@ import java.util.concurrent.atomic.AtomicLong
             body.addView(heading)
             typeButtons.values.forEach { it.nextFocusDownId=collectionBack!!.id }
         }
-        catalogPageKey="$tab:${if(actorRanking) "actor" else ""}:${collection.orEmpty()}:${if(tab==0) genre?.slug.orEmpty() else ""}:${if(tab==7) theaterFilterKey(theaterContentType)+theaterSelections.toSortedMap() else ""}:$page:$query"
+        catalogPageKey="$tab:${if(actorRanking) "actor:$actorRankSubBoard" else ""}:${collection.orEmpty()}:${if(tab==0) genre?.slug.orEmpty() else ""}:${if(tab==7) theaterFilterKey(theaterContentType)+theaterSelections.toSortedMap() else ""}:$page:$query"
         if(tab==0 && genre!=null) {
             val bar=row().apply { setPadding(0,0,0,dp(6)) }
             bar.addView(text("题材 · ${genre?.name}",16f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
