@@ -72,9 +72,19 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         card.tag=item.id; card.contentDescription=item.title
         loadCover(holder.image,item.cover)
         // AI 剧分类复用的是片库卡片，没有名次与热度，按普通片库卡片展示
+        val actorRanked=tab==2 && actorRanking
+        val actor=if(actorRanked) actorRankItems.firstOrNull { it.userId==item.id } else null
         val ranked=tab==2 && ranking!=null
         val rankPosition=if(ranked) ranking?.positions?.get(item.id) else null
-        if(ranked) {
+        if(actorRanked) {
+            val rank=actor?.position
+            val rankLabel=if(rank!=null) "第 $rank 名" else "名次暂无"
+            holder.rank.text=rankLabel
+            holder.rank.setTextColor(if(rank==1) white else Color.rgb(24,26,30))
+            holder.rank.background=rounded(if(rank==1) accent else Color.argb(235,255,255,255),6)
+            holder.rank.visibility=View.VISIBLE
+            card.contentDescription="$rankLabel，${actor?.name ?: item.title}，${actor?.popularity.orEmpty()}"
+        } else if(ranked) {
             val rank=rankPosition?.rank
             val rankLabel=if(rank!=null) "第 $rank 名" else "名次暂无"
             val styled=android.text.SpannableString(rankLabel)
@@ -89,17 +99,18 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             holder.rank.visibility=View.VISIBLE
             card.contentDescription="$rankLabel，${item.title}，${rankPosition?.heat?.ifBlank { "热度暂无" } ?: "热度暂无"}"
         } else holder.rank.visibility=View.GONE
-        holder.title.text=item.title
-        val genreTags=item.tags.split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3)
+        holder.title.text=actor?.name ?: item.title
+        val genreTags=(actor?.details ?: item.tags.split(Regex("\\s*[·|，,、]\\s*")))
+            .map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3)
         holder.tags.text=genreTags.joinToString("  ·  ")
         holder.tags.visibility=if(genreTags.isEmpty()) View.INVISIBLE else View.VISIBLE
-        val progress=if(tab==4 || collection=="resume") library.progress(item.id) else null
+        val progress=if(!actorRanked && (tab==4 || collection=="resume")) library.progress(item.id) else null
         val aggregateType=if(tab==1 && aggregateSearch) when {
             item.badge.startsWith("短剧") -> ContentType.SHORT
             item.badge.startsWith("漫剧") -> ContentType.COMIC
             else -> null
         } else null
-        holder.badge.text=if(tab==3) library.favoriteLabel(item.id) else if(ranked) rankPosition?.heat?.ifBlank { "热度暂无" } ?: "热度暂无" else if(progress!=null) if(library.watched(item.id)) "整剧已看完" else "第 ${progress.episodeIndex+1} 集 · ${formatTime(progress.position)}" else item.badge
+        holder.badge.text=if(actorRanked) actor?.popularity?.ifBlank { "人气暂无" } ?: "人气暂无" else if(tab==3) library.favoriteLabel(item.id) else if(ranked) rankPosition?.heat?.ifBlank { "热度暂无" } ?: "热度暂无" else if(progress!=null) if(library.watched(item.id)) "整剧已看完" else "第 ${progress.episodeIndex+1} 集 · ${formatTime(progress.position)}" else item.badge
         if(aggregateType!=null) {
             val short=aggregateType==ContentType.SHORT
             holder.badge.setTextColor(if(short) Color.rgb(145,72,20) else Color.rgb(54,79,157))
@@ -112,7 +123,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         } else {
             holder.badge.background=null
             holder.badge.setPadding(dp(3),0,0,0)
-            holder.badge.setTextColor(if(ranked || tab==3) accent else muted)
+            holder.badge.setTextColor(if(actorRanked || ranked || tab==3) accent else muted)
         }
         // 搜索结果卡片的标签统一占据 22dp 高度，并统一垂直居中。
         // 短剧/漫剧标签与普通来源文字混排、ViewHolder 回收复用时，也保持同一基线。
@@ -122,10 +133,17 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             holder.badge.includeFontPadding=false
         }
         if(tab==3) favoriteBadges[item.id]=holder.badge
-        card.setOnClickListener { catalogFocus=item.id; openDetail(item,tab==4 || collection=="resume" || collection=="updates") }
-        card.setOnLongClickListener { catalogFocus=item.id; quickActions(item,card); true }
+        card.setOnClickListener {
+            catalogFocus=item.id
+            if(actorRanked) Toast.makeText(host,"演员：${actor?.name ?: item.title} · ${actor?.popularity.orEmpty()}",Toast.LENGTH_SHORT).show()
+            else openDetail(item,tab==4 || collection=="resume" || collection=="updates")
+        }
+        card.setOnLongClickListener {
+            catalogFocus=item.id
+            if(actorRanked) true else { quickActions(item,card); true }
+        }
         card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
-        card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(host,focused); if(focused) { catalogFocus=item.id; loadCover(holder.image,item.cover); selectionPreview?.show(item,selectionStatus(item)) } }
+        card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(host,focused); if(focused) { catalogFocus=item.id; loadCover(holder.image,item.cover); if(!actorRanked) selectionPreview?.show(item,selectionStatus(item)) } }
         card.nextFocusUpId=if(position<cols) {
             // 搜索页右侧海报栏的首行向上直接回到顶部“搜索”导航，避免被中栏联想/历史区截走。
             if(tab==1) searchNavShortcut?.id ?: View.NO_ID
