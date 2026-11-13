@@ -55,22 +55,21 @@ def extract_douyin_title(raw,url_start):
  if marker>=0:segment=segment[:marker]
  # 常见单行分享格式：时间/口令 + “看看【作者的作品】” + 剧名/简介 + 链接。
  # 优先截取作者提示之后的正文，避免把前面的“8.79”等分享口令误判成标题。
- m=re.search(r"看看[【〖\\[][^】〗\\]]{1,60}(?:的作品|作品)[】〗\\]]\\s*(.*)$",segment)
+ m=re.search(r"看看[【〖\[][^】〗\]]{1,60}(?:的作品|作品)[】〗\]]\s*(.*)$",segment)
  if m:
   value=clean_title(m.group(1))
   # 分享文案可能把剧情简介接在标题后，按常见简介引导词截断。
-  value=re.split(r"\\s+(?:为复活|为救|为了|讲述|本剧|该剧|这部短剧)",value,maxsplit=1)[0].strip()
+  value=re.split(r"\s+(?:为复活|为救|为了|讲述|本剧|该剧|这部短剧)",value,maxsplit=1)[0].strip()
   return value[:80]
  lines=[x.strip() for x in segment.splitlines() if x.strip()]
  if not lines:return ""
  candidates=[]
  for line in lines[-5:]:
-  line=re.sub(r"^[【〖\\[][^】〗\\]]{1,50}(?:的作品|作品)[】〗\\]]\\s*","",line)
-  line=re.sub(r"^[【〖\\[][^】〗\\]]{1,50}[】〗\\]]\\s*","",line)
+  line=re.sub(r"^[【〖\[][^】〗\]]{1,50}(?:的作品|作品)[】〗\]]\s*","",line)
+  line=re.sub(r"^[【〖\[][^】〗\]]{1,50}[】〗\]]\s*","",line)
   line=clean_title(line)
-  if line and not re.fullmatch(r"(?:抖音|分享|短剧|漫剧|作品|\\d+(?:\\.\\d+)?)",line):candidates.append(line)
+  if line and not re.fullmatch(r"(?:抖音|分享|短剧|漫剧|作品|\d+(?:\.\d+)?)",line):candidates.append(line)
  return candidates[-1] if candidates else ""
-
 def parse(raw):
  out=[];rt=re.findall(r"(?:漫剧|短剧)《([^》]{1,80})》",raw)
  for m in URLS.finditer(raw):
