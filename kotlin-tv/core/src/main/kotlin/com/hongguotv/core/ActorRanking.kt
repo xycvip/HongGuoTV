@@ -84,10 +84,12 @@ internal object ActorRankParser {
                 }
             }
             if (requestedOffset == 0 && items.isEmpty()) throw IOException("演员榜暂无数据或接口返回格式已变化")
+            val reportedOffset = data.optInt("next_offset", requestedOffset + items.size)
+            val nextOffset = if (reportedOffset > requestedOffset) reportedOffset else requestedOffset + items.size
             return ActorRankPage(
                 items = items,
-                nextOffset = data.optInt("next_offset", requestedOffset + items.size),
-                hasMore = data.optBoolean("has_more", false),
+                nextOffset = nextOffset,
+                hasMore = data.optBoolean("has_more", false) && items.isNotEmpty() && nextOffset > requestedOffset,
                 sessionId = data.optString("session_id"),
                 version = data.optString("rank_version"),
             )
