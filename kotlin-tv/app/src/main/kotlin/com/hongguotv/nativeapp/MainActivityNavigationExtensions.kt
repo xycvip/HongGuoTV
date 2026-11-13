@@ -110,9 +110,16 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
 
     internal fun MainActivity.leaveCollection() {
         if(collection==null) return
+        val leavingActorWorks=collection=="actor-works"
         collection=null
         collectionReturn?.let { page=it.page; catalog=it.items; hasMore=it.hasMore; ranking=it.ranking }
         catalogFocus=collectionFocus; collectionReturn=null
+        if(leavingActorWorks) {
+            actorWorksActor=null
+            actorWorksItems=emptyList()
+            actorWorksNextOffset=0
+            actorWorksHasMore=false
+        }
     }
 
     internal fun MainActivity.showCollection(kind: String) {
