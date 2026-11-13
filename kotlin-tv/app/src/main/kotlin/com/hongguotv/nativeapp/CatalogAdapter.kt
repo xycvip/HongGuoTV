@@ -174,7 +174,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         val label=when(footer) {
             FOOTER_LOADING -> "正在加载…"
             FOOTER_ERROR -> "加载失败，继续浏览会自动重试"
-            else -> if(tab==2) "已展示全部 ${displayed.size} 部" else "已加载全部，试试搜索"
+            else -> if(tab==2 && actorRanking) "已显示全部内容" else if(tab==2) "已展示全部 ${displayed.size} 部" else "已加载全部，试试搜索"
         }
         val hint=text(label,14f,muted).apply {
             gravity=Gravity.CENTER; setPadding(0,dp(8),0,dp(8)); isFocusable=true; isFocusableInTouchMode=true
