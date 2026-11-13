@@ -49,11 +49,11 @@ import java.util.concurrent.atomic.AtomicLong
         collectionBack=null
         if(collection!=null) {
             val heading=row()
-            collectionBack=addButton(heading,"‹ 返回首页") { leaveCollection(); showCatalog() }.apply {
+            collectionBack=addButton(heading,if(collection=="actor-works") "‹ 返回演员榜" else "‹ 返回首页") { leaveCollection(); showCatalog() }.apply {
                 nextFocusUpId=typeButtons[library.contentType]?.id ?: navForTab().id
                 nextFocusDownId=id
             }
-            heading.addView(text(when(collection) { "later" -> "稍后看"; "updates" -> "收藏有更新"; "hot" -> "热门发现"; "hot-short" -> "热门发现 · 短剧"; "hot-comic" -> "热门发现 · 漫剧"; "hot-ai" -> "热门发现 · AI剧"; else -> "接着看" },22f))
+            heading.addView(text(when(collection) { "actor-works" -> "${actorWorksActor?.name ?: "演员"} · 参演作品"; "later" -> "稍后看"; "updates" -> "收藏有更新"; "hot" -> "热门发现"; "hot-short" -> "热门发现 · 短剧"; "hot-comic" -> "热门发现 · 漫剧"; "hot-ai" -> "热门发现 · AI剧"; else -> "接着看" },22f))
             body.addView(heading)
             typeButtons.values.forEach { it.nextFocusDownId=collectionBack!!.id }
         }
@@ -66,7 +66,7 @@ import java.util.concurrent.atomic.AtomicLong
         val displayed=mutableListOf<Series>()
         displayed+=if(localCatalog()) catalog else if(tab==0) catalog.filterNot { it.id in library.hidden() } else catalog
         if(displayed.isEmpty()) {
-            message(body,if(loading) "正在加载推荐…" else when(tab) { 1 -> if(query.isBlank()) "输入名称关键词，或用字母键拼首拼选择联想词" else if(aggregateSearch) "没有找到相关漫剧或短剧，换个关键词试试" else "没有找到相关${library.contentType.label}，换个关键词试试"; 3 -> if(favoriteGroupFilter!=null) "「$favoriteGroupFilter」分组暂无收藏" else "在剧集详情中选择收藏，喜欢的剧就会出现在这里"; 4 -> "播放过的剧集会自动保存在这里"; else -> "本页没有更多内容" })
+            message(body,if(collection=="actor-works") if(loading) "正在加载演员作品…" else "暂无参演作品" else if(loading) "正在加载推荐…" else when(tab) { 1 -> if(query.isBlank()) "输入名称关键词，或用字母键拼首拼选择联想词" else if(aggregateSearch) "没有找到相关漫剧或短剧，换个关键词试试" else "没有找到相关${library.contentType.label}，换个关键词试试"; 3 -> if(favoriteGroupFilter!=null) "「$favoriteGroupFilter」分组暂无收藏" else "在剧集详情中选择收藏，喜欢的剧就会出现在这里"; 4 -> "播放过的剧集会自动保存在这里"; else -> "本页没有更多内容" })
             wireSearchPanel(null)
             if(focusType) (if(tab==1) searchInput else navForTab())?.requestFocus()
             else if(pendingRefreshFocus==null && !(tab==2 && rankFocusTag!=null)) {
@@ -138,7 +138,7 @@ import java.util.concurrent.atomic.AtomicLong
         })
         (searchBody as? SearchResultsColumn)?.scrollTarget=recycler
         adapter.footer=when {
-            localCatalog() -> if(collection=="hot" && collectionReturn?.hasMore==true) FOOTER_MORE_HOT else FOOTER_NONE
+            localCatalog() -> when(collection) { "actor-works" -> if(hasMore) FOOTER_NONE else FOOTER_END; "hot" -> if(collectionReturn?.hasMore==true) FOOTER_MORE_HOT else FOOTER_NONE; else -> FOOTER_NONE }
             hasMore -> FOOTER_NONE
             else -> FOOTER_END
         }
@@ -183,7 +183,7 @@ import java.util.concurrent.atomic.AtomicLong
                 if(tab==2) {
                     val firstPoster=recycler.findViewHolderForAdapterPosition(1)?.itemView
                     if(firstPoster?.isFocusable==true && firstPoster.isAttachedToWindow) {
-                        val selectedBoard=if(actorRanking) root.findViewWithTag<View>("rank:actor:$actorRankSubBoard") ?: actorRankButton else root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch
+                        val selectedBoard=if(collection=="actor-works") collectionBack else if(actorRanking) root.findViewWithTag<View>("rank:actor:$actorRankSubBoard") ?: actorRankButton else root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch
                         val firstRowLastPosition=minOf(cols,displayed.size)
                         // 顶部每张演员/短剧榜卡片按上键都明确回到当前选中的榜单入口。
                         for(position in 1..firstRowLastPosition) {
@@ -201,19 +201,27 @@ import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.maybeLoadMore() {
         val adapter=catalogAdapter ?: return
-        if(randomDialog?.isShowing==true || loadingMore || !hasMore || localCatalog() || screen!="catalog") return
+        if(randomDialog?.isShowing==true || loadingMore || !hasMore || (localCatalog() && collection!="actor-works") || screen!="catalog") return
         if(page>=waterfallMaxPages || catalog.size>=waterfallMaxPages*20) { hasMore=false; adapter.updateFooter(FOOTER_END); return }
         val requestTab=tab; val requestPage=page+1; val requestQuery=query; val requestType=library.contentType
         val requestBoard=rankBoard
-        val requestActor=requestTab==2 && actorRanking
+        val requestActorWorks=requestTab==2 && collection=="actor-works"
+        val requestActor=requestTab==2 && actorRanking && !requestActorWorks
+        val requestActorWorksActor=actorWorksActor
+        val requestActorWorksOffset=actorWorksNextOffset
         val requestActorOffset=actorRankNextOffset
         val requestActorSession=actorRankSessionId
         val requestActorSubBoard=actorRankSubBoard
         val requestTheaterType=theaterContentType; val requestTheaterSelection=theaterSelections.toMap()
         var responseActorPage:ActorRankPage? = null
+        var responseActorWorksPage:ActorWorksPage? = null
         loadingMore=true; adapter.updateFooter(FOOTER_LOADING)
         work({
-            when(requestTab) {
+            if(requestActorWorks) {
+                val actor=requestActorWorksActor ?: error("演员信息已失效")
+                repository.actorWorks(actor.actorId,requestActorWorksOffset,20).also { responseActorWorksPage=it }
+                    .let { CatalogPage(it.items,it.hasMore) }
+            } else when(requestTab) {
                 0 -> repository.home(requestPage,requestType,null)
                 7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).catalog
                 2 -> if(requestActor) repository.actorRanking(requestActorOffset,requestActorSession,requestActorSubBoard).let { actorPage ->
@@ -226,7 +234,13 @@ import java.util.concurrent.atomic.AtomicLong
             loadingMore=false
             page=requestPage
             hasMore=result.hasMore
-            if(requestActor) {
+            if(requestActorWorks) {
+                val worksPage=responseActorWorksPage ?: error("演员作品分页响应丢失")
+                val knownWorks=actorWorksItems.mapTo(HashSet()) { it.id }
+                actorWorksItems=actorWorksItems+worksPage.items.filter { it.id !in knownWorks }
+                actorWorksNextOffset=worksPage.nextOffset
+                actorWorksHasMore=worksPage.hasMore
+            } else if(requestActor) {
                 val actorPage=responseActorPage ?: error("演员榜分页响应丢失")
                 val knownActors=actorRankItems.mapTo(HashSet()) { it.userId }
                 actorRankItems=actorRankItems+actorPage.items.filter { it.userId !in knownActors }
