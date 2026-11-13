@@ -47,7 +47,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
             closePushPlaybackService()
         }
         leaveCollection()
-        tabState[tab]=CatalogState(page,catalog,hasMore,ranking,rankBoard,genre,actorRanking); tabFocus[tab]=catalogFocus
+        tabState[tab]=CatalogState(page,catalog,hasMore,ranking,rankBoard,actorRanking); tabFocus[tab]=catalogFocus
         // 从其他模块切回搜索页时重置为全新搜索状态，不保留上次的搜索词与结果
         if(targetTab==1) {
             query=""; aggregateSearch=true; phoneSearched=false; lastSuggestWords=emptyList<String>(); lastSuggestKey=""; suggestFocusIndex=-1; keyboardLastLabel=null
@@ -55,7 +55,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
             tabState.remove(1); tabFocus.remove(1)
         }
         tab=targetTab; val saved=tabState[targetTab]; page=saved?.page ?: 1; catalog=saved?.items ?: emptyList(); hasMore=saved?.hasMore ?: false; ranking=saved?.ranking; catalogFocus=tabFocus[targetTab].orEmpty()
-        rankBoard=saved?.board ?: rankBoard; genre=saved?.genre ?: genre
+        rankBoard=saved?.board ?: rankBoard
         actorRanking=saved?.actorRanking ?: false
         if(targetTab==0) {
             if(doubleTapHome) {
@@ -92,7 +92,7 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
         lastSuggestWords=emptyList<String>(); lastSuggestKey=""; phoneSearched=false
         for(index in 0..1) { tabState.remove(index); tabFocus.remove(index) }
         releaseCatalogViews()
-        page=1; catalog=emptyList(); hasMore=false; ranking=null; catalogFocus=""; homePosition=null; genre=null
+        page=1; catalog=emptyList(); hasMore=false; ranking=null; catalogFocus=""; homePosition=null
         showCatalog(load=(tab==0 || query.isNotBlank()),focusType=true)
     }
 
