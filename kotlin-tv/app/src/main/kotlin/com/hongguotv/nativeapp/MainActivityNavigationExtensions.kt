@@ -37,7 +37,11 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
 
     internal fun MainActivity.switchTab(next: Int) {
         val targetTab=if(next==9) 4 else next
-        debugLog("页面导航：主导航页签 $tab -> $targetTab")
+        val now=android.os.SystemClock.elapsedRealtime()
+        val doubleTapHome=targetTab==0 && tab==0 && navigationUiState.lastHomeNavTapAt>0L &&
+            now-navigationUiState.lastHomeNavTapAt in 1..650
+        navigationUiState.lastHomeNavTapAt=if(targetTab==0 && !doubleTapHome) now else 0L
+        debugLog("页面导航：主导航页签 $tab -> $targetTab；首页双击刷新=$doubleTapHome")
         if(pushPlaybackPageActive || pushPlaybackServer!=null) {
             pushPlaybackPageActive=false
             closePushPlaybackService()
@@ -54,8 +58,13 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
         rankBoard=saved?.board ?: rankBoard; genre=saved?.genre ?: genre
         aiCatalog=false; aiGenre=null
         if(targetTab==0) {
-            // 点击首页后刷新内容，但重建页面时焦点固定恢复到“首页”导航项。
-            refreshAllHome(focusNav=true)
+            if(doubleTapHome) {
+                // 首页连续双击才执行强制刷新；单击仅进入/停留首页，不打断当前内容。
+                refreshAllHome(focusNav=true)
+            } else {
+                // 单击首页只恢复页面；仅在尚无首页数据时执行首次加载。
+                showCatalog(load=catalog.isEmpty(),focusNav=true)
+            }
             if(!apiStatusCheckStarted) main.post { runAutomaticApiChecks() }
         } else {
             showCatalog(load=(targetTab==7 || (targetTab<=2 && catalog.isEmpty() && (targetTab!=1 || query.isNotBlank()))))
