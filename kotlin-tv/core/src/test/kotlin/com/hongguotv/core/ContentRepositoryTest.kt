@@ -718,6 +718,23 @@ class ContentRepositoryTest {
         assertEquals(4,result.ranking!!.totalPages)
     }
 
+    @Test fun newDramaBoardsUseTheirMatchingOfficialWebsiteRoutes() {
+        listOf(RankBoard.NEW_REAL, RankBoard.NEW_COMIC, RankBoard.NEW_AI).forEach { board ->
+            val repo = repository { request ->
+                assertEquals("/rank/${board.path}", request.url.encodedPath)
+                assertEquals("1", request.url.queryParameter("page"))
+                val payload = rankPayload()
+                val deferred = script("mergeLoaderData", JSONArray().put(board.route)
+                    .put(JSONArray().put(JSONObject().put("key", "content")
+                        .put("routerDataFnName", "p").put("routerDataFnArgs", JSONArray().put(payload.toString())))))
+                """<script>_ROUTER_DATA={"loaderData":{"${board.route}":{"rankKey":"${board.rankKey}","pageNum":1,"updatedText":"今日已更新"}}};</script>""" + deferred
+            }
+            val result = repo.ranking(board, 1)
+            assertEquals("测试漫剧", result.items.single().title)
+            assertEquals("今日已更新", result.ranking!!.updatedText)
+        }
+    }
+
     private fun currentRealRank(payload: JSONObject) = script("mergeLoaderData",JSONArray()
         .put("rank_hot-real-drama/page").put(JSONArray().put(JSONObject().put("key","content")
             .put("routerDataFnName","p").put("routerDataFnArgs",JSONArray().put(payload.toString())))))
