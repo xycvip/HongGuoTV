@@ -240,7 +240,7 @@ internal fun MainActivity.renderCatalogContent(
                             }
                         }
                     }
-                    if(requestTab==0 && requestPage==1 && requestGenre==null) {
+                    if(requestTab==0 && requestPage==1) {
                         // 焦点已由 showCatalog 的 focusNav 或 pendingRefreshFocus 恢复；
                         // 此处只结束刷新状态，不能再次把焦点抢到随机入口或刷新控件。
                         refreshHomePending=false
@@ -252,7 +252,7 @@ internal fun MainActivity.renderCatalogContent(
                         else catalogRecycler?.post { (resultFirstCard ?: searchInput)?.requestFocus() }
                     }
             }, { problem ->
-                if(requestTab==0 && requestPage==1 && requestGenre==null) {
+                if(requestTab==0 && requestPage==1) {
                     refreshHomePending=false
                     pendingRefreshFocus?.let { restore ->
                         pendingRefreshFocus=null
