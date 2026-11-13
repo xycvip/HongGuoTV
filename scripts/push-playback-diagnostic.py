@@ -207,6 +207,14 @@ def douyin(url, target_title=""):
    with urllib.request.urlopen(req,timeout=18) as response:
     status=response.status;final=response.geturl();content_type=response.headers.get("Content-Type","未提供")
     body=response.read(3145728).decode("utf-8","replace")
+   # 在原始响应全文中直接搜索分享剧名片段，不依赖 JSON 字段名或 aweme_id。
+   direct_phrase=(target_title or "")[:10]
+   direct_hits=[]
+   if direct_phrase:
+    for label,term in (("原文",direct_phrase),("JSON Unicode 转义", "".join("\\u%04x" % ord(ch) for ch in direct_phrase))):
+     pos=body.find(term)
+     if pos>=0:
+      direct_hits.append(f"{label}命中位置 {pos}，出现 {body.count(term)} 次；上下文：{re.sub(r'\\s+',' ',body[max(0,pos-100):pos+len(term)+160])}")
    a,path,diagnostic=inspect_feed_json(body,aid)
    title_matches,title_candidates=scan_feed_titles(body,target_title)
    meta=f"HTTP {status}；Content-Type：{content_type}；最终地址：{final}；响应长度：{len(body)} 字符；{diagnostic}"
