@@ -101,7 +101,7 @@ internal fun MainActivity.togglePlayback()=requestPlayback(!(if(playbackReady) p
 
 internal val MainActivity.videoRendererMode: Int
     get() = getSharedPreferences("playback-renderer-v1", Context.MODE_PRIVATE)
-        .getInt("video_renderer_mode", 0).coerceIn(0, 2)
+        .getInt("video_renderer_mode", 1).let { if(it == 2) 2 else 1 }
 
 /** 播放器设置与控制栏共用的显示标签和渲染模式映射。 */
 internal fun MainActivity.sleepActionLabel(mode: Int = sleepActionMode) = listOf("播放", "软件")[mode.coerceIn(0, 1)]
@@ -113,11 +113,9 @@ internal fun MainActivity.danmakuColorModeLabel(mode: Int = danmakuColorMode): S
 }
 
 internal fun MainActivity.videoRendererModeLabel(mode: Int = videoRendererMode): String =
-    listOf("自动", "SurfaceView", "TextureView")[mode.coerceIn(0, 2)]
+    if(mode == 2) "TextureView" else "SurfaceView"
 
-internal fun MainActivity.resolvedVideoRendererMode(): Int =
-    if(videoRendererMode != 0) videoRendererMode
-    else if(isTelevisionDevice && seamlessPlaybackEnabled) 2 else 1
+internal fun MainActivity.resolvedVideoRendererMode(): Int = videoRendererMode
 
 internal fun MainActivity.frameResizeMode()=when(library.frameMode) {
     VideoFrameMode.FIT -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
