@@ -173,7 +173,7 @@ import java.util.concurrent.atomic.AtomicLong
         rankSwitch?.nextFocusDownId=recycler.id; rankRefresh?.nextFocusDownId=recycler.id; historyManage?.nextFocusDownId=recycler.id; favoriteCheck?.nextFocusDownId=favoriteFilterFirst?.id ?: recycler.id
         if(tab==2) RankBoard.entries.forEach { board -> root.findViewWithTag<View>("rank:board:${board.name}")?.nextFocusDownId=recycler.id }
         root.findViewWithTag<View>("recent:watch-stats")?.nextFocusDownId=recycler.id
-        actorRankButton?.nextFocusDownId=recycler.id
+        actorRankButton?.nextFocusDownId=if(actorRanking) root.findViewWithTag<View>("rank:actor:$actorRankSubBoard")?.id ?: recycler.id else recycler.id
         root.findViewWithTag<View>("rank:actor:ranklist_series_actor")?.nextFocusDownId=recycler.id
         root.findViewWithTag<View>("rank:actor:ranklist_actor_fans")?.nextFocusDownId=recycler.id
         favoriteFilterButtons.forEach { it.nextFocusDownId=recycler.id }
