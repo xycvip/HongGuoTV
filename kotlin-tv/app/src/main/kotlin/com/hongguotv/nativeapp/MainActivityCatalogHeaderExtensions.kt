@@ -368,6 +368,8 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 view.nextFocusRightId=boardFocusItems.getOrNull(index+1)?.id ?: view.id
             }
             val boardScroll=HorizontalScrollView(this).apply {
+                isFocusable=false
+                isFocusableInTouchMode=false
                 isHorizontalScrollBarEnabled=false
                 clipToPadding=false
                 overScrollMode=View.OVER_SCROLL_NEVER
