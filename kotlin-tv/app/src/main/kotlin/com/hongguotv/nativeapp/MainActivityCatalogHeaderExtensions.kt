@@ -367,7 +367,13 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 view.nextFocusLeftId=boardFocusItems.getOrNull(index-1)?.id ?: view.id
                 view.nextFocusRightId=boardFocusItems.getOrNull(index+1)?.id ?: view.id
             }
-            container.addView(boardRow)
+            val boardScroll=HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled=false
+                clipToPadding=false
+                overScrollMode=View.OVER_SCROLL_NEVER
+                addView(boardRow,HorizontalScrollView.LayoutParams(-2,-2))
+            }
+            container.addView(boardScroll,lp(-1,-2))
             val defaultSource=if(actorRanking) if(actorRankSubBoard=="ranklist_actor_fans") "来源：红果演员星光榜" else "来源：红果演员剧星榜" else rankBoard.sourceText
             rankSubtitle=text(if(loading) "正在读取最新榜单…" else if(actorRanking) defaultSource else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,13f,muted).apply { setPadding(0,0,0,dp(8)) }
             container.addView(rankSubtitle)
