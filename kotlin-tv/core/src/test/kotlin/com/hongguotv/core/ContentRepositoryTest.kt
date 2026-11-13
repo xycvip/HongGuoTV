@@ -507,7 +507,8 @@ class ContentRepositoryTest {
                 assertEquals("7100000000001401", request.url.queryParameter("encrypted_celebrity_ids"))
                 assertEquals(if (requests.size == 1) "0" else "1", request.url.queryParameter("offset"))
                 assertEquals("0", request.url.queryParameter("req_scene"))
-                val body = """{"code":0,"data":{"works":{"7100000000001401":{"total_count":2,"has_more":true,"video_list":[{"series_id":"7700000000000001","title":"演员作品甲","cover":"https://example.com/a.jpg"},{"series_id":"7700000000000002","title":"演员作品乙","cover":"https://example.com/b.jpg"}]}}}}"""
+                val hasMore = request.url.queryParameter("offset") == "0"
+                val body = """{"code":0,"data":{"works":{"7100000000001401":{"total_count":2,"has_more":$hasMore,"video_list":[{"series_id":"7700000000000001","title":"演员作品甲","cover":"https://example.com/a.jpg"},{"series_id":"7700000000000002","title":"演员作品乙","cover":"https://example.com/b.jpg"}]}}}}"""
                 Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
                     .code(200).message("OK").body(body.toResponseBody()).build()
             }.build(),
