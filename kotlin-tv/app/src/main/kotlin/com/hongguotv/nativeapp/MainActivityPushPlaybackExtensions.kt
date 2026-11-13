@@ -30,83 +30,95 @@ import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
-private data class PushShareItem(val title:String,val url:String,val source:String)
+private data class PushShareItem(
+    val title:String,
+    val url:String,
+    val source:String,
+    val titleCandidates:List<String> = emptyList()
+)
 private data class RedShareIds(val seriesId:String?,val videoId:String?)
-
-/** 抖音短剧分享页使用 playlet_id/series_id，不是 aweme_id；单独请求短剧详情接口取剧名。 */
-private object DouyinPlayletResolver {
-    private fun text(obj:JSONObject?,key:String):String =
-        obj?.opt(key)?.takeUnless { it==JSONObject.NULL }?.toString()?.trim().orEmpty().takeUnless { it=="null" }.orEmpty()
-    private fun findDetail(value:Any?,playletId:String,depth:Int=0):JSONObject? {
-        if(depth>24) return null
-        when(value) {
-            is JSONObject -> {
-                val id=listOf("playlet_id","series_id","seriesId","id").map { text(value,it) }.firstOrNull { it.isNotBlank() }
-                val hasTitle=listOf("playlet_name","series_name","title","name","mix_name").any { text(value,it).isNotBlank() }
-                if(id==playletId && hasTitle) return value
-                val keys=value.keys()
-                while(keys.hasNext()) findDetail(value.opt(keys.next()),playletId,depth+1)?.let { return it }
-                if(depth<=2 && hasTitle) return value
-            }
-            is JSONArray -> for(i in 0 until value.length()) findDetail(value.opt(i),playletId,depth+1)?.let { return it }
-        }
-        return null
-    }
-    fun resolveTitle(playletId:String):String {
-        require(Regex("^\\d{8,25}$").matches(playletId)) { "抖音短剧 ID 格式不正确" }
-        val endpoint="https://www.iesdouyin.com/web/api/playlet/detail/?playlet_id=$playletId"
-        val connection=(URL(endpoint).openConnection() as HttpURLConnection).apply {
-            instanceFollowRedirects=true
-            connectTimeout=8000
-            readTimeout=10000
-            requestMethod="GET"
-            setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36")
-            setRequestProperty("Accept","application/json, text/plain, */*")
-            setRequestProperty("Referer","https://www.iesdouyin.com/")
-        }
-        try {
-            val status=connection.responseCode
-            if(status !in 200..299) throw java.io.IOException("抖音短剧详情 HTTP $status")
-            val body=connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(2*1024*1024) }
-            val root=JSONObject(body)
-            val detail=findDetail(root,playletId) ?: root.optJSONObject("data") ?: root
-            val title=listOf("playlet_name","series_name","title","name","mix_name")
-                .map { text(detail,it) }.firstOrNull { it.isNotBlank() }.orEmpty()
-            if(title.isBlank()) throw java.io.IOException("短剧详情接口未返回可识别的剧名")
-            return title
-        } finally { connection.disconnect() }
-    }
-}
 private object PushShareParser {
     private val redTitle=Regex("(?:漫剧|短剧)《([^》]{1,80})》")
     private val urlToken=Regex("""https?://[^\s<>\"'，。]+""",RegexOption.IGNORE_CASE)
     private val bracketTitle=Regex("[《【〖]([^》】〗]{1,100})[》】〗]")
     private val authorWorkSuffix=Regex("(?:的作品|作品)$")
-    private val descriptionStart=Regex("\\s+(?=(?:为|讲述|讲的是|故事讲述|女主|男主|剧情|本剧|这部|一场|一段))")
-    private fun clean(v:String)=v.replace(Regex("#[^\\n]*"),"").replace(Regex("\\s+")," ").trim().trimEnd('！','!','。','，',',','…')
-    /** 抖音常见格式：看看【作者的作品】剧名 + 剧情描述。括号里的作者名不能误当剧名。 */
-    private fun extractDouyinTitle(block:String):String {
-        var text=clean(block)
+    private val explicitTitle=Regex("(?:短剧|漫剧)?《([^》]{2,80})》")
+    private val hashtag=Regex("#([^#\\s]+)")
+    private val descriptionStart=Regex("\\s+(?=(?:为(?:了)?|讲述|讲的是|故事讲述|剧情简介|剧情是|本剧讲述))")
+    private val adPhrases=listOf(
+        "红果海量","海量库存","库存全免费","免费短剧APP","来红果","热门爆款天天更",
+        "短剧自由拿捏","免费短剧app","看全集","全集看","爆款天天更","全免费"
+    )
+    private val genericTags=setOf(
+        "抖音短剧","短剧","漫剧","短剧新番计划","新番计划","ai","脑洞","救赎",
+        "红果短剧","红果免费短剧","推荐","热门","好剧"
+    )
+    private fun normalize(value:String)=value.replace(Regex("\\s+")," ").trim()
+    private fun isAdvertisement(value:String)=adPhrases.any { value.contains(it,ignoreCase=true) }
+    private fun cleanTitle(value:String):String {
+        return normalize(value)
+            .trim('《','》','【','】','〖','〗','：',':','，',',','。','！','!','？','?','…','·','-')
+            .replace(Regex("^[\\s:：，,。！!]+"),"")
+            .replace(Regex("[\\s…]+$"),"")
+            .trim()
+    }
+    /**
+     * 提取多个候选，而不是猜定整段正文就是剧名：
+     * 明确书名号 > 正文标题候选 > 有辨识度的话题标签。
+     * 作者括号、营销广告、分享模板永远不作为剧名候选。
+     */
+    private fun extractDouyinTitles(block:String):List<String> {
+        var text=normalize(block)
             .replace(Regex("^\\d+(?:\\.\\d+)?\\s*"),"")
             .replace(Regex("^复制打开抖音[，,、：: ]*"),"")
             .replace(Regex("^看看[，,、：: ]*"),"")
+            .replace(Regex("^打开抖音[，,、：: ]*"),"")
             .trim()
+        if(text.isBlank()) return emptyList()
+
+        explicitTitle.find(text)?.let { match ->
+            val explicit=cleanTitle(match.groupValues[1])
+            if(explicit.length>=2 && !isAdvertisement(explicit)) return listOf(explicit)
+        }
+
         val bracket=bracketTitle.find(text)
         if(bracket!=null) {
-            val bracketValue=bracket.groupValues[1].trim()
+            val bracketValue=cleanTitle(bracket.groupValues[1])
             if(authorWorkSuffix.containsMatchIn(bracketValue)) {
-                // 作者标记后面的文字才是作品标题，后续通常是剧情简介。
+                // 【作者的作品】是作者标签，必须剥离。
                 text=text.substring(bracket.range.last+1).trim()
-            } else {
-                return bracketValue.takeIf { it.isNotBlank() && !authorWorkSuffix.containsMatchIn(it) }.orEmpty()
+            } else if(bracketValue.isNotBlank() && !isAdvertisement(bracketValue)) {
+                // 非作者括号内容可能是真正标题，作为最高优先级候选。
+                return listOf(bracketValue)
             }
         }
-        text=text.replace(Regex("^(?:短剧|漫剧)[：:，,、 ]*"),"").trim()
-        // 分享标题通常是连续文本；空格后若进入剧情描述，则截断描述。
-        text=descriptionStart.split(text,limit=2).firstOrNull().orEmpty().trim()
-        text=text.substringBefore(' ').trim()
-        return clean(text).trim('《','》','【','】','〖','〗','：',':','，',',','。','！','!')
-            .takeIf { it.isNotBlank() && !authorWorkSuffix.containsMatchIn(it) }.orEmpty()
+
+        // URL 之前的文案才是标题来源；清除分享模板和口令残留。
+        text=urlToken.replace(text," ")
+        text=normalize(text)
+        val tags=hashtag.findAll(text).map { cleanTitle(it.groupValues[1]) }.toList()
+        var body=text.substringBefore('#').trim()
+        body=body.replace(Regex("^(?:短剧|漫剧)[：:，,、 ]*"),"").trim()
+
+        val candidates=linkedSetOf<String>()
+        if(body.isNotBlank() && !isAdvertisement(body)) {
+            // 只在明确的剧情介绍引导词前截断；不按空格或逗号粗暴截断标题。
+            body=descriptionStart.split(body,limit=2).firstOrNull().orEmpty()
+            val candidate=cleanTitle(body)
+            if(candidate.length>=2 && !isAdvertisement(candidate) &&
+                !authorWorkSuffix.containsMatchIn(candidate)) candidates+=candidate
+        }
+
+        // 话题可能藏有剧名（如 #难逃霖网），但通用分类标签不参与搜索。
+        tags.forEach { tag ->
+            val normalizedTag=tag.lowercase(Locale.ROOT)
+            if(tag.length>=3 && normalizedTag !in genericTags &&
+                !isAdvertisement(tag) && !authorWorkSuffix.containsMatchIn(tag) &&
+                !tag.startsWith("抖音") && !tag.startsWith("红果")) {
+                candidates+=tag
+            }
+        }
+        return candidates.toList()
     }
     private fun classifyUrl(rawUrl:String):String? {
         val candidate=rawUrl.trim().trimEnd('！','!','。','，',',','；',';','）',')','】',']','>','"','\'')
@@ -139,13 +151,13 @@ private object PushShareParser {
             val marker=raw.lastIndexOf("复制打开抖音",item.first)
             val lineStart=if(marker<0) 0 else (raw.lastIndexOf('\n',marker).takeIf { it>=0 }?.plus(1) ?: 0)
             val block=raw.substring(lineStart,item.first)
-            val title=extractDouyinTitle(block)
-            if(title.isNotBlank() || item.third=="抖音短剧") result+=PushShareItem(title,item.second,item.third)
+            val titles=extractDouyinTitles(block)
+            // 即使分享文案没有可用标题，也保留抖音链接，让 Feed 先尝试精确识别。
+            result+=PushShareItem(titles.firstOrNull().orEmpty(),item.second,item.third,titles)
         }
         return result.distinctBy { it.source+"|"+it.url+"|"+it.title }
     }
 }
-
 /** 抖音分享短链解析：短链重定向提取 aweme_id，再用移动端 Feed 精确匹配作品并读取短剧信息。 */
 private data class DouyinShareInfo(
     val awemeId:String,
@@ -697,15 +709,24 @@ private fun MainActivity.acceptPushShare(raw:String) {
                     }
                 }
                 // 抖音优先使用 Feed 验证出的短剧名；Feed 无法确认时不把“作者的作品”当剧名。
-                if(!resolved && searchTitle.isNotBlank()) {
-                    try {
-                        repository.searchCombined(searchTitle,1).items.take(12).forEach { series ->
-                            if(candidates.none { it.second.id==series.id }) candidates+=share.copy(title=searchTitle) to series
+                if(!resolved) {
+                    val titleQueries=if(share.source=="抖音" && searchTitle==share.title) {
+                        share.titleCandidates.ifEmpty { listOf(searchTitle) }.filter { it.isNotBlank() }.distinct()
+                    } else listOf(searchTitle).filter { it.isNotBlank() }
+                    titleQueries.forEach { queryTitle ->
+                        try {
+                            repository.searchCombined(queryTitle,1).items.take(12).forEach { series ->
+                                if(candidates.none { it.second.id==series.id }) candidates+=share.copy(title=queryTitle) to series
+                            }
+                        } catch(problem:Exception) {
+                            failures+=share.source+"《"+queryTitle+"》："+(problem.message ?: "搜索失败")
                         }
-                    } catch(problem:Exception) { failures+=share.source+"《"+searchTitle+"》："+(problem.message ?: "搜索失败") }
+                    }
                 }
             }
-            val searchTitles=verifiedTitles.ifEmpty { shares.map { it.title }.filter { it.isNotBlank() } }
+            val searchTitles=verifiedTitles.ifEmpty {
+                shares.flatMap { it.titleCandidates.ifEmpty { listOf(it.title) } }.filter { it.isNotBlank() }.distinct()
+            }
             val ranked=candidates.distinctBy { it.second.id }.sortedByDescending { (_,series) -> pushTitleScore(series.title,searchTitles) }.take(12)
             val exact=ranked.filter { (_,series) -> searchTitles.any { normalizePushTitle(series.title)==normalizePushTitle(it) } }
             val readyDetail=directDetail
