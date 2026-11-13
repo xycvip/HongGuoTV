@@ -19,9 +19,9 @@ jobs:
   diagnose:
     name: 分享解析与播放入口诊断
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
-      - name: 检出当前测试分支
+      - name: 检出当前运行分支
         uses: actions/checkout@v4
       - name: 准备 Python 环境
         uses: actions/setup-python@v5
