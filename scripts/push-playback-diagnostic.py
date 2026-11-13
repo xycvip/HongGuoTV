@@ -570,7 +570,7 @@ def probe_detail_pages(sid,eid):
  if eid:
   lines.append(inspect_official_html("红果官网单集播放页",f"https://hongguoduanju.com/player/{sid}/{eid}",sid,eid))
   lines.append(inspect_official_html("novelquickapp 单集播放页",f"https://novelquickapp.com/player/{sid}/{eid}",sid,eid))
- detail_body={"biz_param":{"detail_page_version":0,"disable_digg_stat":False,"disable_video_relate_book":False,"image_shrink_datas_str":"W3siaW1hZ2VfdHlwZSI6MywiaW1hZ2Vfd2lkdGgiOjkwMCwic2hyaW5rX3R5cGUiOjN9LHsiaW1hZ2VfdHlwZSI6NCwiaW1hZ2Vfd2lkdGgiOjcyLCJzaHJpbmtfdHlwZSI6NH1d\\n","need_all_video_definition":False,"need_mp4_align":False,"screen_width_px":"900","source":7,"use_os_player":False,"use_server_dns":False},"series_id":sid}
+ detail_body={"biz_param":{"detail_page_version":0,"disable_digg_stat":False,"disable_video_relate_book":False,"image_shrink_datas_str":"W3siaW1hZ2VfdHlwZSI6MywiaW1hZ2Vfd2lkdGgiOjkwMCwic2hyaW5rX3R5cGUiOjN9LHsiaW1hZ2VfdHlwZSI6NCwiaW1hZ2Vfd2lkdGgiOjcyLCJzaHJpbmtfdHlwZSI6NH1d\n","need_all_video_definition":False,"need_mp4_align":False,"screen_width_px":"900","source":7,"use_os_player":False,"use_server_dns":False},"series_id":sid}
  preload_body={**detail_body,"dr_scene":"preload"}
  lines.append(probe_app_detail_endpoint("新版单剧详情 video_detail/v1","/novel/player/video_detail/v1/",{"series_id":sid},sid,eid))
  lines.append(probe_app_detail_endpoint("批量分集详情 multi_video_detail/v1","/novel/player/multi_video_detail/v1/",detail_body,sid,eid))
