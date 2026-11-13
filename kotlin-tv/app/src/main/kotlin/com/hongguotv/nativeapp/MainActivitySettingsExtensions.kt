@@ -291,15 +291,12 @@ import java.util.concurrent.atomic.AtomicLong
         defaultSpeed=setting(playback,0,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
         frame=setting(playback,0,"画面模式  ·  ${library.frameMode.label}") { showFramePicker(frame,false) }
         videoRendererButton=setting(playback,0,"渲染方式  ·  ${videoRendererModeLabel()}") {
-            val next=(videoRendererMode+1)%3
+            val next=if(videoRendererMode==1) 2 else 1
             getSharedPreferences("playback-renderer-v1", Context.MODE_PRIVATE).edit()
                 .putInt("video_renderer_mode",next).apply()
             videoRendererButton.text="渲染方式  ·  ${videoRendererModeLabel(next)}"
             applyVideoRenderer()
-            val actual=if(next==0) {
-                if(isTelevisionDevice && seamlessPlaybackEnabled) "电视无感连播自动使用 TextureView"
-                else "自动使用 SurfaceView"
-            } else "当前已切换为 ${videoRendererModeLabel(next)}"
+            val actual="当前已切换为 ${videoRendererModeLabel(next)}"
             Toast.makeText(this@settings,actual,Toast.LENGTH_LONG).show()
         }
         lateinit var seamlessPlaybackButton:TextView
@@ -308,7 +305,6 @@ import java.util.concurrent.atomic.AtomicLong
             getSharedPreferences("playback-settings-v1",Context.MODE_PRIVATE)
                 .edit().putBoolean("seamless_playback",enabled).apply()
             seamlessPlaybackButton.text="无感连播  ·  ${if(enabled) "开启" else "关闭"}"
-            applyVideoRenderer()
             if(enabled) {
                 standbyFallbackEpisodeId=""
                 cancelPrefetch()
@@ -320,7 +316,6 @@ import java.util.concurrent.atomic.AtomicLong
             } else {
                 standbyFallbackEpisodeId=""
                 clearStandbyPlayer("用户关闭无感连播")
-                applyVideoRenderer()
                 Toast.makeText(this@settings,"无感连播已关闭，恢复单播放器预加载",Toast.LENGTH_SHORT).show()
             }
         }
