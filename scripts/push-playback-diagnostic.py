@@ -470,6 +470,7 @@ def probe_detail_pages(sid,eid):
   "- 第三方详情接口候选（本次仅登记文档入口，需配置各自密钥后才能实测）：",
   "  - 小影API红果详情：GET /api/dramas/hongguo/detail?series_id=...；需要项目签名；文档：https://www.xiaoyingapi.com/docs/drama/",
   "  - SocialDataX红果详情：支持 series_id 或 novelquickapp 分享链接；需要 API Key；文档：https://socialdatax.com/api-docs/hongguo/",
+  "  - Apify SocialDataX红果详情：支持 novelquickapp 整剧分享链接/完整分享文案；需 Apify 任务调用凭据，按成功结果计费；文档：https://apify.com/socialdatax/socialdatax-hongguo-data-api",
   "  - 红果新版 App video_detail/v1：需要设备参数及 X-Gorgon/X-Khronos 签名；参考：https://github.com/gybeyond1/hongguo-dl",
  ]
  return lines
