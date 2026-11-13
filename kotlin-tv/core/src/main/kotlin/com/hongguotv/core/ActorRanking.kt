@@ -53,7 +53,11 @@ internal object ActorRankParser {
                 // 不能只读 base_info，否则即使 user_id 已识别，也会因 name 为空过滤整页演员。
                 val actorId = firstString(base, "actor_id_str", "actor_id", "star_id", "author_id")
                     .ifBlank { firstString(info, "actor_id_str", "actor_id", "star_id", "author_id") }
+                // 星光榜真实 cell 的 user_name 可能直接放在 user_info，
+                // 而剧星榜常见结构则放在 base_info；两层都要读取。
                 val name = firstString(base, "user_name", "nickname", "name", "nick_name")
+                    .ifBlank { firstString(info, "user_name", "nickname", "name", "nick_name") }
+                    .ifBlank { firstString(node, "user_name", "nickname", "name", "nick_name") }
                     .ifBlank { firstString(info, "user_name", "nickname", "name", "nick_name") }
                     .ifBlank { firstString(node, "user_name", "nickname", "name", "nick_name") }
                 if (!userId.matches(Regex("[0-9]{1,30}")) || name.isBlank() || !seen.add(userId)) continue
