@@ -49,8 +49,13 @@ internal object ActorRankParser {
                 // 不能把 user_id 错当成 base_info 的字段，否则星光榜会把整页演员全部过滤掉。
                 val userId = firstString(info, "user_id", "uid", "userId", "id")
                     .ifBlank { firstString(base, "user_id", "uid", "userId", "id") }
+                // 红果不同版本会把昵称/演员 ID 放在 base_info 或 user_info；
+                // 不能只读 base_info，否则即使 user_id 已识别，也会因 name 为空过滤整页演员。
                 val actorId = firstString(base, "actor_id_str", "actor_id", "star_id", "author_id")
+                    .ifBlank { firstString(info, "actor_id_str", "actor_id", "star_id", "author_id") }
                 val name = firstString(base, "user_name", "nickname", "name", "nick_name")
+                    .ifBlank { firstString(info, "user_name", "nickname", "name", "nick_name") }
+                    .ifBlank { firstString(node, "user_name", "nickname", "name", "nick_name") }
                 if (!userId.matches(Regex("[0-9]{1,30}")) || name.isBlank() || !seen.add(userId)) continue
 
                 val detailsArray = node.optJSONArray("sub_title_list")
