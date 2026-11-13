@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-import html,json,os,re,socket,ssl,sys,urllib.parse,urllib.request
+import html,http.client,ipaddress,json,os,re,socket,ssl,sys,urllib.parse,urllib.request
 from datetime import datetime,timezone
 
 UA="Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36"
@@ -12,22 +12,102 @@ def get(url,headers=None):
  q=urllib.request.Request(url,headers=h)
  with urllib.request.urlopen(q,timeout=18) as r:return r.status,r.geturl(),r.read(3145728).decode("utf-8","replace")
 
+def public_dns_ips(host):
+ # 系统 DNS 若被污染为 127.0.0.1，使用独立 DoH 解析器取得真实公网地址。
+ endpoints=(
+  ("Cloudflare DoH","https://cloudflare-dns.com/dns-query?"+urllib.parse.urlencode({"name":host,"type":"A"})),
+  ("Google DoH","https://dns.google/resolve?"+urllib.parse.urlencode({"name":host,"type":"A"})),
+ )
+ results=[]
+ for label,url in endpoints:
+  try:
+   req=urllib.request.Request(url,headers={"User-Agent":"HongGuoTV-Diagnostic/1.0","Accept":"application/dns-json"})
+   with urllib.request.urlopen(req,timeout=8) as r:data=json.loads(r.read(65536).decode("utf-8","replace"))
+   ips=[]
+   for answer in data.get("Answer",[]):
+    if answer.get("type")==1:
+     try:
+      ip=ipaddress.ip_address(answer.get("data",""))
+      if ip.is_global:ips.append(str(ip))
+     except ValueError:pass
+   results.append((label,list(dict.fromkeys(ips))))
+  except Exception as e:results.append((label,["查询失败："+str(e)]))
+ return results
+
+class PinnedHTTPSConnection(http.client.HTTPSConnection):
+ def __init__(self,host,address,timeout=12):
+  super().__init__(host,port=443,timeout=timeout,context=ssl.create_default_context())
+  self.address=address
+ def connect(self):
+  raw=socket.create_connection((self.address,self.port),self.timeout)
+  self.sock=self._context.wrap_socket(raw,server_hostname=self.host)
+
+def request_feed(host,path,headers):
+ # 优先沿用系统 DNS；若解析到回环/非公网地址或请求失败，再用 DoH 公网 IP，
+ # 同时保留 HTTPS SNI 和 Host，避免把 IP 当作目标域名请求。
+ try:
+  infos=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
+  system_ips=list(dict.fromkeys(x[4][0] for x in infos))
+ except Exception:
+  system_ips=[]
+ usable=[]
+ for value in system_ips:
+  try:
+   ip=ipaddress.ip_address(value)
+   if ip.is_global:usable.append(value)
+  except ValueError:pass
+ errors=[]
+ if usable:
+  try:
+   req=urllib.request.Request("https://"+host+path,headers=headers)
+   with urllib.request.urlopen(req,timeout=18) as r:
+    return r.status,r.geturl(),r.headers.get("Content-Type","未提供"),r.read(3145728).decode("utf-8","replace"),"系统 DNS"
+  except Exception as e:errors.append("系统 DNS 请求失败："+str(e))
+ else:
+  errors.append("系统 DNS 返回非公网地址："+(", ".join(system_ips) if system_ips else "无可用地址"))
+ for resolver,values in public_dns_ips(host):
+  for address in values:
+   if address.startswith("查询失败："):
+    errors.append(resolver+"："+address);continue
+   try:
+    conn=PinnedHTTPSConnection(host,address,timeout=18)
+    conn.request("GET",path,headers={**headers,"Host":host})
+    response=conn.getresponse()
+    body=response.read(3145728).decode("utf-8","replace")
+    status=response.status;ctype=response.getheader("Content-Type","未提供")
+    conn.close()
+    return status,"https://"+host+path,ctype,body,f"{resolver} 公网 IP {address}（绕过异常系统 DNS，保留 TLS SNI/Host）"
+   except Exception as e:
+    errors.append(f"{resolver} {address} 请求失败："+str(e))
+ raise RuntimeError("；".join(errors))
+
 def probe_host(host):
  result={"host":host}
  try:
   infos=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
-  result["dns"]="成功："+", ".join(dict.fromkeys(x[4][0] for x in infos))
+  system_ips=list(dict.fromkeys(x[4][0] for x in infos))
+  result["dns"]="成功："+", ".join(system_ips)
  except Exception as e:
-  result["dns"]="失败："+str(e);result["tcp"]="未测试";result["tls"]="未测试";return result
+  system_ips=[];result["dns"]="失败："+str(e)
+ public=public_dns_ips(host)
+ result["public_dns"]="；".join(label+"："+(", ".join(values) if values else "无公网 A 记录") for label,values in public)
+ candidates=[]
+ for value in system_ips:
+  try:
+   if ipaddress.ip_address(value).is_global:candidates.append(value)
+  except ValueError:pass
+ for _,values in public:
+  candidates.extend(x for x in values if not x.startswith("查询失败："))
+ candidates=list(dict.fromkeys(candidates))
+ if not candidates:
+  result["tcp"]="未测试（没有可用公网 IP）";result["tls"]="未测试";return result
+ result["test_ip"]=candidates[0]
  try:
-  with socket.create_connection((host,443),timeout=6) as s:result["tcp"]="成功"
+  with socket.create_connection((candidates[0],443),timeout=6) as raw:
+   with ssl.create_default_context().wrap_socket(raw,server_hostname=host) as s:
+    result["tcp"]="成功";result["tls"]="成功："+(s.version() or "未知")
  except Exception as e:
-  result["tcp"]="失败："+str(e);result["tls"]="未测试";return result
- try:
-  ctx=ssl.create_default_context()
-  with socket.create_connection((host,443),timeout=6) as raw:
-   with ctx.wrap_socket(raw,server_hostname=host) as s:result["tls"]="成功："+(s.version() or "未知")
- except Exception as e:result["tls"]="失败："+str(e)
+  result["tcp"]="失败："+str(e);result["tls"]="失败/未完成"
  return result
 
 def classify(url):
@@ -203,10 +283,9 @@ def douyin(url, target_title=""):
  attempts=[]
  for host in FEED_HOSTS:
   try:
-   req=urllib.request.Request(f"https://{host}/aweme/v1/feed/?aweme_id={aid}&aid=1128",headers={"User-Agent":"com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7; Build/TQ3A.230805.001; Cronet/TTNetVersion)","Accept":"application/json, text/plain, */*","Referer":"https://www.douyin.com/"})
-   with urllib.request.urlopen(req,timeout=18) as response:
-    status=response.status;final=response.geturl();content_type=response.headers.get("Content-Type","未提供")
-    body=response.read(3145728).decode("utf-8","replace")
+   feed_path=f"/aweme/v1/feed/?aweme_id={aid}&aid=1128"
+   feed_headers={"User-Agent":"com.ss.android.ugc.aweme/390000 (Linux; U; Android 13; zh_CN; Pixel 7; Build/TQ3A.230805.001; Cronet/TTNetVersion)","Accept":"application/json, text/plain, */*","Referer":"https://www.douyin.com/"}
+   status,final,content_type,body,route=request_feed(host,feed_path,feed_headers)
    # 在原始响应全文中直接搜索分享剧名片段，不依赖 JSON 字段名或 aweme_id。
    direct_phrase=(target_title or "")[:9]
    direct_hits=[]
@@ -219,7 +298,7 @@ def douyin(url, target_title=""):
    direct_summary="；".join(direct_hits) if direct_hits else f"未找到“{direct_phrase}”原文或 Unicode 转义"
    a,path,diagnostic=inspect_feed_json(body,aid)
    title_matches,title_candidates=scan_feed_titles(body,target_title)
-   meta=f"HTTP {status}；Content-Type：{content_type}；最终地址：{final}；响应长度：{len(body)} 字符；原始响应全文直接搜索：{direct_summary}；{diagnostic}"
+   meta=f"HTTP {status}；Content-Type：{content_type}；最终地址：{final}；请求路径：{route}；响应长度：{len(body)} 字符；原始响应全文直接搜索：{direct_summary}；{diagnostic}"
    if not a and title_matches:
     hit=title_matches[0]
     attempts.append(f"{host}：未命中 aweme_id，但在整个 Feed JSON 的 {hit['path']}（字段 {hit['field']}）发现分享剧名文本：{hit['value']}")
@@ -352,7 +431,7 @@ def main():
  probes={}
  for host in FEED_HOSTS:probes[host]=probe_host(host)
  L += ["## Feed 网络连通性（独立于接口业务结果）"]
- for host,p in probes.items():L += [f"- {host}：DNS {p.get('dns')}；TCP 443 {p.get('tcp')}；TLS {p.get('tls')}"]
+ for host,p in probes.items():L += [f"- {host}：系统 DNS {p.get('dns')}；公共 DNS 对照 {p.get('public_dns','未查询')}；测试 IP {p.get('test_ip','无')}；TCP 443 {p.get('tcp')}；TLS {p.get('tls')}"]
  if not shares:L += ["## 未识别","没有识别到 App 当前支持的红果/抖音分享格式。"]
  for i,s in enumerate(shares[:4],1):
   t=s["title"];direct=False;feed_ok=None
