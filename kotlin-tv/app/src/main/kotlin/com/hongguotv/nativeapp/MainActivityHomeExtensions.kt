@@ -16,7 +16,7 @@ import com.hongguotv.core.*
         home.render(homeShelves(),catalogFocus,!focusNav && !focusType,null,homePosition)
         // 首页导航按下方向固定进入首页首排第一张海报。
         nav.forEach { it.nextFocusDownId=home.firstId() }
-        if(focusNav) navByTab[0]?.requestFocus() else if(focusType) (genreButton ?: home.firstId().let { root.findViewById<View>(it) })?.requestFocus()
+        if(focusNav) navByTab[0]?.requestFocus() else if(focusType) home.firstId().takeIf { it!=View.NO_ID }?.let { root.findViewById<View>(it)?.requestFocus() }
         loadHomeShelf(if(library.contentType==ContentType.SHORT) ContentType.COMIC else ContentType.SHORT,false)
         loadHomeShelf(ContentType.AI,false)
         if(hot.isNotEmpty() && !homeContentLogged) {
@@ -55,7 +55,7 @@ import com.hongguotv.core.*
                 val refreshAgain=queuedHomeShelfRefresh.remove(type)
                 result.onSuccess { loaded ->
                     library.cacheHome(type,loaded.items,loaded.hasMore)
-                    if(screen=="catalog" && tab==0 && collection==null && genre==null) {
+                    if(screen=="catalog" && tab==0 && collection==null) {
                         homeScreen?.updateShelves(homeShelves(),requestFocus=false)
                     }
                 }.onFailure { problem ->
