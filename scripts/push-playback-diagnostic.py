@@ -13,31 +13,46 @@ def get(url,headers=None):
  with urllib.request.urlopen(q,timeout=18) as r:return r.status,r.geturl(),r.read(3145728).decode("utf-8","replace")
 
 def public_dns_records(host):
- # 同时查询 A/AAAA/CNAME，并保留 DNS RCODE/Answer，区分 NXDOMAIN、无记录和解析器故障。
- endpoints=("Cloudflare DoH","https://cloudflare-dns.com/dns-query?","Google DoH","https://dns.google/resolve?")
+ # 对每个公共 DNS 递归追踪 CNAME 链；每一级分别记录 A/AAAA/CNAME 的 RCODE/Answer。
+ # 仅收集公网 IP，避免把 127.0.0.1 等特殊地址用于 HTTPS pinned 连接。
+ endpoints=(("Cloudflare DoH","https://cloudflare-dns.com/dns-query?"),
+            ("Google DoH","https://dns.google/resolve?"))
  results=[]
- for resolver,base in ((endpoints[0],endpoints[1]),(endpoints[2],endpoints[3])):
-  ips=[];details=[]
-  for qtype in ("A","AAAA","CNAME"):
-   url=base+urllib.parse.urlencode({"name":host,"type":qtype})
-   try:
-    req=urllib.request.Request(url,headers={"User-Agent":"HongGuoTV-Diagnostic/1.0","Accept":"application/dns-json"})
-    with urllib.request.urlopen(req,timeout=8) as r:data=json.loads(r.read(65536).decode("utf-8","replace"))
-    status=data.get("Status","未知")
-    answers=[]
-    for answer in data.get("Answer",[]):
-     typ=answer.get("type");value=str(answer.get("data","")).rstrip(".")
-     if typ==1 or typ==28:
-      try:
-       ip=ipaddress.ip_address(value)
-       if ip.is_global:
-        ips.append(str(ip));answers.append(str(ip))
-       else:answers.append(value+"（非公网）")
-      except ValueError:answers.append(value)
-     elif typ==5:answers.append("CNAME "+value)
-    details.append(f"{qtype}: RCODE={status}, "+(" | ".join(answers[:8]) if answers else "无 Answer"))
-   except Exception as e:details.append(f"{qtype}: 查询失败 {type(e).__name__}: {e}")
-  results.append((resolver,list(dict.fromkeys(ips)),"；".join(details)))
+ for resolver,base in endpoints:
+  queue=[(host,0)];seen=set();ips=[];trace=[]
+  while queue and len(seen)<12:
+   current,depth=queue.pop(0)
+   current=current.rstrip(".").lower()
+   if current in seen:continue
+   seen.add(current)
+   aliases=[]
+   for qtype in ("A","AAAA","CNAME"):
+    url=base+urllib.parse.urlencode({"name":current,"type":qtype})
+    try:
+     req=urllib.request.Request(url,headers={"User-Agent":"HongGuoTV-Diagnostic/1.0","Accept":"application/dns-json"})
+     with urllib.request.urlopen(req,timeout=8) as r:data=json.loads(r.read(65536).decode("utf-8","replace"))
+     status=data.get("Status","未知");answers=[]
+     for answer in data.get("Answer",[]):
+      typ=answer.get("type");value=str(answer.get("data","")).rstrip(".")
+      if typ==1 or typ==28:
+       try:
+        ip=ipaddress.ip_address(value)
+        if ip.is_global:
+         ips.append(str(ip));answers.append(str(ip))
+        else:answers.append(value+"（非公网）")
+       except ValueError:answers.append(value)
+      elif typ==5:
+       aliases.append(value)
+       answers.append("CNAME "+value)
+      elif value:answers.append(value)
+     trace.append(f"{current} [{qtype} RCODE={status}]: "+(" | ".join(answers[:10]) if answers else "无 Answer"))
+    except Exception as e:
+     trace.append(f"{current} [{qtype}]: 查询失败 {type(e).__name__}: {e}")
+   for alias in aliases:
+    if alias.lower().rstrip(".") not in seen and depth<8:
+     queue.append((alias,depth+1))
+  if queue:trace.append("递归追踪达到安全上限，尚有未查询别名")
+  results.append((resolver,list(dict.fromkeys(ips)),"；".join(trace)))
  return results
 
 class PinnedHTTPSConnection(http.client.HTTPSConnection):
