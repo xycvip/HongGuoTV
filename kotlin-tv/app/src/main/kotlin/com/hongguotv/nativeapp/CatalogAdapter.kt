@@ -137,12 +137,18 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             catalogFocus=item.id
             if(actorRanked) {
                 val entry=actor ?: return@setOnClickListener
-                rankSubtitle?.text=buildString {
-                    append("第 ${entry.position} 名 · ${entry.name}")
-                    if(entry.popularity.isNotBlank()) append(" · ${entry.popularity}")
-                    if(entry.intro.isNotBlank()) append("\n${entry.intro}")
-                    if(entry.details.isNotEmpty()) append("\n${entry.details.joinToString(" · ")}")
+                val detail=buildString {
+                    append("第 ${entry.position} 名")
+                    if(entry.popularity.isNotBlank()) append("\n人气：${entry.popularity}")
+                    if(entry.intro.isNotBlank()) append("\n\n${entry.intro}")
+                    if(entry.details.isNotEmpty()) append("\n\n${entry.details.joinToString(" · ")}")
+                    if(entry.actorId.isNotBlank()) append("\n\n演员编号：${entry.actorId}")
                 }
+                android.app.AlertDialog.Builder(host)
+                    .setTitle(entry.name)
+                    .setMessage(detail)
+                    .setPositiveButton("关闭", null)
+                    .show()
             } else openDetail(item,tab==4 || collection=="resume" || collection=="updates")
         }
         card.setOnLongClickListener {
