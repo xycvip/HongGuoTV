@@ -45,8 +45,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.catalogGrid(body: LinearLayout,focusNav: Boolean,focusType: Boolean=false,loading: Boolean=false,focusFilter: Boolean=false) {
-        if(tab==0 && page==1 && collection==null && genre==null) { renderHome(body,focusNav,focusType,loading); return }
-        collectionBack=null; genreClear=null
+        if(tab==0 && page==1 && collection==null) { renderHome(body,focusNav,focusType,loading); return }
+        collectionBack=null
         if(collection!=null) {
             val heading=row()
             collectionBack=addButton(heading,"‹ 返回首页") { leaveCollection(); showCatalog() }.apply {
@@ -57,21 +57,7 @@ import java.util.concurrent.atomic.AtomicLong
             body.addView(heading)
             typeButtons.values.forEach { it.nextFocusDownId=collectionBack!!.id }
         }
-        catalogPageKey="$tab:${if(actorRanking) "actor:$actorRankSubBoard" else ""}:${collection.orEmpty()}:${if(tab==0) genre?.slug.orEmpty() else ""}:${if(tab==7) theaterFilterKey(theaterContentType)+theaterSelections.toSortedMap() else ""}:$page:$query"
-        if(tab==0 && genre!=null) {
-            val bar=row().apply { setPadding(0,0,0,dp(6)) }
-            bar.addView(text("题材 · ${genre?.name}",16f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
-            genreClear=addButton(bar,"全部题材") {
-                pendingRefreshFocus="focus:home:genre"
-                genre=null; page=1; catalogFocus=""; tabState.remove(0); tabFocus.remove(0); showCatalog(true)
-            }.apply {
-                tag="home:genre-clear"
-                nextFocusUpId=genreButton?.id ?: typeButtons[library.contentType]?.id ?: navForTab().id
-            }
-            body.addView(bar)
-            typeButtons.values.forEach { it.nextFocusDownId=genreClear!!.id }
-            genreButton?.nextFocusDownId=genreClear!!.id
-        }
+        catalogPageKey="$tab:${if(actorRanking) "actor:$actorRankSubBoard" else ""}:${collection.orEmpty()}:${if(tab==7) theaterFilterKey(theaterContentType)+theaterSelections.toSortedMap() else ""}:$page:$query"
         if(actorRanking) {
             selectionPreview=null
         } else {
@@ -177,9 +163,8 @@ import java.util.concurrent.atomic.AtomicLong
         root.findViewWithTag<View>("rank:actor:ranklist_series_actor")?.nextFocusDownId=recycler.id
         root.findViewWithTag<View>("rank:actor:ranklist_actor_fans")?.nextFocusDownId=recycler.id
         favoriteFilterButtons.forEach { it.nextFocusDownId=recycler.id }
-        collectionBack?.nextFocusDownId=recycler.id; genreClear?.nextFocusDownId=recycler.id
-        typeButtons.values.forEach { it.nextFocusDownId=searchInput?.id ?: collectionBack?.id ?: genreClear?.id ?: recycler.id }
-        genreButton?.nextFocusDownId=genreClear?.id ?: recycler.id
+        collectionBack?.nextFocusDownId=recycler.id
+        typeButtons.values.forEach { it.nextFocusDownId=searchInput?.id ?: collectionBack?.id ?: recycler.id }
 
         searchInput?.nextFocusDownId=azFirst?.id ?: recycler.id
         searchButton?.nextFocusDownId=azFirst?.id ?: recycler.id
@@ -219,7 +204,7 @@ import java.util.concurrent.atomic.AtomicLong
         if(randomDialog?.isShowing==true || loadingMore || !hasMore || localCatalog() || screen!="catalog") return
         if(page>=waterfallMaxPages || catalog.size>=waterfallMaxPages*20) { hasMore=false; adapter.updateFooter(FOOTER_END); return }
         val requestTab=tab; val requestPage=page+1; val requestQuery=query; val requestType=library.contentType
-        val requestBoard=rankBoard; val requestGenre=if(requestTab==0) genre else null
+        val requestBoard=rankBoard
         val requestActor=requestTab==2 && actorRanking
         val requestActorOffset=actorRankNextOffset
         val requestActorSession=actorRankSessionId
@@ -229,7 +214,7 @@ import java.util.concurrent.atomic.AtomicLong
         loadingMore=true; adapter.updateFooter(FOOTER_LOADING)
         work({
             when(requestTab) {
-                0 -> repository.home(requestPage,requestType,requestGenre)
+                0 -> repository.home(requestPage,requestType,null)
                 7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).catalog
                 2 -> if(requestActor) repository.actorRanking(requestActorOffset,requestActorSession,requestActorSubBoard).let { actorPage ->
                     responseActorPage=actorPage
