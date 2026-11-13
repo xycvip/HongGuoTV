@@ -51,4 +51,40 @@ class ActorRankParserTest {
         assertEquals("actor-session", page.sessionId)
         assertTrue(page.hasMore)
     }
+
+    @Test
+    fun parsesStarBoardCellPayloadAndAlternatePaginationFields() {
+        val raw = """
+            {
+              "code": 0,
+              "message": "SUCCESS",
+              "data": {
+                "has_next": true,
+                "rank_session": "star-session",
+                "cell": [{
+                  "ugc_user_data": [{
+                    "user_info": {
+                      "user_id": "7200000000001301",
+                      "base_info": {
+                        "user_name": "星光榜演员",
+                        "user_avatar": "https://p3-reading-sign.fqnovelpic.com/novel-pic/star-avatar.heic",
+                        "actor_id_str": "7200000000001401"
+                      }
+                    },
+                    "rec_text_item": {"RecommendText": "900万人气"}
+                  }]
+                }]
+              }
+            }
+        """.trimIndent()
+
+        val page = ActorRankParser.parse(raw, 0)
+        assertEquals(1, page.items.size)
+        assertEquals("星光榜演员", page.items.single().name)
+        assertEquals("7200000000001301", page.items.single().userId)
+        assertEquals("7200000000001401", page.items.single().actorId)
+        assertEquals("900万人气", page.items.single().popularity)
+        assertEquals("star-session", page.sessionId)
+        assertTrue(page.hasMore)
+    }
 }
