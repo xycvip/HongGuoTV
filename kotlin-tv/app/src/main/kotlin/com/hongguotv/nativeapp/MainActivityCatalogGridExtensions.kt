@@ -221,6 +221,7 @@ import java.util.concurrent.atomic.AtomicLong
         val requestActor=requestTab==2 && actorRanking
         val requestActorOffset=actorRankNextOffset
         val requestActorSession=actorRankSessionId
+        val requestActorSubBoard=actorRankSubBoard
         val requestTheaterType=theaterContentType; val requestTheaterSelection=theaterSelections.toMap()
         var responseActorPage:ActorRankPage? = null
         loadingMore=true; adapter.updateFooter(FOOTER_LOADING)
@@ -228,7 +229,7 @@ import java.util.concurrent.atomic.AtomicLong
             when(requestTab) {
                 0 -> repository.home(requestPage,requestType,requestGenre)
                 7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).catalog
-                2 -> if(requestActor) repository.actorRanking(requestActorOffset,requestActorSession).let { actorPage ->
+                2 -> if(requestActor) repository.actorRanking(requestActorOffset,requestActorSession,requestActorSubBoard).let { actorPage ->
                     responseActorPage=actorPage
                     CatalogPage(actorPage.items.map { it.toSeries() },actorPage.hasMore)
                 } else repository.ranking(requestBoard,requestPage)
@@ -246,7 +247,7 @@ import java.util.concurrent.atomic.AtomicLong
                 actorRankSessionId=actorPage.sessionId
                 actorRankVersion=actorPage.version
                 ranking=null
-                rankSubtitle?.text="来源：红果演员剧星榜"
+                rankSubtitle?.text=if(requestActorSubBoard=="ranklist_actor_fans") "来源：红果演员星光榜" else "来源：红果演员剧星榜"
             } else {
                 result.ranking?.let { r -> ranking=ComicRanking((ranking?.positions.orEmpty())+r.positions,r.totalPages,r.updatedText.ifBlank { ranking?.updatedText.orEmpty() }) }
                 if(requestTab==2) rankSubtitle?.text=ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
