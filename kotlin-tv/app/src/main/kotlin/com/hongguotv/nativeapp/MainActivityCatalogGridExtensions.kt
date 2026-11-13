@@ -72,7 +72,11 @@ import java.util.concurrent.atomic.AtomicLong
             typeButtons.values.forEach { it.nextFocusDownId=genreClear!!.id }
             genreButton?.nextFocusDownId=genreClear!!.id
         }
-        val preview=SeriesPreview(this); selectionPreview=preview; body.addView(preview)
+        if(actorRanking) {
+            selectionPreview=null
+        } else {
+            val preview=SeriesPreview(this); selectionPreview=preview; body.addView(preview)
+        }
         val displayed=mutableListOf<Series>()
         displayed+=if(localCatalog()) catalog else if(tab==0) catalog.filterNot { it.id in library.hidden() } else catalog
         if(displayed.isEmpty()) {
