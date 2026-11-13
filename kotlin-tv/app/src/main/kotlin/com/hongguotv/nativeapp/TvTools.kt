@@ -50,8 +50,8 @@ class TvTools(private val activity: Activity) {
     fun confirm(title: String,message: String,anchor: View?,action: ()->Unit) {
         open(TvDialog.confirm(activity,title,message,action = action),anchor)
     }
-    fun choose(title: String,labels: List<String>,anchor: View?,onChoice: (Int)->Unit,extra: String?=null,onExtra: ()->Unit={}) {
-        val next=TvDialog.choose(activity,title,labels,onChoice,extra,onExtra)
+    fun choose(title: String,labels: List<String>,anchor: View?,onChoice: (Int)->Unit,extra: String?=null,onExtra: ()->Unit={},selectedIndex: Int=-1) {
+        val next=TvDialog.choose(activity,title,labels,onChoice,extra,onExtra,selectedIndex)
         open(next,anchor)
     }
     fun episodePicker(count: Int,current: Int,anchor: View?,select: (Int)->Unit) {
