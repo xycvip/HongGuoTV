@@ -622,8 +622,15 @@ def main():
     if sid:
      L += probe_detail_pages(sid,eid)
      real,eps=detail(sid)
-     if eid and eid not in eps:raise RuntimeError("分享集数 ID 不在详情分集列表")
-     t=real;direct=True;L += ["- 红果详情：成功",f"- 剧名：**{real}**",f"- 总集数：{len(eps)}",f"- 分享集数：{eps.index(eid)+1 if eid else 1}"]
+     t=real
+     direct=(not eid or eid in eps)
+     L += ["- 红果官网详情：成功",f"- 剧名：**{real}**",f"- 总集数：{len(eps)}"]
+     if eid and eid in eps:
+      L.append(f"- 分享单集 ID：精确命中第 {eps.index(eid)+1} 集")
+     elif eid:
+      L.append(f"- 分享单集 ID：未在官网 vid_list 中命中（{eid}）；剧目详情仍然成功，不中断后续标题搜索")
+     else:
+      L.append("- 分享单集 ID：未从分享链接提取；剧目详情成功")
   except Exception as e:L += ["- 分享解析/详情：失败",f"- 原因：{e}"]
   if direct:L += ["- 播放入口判断：可定位到红果剧目/分集（未验证设备播放器）",""];continue
   if t.strip():
