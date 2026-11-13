@@ -150,7 +150,45 @@ def inspect_feed_json(body, aid):
  if sample_paths:summary.append("aweme_id 字段示例位置："+", ".join(sample_paths))
  return found,found_path,"；".join(summary)
 
-def douyin(url):
+def scan_feed_titles(body, target_title=""):
+ # 不依赖 aweme_id：遍历整个 Feed JSON 的所有字符串叶子节点，
+ # 同时收集标题/描述/分享/短剧等字段，并检查分享标题是否出现在任意位置。
+ try:
+  payload=json.loads(body)
+ except Exception:
+  return [],[]
+ def norm(value):
+  return "".join(c for c in str(value).casefold() if c.isalnum())
+ wanted=norm(target_title)
+ matches=[];candidates=[];visited=0
+ def walk(node,path="$",parent=None):
+  nonlocal visited
+  if isinstance(node,dict):
+   visited+=1
+   for key,value in node.items():
+    child_path=f"{path}.{key}"
+    if isinstance(value,str) and value.strip():
+     text=value.strip()
+     key_hint=any(word in str(key).lower() for word in (
+      "title","name","desc","caption","share","series","mix","playlet",
+      "album","text","content","abstract","schema"
+     ))
+     if key_hint and len(text)<=180 and len(candidates)<100:
+      candidates.append({"path":child_path,"field":str(key),"value":re.sub(r"\\s+"," ",text)[:180]})
+     value_norm=norm(text)
+     if wanted and len(wanted)>=5 and (wanted in value_norm or value_norm in wanted):
+      if len(matches)<30:
+       matches.append({"path":child_path,"field":str(key),"value":re.sub(r"\\s+"," ",text)[:180]})
+    elif isinstance(value,(dict,list)):
+     walk(value,child_path,str(key))
+  elif isinstance(node,list):
+   for index,value in enumerate(node):
+    if isinstance(value,(dict,list)):
+     walk(value,f"{path}[{index}]",parent)
+ walk(payload)
+ return matches,candidates
+
+def douyin(url, target_title=""):
  u=urllib.parse.urlsplit(url)
  if u.hostname=="v.douyin.com":
   _,final,_=get(url);m=re.search(r"/(?:share/video|video)/(\d{8,25})",final) or re.search(r"[?&]aweme_id=(\d{8,25})",final)
@@ -168,8 +206,15 @@ def douyin(url):
     status=response.status;final=response.geturl();content_type=response.headers.get("Content-Type","未提供")
     body=response.read(3145728).decode("utf-8","replace")
    a,path,diagnostic=inspect_feed_json(body,aid)
+   title_matches,title_candidates=scan_feed_titles(body,target_title)
    meta=f"HTTP {status}；Content-Type：{content_type}；最终地址：{final}；响应长度：{len(body)} 字符；{diagnostic}"
-   if not a:raise RuntimeError(meta)
+   if not a and title_matches:
+    hit=title_matches[0]
+    attempts.append(f"{host}：未命中 aweme_id，但在整个 Feed JSON 的 {hit['path']}（字段 {hit['field']}）发现分享剧名文本：{hit['value']}")
+    return aid,target_title,"",attempts
+   if not a:
+    preview="；".join(f"{x['path']}[{x['field']}]={x['value']}" for x in title_candidates[:12])
+    raise RuntimeError(meta+"；全 JSON 标题/描述字段扫描："+(preview or "没有发现可读的标题类字段"))
    si=a.get("series_info") if isinstance(a.get("series_info"),dict) else {}
    mi=a.get("mix_info") if isinstance(a.get("mix_info"),dict) else {}
    next_info=si.get("next_info") if isinstance(si.get("next_info"),dict) else {}
@@ -179,7 +224,14 @@ def douyin(url):
    bracket=re.search(r"[【〖]([^】〗]{1,100})[】〗]",share_desc)
    title=(si.get("series_name") or mi.get("mix_name") or next_info.get("name") or (bracket.group(1) if bracket else "")).strip()
    title=re.sub(r"^(?:短剧|漫剧)\s*[·・]\s*","",title).strip()
-   if not title:raise RuntimeError(f"HTTP {status}；作品 ID 已在 {path} 匹配，但 Feed 没有短剧名称；{diagnostic}")
+   if not title and title_matches:
+    title=target_title
+    hit=title_matches[0]
+    attempts.append(f"{host}：目标 aweme_id 已命中；剧名文本另在 {hit['path']}（字段 {hit['field']}）找到：{hit['value']}")
+   if not title:
+    preview="；".join(f"{x['path']}[{x['field']}]={x['value']}" for x in title_candidates[:12])
+    raise RuntimeError(f"HTTP {status}；作品 ID 已在 {path} 匹配，但标准短剧字段没有剧名；全 JSON 标题/描述字段扫描：{preview or '无标题类字段'}；{diagnostic}")
+   attempts.append(f"{host}：{diagnostic}")
    return aid,title,(a.get("author") or {}).get("nickname",""),attempts
   except Exception as e:attempts.append(host+"："+str(e))
  return aid,"","",attempts
@@ -398,11 +450,12 @@ def main():
   L += [f"## 分享 {i}：{s['source']}",f"- 初始提取标题：{t or '未提取'}",f"- 链接：{s['url'] or '无'}"]
   try:
    if s["source"]=="抖音":
-    aid,feed_title,author,attempts=douyin(s["url"])
+    aid,feed_title,author,attempts=douyin(s["url"],t)
     L += [f"- aweme_id：{aid}"]
     if feed_title:
      t=feed_title;feed_ok=True
-     L += [f"- Feed 确认剧名：**{t}**",f"- 作者：{author or '未返回'}","- Feed 业务解析：成功"]
+     L += [f"- Feed 确认剧名：**{t}**",f"- 作者：{author or '未返回/未匹配作品对象'}","- Feed 业务解析：成功（可能通过全 JSON 剧名文本匹配）"]
+     L += [f"- Feed 额外证据：{x}" for x in attempts]
     else:
      feed_ok=False
      L += ["- Feed 业务解析：失败（已继续执行标题兜底）"]+[f"- Feed 节点 {x}" for x in attempts]
