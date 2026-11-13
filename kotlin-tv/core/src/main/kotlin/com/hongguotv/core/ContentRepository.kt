@@ -139,7 +139,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
             "is_android_pad_screen" to identity.getValue("is_android_pad_screen"),
             "openudid" to identity.getValue("openudid"),
             "encrypted_celebrity_ids" to actorId,
-            "offset" to "0",
+            "offset" to offset.toString(),
             "count" to (offset + pageSize).coerceAtLeast(40).coerceAtMost(300).toString(),
             "req_scene" to "0",
             "user_is_login" to "0",
