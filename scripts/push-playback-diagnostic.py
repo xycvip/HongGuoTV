@@ -407,7 +407,7 @@ def decode_scheme_params(values):
    if decoded==text:break
    text=decoded
   # 先从已解码的原始文本直接提取字段，避免嵌套 JSON 字符串递归时漏掉标量 ID。
-  for match in re.finditer(r"""["']?(?:video_id|videoid|video_id_str)["']?\\s*[:=]\\s*["']?(\\d{1,30})""",text,re.I):
+  for match in re.finditer(r"""["']?(?:video_id|videoid|video_id_str)["']?\s*[:=]\s*["']?(\d{1,30})""",text,re.I):
    found.append(match.group(1))
   try:
    visit(json.loads(text),depth+1)
