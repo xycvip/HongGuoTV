@@ -443,35 +443,142 @@ def detail(sid):
  if not eps:raise RuntimeError("详情页没有分集列表")
  return o.get("series_name") or o.get("series_title") or "未知剧名",eps
 
-def probe_detail_pages(sid,eid):
- # 同一组分享 ID 并行验证不同公开详情/播放页面，避免把“剧目详情成功”
- # 与“分享单集 ID 命中”混为一个结果。
- candidates=[
-  ("红果官网查询参数详情",f"https://hongguoduanju.com/detail?series_id={sid}"),
-  ("红果官网路径详情",f"https://hongguoduanju.com/detail/{sid}"),
- ]
- if eid:
-  candidates += [
-   ("novelquickapp 单集播放页",f"https://novelquickapp.com/player/{sid}/{eid}"),
-   ("红果官网单集播放页",f"https://hongguoduanju.com/player/{sid}/{eid}"),
-  ]
- lines=["- 多路详情页接口实测："]
- for label,url in candidates:
+
+
+def post_hongguo_json(host,path,body):
+ # 公开源码中出现的红果 App 路径。此处不伪造 X-Gorgon/X-Khronos；
+ # 无签名探测用于判断接口是否仍接受当前请求形态，拒绝/空响应会明确标记。
+ query={
+  "aid":"8662","app_name":"novelread","version_code":"72932",
+  "version_name":"7.2.9.32","device_platform":"android","os":"android",
+  "device_type":"Android","device_brand":"Android","os_api":"35",
+  "os_version":"15","channel":"googleplay","ac":"wifi","language":"zh",
+  "manifest_version_code":"72932","resolution":"1080*1920","dpi":"420",
+  "update_version_code":"72932","host_abi":"arm64-v8a",
+ }
+ url="https://"+host+path+"?"+urllib.parse.urlencode(query)
+ data=json.dumps(body,separators=(",",":"),ensure_ascii=False).encode("utf-8")
+ headers={
+  "User-Agent":"com.phoenix.read/72932 (Linux; U; Android 15; zh_CN; Android; Build/UP1A;tt-ok/3.12.13.20)",
+  "Accept":"application/json; charset=utf-8,application/x-protobuf",
+  "Content-Type":"application/json; charset=utf-8",
+  "Accept-Encoding":"gzip",
+  "Connection":"close",
+ }
+ req=urllib.request.Request(url,data=data,headers=headers,method="POST")
+ try:
+  with urllib.request.urlopen(req,timeout=15) as r:
+   raw=r.read(3145728)
+   if r.headers.get("Content-Encoding","").lower()=="gzip":
+    import gzip
+    raw=gzip.decompress(raw)
+   return r.status,r.headers.get("Content-Type","未提供"),raw.decode("utf-8","replace"),url
+ except urllib.error.HTTPError as e:
+  raw=e.read(3145728)
+  if e.headers.get("Content-Encoding","").lower()=="gzip":
+   try:
+    import gzip
+    raw=gzip.decompress(raw)
+   except Exception:pass
+  return e.code,e.headers.get("Content-Type","未提供"),raw.decode("utf-8","replace"),url
+
+def inspect_red_detail_payload(body,sid,eid):
+ if not body.strip():return {"json":False,"title":"","episode_ids":[],"matched":False,"summary":"响应体为空"}
+ try:obj=json.loads(body)
+ except Exception:return {"json":False,"title":"","episode_ids":[],"matched":False,"summary":"响应不是 JSON"}
+ titles=[];vids=[]
+ def walk(node):
+  if isinstance(node,dict):
+   for k,v in node.items():
+    if k in ("series_name","series_title","book_name","title") and isinstance(v,str) and v.strip():
+     if len(v.strip())<100:titles.append(v.strip())
+    if k in ("vid_list","video_list","episodes","episode_list") and isinstance(v,list):
+     for item in v:
+      if isinstance(item,(str,int)):vids.append(str(item))
+      elif isinstance(item,dict):
+       for ik in ("vid","video_id","item_id","episode_id","id"):
+        if item.get(ik) is not None:vids.append(str(item[ik]))
+    if isinstance(v,(dict,list)):walk(v)
+  elif isinstance(node,list):
+   for x in node:
+    if isinstance(x,(dict,list)):walk(x)
+ walk(obj)
+ vids=list(dict.fromkeys(x for x in vids if x.isdigit()))
+ title=next((x for x in titles if x and x not in ("未知剧名",)), "")
+ matched=bool(eid and eid in vids)
+ return {"json":True,"title":title,"episode_ids":vids,"matched":matched,
+         "summary":f"JSON 成功；提取剧名={title or '无'}；分集ID数量={len(vids)}；分享单集ID精确命中={'是' if matched else '否'}"}
+
+def probe_app_detail_endpoint(label,path,body,sid,eid):
+ hosts=("api5-normal-sinfonlinea.fqnovel.com","api5-normal-sinfonlineb.fqnovel.com","api5-normal-sinfonlinec.fqnovel.com")
+ errors=[]
+ for host in hosts:
   try:
-   status,final,body=get(url)
-   title_match=re.search(r"<title[^>]*>(.*?)</title>",body,re.I|re.S)
-   page_title=html.unescape(re.sub(r"\s+"," ",title_match.group(1))).strip() if title_match else ""
-   sid_hit=sid in body
-   eid_hit=bool(eid and re.search(r"(?<!\d)"+re.escape(eid)+r"(?!\d)",body))
-   lines.append(f"  - {label}：HTTP {status}；剧目ID命中={'是' if sid_hit else '否'}；分享单集ID命中={'是' if eid_hit else '否'}；页面标题={page_title[:100] or '未提取'}；链接={final}")
-  except Exception as e:
-   lines.append(f"  - {label}：请求失败 {type(e).__name__}: {e}；链接={url}")
+   status,ctype,payload,url=post_hongguo_json(host,path,body)
+   parsed=inspect_red_detail_payload(payload,sid,eid)
+   # 空 body / HTML / 非 JSON 不算接口成功；记录后继续下一 host。
+   if parsed["json"] and (parsed["title"] or parsed["episode_ids"]):
+    return f"- {label}：HTTP {status}；主机={host}；Content-Type={ctype}；{parsed['summary']}；响应字节={len(payload.encode('utf-8'))}；请求={url}"
+   errors.append(f"{host}: HTTP {status}, {len(payload.encode('utf-8'))}字节, {parsed['summary']}")
+  except Exception as e:errors.append(f"{host}: {type(e).__name__}: {e}")
+ return f"- {label}：未取得可解析详情；逐主机结果："+ "；".join(errors)
+
+def inspect_official_html(label,url,sid,eid):
+ try:
+  status,final,body=get(url)
+  # HTML 中详情数据可能是 RouterData 脚本，也可能直接内嵌 JSON。
+  title_match=re.search(r"<title[^>]*>(.*?)</title>",body,re.I|re.S)
+  page_title=html.unescape(re.sub(r"\s+"," ",title_match.group(1))).strip() if title_match else ""
+  ids=[]
+  for key in ("vid_list","video_list"):
+   for m in re.finditer(r'"'+key+r'"\s*:\s*\[',body):
+    start=m.end()-1;depth=0;quoted=False;escaped=False;end=None
+    for j,ch in enumerate(body[start:],start):
+     if quoted:
+      if escaped:escaped=False
+      elif ch=="\\":escaped=True
+      elif ch=='"':quoted=False
+      continue
+     if ch=='"':quoted=True
+     elif ch=="[":depth+=1
+     elif ch=="]":
+      depth-=1
+      if depth==0:end=j+1;break
+    if end:
+     try:
+      arr=json.loads(body[start:end])
+      for item in arr:
+       if isinstance(item,(str,int)):ids.append(str(item))
+       elif isinstance(item,dict):
+        for k in ("vid","video_id","episode_id","id"):
+         if item.get(k) is not None:ids.append(str(item[k]));break
+     except Exception:pass
+  ids=list(dict.fromkeys(x for x in ids if x.isdigit()))
+  title=""
+  for pattern in (r'"series_name"\s*:\s*"([^"]+)"',r'"series_title"\s*:\s*"([^"]+)"'):
+   m=re.search(pattern,body)
+   if m:title=html.unescape(m.group(1));break
+  exact=bool(eid and eid in ids)
+  return f"- {label}：HTTP {status}；页面标题={page_title[:80] or '无'}；剧名={title or '未解析'}；分集ID={len(ids)}个；分享单集精确命中={'是' if exact else '否'}；最终地址={final}"
+ except Exception as e:return f"- {label}：请求失败 {type(e).__name__}: {e}；URL={url}"
+
+def probe_detail_pages(sid,eid):
+ # 所有候选分别输出结果；任何单路失败都不能中断其余探测。
+ lines=["- 详情接口逐项独立测试："]
+ lines.append(inspect_official_html("官网详情查询参数",f"https://hongguoduanju.com/detail?series_id={sid}",sid,eid))
+ lines.append(inspect_official_html("官网详情路径",f"https://hongguoduanju.com/detail/{sid}",sid,eid))
+ if eid:
+  lines.append(inspect_official_html("红果官网单集播放页",f"https://hongguoduanju.com/player/{sid}/{eid}",sid,eid))
+  lines.append(inspect_official_html("novelquickapp 单集播放页",f"https://novelquickapp.com/player/{sid}/{eid}",sid,eid))
+ detail_body={"biz_param":{"detail_page_version":0,"disable_digg_stat":False,"need_all_video_definition":False,"need_mp4_align":False,"screen_width_px":"1080","source":7,"use_os_player":False,"use_server_dns":False},"dr_scene":"preload","series_id":sid}
+ lines.append(probe_app_detail_endpoint("新版单剧详情 video_detail/v1","/novel/player/video_detail/v1/",{"series_id":sid},sid,eid))
+ lines.append(probe_app_detail_endpoint("批量分集详情 multi_video_detail/v1","/novel/player/multi_video_detail/v1/",detail_body,sid,eid))
+ lines.append(probe_app_detail_endpoint("旧预加载分集详情 multi_video_detail/preload/v1","/novel/player/multi_video_detail/preload/v1",detail_body,sid,eid))
+ lines.append(probe_app_detail_endpoint("旧预加载分集详情（尾斜杠变体）","/novel/player/multi_video_detail/preload/v1/",detail_body,sid,eid))
  lines += [
-  "- 第三方详情接口候选（本次仅登记文档入口，需配置各自密钥后才能实测）：",
-  "  - 小影API红果详情：GET /api/dramas/hongguo/detail?series_id=...；需要项目签名；文档：https://www.xiaoyingapi.com/docs/drama/",
-  "  - SocialDataX红果详情：支持 series_id 或 novelquickapp 分享链接；需要 API Key；文档：https://socialdatax.com/api-docs/hongguo/",
-  "  - Apify SocialDataX红果详情：支持 novelquickapp 整剧分享链接/完整分享文案；需 Apify 任务调用凭据，按成功结果计费；文档：https://apify.com/socialdatax/socialdatax-hongguo-data-api",
-  "  - 红果新版 App video_detail/v1：需要设备参数及 X-Gorgon/X-Khronos 签名；参考：https://github.com/gybeyond1/hongguo-dl",
+  "- 说明：App 接口探测不伪造 X-Gorgon/X-Khronos；如果服务端要求设备签名，会如实显示拒绝、空响应或非 JSON，不把它记成详情成功。",
+  "- 本轮只验证详情和分集 ID，不调用视频模型、不下载视频，也不触发播放器。",
+  "- 参考开源实现：danmu_api、zhangbaio/hongguo、gybeyond1/hongguo-dl、zhoufuweigg/guoapp；第三方收费 API 未加入。",
  ]
  return lines
 
