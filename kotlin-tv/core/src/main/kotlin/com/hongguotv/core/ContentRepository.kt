@@ -102,6 +102,53 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
         return ActorRankParser.parse(text(signed.url,signed,profile.cookie),offset)
     }
 
+    /** 红果官方演员参演作品列表；按演员 ID 查询，并用累计 count 保持分页结果稳定。 */
+    open fun actorWorks(actorId: String, offset: Int = 0, pageSize: Int = 20): ActorWorksPage {
+        require(actorId.matches(Regex("[0-9]{1,30}"))) { "无效的演员 ID" }
+        require(offset >= 0 && pageSize in 1..50)
+        val profile = playbackSession.profile(http)
+        val identity = profile.values
+        val values = linkedMapOf(
+            "iid" to identity.getValue("iid"),
+            "device_id" to identity.getValue("device_id"),
+            "ac" to "wifi",
+            "channel" to identity.getValue("channel"),
+            "aid" to identity.getValue("aid"),
+            "app_name" to identity.getValue("app_name"),
+            "cdid" to identity.getValue("cdid"),
+            "version_code" to identity.getValue("version_code"),
+            "version_name" to identity.getValue("version_name"),
+            "device_platform" to identity.getValue("device_platform"),
+            "os" to identity.getValue("os"),
+            "ssmix" to identity.getValue("ssmix"),
+            "device_type" to identity.getValue("device_type"),
+            "device_brand" to identity.getValue("device_brand"),
+            "language" to identity.getValue("language"),
+            "os_api" to identity.getValue("os_api"),
+            "os_version" to identity.getValue("os_version"),
+            "manifest_version_code" to identity.getValue("manifest_version_code"),
+            "resolution" to identity.getValue("resolution"),
+            "dpi" to identity.getValue("dpi"),
+            "update_version_code" to identity.getValue("update_version_code"),
+            "host_abi" to identity.getValue("host_abi"),
+            "dragon_device_type" to identity.getValue("dragon_device_type"),
+            "pv_player" to identity.getValue("pv_player"),
+            "compliance_status" to identity.getValue("compliance_status"),
+            "need_personal_recommend" to identity.getValue("need_personal_recommend"),
+            "player_so_load" to identity.getValue("player_so_load"),
+            "is_android_pad_screen" to identity.getValue("is_android_pad_screen"),
+            "openudid" to identity.getValue("openudid"),
+            "encrypted_celebrity_ids" to actorId,
+            "offset" to "0",
+            "count" to (offset + pageSize).coerceAtLeast(40).coerceAtMost(300).toString(),
+            "req_scene" to "0",
+            "user_is_login" to "0",
+        )
+        val base = "https://api5-normal-sinfonlinea.fqnovel.com/reading/user/celebrity/works/v1/"
+        val signed = signer.sign(base, values, identity = identity)
+        return ActorWorksParser.parse(text(signed.url, signed, profile.cookie), actorId, offset, pageSize)
+    }
+
     fun comicRanking(page: Int = 1)=ranking(RankBoard.COMIC,page)
     fun realRanking(page: Int = 1)=ranking(RankBoard.REAL,page)
     private val theaterRepository by lazy { TheaterRepository(http,playbackSession) { url,signed -> text(url,signed) } }
