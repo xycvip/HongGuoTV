@@ -27,6 +27,16 @@ data class ActorRankPage(
     val version: String,
 )
 
+/** Reuse the catalog grid's visual card model without treating an actor as a playable series. */
+internal fun ActorRankEntry.toSeries() = Series(
+    id = userId,
+    title = name,
+    cover = avatar,
+    description = intro,
+    badge = popularity,
+    tags = details.joinToString(" · "),
+)
+
 internal object ActorRankParser {
     fun parse(raw: String, requestedOffset: Int): ActorRankPage {
         try {
