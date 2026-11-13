@@ -19,7 +19,8 @@ class PlaybackDeviceRegistrationException(cause: Throwable? = null) :
  */
 class PlaybackDeviceSession(
     private val register: (OkHttpClient) -> DeviceRegister.Registered? = { http ->
-        val body = DeviceRegister.payload(VendorConstants.device)
+        val registrationDevice = VendorConstants.device + mapOf("cdid" to cdid, "openudid" to openudid)
+        val body = DeviceRegister.payload(registrationDevice)
         val request = Request.Builder().url(DeviceRegister.url())
         DeviceRegister.headers(body, VendorConstants.device).forEach { (key, value) ->
             request.header(key, value)
@@ -39,6 +40,7 @@ class PlaybackDeviceSession(
     data class Profile(val values: Map<String, String>, val cookie: String)
 
     private val cdid = UUID.randomUUID().toString()
+    private val openudid = UUID.randomUUID().toString().replace("-", "").take(16)
     private var ready: Profile? = null
 
     @Synchronized
@@ -63,6 +65,7 @@ class PlaybackDeviceSession(
                         "device_id" to device.deviceId,
                         "iid" to device.installId,
                         "cdid" to cdid,
+                        "openudid" to openudid,
                     ),
                 device.cookies
                     .filterKeys {
