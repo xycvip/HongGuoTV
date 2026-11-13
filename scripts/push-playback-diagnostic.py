@@ -176,7 +176,9 @@ def scan_feed_titles(body, target_title=""):
      if key_hint and len(text)<=180 and len(candidates)<100:
       candidates.append({"path":child_path,"field":str(key),"value":re.sub(r"\s+"," ",text)[:180]})
      value_norm=norm(text)
-     if wanted and len(wanted)>=5 and (wanted in value_norm or value_norm in wanted):
+     # 空字符串（表情、标点等归一化后为空）绝不能参与匹配；
+     # 只允许完整分享剧名出现在较长文本中，不允许短字段反向包含剧名。
+     if wanted and len(wanted)>=5 and len(value_norm)>=5 and wanted in value_norm:
       if len(matches)<30:
        matches.append({"path":child_path,"field":str(key),"value":re.sub(r"\s+"," ",text)[:180]})
     elif isinstance(value,(dict,list)):
