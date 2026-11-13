@@ -174,6 +174,8 @@ import java.util.concurrent.atomic.AtomicLong
         if(tab==2) RankBoard.entries.forEach { board -> root.findViewWithTag<View>("rank:board:${board.name}")?.nextFocusDownId=recycler.id }
         root.findViewWithTag<View>("recent:watch-stats")?.nextFocusDownId=recycler.id
         actorRankButton?.nextFocusDownId=recycler.id
+        root.findViewWithTag<View>("rank:actor:ranklist_series_actor")?.nextFocusDownId=recycler.id
+        root.findViewWithTag<View>("rank:actor:ranklist_actor_fans")?.nextFocusDownId=recycler.id
         favoriteFilterButtons.forEach { it.nextFocusDownId=recycler.id }
         collectionBack?.nextFocusDownId=recycler.id; genreClear?.nextFocusDownId=recycler.id
         typeButtons.values.forEach { it.nextFocusDownId=searchInput?.id ?: collectionBack?.id ?: genreClear?.id ?: recycler.id }
@@ -196,7 +198,7 @@ import java.util.concurrent.atomic.AtomicLong
                 if(tab==2) {
                     val firstPoster=recycler.findViewHolderForAdapterPosition(1)?.itemView
                     if(firstPoster?.isFocusable==true && firstPoster.isAttachedToWindow) {
-                        val selectedBoard=if(actorRanking) actorRankButton else root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch
+                        val selectedBoard=if(actorRanking) root.findViewWithTag<View>("rank:actor:$actorRankSubBoard") ?: actorRankButton else root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch
                         val firstRowLastPosition=minOf(cols,displayed.size)
                         // 顶部每张演员/短剧榜卡片按上键都明确回到当前选中的榜单入口。
                         for(position in 1..firstRowLastPosition) {
