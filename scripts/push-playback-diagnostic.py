@@ -5,7 +5,7 @@ from datetime import datetime,timezone
 
 UA="Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36"
 URLS=re.compile(r"""https?://[^\s<>"'，。]+""",re.I)
-FEED_HOSTS=("api5-normal-c-hl.amemv.com","aweme.snssdk.com")
+FEED_HOSTS=("aweme.snssdk.com","api5-normal-c-hl.amemv.com")
 
 def get(url,headers=None):
  h={"User-Agent":UA,"Accept":"text/html,application/xhtml+xml,application/json,*/*"};h.update(headers or {})
