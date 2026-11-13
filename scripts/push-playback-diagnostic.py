@@ -260,7 +260,7 @@ def extract_router_json(page):
  for i,ch in enumerate(page[start:],start):
   if quoted:
    if escaped:escaped=False
-   elif ch=="\\\\":escaped=True
+   elif ch=="\\":escaped=True
    elif ch=='"':quoted=False
    continue
   if ch=='"':quoted=True
