@@ -159,7 +159,7 @@ internal fun MainActivity.renderCatalogContent(
                     7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).let { responseTheaterFilters=it.filters; it.catalog }
                     2 -> if(requestActor) repository.actorRanking(0,"").let { actorPage ->
                         responseActorPage=actorPage
-                        CatalogPage(actorPage.items.map { ActorRankEntry.toSeries(it) },actorPage.hasMore)
+                        CatalogPage(actorPage.items.map { it.toSeries() },actorPage.hasMore)
                     } else repository.ranking(requestBoard,requestPage)
                     else -> if(requestAggregate) repository.searchCombined(requestQuery,requestPage) else repository.search(requestQuery,requestPage,requestType)
                 }
@@ -196,7 +196,7 @@ internal fun MainActivity.renderCatalogContent(
                 }
                     catalog=result.items; hasMore=result.hasMore
                     if(requestActor) {
-                        val actorPage=responseActorPage ?: throw IOException("演员榜响应丢失")
+                        val actorPage=responseActorPage ?: error("演员榜响应丢失")
                         actorRankItems=actorPage.items
                         actorRankNextOffset=actorPage.nextOffset
                         actorRankSessionId=actorPage.sessionId
