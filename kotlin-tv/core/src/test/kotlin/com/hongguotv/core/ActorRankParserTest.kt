@@ -20,10 +20,10 @@ class ActorRankParserTest {
                   "cell_data": [{
                     "ugc_user_data": [{
                       "user_info": {
+                        "user_id": "7100000000001301",
                         "base_info": {
-                          "user_id": "7100000000001301",
                           "user_name": "测试演员",
-                          "user_avatar": "https://example.com/avatar.jpg",
+                          "user_avatar": "https://p3-reading-sign.fqnovelpic.com/novel-pic/actor-avatar~tplv-81nmtwyey9.heic",
                           "actor_id_str": "7100000000001401"
                         }
                       },
@@ -42,6 +42,7 @@ class ActorRankParserTest {
         assertEquals(1, page.items.size)
         assertEquals("7100000000001301", page.items.single().userId)
         assertEquals("7100000000001401", page.items.single().actorId)
+        assertEquals("https://p3-novel.byteimg.com/novel-pic/actor-avatar~tplv-shrink:640:0.image", page.items.single().avatar)
         assertEquals("测试演员", page.items.single().name)
         assertEquals("700万人气", page.items.single().popularity)
         assertEquals(1, page.items.single().position)
