@@ -12,10 +12,11 @@ import androidx.media3.common.*
 import com.hongguotv.core.*
 
 internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
-        tvTools.choose("全局画面模式",listOf("完整画面 · 保留比例与全部内容","等比铺满 · 会裁掉部分画面与字幕","拉伸铺满 · 画面比例会改变"),anchor,{ index ->
+        val options=listOf("完整画面 · 保留比例与全部内容","等比铺满 · 会裁掉部分画面与字幕","拉伸铺满 · 画面比例会改变")
+        tvTools.choose("全局画面模式",options,anchor,{ index ->
             library.frameMode=VideoFrameMode.entries[index]; playerView?.resizeMode=activeFrameResizeMode()
             if(anchor.tag!="playback-settings") anchor.text=(if(inPlayer) "画面 " else "画面模式  ·  ")+library.frameMode.label
-        })
+        },selectedIndex=VideoFrameMode.entries.indexOf(library.frameMode))
     }
 
     internal fun MainActivity.showPanel() {
