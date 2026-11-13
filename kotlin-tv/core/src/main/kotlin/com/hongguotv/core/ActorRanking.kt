@@ -34,6 +34,11 @@ internal object ActorRankParser {
             // 不同演员子榜的 cell/change 响应层级并不完全一致。
             // 优先兼容 cell_view.cell_data，同时递归识别直接列表及嵌套用户列表。
             val candidates = mutableListOf<JSONObject>()
+            // 星光榜接口使用精简响应：data.cell / has_next / rank_session；
+            // 剧星榜旧响应则使用 data.cell_view.cell_data / has_more / session_id。
+            // cell 可能是数组、对象，部分网关还会把内层 JSON 序列化成字符串。
+            collectActorNodes(data.opt("cell"), candidates)
+            collectActorNodes(data.opt("cell_view"), candidates)
             collectActorNodes(data, candidates)
             val items = mutableListOf<ActorRankEntry>()
             val seen = hashSetOf<String>()
@@ -82,10 +87,12 @@ internal object ActorRankParser {
             }
             val reportedOffset = data.optInt("next_offset", requestedOffset + items.size)
             val nextOffset = if (reportedOffset > requestedOffset) reportedOffset else requestedOffset + items.size
+            val hasMore = data.optBoolean("has_more", data.optBoolean("has_next", false))
+            val session = data.optString("session_id").ifBlank { data.optString("rank_session") }
             return ActorRankPage(
                 items = items, nextOffset = nextOffset,
-                hasMore = data.optBoolean("has_more", false) && items.isNotEmpty() && nextOffset > requestedOffset,
-                sessionId = data.optString("session_id"), version = data.optString("rank_version"),
+                hasMore = hasMore && items.isNotEmpty() && nextOffset > requestedOffset,
+                sessionId = session, version = data.optString("rank_version"),
             )
         } catch (error: IOException) {
             throw error
@@ -104,6 +111,15 @@ internal object ActorRankParser {
                 while (keys.hasNext()) collectActorNodes(value.opt(keys.next()), out)
             }
             is JSONArray -> for (i in 0 until value.length()) collectActorNodes(value.opt(i), out)
+            is String -> {
+                val json = value.trim()
+                if (json.startsWith("{") || json.startsWith("[")) {
+                    runCatching {
+                        if (json.startsWith("{")) collectActorNodes(JSONObject(json), out)
+                        else collectActorNodes(JSONArray(json), out)
+                    }
+                }
+            }
         }
     }
 
