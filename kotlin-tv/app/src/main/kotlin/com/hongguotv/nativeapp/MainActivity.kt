@@ -324,12 +324,12 @@ class MainActivity: Activity() {
     internal var rankSwitch by rankingUiState::rankSwitch
     internal var rankRefresh by rankingUiState::rankRefresh
     internal var rankSubtitle by rankingUiState::rankSubtitle
-    // AI 剧分类是排行榜页内的子视图，不占用首页内容类型页签，也不参与搜索口径
-    internal var aiCatalog by rankingUiState::aiCatalog
-    internal var aiGenre by rankingUiState::aiGenre
-    internal var aiEntry by rankingUiState::aiEntry
-    internal var aiBack by rankingUiState::aiBack
-    internal var aiGenreButton by rankingUiState::aiGenreButton
+    internal var actorRanking by rankingUiState::actorRanking
+    internal var actorRankButton by rankingUiState::actorRankButton
+    internal var actorRankItems by rankingUiState::actorRankItems
+    internal var actorRankNextOffset by rankingUiState::actorRankNextOffset
+    internal var actorRankSessionId by rankingUiState::actorRankSessionId
+    internal var actorRankVersion by rankingUiState::actorRankVersion
     internal var genre by rankingUiState::genre
     internal var genreButton by rankingUiState::genreButton
     internal var genreClear by rankingUiState::genreClear
