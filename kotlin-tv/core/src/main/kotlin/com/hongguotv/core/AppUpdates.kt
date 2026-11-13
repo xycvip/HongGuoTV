@@ -37,10 +37,10 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             { it },                                        // raw GitHub first
             { "https://gh-proxy.com/$it" },                // fastgit style proxy
             { "https://ghfast.top/$it" },                  // fastgit alternate
-            { "https://gh-proxy.net/$it" },                // another mirror
+            { "https://v6.gh-proxy.org/$it" },                // another mirror
         )
         /** Display names aligned with MIRRORS for the manual download selector. */
-        val MIRROR_NAMES = listOf("GitHub 原始线路", "gh-proxy.com", "ghfast.top", "gh-proxy.net")
+        val MIRROR_NAMES = listOf("GitHub 原始线路", "gh-proxy.com", "ghfast.top", "v6.gh-proxy.org")
         /** All hosts we ever send HTTPS traffic to — the interceptor whitelist. */
         val ALLOWED_HOSTS = setOf(
             "github.com",
@@ -48,7 +48,7 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             "raw.githubusercontent.com",
             "release-assets.githubusercontent.com",
             "objects.githubusercontent.com",
-            "gh-proxy.com", "ghfast.top", "gh-proxy.net",
+            "gh-proxy.com", "ghfast.top", "v6.gh-proxy.org",
             "api.gitcode.com", "gitcode.com", "raw.gitcode.com", "file-cdn.gitcode.com",
         )
         fun parse(
