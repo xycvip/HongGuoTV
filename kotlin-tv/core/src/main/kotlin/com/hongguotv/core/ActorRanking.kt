@@ -26,7 +26,7 @@ internal object ActorRankParser {
             val code = root.opt("code")?.toString().orEmpty()
             if (code.isNotBlank() && code != "0") {
                 val message = root.optString("message").ifBlank { root.optString("msg") }
-                throw IOException("演员榜接口返回错误（code=" + code + if (message.isNotBlank()) ", $message" else "" + "）")
+                throw IOException("演员榜接口返回错误（code=" + code + (if (message.isNotBlank()) ", $message" else "") + "）")
             }
             val data = root.optJSONObject("data")
                 ?: throw IOException("演员榜响应缺少 data（" + root.optString("message").ifBlank { root.optString("msg") } + "）")
