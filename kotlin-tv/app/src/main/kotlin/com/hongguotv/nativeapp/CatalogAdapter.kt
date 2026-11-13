@@ -140,8 +140,8 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
                 rankSubtitle?.text=buildString {
                     append("第 ${entry.position} 名 · ${entry.name}")
                     if(entry.popularity.isNotBlank()) append(" · ${entry.popularity}")
-                    if(entry.intro.isNotBlank()) append("\\n${entry.intro}")
-                    if(entry.details.isNotEmpty()) append("\\n${entry.details.joinToString(" · ")}")
+                    if(entry.intro.isNotBlank()) append("\n${entry.intro}")
+                    if(entry.details.isNotEmpty()) append("\n${entry.details.joinToString(" · ")}")
                 }
             } else openDetail(item,tab==4 || collection=="resume" || collection=="updates")
         }
