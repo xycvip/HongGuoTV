@@ -253,28 +253,47 @@ def search_api(title):
  return out
 
 def extract_router_json(page):
- mark=page.find("_ROUTER_DATA")
- start=page.find("{",mark)
- if mark<0 or start<0:raise RuntimeError("官网页面没有 _ROUTER_DATA")
- depth=0;quoted=False;escaped=False
- for i,ch in enumerate(page[start:],start):
-  if quoted:
-   if escaped:escaped=False
-   elif ch=="\\":escaped=True
-   elif ch=='"':quoted=False
-   continue
-  if ch=='"':quoted=True
-  elif ch in "{[":depth+=1
-  elif ch in "}]":
-   depth-=1
-   if depth==0:return json.loads(page[start:i+1])
- raise RuntimeError("_ROUTER_DATA JSON 不完整")
+ # 官网前端实现可能变化：兼容旧版 _ROUTER_DATA、Next.js 数据及 React Router hydration 数据。
+ markers=("_ROUTER_DATA","__NEXT_DATA__","__staticRouterHydrationData","__reactRouterContext")
+ starts=[]
+ for marker in markers:
+  pos=page.find(marker)
+  if pos>=0:
+   start=page.find("{",pos)
+   if start>=0:starts.append(start)
+ # 对没有显式状态变量名、但直接内嵌 JSON 的页面，尝试解析纯 JSON script。
+ for match in re.finditer(r"<script[^>]*>(.*?)</script>",page,re.I|re.S):
+  raw=match.group(1).strip()
+  if raw.startswith("{"): 
+   try:
+    obj=json.loads(raw)
+    if isinstance(obj,dict):return obj
+   except Exception:pass
+ for start in sorted(set(starts)):
+  depth=0;quoted=False;escaped=False
+  for i,ch in enumerate(page[start:],start):
+   if quoted:
+    if escaped:escaped=False
+    elif ch=="\\\\":escaped=True
+    elif ch=='"':quoted=False
+    continue
+   if ch=='"':quoted=True
+   elif ch in "{[":depth+=1
+   elif ch in "}]":
+    depth-=1
+    if depth==0:
+     try:
+      obj=json.loads(page[start:i+1])
+      if isinstance(obj,dict):return obj
+     except Exception:break
+     break
+ raise RuntimeError("官网搜索页未找到可解析的 SSR/hydration JSON（页面结构可能已调整）")
 
 def search_ssr(title):
  url="https://hongguoduanju.com/search/"+urllib.parse.quote(title,safe="")+"?page=1"
  _,final,page=get(url,{"Accept":"text/html,application/xhtml+xml"})
  payload=extract_router_json(page)
- loader=payload.get("loaderData") or {}
+ loader=payload.get("loaderData") or payload
  if not isinstance(loader,dict):raise RuntimeError("官网 SSR loaderData 结构异常")
  found=[]
  def add_row(row):
