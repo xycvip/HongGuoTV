@@ -57,8 +57,7 @@ import java.util.concurrent.atomic.AtomicLong
             body.addView(heading)
             typeButtons.values.forEach { it.nextFocusDownId=collectionBack!!.id }
         }
-        val focusGenre=if(tab==2 && aiCatalog) aiGenre else genre
-        catalogPageKey="$tab:${if(aiCatalog) "ai" else ""}:${collection.orEmpty()}:${focusGenre?.slug.orEmpty()}:${if(tab==7) theaterFilterKey(theaterContentType)+theaterSelections.toSortedMap() else ""}:$page:$query"
+        catalogPageKey="$tab:${if(actorRanking) "actor" else ""}:${collection.orEmpty()}:${if(tab==0) genre?.slug.orEmpty() else ""}:${if(tab==7) theaterFilterKey(theaterContentType)+theaterSelections.toSortedMap() else ""}:$page:$query"
         if(tab==0 && genre!=null) {
             val bar=row().apply { setPadding(0,0,0,dp(6)) }
             bar.addView(text("题材 · ${genre?.name}",16f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
@@ -72,20 +71,6 @@ import java.util.concurrent.atomic.AtomicLong
             body.addView(bar)
             typeButtons.values.forEach { it.nextFocusDownId=genreClear!!.id }
             genreButton?.nextFocusDownId=genreClear!!.id
-        }
-        if(tab==2 && aiCatalog && aiGenre!=null) {
-            val bar=row().apply { setPadding(0,0,0,dp(6)) }
-            bar.addView(text("题材 · ${aiGenre?.name}",16f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
-            genreClear=addButton(bar,"全部题材") {
-                pendingRefreshFocus="rank:genre"
-                rankFocusTag="rank:genre"
-                aiCatalog=false; aiGenre=null; page=1; catalogFocus=""; tabState.remove(2); tabFocus.remove(2); showCatalog(true)
-            }.apply {
-                tag="rank:ai:genre-clear"
-                nextFocusUpId=aiGenreButton?.id ?: navForTab().id
-            }
-            body.addView(bar)
-            aiGenreButton?.nextFocusDownId=genreClear!!.id
         }
         val preview=SeriesPreview(this); selectionPreview=preview; body.addView(preview)
         val displayed=mutableListOf<Series>()
@@ -173,7 +158,7 @@ import java.util.concurrent.atomic.AtomicLong
         } else body.addView(recycler,lp(-1,0).apply { weight=1f })
         nav.forEach {
             it.nextFocusDownId=when {
-                tab==2 -> (if(aiCatalog) aiBack ?: aiGenreButton ?: rankRefresh else aiEntry ?: rankSwitch ?: rankRefresh)?.id ?: recycler.id
+                tab==2 -> (if(actorRanking) actorRankButton else root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch)?.id ?: recycler.id
                 tab==1 -> searchInput?.id ?: recycler.id
                 tab==0 -> collectionBack?.id ?: navForTab().id ?: recycler.id
                 tab==7 -> ((theaterFilterHost?.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: recycler.id)
@@ -184,12 +169,12 @@ import java.util.concurrent.atomic.AtomicLong
         rankSwitch?.nextFocusDownId=recycler.id; rankRefresh?.nextFocusDownId=recycler.id; historyManage?.nextFocusDownId=recycler.id; favoriteCheck?.nextFocusDownId=favoriteFilterFirst?.id ?: recycler.id
         if(tab==2) RankBoard.entries.forEach { board -> root.findViewWithTag<View>("rank:board:${board.name}")?.nextFocusDownId=recycler.id }
         root.findViewWithTag<View>("recent:watch-stats")?.nextFocusDownId=recycler.id
-        aiEntry?.nextFocusDownId=recycler.id; aiBack?.nextFocusDownId=recycler.id
+        actorRankButton?.nextFocusDownId=recycler.id
         favoriteFilterButtons.forEach { it.nextFocusDownId=recycler.id }
         collectionBack?.nextFocusDownId=recycler.id; genreClear?.nextFocusDownId=recycler.id
         typeButtons.values.forEach { it.nextFocusDownId=searchInput?.id ?: collectionBack?.id ?: genreClear?.id ?: recycler.id }
         genreButton?.nextFocusDownId=genreClear?.id ?: recycler.id
-        aiGenreButton?.nextFocusDownId=genreClear?.id ?: recycler.id
+
         searchInput?.nextFocusDownId=azFirst?.id ?: recycler.id
         searchButton?.nextFocusDownId=azFirst?.id ?: recycler.id
         searchActions.forEach { it.nextFocusDownId=azFirst?.id ?: recycler.id }
@@ -207,13 +192,13 @@ import java.util.concurrent.atomic.AtomicLong
                 if(tab==2) {
                     val firstPoster=recycler.findViewHolderForAdapterPosition(1)?.itemView
                     if(firstPoster?.isFocusable==true && firstPoster.isAttachedToWindow) {
-                        val selectedBoard=root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch
+                        val selectedBoard=if(actorRanking) actorRankButton else root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch
                         val firstRowLastPosition=minOf(cols,displayed.size)
-                        // 顶部每张海报按上键都明确回到当前选中的榜单，避免焦点误跳到题材/刷新或导航栏。
+                        // 顶部每张演员/短剧榜卡片按上键都明确回到当前选中的榜单入口。
                         for(position in 1..firstRowLastPosition) {
                             recycler.findViewHolderForAdapterPosition(position)?.itemView?.nextFocusUpId=selectedBoard?.id ?: View.NO_ID
                         }
-                        (listOfNotNull(rankSwitch,rankRefresh,genreButton,aiEntry,aiBack,aiGenreButton,genreClear) +
+                        (listOfNotNull(rankSwitch,actorRankButton,rankRefresh) +
                             RankBoard.entries.mapNotNull { root.findViewWithTag<View>("rank:board:${it.name}") })
                             .forEach { it.nextFocusDownId=firstPoster.id }
                     }
@@ -229,25 +214,42 @@ import java.util.concurrent.atomic.AtomicLong
         if(page>=waterfallMaxPages || catalog.size>=waterfallMaxPages*20) { hasMore=false; adapter.updateFooter(FOOTER_END); return }
         val requestTab=tab; val requestPage=page+1; val requestQuery=query; val requestType=library.contentType
         val requestBoard=rankBoard; val requestGenre=if(requestTab==0) genre else null
+        val requestActor=requestTab==2 && actorRanking
+        val requestActorOffset=actorRankNextOffset
+        val requestActorSession=actorRankSessionId
         val requestTheaterType=theaterContentType; val requestTheaterSelection=theaterSelections.toMap()
-        val requestAi=if(requestTab==2) aiCatalog else false; val requestAiGenre=if(requestAi) aiGenre else null
+        var responseActorPage:ActorRankPage? = null
         loadingMore=true; adapter.updateFooter(FOOTER_LOADING)
         work({
             when(requestTab) {
                 0 -> repository.home(requestPage,requestType,requestGenre)
                 7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).catalog
-                2 -> if(requestAi) repository.home(requestPage,ContentType.AI,requestAiGenre) else repository.ranking(requestBoard,requestPage)
+                2 -> if(requestActor) repository.actorRanking(requestActorOffset,requestActorSession).let { actorPage ->
+                    responseActorPage=actorPage
+                    CatalogPage(actorPage.items.map { it.toSeries() },actorPage.hasMore)
+                } else repository.ranking(requestBoard,requestPage)
                 else -> repository.search(requestQuery,requestPage,requestType)
             }
         }, { result ->
             loadingMore=false
             page=requestPage
             hasMore=result.hasMore
-            result.ranking?.let { r -> ranking=ComicRanking((ranking?.positions.orEmpty())+r.positions,r.totalPages,r.updatedText.ifBlank { ranking?.updatedText.orEmpty() }) }
-            if(requestTab==2 && !requestAi) rankSubtitle?.text=ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
+            if(requestActor) {
+                val actorPage=responseActorPage ?: throw IOException("演员榜分页响应丢失")
+                val knownActors=actorRankItems.mapTo(HashSet()) { it.userId }
+                actorRankItems=actorRankItems+actorPage.items.filter { it.userId !in knownActors }
+                actorRankNextOffset=actorPage.nextOffset
+                actorRankSessionId=actorPage.sessionId
+                actorRankVersion=actorPage.version
+                ranking=null
+                rankSubtitle?.text="来源：红果演员剧星榜"
+            } else {
+                result.ranking?.let { r -> ranking=ComicRanking((ranking?.positions.orEmpty())+r.positions,r.totalPages,r.updatedText.ifBlank { ranking?.updatedText.orEmpty() }) }
+                if(requestTab==2) rankSubtitle?.text=ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
+            }
             val known=catalog.mapTo(HashSet()) { it.id }
             val fresh=result.items.filter { it.id !in known }
-            catalog=catalog+result.items
+            catalog=catalog+fresh
             val current=catalogAdapter
             if(current!=null) {
                 val visible=fresh.filter { tab!=0 || it.id !in library.hidden() }
