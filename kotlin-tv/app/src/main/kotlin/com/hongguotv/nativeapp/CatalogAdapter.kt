@@ -73,7 +73,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         loadCover(holder.image,item.cover)
         // 演员榜复用卡片网格布局，但数据与可播放短剧保持独立。
         val actorRanked=tab==2 && actorRanking && collection!="actor-works"
-        val actor=if(actorRanked) actorRankItems.firstOrNull { it.userId==item.id } else null
+        val actor=if(actorRanked) actorRankItems.firstOrNull { it.actorId==item.id || (it.actorId.isBlank() && it.userId==item.id) } else null
         val ranked=tab==2 && ranking!=null
         val rankPosition=if(ranked) ranking?.positions?.get(item.id) else null
         if(actorRanked) {
