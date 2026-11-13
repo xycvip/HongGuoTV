@@ -28,7 +28,7 @@ data class ActorRankPage(
 )
 
 /** Reuse the catalog grid's visual card model without treating an actor as a playable series. */
-internal fun ActorRankEntry.toSeries() = Series(
+fun ActorRankEntry.toSeries() = Series(
     id = userId,
     title = name,
     cover = avatar,
