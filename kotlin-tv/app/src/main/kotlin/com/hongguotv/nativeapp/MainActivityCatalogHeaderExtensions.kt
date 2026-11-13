@@ -281,13 +281,12 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
             val boardFocusItems=mutableListOf<View>()
             listOf(RankBoard.TOTAL, RankBoard.REAL, RankBoard.AI, RankBoard.COMIC).forEachIndexed { index, board ->
                 val focusTag = "rank:board:${board.name}"
-                val boardButton=addButton(boardRow, board.buttonLabel, rankBoard == board) {
-                    if (rankBoard != board) {
+                val boardButton=addButton(boardRow, board.buttonLabel, !actorRanking && rankBoard == board) {
+                    if (rankBoard != board || actorRanking) {
                         pendingRefreshFocus=focusTag
                         rankFocusTag=focusTag
                         rankBoard=board
-                        aiCatalog=false
-                        aiGenre=null
+                        actorRanking=false
                         page=1
                         catalogFocus=""
                         tabState.remove(2)
@@ -301,8 +300,23 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 boardFocusItems+=boardButton
                 if(index==0) rankSwitch=boardButton
             }
-            genreButton=addButton(boardRow,(if(aiCatalog) aiGenre else genre)?.let { "题材 · ${it.name}" } ?: "题材") { showGenrePicker() }.apply {
-                tag="rank:genre"
+            actorRankButton=addButton(boardRow,"演员榜",actorRanking) {
+                if(!actorRanking) {
+                    pendingRefreshFocus="rank:actor"
+                    rankFocusTag="rank:actor"
+                    actorRanking=true
+                    actorRankItems=emptyList()
+                    actorRankNextOffset=0
+                    actorRankSessionId=""
+                    actorRankVersion=""
+                    page=1
+                    catalogFocus=""
+                    tabState.remove(2)
+                    tabFocus.remove(2)
+                    showCatalog(true)
+                }
+            }.apply {
+                tag="rank:actor"
                 nextFocusUpId=navForTab().id
             }.also { boardFocusItems+=it }
             rankRefresh=addButton(boardRow,"刷新") {
@@ -310,6 +324,12 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 rankFocusTag="rank:refresh"
                 page=1
                 catalogFocus=""
+                if(actorRanking) {
+                    actorRankItems=emptyList()
+                    actorRankNextOffset=0
+                    actorRankSessionId=""
+                    actorRankVersion=""
+                }
                 showCatalog(true)
             }.apply {
                 tag="rank:refresh"
@@ -320,8 +340,8 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 view.nextFocusRightId=boardFocusItems.getOrNull(index+1)?.id ?: view.id
             }
             container.addView(boardRow)
-            val defaultSource=rankBoard.sourceText
-            rankSubtitle=text(if(loading) "正在读取最新榜单…" else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,13f,muted).apply { setPadding(0,0,0,dp(8)) }
+            val defaultSource=if(actorRanking) "来源：红果演员剧星榜" else rankBoard.sourceText
+            rankSubtitle=text(if(loading) "正在读取最新榜单…" else if(actorRanking) defaultSource else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,13f,muted).apply { setPadding(0,0,0,dp(8)) }
             container.addView(rankSubtitle)
             nav.forEach { it.nextFocusDownId=boardRow.getChildAt(0)?.id ?: View.NO_ID }
 }
