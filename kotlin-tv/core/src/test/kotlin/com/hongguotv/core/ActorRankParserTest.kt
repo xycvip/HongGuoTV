@@ -65,8 +65,8 @@ class ActorRankParserTest {
                   "ugc_user_data": [{
                     "user_info": {
                       "user_id": "7200000000001301",
+                      "user_name": "星光榜演员",
                       "base_info": {
-                        "user_name": "星光榜演员",
                         "user_avatar": "https://p3-reading-sign.fqnovelpic.com/novel-pic/star-avatar.heic",
                         "actor_id_str": "7200000000001401"
                       }
