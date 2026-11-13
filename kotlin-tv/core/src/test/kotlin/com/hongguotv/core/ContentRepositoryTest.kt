@@ -441,7 +441,7 @@ class ContentRepositoryTest {
                 val request = chain.request()
                 requests += request
                 assertEquals("GET", request.method)
-                assertEquals("/reading/bookapi/bookmall/cell/change/v1/", request.url.encodedPath)
+                assertEquals("/reading/bookapi/bookmall/cell/change/v", request.url.encodedPath)
                 assertEquals("7470092475068071998", request.url.queryParameter("cell_id"))
                 assertEquals("0", request.url.queryParameter("cell_sub_id"))
                 assertEquals("0", request.url.queryParameter("category_id"))
