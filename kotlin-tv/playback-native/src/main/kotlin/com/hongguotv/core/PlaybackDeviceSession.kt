@@ -18,20 +18,7 @@ class PlaybackDeviceRegistrationException(cause: Throwable? = null) :
  * 平台按「注册过的 device_id + install_id」放行播放接口，未注册设备的播放请求只会拿到空响应。
  */
 class PlaybackDeviceSession(
-    private val register: (OkHttpClient) -> DeviceRegister.Registered? = { http ->
-        val registrationDevice = VendorConstants.device + mapOf("cdid" to cdid, "openudid" to openudid)
-        val body = DeviceRegister.payload(registrationDevice)
-        val request = Request.Builder().url(DeviceRegister.url())
-        DeviceRegister.headers(body, VendorConstants.device).forEach { (key, value) ->
-            request.header(key, value)
-        }
-        request.post(body.toRequestBody("application/octet-stream".toMediaType()))
-        // 注册请求不带账号 Cookie；取消由调用方的工作域负责。
-        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
-        RequestScope.execute(transport.newCall(request.build())) { response ->
-            DeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
-        }
-    }
+    private val register: ((OkHttpClient) -> DeviceRegister.Registered?)? = null
 ) {
     companion object {
         val shared = PlaybackDeviceSession()
@@ -43,13 +30,29 @@ class PlaybackDeviceSession(
     private val openudid = UUID.randomUUID().toString().replace("-", "").take(16)
     private var ready: Profile? = null
 
+    private fun registerDevice(http: OkHttpClient): DeviceRegister.Registered? {
+        register?.let { return it(http) }
+        val registrationDevice = VendorConstants.device + mapOf("cdid" to cdid, "openudid" to openudid)
+        val body = DeviceRegister.payload(registrationDevice)
+        val request = Request.Builder().url(DeviceRegister.url())
+        DeviceRegister.headers(body, VendorConstants.device).forEach { (key, value) ->
+            request.header(key, value)
+        }
+        request.post(body.toRequestBody("application/octet-stream".toMediaType()))
+        // 注册请求不带账号 Cookie；取消由调用方的工作域负责。
+        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
+        return RequestScope.execute(transport.newCall(request.build())) { response ->
+            DeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
+        }
+    }
+
     @Synchronized
     fun profile(http: OkHttpClient): Profile {
         ready?.let { return it }
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
         val device =
             try {
-                register(http) ?: throw PlaybackDeviceRegistrationException()
+                registerDevice(http) ?: throw PlaybackDeviceRegistrationException()
             } catch (error: InterruptedIOException) {
                 throw error
             } catch (error: IOException) {
