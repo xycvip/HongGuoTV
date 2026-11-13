@@ -152,8 +152,8 @@ object TvDialog {
         labels: List<String>,
         onChoice: (Int) -> Unit,
         extra: String? = null,
-        onExtra: () -> Unit = {},
-        selectedIndex: Int = -1
+        selectedIndex: Int = -1,
+        onExtra: () -> Unit = {}
     ): AlertDialog {
         val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         content.addView(title(activity, title))
