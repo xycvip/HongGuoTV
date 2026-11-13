@@ -148,7 +148,7 @@ import java.util.concurrent.atomic.AtomicLong
         } else body.addView(recycler,lp(-1,0).apply { weight=1f })
         nav.forEach {
             it.nextFocusDownId=when {
-                tab==2 -> (if(actorRanking) actorRankButton else root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch)?.id ?: recycler.id
+                tab==2 -> (if(collection=="actor-works") collectionBack else if(actorRanking) actorRankButton else root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch)?.id ?: recycler.id
                 tab==1 -> searchInput?.id ?: recycler.id
                 tab==0 -> collectionBack?.id ?: navForTab().id ?: recycler.id
                 tab==7 -> ((theaterFilterHost?.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: recycler.id)
