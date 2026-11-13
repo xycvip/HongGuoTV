@@ -77,8 +77,9 @@ import java.util.concurrent.atomic.AtomicLong
             val bar=row().apply { setPadding(0,0,0,dp(6)) }
             bar.addView(text("题材 · ${aiGenre?.name}",16f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
             genreClear=addButton(bar,"全部题材") {
-                pendingRefreshFocus="rank:board:AI"
-                aiGenre=null; page=1; catalogFocus=""; tabState.remove(2); tabFocus.remove(2); showCatalog(true)
+                pendingRefreshFocus="rank:genre"
+                rankFocusTag="rank:genre"
+                aiCatalog=false; aiGenre=null; page=1; catalogFocus=""; tabState.remove(2); tabFocus.remove(2); showCatalog(true)
             }.apply {
                 tag="rank:ai:genre-clear"
                 nextFocusUpId=aiGenreButton?.id ?: navForTab().id
