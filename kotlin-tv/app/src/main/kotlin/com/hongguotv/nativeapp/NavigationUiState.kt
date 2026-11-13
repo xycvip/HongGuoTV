@@ -22,6 +22,7 @@ internal class NavigationUiState {
     var catalogPageKey: String = ""
     var prefetchAttemptAt: Long = 0L
     var prefetchAttempts: Int = 0
+    var lastHomeNavTapAt: Long = 0L
     val tabFocus = mutableMapOf<Int, String>()
     val nav = mutableListOf<View>()
     val navByTab = mutableMapOf<Int, View>()
