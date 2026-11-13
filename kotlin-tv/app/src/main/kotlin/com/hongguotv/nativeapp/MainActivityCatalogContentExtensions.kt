@@ -82,7 +82,7 @@ internal fun MainActivity.renderCatalogContent(
         if(tab==1) {
             renderCatalogSearchPage(container)
 
-        } else if(tab==2) {
+        } else if(tab==2 && collection!="actor-works") {
             renderRankingCatalogHeader(container,nav,load)
             // 榜单顶部控件重建后恢复上次实际获得焦点的选项。
             if(!focusNav && !focusType && pendingRefreshFocus==null) rankFocusTag?.let { focusTag ->
@@ -149,13 +149,21 @@ internal fun MainActivity.renderCatalogContent(
             val requestTab=tab; val requestPage=page; val requestQuery=query; val requestType=library.contentType
             val requestAggregate=requestTab==1 && aggregateSearch
             val requestBoard=rankBoard
-            val requestActor=requestTab==2 && actorRanking
+            val requestCollection=collection
+            val requestActorWorks=requestTab==2 && requestCollection=="actor-works"
+            val requestActor=requestTab==2 && actorRanking && !requestActorWorks
+            val requestActorWorksActor=actorWorksActor
             val requestActorSubBoard=actorRankSubBoard
             val requestTheaterType=theaterContentType; val requestTheaterSelection=theaterSelections.toMap()
             var responseActorPage:ActorRankPage? = null
+            var responseActorWorksPage:ActorWorksPage? = null
             var responseTheaterFilters:List<TheaterFilterGroup> = emptyList()
             work({
-                when(requestTab) {
+                if(requestActorWorks) {
+                    val actor=requestActorWorksActor ?: error("演员信息已失效")
+                    repository.actorWorks(actor.actorId,0,20).also { responseActorWorksPage=it }
+                        .let { CatalogPage(it.items,it.hasMore) }
+                } else when(requestTab) {
                     0 -> repository.home(requestPage,requestType,null)
                     7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).let { responseTheaterFilters=it.filters; it.catalog }
                     2 -> if(requestActor) repository.actorRanking(0,"",requestActorSubBoard).let { actorPage ->
@@ -196,7 +204,13 @@ internal fun MainActivity.renderCatalogContent(
                     library.cacheHome(requestType,result.items,result.hasMore)
                 }
                     catalog=result.items; hasMore=result.hasMore
-                    if(requestActor) {
+                    if(requestActorWorks) {
+                        val worksPage=responseActorWorksPage ?: error("演员作品响应丢失")
+                        actorWorksItems=worksPage.items
+                        actorWorksNextOffset=worksPage.nextOffset
+                        actorWorksHasMore=worksPage.hasMore
+                        ranking=null
+                    } else if(requestActor) {
                         val actorPage=responseActorPage ?: error("演员榜响应丢失")
                         actorRankItems=actorPage.items
                         actorRankNextOffset=actorPage.nextOffset
@@ -205,12 +219,12 @@ internal fun MainActivity.renderCatalogContent(
                         ranking=null
                     } else {
                         ranking=result.ranking
-                        if(requestTab==2) actorRankItems=emptyList()
+                        if(requestTab==2 && !requestActorWorks) actorRankItems=emptyList()
                     }
                     // 手机输入的精确剧名搜索零结果时自动恢复联想，帮助用户纠正剧名
                     if(requestTab==1 && result.items.isEmpty()) { phoneSearched=false; scheduleSuggest() }
                     val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
-                    if(requestTab==2) rankSubtitle?.text=if(requestActor) if(requestActorSubBoard=="ranklist_actor_fans") "来源：红果演员星光榜" else "来源：红果演员剧星榜" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
+                    if(requestTab==2 && !requestActorWorks) rankSubtitle?.text=if(requestActor) if(requestActorSubBoard=="ranklist_actor_fans") "来源：红果演员星光榜" else "来源：红果演员剧星榜" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
                     if(requestTab==2 || requestTab==7) {
                         // 首屏数据到达后重建一次页面，让筛选头与海报网格在同一 RecyclerView 中组装。
                         val restore=pendingRefreshFocus
