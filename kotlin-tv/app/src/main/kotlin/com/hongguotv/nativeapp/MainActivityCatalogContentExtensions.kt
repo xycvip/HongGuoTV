@@ -149,14 +149,18 @@ internal fun MainActivity.renderCatalogContent(
             val requestTab=tab; val requestPage=page; val requestQuery=query; val requestType=library.contentType
             val requestAggregate=requestTab==1 && aggregateSearch
             val requestBoard=rankBoard; val requestGenre=if(requestTab==0) genre else null
+            val requestActor=requestTab==2 && actorRanking
             val requestTheaterType=theaterContentType; val requestTheaterSelection=theaterSelections.toMap()
-            val requestAi=if(requestTab==2) aiCatalog else false; val requestAiGenre=if(requestAi) aiGenre else null; val requestAiType=requestType
+            var responseActorPage:ActorRankPage? = null
             var responseTheaterFilters:List<TheaterFilterGroup> = emptyList()
             work({
                 when(requestTab) {
                     0 -> repository.home(requestPage,requestType,requestGenre)
                     7 -> repository.theater(requestPage,requestTheaterType,requestTheaterSelection).let { responseTheaterFilters=it.filters; it.catalog }
-                    2 -> if(requestAi) repository.home(requestPage,requestAiType,requestAiGenre) else repository.ranking(requestBoard,requestPage)
+                    2 -> if(requestActor) repository.actorRanking(0,"").let { actorPage ->
+                        responseActorPage=actorPage
+                        CatalogPage(actorPage.items.map { ActorRankEntry.toSeries(it) },actorPage.hasMore)
+                    } else repository.ranking(requestBoard,requestPage)
                     else -> if(requestAggregate) repository.searchCombined(requestQuery,requestPage) else repository.search(requestQuery,requestPage,requestType)
                 }
             }, { result ->
@@ -190,11 +194,22 @@ internal fun MainActivity.renderCatalogContent(
                 if(requestTab==0 && requestPage==1 && requestGenre==null) {
                     library.cacheHome(requestType,result.items,result.hasMore)
                 }
-                    catalog=result.items; hasMore=result.hasMore; ranking=result.ranking
+                    catalog=result.items; hasMore=result.hasMore
+                    if(requestActor) {
+                        val actorPage=responseActorPage ?: throw IOException("演员榜响应丢失")
+                        actorRankItems=actorPage.items
+                        actorRankNextOffset=actorPage.nextOffset
+                        actorRankSessionId=actorPage.sessionId
+                        actorRankVersion=actorPage.version
+                        ranking=null
+                    } else {
+                        ranking=result.ranking
+                        if(requestTab==2) actorRankItems=emptyList()
+                    }
                     // 手机输入的精确剧名搜索零结果时自动恢复联想，帮助用户纠正剧名
                     if(requestTab==1 && result.items.isEmpty()) { phoneSearched=false; scheduleSuggest() }
                     val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
-                    if(requestTab==2) rankSubtitle?.text=if(requestAi) "来源：红果${requestAiType.label}题材" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
+                    if(requestTab==2) rankSubtitle?.text=if(requestActor) "来源：红果演员剧星榜" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
                     if(requestTab==2 || requestTab==7) {
                         // 首屏数据到达后重建一次页面，让筛选头与海报网格在同一 RecyclerView 中组装。
                         val restore=pendingRefreshFocus
