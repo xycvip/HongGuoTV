@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "162da87b0b44ad67099fc72f9882d3501e1d4c6f",
-  "versionCode": 90,
-  "versionName": "0.0.90",
+  "sourceCommit": "82764c3f747cf6d5a0ce7592badbbdc04de230a9",
+  "versionCode": 91,
+  "versionName": "0.0.91",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.90",
+  "tag": "hongguotv-bate-v0.0.91",
   "apk": {
-    "name": "HongguoTV-0.0.90.apk",
-    "size": 2048373,
-    "sha256": "78ed39a8430d74f5b947375724021bb673eb8a34919cc41652d0c1260f256558",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.90/HongguoTV-0.0.90.apk"
+    "name": "HongguoTV-0.0.91.apk",
+    "size": 2048497,
+    "sha256": "92da46eee6be43ae008d84a5f174218134d412a6239b53584c60a414d6b9f815",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.91/HongguoTV-0.0.91.apk"
   },
-  "notes": "【其他功能与问题修复】\n- 演员榜卡片按演员ID关联真实数据"
+  "notes": "【其他功能与问题修复】\n- 调整演员榜列表结束提示文案"
 }
