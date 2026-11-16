@@ -42,14 +42,15 @@ class PlaybackRepository(
                 it.codec.lowercase(java.util.Locale.ROOT) in setOf("bytevc2", "bvc2")
             }
             if (compatible.isEmpty()) throw UnplayableVideoException("本集片源暂不兼容，请播放下一集")
-            val compatibleLadder = StreamLadder(compatible)
             val selected = if (maxQuality == PlaybackQualityMode.AUTO_COMPAT) {
                 compatible
                     .filter { it.codec.lowercase(java.util.Locale.ROOT) in setOf("h264", "avc", "avc1", "avc3") }
-                    .maxWithOrNull(compareBy<Rendition> { it.quality })
-                    ?: compatibleLadder.select(limit)
+                    .maxByOrNull { it.quality }
+                    ?: compatible.maxByOrNull { it.quality }
             } else {
-                compatibleLadder.select(limit)
+                compatible.filter { it.quality in 1..limit }.maxByOrNull { it.quality }
+                    ?: compatible.filter { it.quality <= 0 }.maxByOrNull { it.quality }
+                    ?: compatible.minByOrNull { it.quality }
             } ?: throw UnplayableVideoException("本集片源暂不兼容，请播放下一集")
 
             val urlPath = runCatching {
