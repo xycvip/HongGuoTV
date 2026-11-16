@@ -69,142 +69,111 @@ class ContentRepositoryTest {
         assertEquals(12,requests)
     }
 
-    private fun streamRepository(vararg variants: Triple<Int,String,String>) = repository { request ->
-        if(request.url.host=="example.com") {
-            val rows=JSONObject()
-            variants.forEachIndexed { index,(height,codec,url) -> rows.put("video_$index",JSONObject().put("vheight",height).put("codec_type",codec).put("main_url",url)) }
-            JSONObject().put("video_info",JSONObject().put("data",JSONObject().put("video_list",rows))).toString()
-        } else """{"data":{"123":{"video_model":{"fallback_api":"https://example.com/stream"}}}}"""
-    }
-
-    @Test fun nestedVideoMetaPrefersH264EvenWhenHevcHasHigherResolution() {
-        val repo=repository { request ->
-            if(request.url.host.endsWith("fqnovel.com")) {
-                """{"data":{"video_model":{"fallback_api":"https://example.com/stream"}}}"""
-            } else {
-                """{"video_info":{"data":{"video_list":{
-                    "hevc":{"main_url":"https://example.com/hevc","video_meta":{"codec_type":"h265","definition":"1080p","vwidth":1920,"vheight":1080}},
-                    "avc":{"main_url":"https://example.com/avc","video_meta":{"codec_type":"h264","definition":"720p","vwidth":1280,"vheight":720}}
-                }}}}"""
+    private fun v5Model(vararg variants: Triple<Int, String, String>): String {
+        val rows = JSONArray()
+        variants.forEach { (height, codec, url) ->
+            val width = when (height) {
+                2160 -> 3840
+                1440 -> 2560
+                1080 -> 1920
+                720 -> 1280
+                540 -> 960
+                480 -> 854
+                else -> height
             }
+            rows.put(JSONObject().put("main_url", url).put("video_meta",
+                JSONObject().put("codec_type", codec).put("vwidth", width).put("vheight", height)))
         }
-        val result=repo.stream("123",1080)
-        assertEquals("https://example.com/avc",result.url)
-        assertEquals("720P",result.quality)
+        val model = JSONObject().put("video_list", rows)
+        val entries = JSONObject().put("123", JSONObject().put("video_model", model))
+        return JSONObject().put("code", 0).put("data", JSONObject().put("1004", entries)).toString()
     }
 
-    @Test fun directDataVideoModelResponseDoesNotRequireFallbackApi() {
-        val repo=repository {
-            """{"data":{"video_model":{"video_list":{"one":{"main_url":"https://example.com/direct","video_meta":{"codec_type":"avc1","vwidth":1280,"vheight":720}}}}}}"""
+    @Test fun nativePlaybackUsesV5MultiVideoModelEndpointAndSignatureHeaders() {
+        var captured: Request? = null
+        val repo = repository { request ->
+            captured = request
+            v5Model(Triple(720, "h264", "https://cdn.example.com/v5-720.mp4"))
         }
-        val result=repo.stream("123",720)
-        assertEquals("https://example.com/direct",result.url)
-        assertEquals("720P",result.quality)
+        val result = repo.stream("123", 720)
+        assertEquals("https://cdn.example.com/v5-720.mp4", result.url)
+        assertEquals("720P", result.quality)
+
+        val request = captured!!
+        assertEquals("POST", request.method)
+        assertEquals("/novel/player/multi_video_model/player/v1", request.url.encodedPath)
+        assertEquals("1905892595382586", request.url.queryParameter("device_id"))
+        assertEquals("1905892595378490", request.url.queryParameter("iid"))
+        assertFalse(request.url.queryParameter("cdid").isNullOrBlank())
+        assertEquals("gzip", request.header("Content-Encoding"))
+        assertNotNull(request.header("x-ss-stub"))
+        assertNotNull(request.header("x-khronos"))
+        assertNotNull(request.header("x-helios"))
+        assertNotNull(request.header("x-medusa"))
+        assertNull(request.header("x-gorgon"))
+        assertNull(request.header("x-ladon"))
+        assertNull(request.header("x-argus"))
+
+        val buffer = okio.Buffer()
+        request.body!!.writeTo(buffer)
+        val body = JSONObject(java.util.zip.GZIPInputStream(buffer.inputStream()).reader().readText())
+        assertEquals("123", body.getJSONObject("mixed_video_id_map").getJSONArray("1004").getString(0))
     }
 
-    @Test fun newVideoTabGetIsPreferredAndParsesVideoModelData() {
-        val requests=mutableListOf<Request>()
-        val repo=repository { request ->
-            requests+=request
-            assertEquals("GET",request.method)
-            assertEquals("/reading/bookapi/video_tab/multi_video_model/v1/",request.url.encodedPath)
-            assertEquals("123",request.url.queryParameter("video_id"))
-            assertEquals("0",request.url.queryParameter("video_id_type"))
-            assertEquals("1",request.url.queryParameter("device_level"))
-            assertEquals("1",request.url.queryParameter("need_all_video_definition"))
-            assertEquals("0",request.url.queryParameter("need_mp4_align"))
-            assertEquals("0",request.url.queryParameter("source"))
-            """{"code":0,"data":{"video_model_data":{"123":{"video_model":{"video_list":[
-                {"main_url":"https://cdn.example.com/get-first.mp4","video_meta":{"codec_type":"h264","definition":"720p","vwidth":1280,"vheight":720}}
-            ]}}}}}"""
+    @Test fun compatibilityModeChoosesHighestResolutionH264() {
+        val repo = repository {
+            v5Model(
+                Triple(720, "h264", "https://cdn.example.com/h264-720.mp4"),
+                Triple(1080, "h264", "https://cdn.example.com/h264-1080.mp4"),
+                Triple(1440, "bytevc1", "https://cdn.example.com/bytevc1-1440.mp4")
+            )
         }
-        val result=repo.stream("123",720)
-        assertEquals("https://cdn.example.com/get-first.mp4",result.url)
-        assertEquals("720P",result.quality)
-        assertEquals(1,requests.size)
-    }
-
-    @Test fun invalidVideoTabResponseFallsBackToLegacyPost() {
-        val methods=mutableListOf<String>()
-        val repo=repository { request ->
-            methods+=request.method
-            if(request.url.encodedPath.contains("video_tab")) {
-                """{"code":100103,"message":"PARAM_INVALID"}"""
-            } else {
-                assertEquals("POST",request.method)
-                """{"data":{"123":{"video_model":{"video_list":{"one":{"main_url":"https://cdn.example.com/legacy.mp4","video_meta":{"codec_type":"h264","definition":"480p","vwidth":854,"vheight":480}}}}}}}"""
-            }
-        }
-        val result=repo.stream("123",720)
-        assertEquals("https://cdn.example.com/legacy.mp4",result.url)
-        // 两个官方 GET 域名都返回无效模型后，才回退到旧 POST 通道。
-        assertEquals(listOf("GET","GET","POST"),methods)
-    }
-
-    @Test fun newGetEndpointRotatesToSecondOfficialDomainAfterNetworkFailure() {
-        val hosts = mutableListOf<String>()
-        val repo = ContentRepository(
-            OkHttpClient.Builder().addInterceptor { chain ->
-                val request = chain.request()
-                hosts += request.url.host
-                if (request.url.host == "api5-normal-sinfonlineb.fqnovel.com") {
-                    throw IOException("connection reset")
-                }
-                Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
-                    .code(200).message("OK").body("""{"code":0,"data":{"video_model_data":{"123":{"video_model":{"video_list":[{"main_url":"https://cdn.example.com/rotated.mp4","video_meta":{"codec_type":"h264","definition":"720p"}}]}}}}}""".toResponseBody()).build()
-            }.build(),
-            System::currentTimeMillis,
-            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586","1905892595378490") }
-        )
-        val result = repo.stream("123",720)
-        assertEquals("https://cdn.example.com/rotated.mp4",result.url)
-        assertEquals(listOf("api5-normal-sinfonlineb.fqnovel.com","api5-normal-sinfonlinea.fqnovel.com"),hosts)
-    }
-
-    @Test fun legacyPostRotatesDomainsAfterRetryableNetworkFailure() {
-        val calls = mutableListOf<Pair<String,String>>()
-        val repo = ContentRepository(
-            OkHttpClient.Builder().addInterceptor { chain ->
-                val request = chain.request()
-                calls += request.method to request.url.host
-                if (request.url.encodedPath.contains("video_tab")) {
-                    Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
-                        .body("""{"code":100103}""".toResponseBody()).build()
-                } else if (request.url.host == "api5-normal-sinfonlineb.fqnovel.com") {
-                    throw IOException("connection reset")
-                } else {
-                    Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
-                        .body("""{"data":{"123":{"video_model":{"video_list":{"one":{"main_url":"https://cdn.example.com/post-rotated.mp4","video_meta":{"codec_type":"h264","definition":"480p"}}}}}}}""".toResponseBody()).build()
-                }
-            }.build(),
-            System::currentTimeMillis,
-            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586","1905892595378490") }
-        )
-        val result = repo.stream("123",720)
-        assertEquals("https://cdn.example.com/post-rotated.mp4",result.url)
-        assertTrue(calls.contains("POST" to "api5-normal-sinfonlinea.fqnovel.com"))
+        val result = repo.stream("123", PlaybackQualityMode.AUTO_COMPAT)
+        assertEquals("https://cdn.example.com/h264-1080.mp4", result.url)
+        assertEquals("1080P", result.quality)
     }
 
     @Test fun incompatibleByteVc2DoesNotBecomeAudioOnlyPlayback() {
-        val repo=streamRepository(Triple(720,"bytevc2","https://example.com/unsupported"),Triple(1080,"bytevc1","https://example.com/hevc"))
-        val result=repo.stream("123",720)
-        assertEquals("https://example.com/hevc",result.url)
-        assertEquals("1080P（兼容资源）",result.quality)
+        val repo = repository {
+            v5Model(
+                Triple(720, "bytevc2", "https://cdn.example.com/unsupported.mp4"),
+                Triple(1080, "bytevc1", "https://cdn.example.com/compatible.mp4")
+            )
+        }
+        val result = repo.stream("123", 720)
+        assertEquals("https://cdn.example.com/compatible.mp4", result.url)
+        assertEquals("1080P（兼容资源）", result.quality)
     }
 
     @Test fun compatibleLowerQualityWinsBeforeHigherResolutionFallback() {
-        val repo=streamRepository(Triple(720,"bytevc2","https://example.com/unsupported"),Triple(480,"h264","https://example.com/avc"),Triple(1080,"bytevc1","https://example.com/hevc"))
-        assertEquals("480P",repo.stream("123",720).quality)
+        val repo = repository {
+            v5Model(
+                Triple(720, "bytevc2", "https://cdn.example.com/unsupported.mp4"),
+                Triple(480, "h264", "https://cdn.example.com/avc-480.mp4"),
+                Triple(1080, "bytevc1", "https://cdn.example.com/hevc-1080.mp4")
+            )
+        }
+        assertEquals("480P", repo.stream("123", 720).quality)
     }
 
     @Test fun entirelyIncompatibleSourceFailsBeforeStartingAudio() {
-        val repo=streamRepository(Triple(720,"ByteVC2","https://example.com/unsupported"),Triple(480,"bvc2","https://example.com/unsupported2"))
-        assertThrows(UnplayableVideoException::class.java) { repo.stream("123",720) }
+        val repo = repository {
+            v5Model(
+                Triple(720, "ByteVC2", "https://cdn.example.com/unsupported.mp4"),
+                Triple(480, "bvc2", "https://cdn.example.com/unsupported2.mp4")
+            )
+        }
+        assertThrows(UnplayableVideoException::class.java) { repo.stream("123", 720) }
     }
 
-    @Test fun legacyMissingCodecLabelKeepsQualityLimit() {
-        val repo=streamRepository(Triple(720,"","https://example.com/legacy"),Triple(1080,"bytevc1","https://example.com/hevc"))
-        assertEquals("720P",repo.stream("123",720).quality)
+    @Test fun missingCodecLabelKeepsManualQualityLimit() {
+        val repo = repository {
+            v5Model(
+                Triple(720, "", "https://cdn.example.com/legacy.mp4"),
+                Triple(1080, "bytevc1", "https://cdn.example.com/hevc.mp4")
+            )
+        }
+        assertEquals("720P", repo.stream("123", 720).quality)
     }
 
     private fun repository(clock: () -> Long = System::currentTimeMillis, respond: (Request) -> String) = ContentRepository(
