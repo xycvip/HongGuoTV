@@ -47,7 +47,7 @@ class PlaybackRepository(
                 URI(selected.url).path.orEmpty().lowercase(java.util.Locale.ROOT)
             }.getOrDefault("")
             if (urlPath.endsWith(".m3u8") || urlPath.endsWith(".mpd") ||
-                listOf(".ts", ".webm", ".mkv", ".avi").any(urlPath::endsWith)
+                listOf(".ts", ".webm", ".mkv", ".avi").any { urlPath.endsWith(it) }
             ) {
                 throw UnsupportedVideoFormatException("当前片源容器暂不支持，现有播放链路需要 MP4 资源")
             }
