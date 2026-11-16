@@ -19,17 +19,21 @@ class PlaybackRepository(
 ) {
     fun stream(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
-        return RequestScope.withDeadline(
-            System.nanoTime() + TimeUnit.SECONDS.toNanos(8)
-        ) {
-            val identity = playbackSession.profile(http)
-            val ladder = MobilePlayback.ladder(
-                id = id,
-                device = identity.values,
-                http = http,
-                signer = MobilePlayback.signer,
-                now = clock(),
-            )
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8)
+        fun clientWithinDeadline(): OkHttpClient {
+            RequestScope.ensureActive()
+            val remaining = deadline - System.nanoTime()
+            if (remaining <= 0) throw java.io.InterruptedIOException("播放请求超时")
+            return http.newBuilder().callTimeout(remaining, TimeUnit.NANOSECONDS).build()
+        }
+        val identity = playbackSession.profile(clientWithinDeadline())
+        val ladder = MobilePlayback.ladder(
+            id = id,
+            device = identity.values,
+            http = clientWithinDeadline(),
+            signer = MobilePlayback.signer,
+            now = clock(),
+        )
             val portrait = ladder.renditions.firstNotNullOfOrNull { row ->
                 if (row.width != null && row.height != null) row.height > row.width else null
             }
@@ -52,8 +56,7 @@ class PlaybackRepository(
                 throw UnsupportedVideoFormatException("当前片源容器暂不支持，现有播放链路需要 MP4 资源")
             }
 
-            val info = selected.toStreamInfo()
-            if (selected.quality > limit) info.copy(quality = info.quality + "（兼容资源）") else info
-        }
+        val info = selected.toStreamInfo()
+        if (selected.quality > limit) info.copy(quality = info.quality + "（兼容资源）") else info
     }
 }
