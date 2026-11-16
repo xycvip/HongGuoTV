@@ -38,13 +38,18 @@ class PlaybackRepository(
                 if (row.width != null && row.height != null) row.height > row.width else null
             }
             val limit = PlaybackQualityMode.limit(maxQuality, portrait)
+            val compatible = ladder.renditions.filterNot {
+                it.codec.lowercase(java.util.Locale.ROOT) in setOf("bytevc2", "bvc2")
+            }
+            if (compatible.isEmpty()) throw UnplayableVideoException("本集片源暂不兼容，请播放下一集")
+            val compatibleLadder = StreamLadder(compatible)
             val selected = if (maxQuality == PlaybackQualityMode.AUTO_COMPAT) {
-                ladder.renditions
-                    .filter { it.codec in setOf("h264", "avc", "avc1", "avc3") }
+                compatible
+                    .filter { it.codec.lowercase(java.util.Locale.ROOT) in setOf("h264", "avc", "avc1", "avc3") }
                     .maxWithOrNull(compareBy<Rendition> { it.quality })
-                    ?: ladder.select(limit)
+                    ?: compatibleLadder.select(limit)
             } else {
-                ladder.select(limit)
+                compatibleLadder.select(limit)
             } ?: throw UnplayableVideoException("本集片源暂不兼容，请播放下一集")
 
             val urlPath = runCatching {
