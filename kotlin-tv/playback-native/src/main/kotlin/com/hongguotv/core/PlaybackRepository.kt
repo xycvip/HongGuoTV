@@ -57,6 +57,6 @@ class PlaybackRepository(
             }
 
         val info = selected.toStreamInfo()
-        if (selected.quality > limit) info.copy(quality = info.quality + "（兼容资源）") else info
+        return if (selected.quality > limit) info.copy(quality = info.quality + "（兼容资源）") else info
     }
 }
