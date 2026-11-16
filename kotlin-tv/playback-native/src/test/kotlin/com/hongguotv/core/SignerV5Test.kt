@@ -56,7 +56,7 @@ class SignerV5Test {
             assertEquals(0, signer.branch(url.encodedQuery!!, body, ts))
             assertEquals(ts.toString(), request.headers["x-khronos"])
             assertEquals(digest("MD5", body).hex().uppercase(), request.headers["x-ss-stub"])
-            assertArrayEquals(body, request.body)
+            assertArrayEquals(body, request.body!!)
             assertEquals(signer.medusa(request.url, body, ts, identity), request.headers["x-medusa"])
             assertNull(request.headers["x-gorgon"])
             assertNull(request.headers["x-ladon"])
