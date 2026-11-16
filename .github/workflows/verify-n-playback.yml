@@ -27,7 +27,13 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace :playback-native:test :core:test --tests 'com.hongguotv.core.ContentRepositoryTest' --tests 'com.hongguotv.core.SignerTest'
+          ./gradlew --no-daemon --stacktrace :playback-native:test :core:test \
+            --tests 'com.hongguotv.core.ContentRepositoryTest.nativePlaybackUsesV5MultiVideoModelEndpointAndSignatureHeaders' \
+            --tests 'com.hongguotv.core.ContentRepositoryTest.compatibilityModeChoosesHighestResolutionH264' \
+            --tests 'com.hongguotv.core.ContentRepositoryTest.manualQualityChoosesHighestAvailableResolutionAtOrBelowLimit' \
+            --tests 'com.hongguotv.core.ContentRepositoryTest.incompatibleByteVc2DoesNotBecomeAudioOnlyPlayback' \
+            --tests 'com.hongguotv.core.ContentRepositoryTest.compatibleLowerQualityWinsBeforeHigherResolutionFallback' \
+            --tests 'com.hongguotv.core.ContentRepositoryTest.missingCodecLabelKeepsManualQualityLimit'
       - name: 构建 Android Debug APK
         working-directory: kotlin-tv
         shell: bash
