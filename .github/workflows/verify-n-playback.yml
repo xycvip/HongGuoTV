@@ -21,10 +21,14 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - name: 运行 Native、Phoenix 回归测试及 Debug 构建
+      - name: 运行 Native、Phoenix 与核心单元测试
         working-directory: kotlin-tv
         shell: bash
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace :playback-native:test :playback-phoenix:test :core:test :app:assembleDebug
+          ./gradlew --no-daemon --stacktrace :playback-native:test :playback-phoenix:test :core:test
+      - name: 构建 Android Debug APK
+        working-directory: kotlin-tv
+        shell: bash
+        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
