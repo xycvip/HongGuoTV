@@ -133,6 +133,19 @@ class ContentRepositoryTest {
         assertEquals("1080P", result.quality)
     }
 
+    @Test fun manualQualityChoosesHighestAvailableResolutionAtOrBelowLimit() {
+        val repo = repository {
+            v5Model(
+                Triple(480, "h264", "https://cdn.example.com/h264-480.mp4"),
+                Triple(720, "h264", "https://cdn.example.com/h264-720.mp4"),
+                Triple(1080, "h264", "https://cdn.example.com/h264-1080.mp4")
+            )
+        }
+        val result = repo.stream("123", 1080)
+        assertEquals("https://cdn.example.com/h264-1080.mp4", result.url)
+        assertEquals("1080P", result.quality)
+    }
+
     @Test fun incompatibleByteVc2DoesNotBecomeAudioOnlyPlayback() {
         val repo = repository {
             v5Model(
