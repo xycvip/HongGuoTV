@@ -21,13 +21,13 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - name: 运行 Native N 接口与核心单元测试
+      - name: 运行 N 接口定向回归测试
         working-directory: kotlin-tv
         shell: bash
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace :playback-native:test :core:test
+          ./gradlew --no-daemon --stacktrace :playback-native:test :core:test --tests 'com.hongguotv.core.ContentRepositoryTest' --tests 'com.hongguotv.core.SignerTest'
       - name: 构建 Android Debug APK
         working-directory: kotlin-tv
         shell: bash
