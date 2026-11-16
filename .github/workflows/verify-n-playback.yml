@@ -3,11 +3,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - "kotlin-tv/playback-native/**"
-      - "kotlin-tv/playback-media/**"
-      - "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/ContentRepository.kt"
-      - "kotlin-tv/app/**"
 permissions:
   contents: read
 concurrency:
