@@ -2,7 +2,6 @@
 package com.hongguotv.core
 
 import java.io.IOException
-import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -54,7 +53,7 @@ class MobilePlaybackTest {
         }
         MobilePlayback.ladder("123", device, http(model()) { request ->
             val bytes = Buffer().apply { request.body!!.writeTo(this) }.readByteArray()
-            assertArrayEquals(signed, bytes)
+            assertArrayEquals(signed!!, bytes)
             assertEquals(signedUrl, request.url.toString())
             assertEquals("/novel/player/multi_video_model/player/v1", request.url.encodedPath)
             assertEquals("123456", request.url.queryParameter("device_id"))
@@ -63,7 +62,7 @@ class MobilePlaybackTest {
             assertEquals("test-signature", request.header("X-Argus"))
             assertNull(request.header("Cookie"))
             assertEquals(
-                MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02X".format(it) },
+                digest("MD5", bytes).hex().uppercase(),
                 request.header("x-ss-stub")
             )
             val body = JSONObject(GZIPInputStream(bytes.inputStream()).reader().readText())
