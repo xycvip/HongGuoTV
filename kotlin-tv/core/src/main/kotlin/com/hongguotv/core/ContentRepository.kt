@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).cookieJar(MemoryCookies()).build(), private val clock: () -> Long = System::currentTimeMillis, private val playbackSession: PlaybackDeviceSession = PlaybackDeviceSession.shared) {
     private val signer = Signer()
     private val site = "https://hongguoduanju.com"
-    private val playbackRepository by lazy { PlaybackRepository(http,clock,playbackSession,signer,site) { url,signed -> text(url,signed) } }
+    private val playbackRepository by lazy { PlaybackRepository(http,clock,playbackSession) }
     private fun categoryPath(type: ContentType)=when(type) {
         ContentType.COMIC -> "comic-drama"
         ContentType.SHORT -> "real-drama"
@@ -188,12 +188,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
     fun sameNameSeasons(current: Series, related: List<Series>): List<Series> =
         detailRepository.sameNameSeasons(current,related)
 
-    /**
-     * New official playback endpoint. It uses the same registered anonymous identity as the legacy
-     * POST endpoint, but its request is a GET with the official GetVideoModelRequest fields in query.
-     * Keep this first attempt deliberately single-shot: the existing POST path remains the bounded
-     * compatibility/recovery path when GET is unavailable or returns an unusable model.
-     */
+    /** Native N playback follows the V5 multi_video_model/player/v1 request path. */
     fun stream(id: String, maxQuality: Int = 1080): StreamInfo = playbackRepository.stream(id,maxQuality)
 
     companion object {
