@@ -2,16 +2,15 @@
 package com.hongguotv.core
 
 import okhttp3.OkHttpClient
-import java.io.IOException
 import java.net.URI
 import java.util.concurrent.TimeUnit
 
 /**
  * Native N playback adapter.
  *
- * The wire request, V5 signing, registered identity and response model follow
- * N3urda/hongguoTV's active MobilePlayback path. Existing app quality-mode and
- * MP4 streaming behavior remain the responsibility of this adapter.
+ * The upstream request, V5 signing, registered identity and model parsing follow
+ * N3urda/hongguoTV's active MobilePlayback path. App quality-mode and MP4
+ * streaming behavior remain local adapter responsibilities.
  */
 class PlaybackRepository(
     private val http: OkHttpClient,
