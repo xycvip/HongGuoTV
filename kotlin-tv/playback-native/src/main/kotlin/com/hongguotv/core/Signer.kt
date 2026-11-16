@@ -18,6 +18,14 @@ class Signer(
         .encodeToString(ByteArray(18).also(java.security.SecureRandom()::nextBytes)),
     private val mobileV5: Boolean = false,
 ) {
+    /** Preserve the original clock + random test constructor used by the shared signing oracle. */
+    constructor(clock: () -> Long, random: () -> Double) :
+        this(clock = clock, device = VendorConstants.device, random = random)
+
+    /** Preserve the original device-first constructor used by existing repositories. */
+    constructor(device: Map<String, String>) :
+        this(clock = System::currentTimeMillis, device = device, random = Math::random)
+
     private val processStarted: Long = clock()
     data class Request(val url: String, val headers: Map<String, String>, val body: ByteArray?)
 
