@@ -13,4 +13,4 @@ data class StreamInfo(
 )
 class UnplayableVideoException(message: String): IOException(message)
 class UnsupportedVideoFormatException(message: String): IOException(message)
-class EmptyPlaybackResponseException: IOException("播放接口暂时返回空响应，请稍后重试")
+class EmptyPlaybackResponseException(message: String = "播放接口暂时返回空响应，请稍后重试"): IOException(message)
