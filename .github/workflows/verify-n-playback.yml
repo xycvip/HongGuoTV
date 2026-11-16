@@ -1,5 +1,12 @@
 name: 临时验证 Native N 接口对齐
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "kotlin-tv/playback-native/**"
+      - "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/ContentRepository.kt"
+      - "kotlin-tv/app/**"
   push:
     branches:
       - align-native-playback-n3urda
