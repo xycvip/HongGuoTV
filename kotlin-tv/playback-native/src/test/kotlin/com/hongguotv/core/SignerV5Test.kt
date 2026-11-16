@@ -7,6 +7,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SignerV5Test {
+    @Test fun matchesCarrierVectorsAcrossAllFourTimestampVariants() {
+        val rows = JSONArray(javaClass.getResource("/signing-v5-carrier.json")!!.readText())
+        for (i in 0 until rows.length()) {
+            val row = rows.getJSONObject(i)
+            val actual = AesV3(hex(row.getString("key")), row.getInt("ts"), v5 = true)
+                .encrypt(hex(row.getString("source")), hex(row.getString("iv")))
+            assertEquals("carrier variant $i", row.getString("encrypted"), actual.hex())
+        }
+    }
+
     @Test fun matchesIndependentSdkDigestVectorsAcrossAllTimestampRotations() {
         val vectors = JSONArray(javaClass.getResource("/signing-v5-f13.json")!!.readText())
         val signer = Signer(mobileV5 = true)
