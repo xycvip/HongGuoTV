@@ -2,6 +2,9 @@
 package com.hongguotv.nativeapp
 
 import android.net.NetworkCapabilities
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.widget.FrameLayout
 import android.view.*
 import android.view.View
 import androidx.media3.common.PlaybackException
