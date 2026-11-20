@@ -123,7 +123,7 @@ class PhoenixPlaybackSource(
                     return try {
                         resolveResponse(normalized, maxQuality).also {
                             emitDiagnostic(
-                                "Phoenix：RedGuoAPI \${if (tabRoute) "video_tab GET" else "video_model POST"} 命中，清晰度=\${it.quality}"
+                                "Phoenix：RedGuoAPI ${if (tabRoute) "video_tab GET" else "video_model POST"} 命中，清晰度=${it.quality}"
                             )
                         }
                     } catch (error: UnplayableVideoException) {
@@ -144,7 +144,7 @@ class PhoenixPlaybackSource(
                     throw error
                 } catch (error: IOException) {
                     lastFailure = error
-                    emitDiagnostic("Phoenix：RedGuoAPI \${if (tabRoute) "video_tab GET" else "video_model POST"} 请求失败")
+                    emitDiagnostic("Phoenix：RedGuoAPI ${if (tabRoute) "video_tab GET" else "video_model POST"} 请求失败")
                 }
             }
         }
@@ -262,7 +262,7 @@ class PhoenixPlaybackSource(
             builder.post(body.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
         }
         return RequestScope.execute(playbackHttp.newCall(request)) { response ->
-            if (response.code != 200) throw IOException("RedGuoAPI 播放接口 HTTP \${response.code}")
+            if (response.code != 200) throw IOException("RedGuoAPI 播放接口 HTTP ${response.code}")
             val responseBody = response.body ?: throw IOException("RedGuoAPI 播放接口响应为空")
             if (responseBody.contentLength() > 20L * 1024 * 1024) throw IOException("播放响应过大")
             val bytes = responseBody.bytes()
@@ -280,7 +280,7 @@ class PhoenixPlaybackSource(
         val baseResp = root.optJSONObject("BaseResp")
         val code = root.opt("code") ?: root.opt("Code") ?: root.opt("status_code") ?: baseResp?.opt("StatusCode")
         if (code != null && code.toString().isNotBlank() && code.toString() != "0") {
-            throw IOException("RedGuoAPI 播放接口业务状态异常：\${code.toString().take(20)}")
+            throw IOException("RedGuoAPI 播放接口业务状态异常：${code.toString().take(20)}")
         }
     }
 
