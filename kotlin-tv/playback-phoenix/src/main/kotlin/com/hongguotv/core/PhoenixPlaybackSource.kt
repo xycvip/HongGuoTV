@@ -119,8 +119,8 @@ class PhoenixPlaybackSource(
                     }
                     val normalized = normalizePlaybackResponse(raw, id, tabRoute)
                         ?: throw IOException("RedGuoAPI 播放接口未返回本集 video_model")
-                    return try {
-                        resolveResponse(normalized, maxQuality).also {
+                    try {
+                        return resolveResponse(normalized, maxQuality).also {
                             emitDiagnostic(
                                 "Phoenix：RedGuoAPI ${if (tabRoute) "video_tab GET" else "video_model POST"} 命中，清晰度=${it.quality}"
                             )
