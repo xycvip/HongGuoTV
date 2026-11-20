@@ -34,11 +34,10 @@ class PhoenixPlayerSignerTest {
         assertEquals(0, (encrypted.size - 38) % 16)
     }
 
-    @Test fun registrationUsesOoiUaLog5Endpoint() {
-        val url = PhoenixDeviceRegister.registrationUrlForTest()
-        assertTrue(url.startsWith("https://log5-applog-lf.fqnovel.com/service/2/device_register/"))
-        assertTrue(url.contains("cronet_version=8d40f833_2026-03-03"))
-        assertTrue(url.contains("ttnet_version=4.2.243.31-douyin"))
-        assertTrue(url.contains("use_store_region_cookie=1"))
+    @Test fun registrationUsesRedGuoApiDeviceEndpoint() {
+        assertEquals(
+            "https://log.snssdk.com/service/2/device_register/",
+            PhoenixDeviceRegister.registrationUrlForTest()
+        )
     }
 }
