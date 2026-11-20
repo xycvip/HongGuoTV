@@ -17,6 +17,8 @@ class Signer(
         .withoutPadding()
         .encodeToString(ByteArray(18).also(java.security.SecureRandom()::nextBytes)),
     private val mobileV5: Boolean = false,
+    // P's RedGuoAPI video_tab route carries device_brand=Redmi; default false preserves N's existing V5 identity.
+    private val mobileV5QueryDeviceBrand: Boolean = false,
 ) {
     /** Preserve the original clock + random test constructor used by the shared signing oracle. */
     constructor(clock: () -> Long, random: () -> Double) :
@@ -387,8 +389,10 @@ class Signer(
             f(1, 1, "sint"), f(2, 2, "sint"), f(3, "8662"), f(4, who.getValue("device_id")),
             f(5, processNonce), f(6, "!noperm!"), f(12, "Asia/Shanghai,8"), f(13, "zh_CN"),
             f(22, who.getValue("os_version")), f(25, processStarted, "sint"),
-            f(30, who.getValue("device_type")), f(31, "HONOR"),
-            f(32, who.getValue("device_type")), f(34, "HONOR"),
+            f(30, who.getValue("device_type")),
+            f(31, if (mobileV5QueryDeviceBrand) who["device_brand"]?.takeIf { it.isNotBlank() } ?: "HONOR" else "HONOR"),
+            f(32, who.getValue("device_type")),
+            f(34, if (mobileV5QueryDeviceBrand) who["device_brand"]?.takeIf { it.isNotBlank() } ?: "HONOR" else "HONOR"),
         )
         val env = proto(f(6, "v04.10.03.04-bugfix"), f(8, who.getValue("channel")),
             f(12, deviceInfo), f(14, version))
