@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Ported from OOIUa/hongguo-android PlaybackDevice (GPL-3.0-only).
+// Device registration aligned to RedGuoAPI modules/hongguo/main.js.
 package com.hongguotv.core
 
 import java.io.ByteArrayOutputStream
@@ -16,7 +16,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-/** OOIUa-compatible anonymous playback device registration. */
+/** RedGuoAPI-compatible anonymous playback device registration. */
 object PhoenixDeviceRegister {
     private const val REGISTER_URL = "https://log.snssdk.com/service/2/device_register/"
     private const val REGISTER_UA = "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
