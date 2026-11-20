@@ -108,13 +108,13 @@ object PhoenixDeviceRegister {
             .callTimeout(20, TimeUnit.SECONDS)
             .build()
         return RequestScope.execute(transport.newCall(request)) { response ->
-            if (response.code >= 500) throw IOException("红果设备注册 HTTP \${response.code}")
+            if (response.code >= 500) throw IOException("红果设备注册 HTTP ${response.code}")
             val responseBody = response.body ?: throw IOException("红果设备注册响应为空")
             if (responseBody.contentLength() > 64L * 1024L) throw IOException("红果设备注册响应过大")
             val raw = responseBody.string()
             val json = runCatching { org.json.JSONObject(raw) }
-                .getOrElse { throw IOException("红果设备注册收到的不是接口数据（HTTP \${response.code}）", it) }
-            if (response.code != 200) throw IOException("红果设备注册 HTTP \${response.code}")
+                .getOrElse { throw IOException("红果设备注册收到的不是接口数据（HTTP ${response.code}）", it) }
+            if (response.code != 200) throw IOException("红果设备注册 HTTP ${response.code}")
             fun responseId(name: String): String {
                 val preferred = json.opt(name + "_str")
                 val value = if (preferred != null && preferred.toString().isNotBlank()) preferred else json.opt(name)
