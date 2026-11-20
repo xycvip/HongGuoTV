@@ -11,11 +11,10 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * 独立 Phoenix video_model/v1 通道。
+ * 独立 Phoenix P 播放通道，接口与签名参数按 RedGuoAPI modules/hongguo/main.js 对齐。
  *
- * 请求成功后继续解析 fallback_api，并将 key_seed / spade_a 交给现有
- * MediaCrypto + RemoteVideo MP4 分段解密链路。该通道仍由独立 API 选择项控制，
- * 不会在失败时静默切换到其他播放接口。
+ * 播放模型成功后继续解析 fallback_api，并将 key_seed / spade_a 交给现有
+ * MediaCrypto + RemoteVideo MP4 分段解密链路；不改变 N 播放路由。
  */
 data class PhoenixPlaybackDiagnostic(
     val quality: String,
@@ -95,8 +94,8 @@ class PhoenixPlaybackSource(
         require(id.matches(Regex("[0-9]{1,30}"))) { "无效的分集 ID" }
         emitDiagnostic("Phoenix：按 RedGuoAPI main.js 注册匿名播放设备")
         val playbackHttp = http.newBuilder()
-            .callTimeout(8, TimeUnit.SECONDS)
-            .followRedirects(false)
+            .callTimeout(20, TimeUnit.SECONDS)
+            .followRedirects(true)
             .build()
         val started = System.currentTimeMillis()
         var identity = session.profile(http)
