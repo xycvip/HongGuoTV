@@ -52,6 +52,7 @@ import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false,forceRebuild: Boolean=false) {
         updater.interrupt()
+        root.findViewWithTag<View>("playback_route_failure_notice")?.let(root::removeView)
         val data=detail ?: return
         val playbackStarted=android.os.SystemClock.elapsedRealtime()
         debugPlaybackStartedAt=playbackStarted; debugPlaybackReadyAt=0L; debugFirstFrameAt=0L
