@@ -412,6 +412,6 @@ class PhoenixPlaybackSource(
     companion object {
         private const val PLAYBACK_UA =
             "com.phoenix.read/73932 (Linux; U; Android 12; zh_CN_#Hans; PGT-AN10; Build/V417IR;tt-ok/3.12.13.20)"
-        private val V5_SIGNER = Signer(mobileV5 = true)
+        private val V5_SIGNER = Signer(mobileV5 = true, mobileV5QueryDeviceBrand = true)
     }
 }
