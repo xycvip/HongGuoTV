@@ -386,6 +386,14 @@ jobs:
               --latest
           fi
 
+          # 正式版 Release 必须同时携带 update.json；应用的 Release 更新检测只识别这个附件名。
+          RELEASE_ASSETS="$(gh release view "$RELEASE_TAG" --repo xycvip/AppDownload --json assets --jq '[.assets[].name]')"
+          echo "$RELEASE_ASSETS" | jq -e 'index("update.json") != null and index("SHA256SUMS") != null and any(.[]; endswith(".apk"))' >/dev/null || {
+            echo "::error::正式版 Release 缺少 update.json、SHA256SUMS 或 APK 附件"
+            exit 1
+          }
+          echo "正式版 Release 附件检查通过：APK、SHA256SUMS、update.json"
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md hongguoTV/latest.json hongguoTV/README.md
