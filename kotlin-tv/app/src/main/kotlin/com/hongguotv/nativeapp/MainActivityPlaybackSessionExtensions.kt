@@ -301,6 +301,28 @@ internal fun MainActivity.playerFailure(problem: Throwable) {
         }
         val recoveryKey = detail?.let { data -> data.episodes.getOrNull(episodeIndex)?.let { "${data.series.id}:$it:${library.maxQuality}" } }.orEmpty()
         val routeRecoveryExhausted = recoveryKey.isNotEmpty() && playbackPipelineState.playbackRecoveryPolicy.isExhaustedFor(recoveryKey)
+        // 只有同线路重试与另一条线路切换都已用尽，且失败来自取流请求，才提示线路失效。
+        // 解码器不兼容、单集片源格式问题等不冒充线路故障。
+        val allRoutesFailed = problem is PlaybackApiRequestException && routeRecoveryExhausted
+        if (allRoutesFailed) {
+            root.findViewWithTag<View>("playback_route_failure_notice")?.let(root::removeView)
+            val notice = text("当前线路失效，请等待更新，不会很久", 20f, Color.WHITE).apply {
+                tag = "playback_route_failure_notice"
+                gravity = Gravity.CENTER
+                textAlignment = View.TEXT_ALIGNMENT_CENTER
+                setPadding(dp(26), dp(16), dp(26), dp(16))
+                background = GradientDrawable().apply {
+                    setColor(Color.argb(205, 12, 16, 22))
+                    cornerRadius = dp(12).toFloat()
+                    setStroke(dp(1), Color.argb(90, 255, 255, 255))
+                }
+                elevation = dp(24).toFloat()
+                isClickable = false
+                isFocusable = false
+            }
+            root.addView(notice, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+            debugLog("播放线路全部尝试失败：已在屏幕中央显示线路失效提示")
+        }
         if(retryable && !sleepStopped && !routeRecoveryExhausted) {
             addButton(controls,"停止自动重试") { cancelRecovery(); playbackText.text="自动重试已停止，观看位置已保留。" }
             autoRecovery=true; scheduleRecovery()
