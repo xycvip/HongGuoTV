@@ -51,6 +51,7 @@ class QuickJsRuntime private constructor(
         }
         val wrapped = """
             (function () {
+                host.exclusive = function (block) { return block(); };
                 const module = { exports: {} };
                 const exports = module.exports;
                 (function (module, exports) {
