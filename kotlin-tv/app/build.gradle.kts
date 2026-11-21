@@ -40,6 +40,8 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // QuickJS: execute remotely updateable CommonJS source modules.
+    implementation("io.github.dokar3:quickjs-kt-android:1.0.15")
     implementation(project(":core")) { exclude(group = "org.json") }
     implementation(project(":playback-native"))
     implementation(project(":playback-api"))
