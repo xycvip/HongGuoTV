@@ -28,12 +28,10 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: 安装 Android 37 平台
-        shell: bash
-        run: |
-          set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager --install "platforms;android-37"
+      - name: 配置 Android SDK 37
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools, platforms;android-37'
 
       - name: 构建 Android Debug APK
         working-directory: kotlin-tv
