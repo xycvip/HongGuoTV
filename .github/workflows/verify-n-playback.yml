@@ -1,8 +1,5 @@
 name: 临时验证 Native N 接口对齐
 on:
-  push:
-    branches:
-      - feature/hongguo-js-module
   pull_request:
     branches:
       - main
