@@ -24,7 +24,6 @@ private val hostFunctionNames = listOf(
     "catalogContext",
     "chapterId",
     "dramaId",
-    "exclusive",
     "fetch",
     "fetchText",
     "finishMedia",
