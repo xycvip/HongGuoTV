@@ -2,8 +2,6 @@ package com.hongguotv.quickjs
 
 import com.dokar.quickjs.QuickJs
 import com.dokar.quickjs.binding.define
-import com.dokar.quickjs.binding.function
-import com.dokar.quickjs.binding.property
 
 /**
  * Minimal bridge contract for an application-owned JavaScript host object.
