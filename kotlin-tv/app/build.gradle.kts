@@ -6,7 +6,7 @@ fun signingValue(env: String, key: String): String? = System.getenv(env) ?: sign
 
 android {
     namespace = "com.hongguotv.nativeapp"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = System.getenv("HONGGUOTV_APPLICATION_ID") ?: "com.x.hongguotv"
         manifestPlaceholders["appLabel"] = System.getenv("HONGGUOTV_APP_LABEL") ?: "红果TV"
