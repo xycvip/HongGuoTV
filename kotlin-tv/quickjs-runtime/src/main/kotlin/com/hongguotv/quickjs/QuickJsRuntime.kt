@@ -25,13 +25,13 @@ class QuickJsRuntime private constructor(
      * Evaluate JavaScript source. Set [asModule] for ES module syntax/imports.
      * Async host bindings registered during creation can be awaited in JS.
      */
-    suspend fun <T : Any?> evaluate(
+    suspend fun evaluate(
         source: String,
         filename: String = "main.js",
         asModule: Boolean = false,
-    ): T {
+    ): Any? {
         check(!closed.get()) { "QuickJS runtime is closed" }
-        return engine.evaluate(source, filename, asModule)
+        return engine.evaluate<Any?>(source, filename, asModule)
     }
 
     /**
