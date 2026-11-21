@@ -25,6 +25,8 @@ class QuickJsModuleRuntime(
     suspend fun load(source: String) = withContext(dispatcher) {
         check(!loaded) { "JavaScript module already loaded" }
         val js = QuickJs.create(dispatcher)
+        js.evaluationTimeoutMillis = 15_000L
+        js.memoryLimit = 64L * 1024L * 1024L
         try {
             HongGuoHostMethods.names.forEach { method ->
                 js.function("__hongguo_host_$method") { args ->
@@ -82,7 +84,8 @@ class QuickJsModuleRuntime(
                   const result = fn.apply(globalThis.__hongguoModule, args);
                   if (result && typeof result.then === "function")
                     throw new Error("This module export returned a Promise; async bridge is not enabled");
-                  return JSON.stringify(result === undefined ? null : result);
+                  return JSON.stringify(result === undefined ? null : result, (key, value) =>
+                    typeof value === "bigint" ? value.toString() : value);
                 })();
             """.trimIndent()
             engine!!.evaluate<String>(script, filename = "hongguo-call.js")
