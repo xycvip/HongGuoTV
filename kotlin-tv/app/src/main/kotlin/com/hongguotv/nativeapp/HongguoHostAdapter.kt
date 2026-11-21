@@ -97,9 +97,9 @@ internal class HongguoHostAdapter(context: Context) : QuickJsHostAdapter {
                 ?: "application/octet-stream").toMediaType()
         )
         builder.method(method, if (method in setOf("GET", "HEAD")) null else body ?: ByteArray(0).toRequestBody(null))
+        val limit = ((input["limit"] as? Number)?.toLong() ?: (4L shl 20)).coerceIn(1L, 16L shl 20)
         client.newCall(builder.build()).execute().use { response ->
-            val data = response.body?.bytes() ?: ByteArray(0)
-            val limit = ((input["limit"] as? Number)?.toLong() ?: (4L shl 20)).coerceIn(1L, 16L shl 20)
+            val data = response.body?.source()?.readByteArray(limit + 1L) ?: ByteArray(0)
             require(data.size.toLong() <= limit) { "接口返回的数据过大" }
             val headers = response.headers.toMultimap()
             val binary = input["binary"] as? Boolean ?: false
