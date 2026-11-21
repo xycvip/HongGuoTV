@@ -1,0 +1,45 @@
+name: QuickJS 容器构建验证
+
+on:
+  push:
+    branches:
+      - feature/hongguo-js-module
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quickjs-shell-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v7
+
+      - name: 配置 Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: 构建 Android Debug APK
+        working-directory: kotlin-tv
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug
+
+      - name: 上传验证 APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: hongguotv-quickjs-debug
+          path: kotlin-tv/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
