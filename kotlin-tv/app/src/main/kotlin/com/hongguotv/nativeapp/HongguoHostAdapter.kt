@@ -105,6 +105,7 @@ internal class HongguoHostAdapter(context: Context) : QuickJsHostAdapter {
             val binary = input["binary"] as? Boolean ?: false
             return mapOf(
                 "status" to response.code,
+                "url" to response.request.url.toString(),
                 "headers" to headers,
                 "body" to if (binary) data else data.toString(StandardCharsets.UTF_8),
                 "blocked" to false,
@@ -131,7 +132,7 @@ internal class HongguoHostAdapter(context: Context) : QuickJsHostAdapter {
         val response = fetch(request)
         val status = response["status"] as Int
         require(status in 200..299) { "网页请求失败：HTTP $status" }
-        return mapOf("body" to response["body"].toString(), "url" to input["url"].toString())
+        return mapOf("body" to response["body"].toString(), "url" to response["url"].toString())
     }
 
     private fun cacheGet(key: String): String? {
@@ -164,7 +165,7 @@ internal class HongguoHostAdapter(context: Context) : QuickJsHostAdapter {
         val uri = URI(raw)
         return mapOf(
             "scheme" to (uri.scheme ?: ""),
-            "host" to (uri.rawAuthority ?: ""),
+            "host" to (uri.rawAuthority?.substringAfterLast("@") ?: ""),
             "hostname" to (uri.host ?: ""),
             "port" to if (uri.port >= 0) uri.port.toString() else "",
             "path" to (uri.rawPath ?: ""),
