@@ -31,7 +31,13 @@ jobs:
       - name: 配置 Android SDK 37
         uses: android-actions/setup-android@v4
         with:
-          packages: 'platform-tools platforms;android-37'
+          packages: 'platform-tools'
+
+      - name: 安装 Android 37 平台
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --channel=3 --install "platforms;android-37"
 
       - name: 构建 Android Debug APK
         working-directory: kotlin-tv
