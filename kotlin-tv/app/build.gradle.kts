@@ -44,6 +44,7 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jsoup:jsoup:1.18.3")
     implementation(project(":core")) { exclude(group = "org.json") }
     implementation(project(":playback-native"))
     implementation(project(":playback-api"))
