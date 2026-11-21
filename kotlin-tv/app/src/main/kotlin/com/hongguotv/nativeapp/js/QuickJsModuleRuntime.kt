@@ -1,7 +1,6 @@
 package com.hongguotv.nativeapp.js
 
 import com.dokar.quickjs.QuickJs
-import com.dokar.quickjs.binding.define
 import com.dokar.quickjs.binding.function
 import com.dokar.quickjs.evaluate
 import kotlinx.coroutines.CoroutineDispatcher
@@ -27,16 +26,21 @@ class QuickJsModuleRuntime(
         check(!loaded) { "JavaScript module already loaded" }
         val js = QuickJs.create(dispatcher)
         try {
-            js.define("host") {
-                HongGuoHostMethods.names.forEach { method ->
-                    function(method) { args -> host.invoke(method, args.toList()) }
+            HongGuoHostMethods.names.forEach { method ->
+                js.function("__hongguo_host_$method") { args ->
+                    host.invoke(method, args.toList())
                 }
             }
+            val hostObject = HongGuoHostMethods.names.joinToString(",") { method ->
+                "$method: (...args) => __hongguo_host_$method(...args)"
+            }
+            js.evaluate<Unit>("globalThis.host = {$hostObject};", filename = "hongguo-host.js")
+
             val bootstrap = """
                 (function () {
                   const module = { exports: {} };
                   const exports = module.exports;
-                  const hostRef = host;
+                  const hostRef = globalThis.host;
                   (function (module, exports, host) {
                     $source
                   })(module, exports, hostRef);
@@ -68,6 +72,8 @@ class QuickJsModuleRuntime(
             require(safeArgs.trim().startsWith("[") && safeArgs.trim().endsWith("]")) {
                 "Arguments must be a JSON array"
             }
+            // Validate before embedding so callers cannot inject executable source.
+            JSONObject("""{"args":$safeArgs}""")
             val script = """
                 (function () {
                   const fn = globalThis.__hongguoModule[$safeName];
