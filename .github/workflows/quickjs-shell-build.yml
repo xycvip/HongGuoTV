@@ -37,6 +37,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sdkmanager --list --channel=3 | grep -Ei "android-37|cinnamon|37-ext" || true
           sdkmanager --channel=3 --install "platforms;android-37"
 
       - name: 构建 Android Debug APK
