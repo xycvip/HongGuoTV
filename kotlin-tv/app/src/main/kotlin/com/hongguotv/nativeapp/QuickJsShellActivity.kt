@@ -56,7 +56,7 @@ class QuickJsShellActivity : Activity() {
         }
         queryInput = EditText(this).apply {
             hint = "输入短剧名称"
-            singleLine = true
+            setSingleLine(true)
             textSize = 18f
             setTextColor(0xffffffff.toInt())
             setHintTextColor(0xff8994a3.toInt())
