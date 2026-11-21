@@ -31,6 +31,7 @@ private val hostFunctionNames = listOf(
     "hexDecode",
     "hexEncode",
     "isKnown",
+    "maxPages",
     "md5",
     "parseHtml",
     "parseUrl",
