@@ -26,4 +26,5 @@ kotlin {
 
 dependencies {
     api("io.github.dokar3:quickjs-kt:1.0.18")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 }
