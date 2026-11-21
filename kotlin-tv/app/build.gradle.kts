@@ -30,15 +30,19 @@ android {
             ?: appVersionProperties.getProperty("APP_VERSION", "1.0.0")
     }
 
+    signingConfigs {
+        create("delivery") {
+            storeType = "PKCS12"
+            storeFile = signingValue("HONGGUOTV_KEYSTORE", "storeFile")?.let { file(it) }
+            storePassword = signingValue("HONGGUOTV_STORE_PASSWORD", "storePassword")
+            keyAlias = signingValue("HONGGUOTV_KEY_ALIAS", "keyAlias")
+            keyPassword = signingValue("HONGGUOTV_KEY_PASSWORD", "keyPassword")
+        }
+    }
+
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.create("delivery") {
-                storeType = "PKCS12"
-                storeFile = signingValue("HONGGUOTV_KEYSTORE", "storeFile")?.let { file(it) }
-                storePassword = signingValue("HONGGUOTV_STORE_PASSWORD", "storePassword")
-                keyAlias = signingValue("HONGGUOTV_KEY_ALIAS", "keyAlias")
-                keyPassword = signingValue("HONGGUOTV_KEY_PASSWORD", "keyPassword")
-            }
+            signingConfig = signingConfigs.getByName("delivery")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
