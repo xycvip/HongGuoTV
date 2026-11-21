@@ -2,6 +2,7 @@ package com.hongguotv.nativeapp
 
 import android.content.Context
 import com.hongguotv.quickjs.QuickJsRuntime
+import org.json.JSONObject
 
 /**
  * Loads the bundled RedGuoAPI Hongguo module without modifying its source.
@@ -17,6 +18,15 @@ internal class HongguoJsModule(context: Context) {
             filename = ASSET_PATH,
             exportName = EXPORT_NAME,
         )
+    }
+
+    suspend fun invoke(runtime: QuickJsRuntime, method: String, argumentsJson: String): String {
+        require(method.matches(Regex("[A-Za-z_$][A-Za-z0-9_$]*"))) { "Invalid module method" }
+        val encodedArguments = JSONObject.quote(argumentsJson)
+        val encodedMethod = JSONObject.quote(method)
+        val script = "(function () { val_dummy })()"
+            .replace("val_dummy", "const args = JSON.parse(" + encodedArguments + "); const target = globalThis." + EXPORT_NAME + "[" + encodedMethod + "]; if (typeof target !== \"function\") throw new Error(\"模块未导出函数 \" + " + encodedMethod + "); const result = target.apply(globalThis." + EXPORT_NAME + ", args); return JSON.stringify(result === undefined ? null : result);")
+        return runtime.evaluate<String>(script, "hongguo-invoke.js", asModule = false)
     }
 
     companion object {
