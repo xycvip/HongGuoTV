@@ -34,6 +34,34 @@ class QuickJsRuntime private constructor(
         return engine.evaluate(source, filename, asModule)
     }
 
+    /**
+     * Evaluate a CommonJS module without rewriting its original source.
+     *
+     * The module receives the global host adapter and exports through
+     * globalThis[exportName]. This keeps RedGuoAPI's module.exports contract.
+     */
+    suspend fun evaluateCommonJs(
+        source: String,
+        filename: String,
+        exportName: String = "__hongguoModule",
+    ) {
+        check(!closed.get()) { "QuickJS runtime is closed" }
+        require(exportName.matches(Regex("[A-Za-z_$][A-Za-z0-9_$]*"))) {
+            "Invalid CommonJS export name"
+        }
+        val wrapped = """
+            (function () {
+                const module = { exports: {} };
+                const exports = module.exports;
+                (function (module, exports) {
+                    $source
+                })(module, exports);
+                globalThis.$exportName = module.exports;
+            })();
+        """.trimIndent()
+        engine.evaluate<Unit>(wrapped, filename, asModule = false)
+    }
+
     /** Compile source to bytecode using the upstream engine. */
     fun compile(
         source: String,
