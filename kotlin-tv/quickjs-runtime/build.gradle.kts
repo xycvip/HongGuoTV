@@ -23,5 +23,4 @@ android {
 
 dependencies {
     api("io.github.dokar3:quickjs-kt:1.0.18")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }
