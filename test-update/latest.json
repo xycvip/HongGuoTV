@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "4933e4b20f11fa4a0a42b65aa2530f69ab14b143",
-  "versionCode": 96,
-  "versionName": "0.0.96",
+  "sourceCommit": "d5cd0deab34f537364f24096eeba7221c9b730b0",
+  "versionCode": 97,
+  "versionName": "0.0.97",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.96",
+  "tag": "hongguotv-bate-v0.0.97",
   "apk": {
-    "name": "HongguoTV-0.0.96.apk",
-    "size": 2048697,
-    "sha256": "c955e740c96907d542db701539d6016505099d8d593253ec1e2536504b9f0816",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.96/HongguoTV-0.0.96.apk"
+    "name": "HongguoTV-0.0.97.apk",
+    "size": 2027649,
+    "sha256": "07c75ddc43c85c8054d435515113ce92d6967177abf653fb69b8a83356934f18",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.97/HongguoTV-0.0.97.apk"
   },
-  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
+  "notes": "【播放与播放器】\n- 播放新集时清除线路失效提示\n【片源与数据管理】\n- 补齐线路失效提示所需 UI 导入\n【界面与交互】\n- 线路全部尝试失败时显示居中提示\n【其他功能与问题修复】\n- Remove unused QuickJS scaffolding\n- Remove unused QuickJS scaffolding\n- Fix QuickJS host object binding for CommonJS modules\n- Add QuickJS host bridge and CommonJS module runtime\n- Add QuickJS host bridge and CommonJS module runtime"
 }
