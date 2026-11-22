@@ -239,7 +239,11 @@ import java.util.Locale
             heading.addView(text(title,16f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
             heading.addView(text("左右查看更多",10f,muted))
             section.addView(heading)
-            val horizontal=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false }
+            val horizontal=HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled=false; clipToPadding=false
+                // 6dp 焦点呼吸位：推荐卡焦点环画在 padding 区不缺角，视口外内容仍被裁剪。
+                setPadding(dp(6),dp(6),dp(6),dp(6))
+            }
             val line=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.TOP }
             val width=((resources.displayMetrics.widthPixels*.9f-dp(70))/5).toInt().coerceAtLeast(dp(100))
             val posterHeight=((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()

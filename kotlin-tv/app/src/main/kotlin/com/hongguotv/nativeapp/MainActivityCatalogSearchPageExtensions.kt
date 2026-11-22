@@ -143,7 +143,7 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
             rightMargin=dp(14)
         })
         val keyboardScroll=ScrollView(this).apply {
-            clipChildren=false
+            // 滚动容器保留自身裁剪；焦点环靠 clipToPadding=false 显示在 padding 区。
             isVerticalScrollBarEnabled=false; clipToPadding=false; isFillViewport=true
             descendantFocusability=android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
@@ -152,7 +152,6 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
         contentRow.addView(leftPane,lp(dp(leftWidth.toInt()),-1))
 
         val midScroll=ScrollView(this).apply {
-            clipChildren=false
             isVerticalScrollBarEnabled=false
             clipToPadding=false
             isFillViewport=true

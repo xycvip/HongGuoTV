@@ -39,6 +39,9 @@ internal class ThirdSourceGridRenderer(
         val layout = GridLayoutManager(activity, columns)
         val recycler = RecyclerView(activity).apply {
             id = View.generateViewId()
+            // 与主网格同款：滚动容器保留裁剪，左上 10dp 焦点呼吸位保住首列/首行焦点环。
+            clipToPadding = false
+            setPadding(ui.dp(10), ui.dp(10), ui.dp(4), ui.dp(4))
             setLayoutManager(layout)
             setAdapter(adapter)
             itemAnimator = null

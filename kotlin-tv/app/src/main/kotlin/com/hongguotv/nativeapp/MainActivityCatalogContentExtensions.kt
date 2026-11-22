@@ -329,8 +329,8 @@ internal fun MainActivity.renderCatalogContent(
                 body.layoutParams=lp(-1,dp(viewportDp))
                 val pageScroll=ScrollView(this).apply {
                     isVerticalScrollBarEnabled=false
+                    // 滚动容器保留自身裁剪：内部网格/筛选条滚出视口的内容不得越界绘制。
                     clipToPadding=false
-                    clipChildren=false
                     isFillViewport=true
                     overScrollMode=View.OVER_SCROLL_NEVER
                     descendantFocusability=android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS

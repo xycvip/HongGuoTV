@@ -36,15 +36,24 @@ internal object FocusRules {
     }
 
     /**
-     * 页面渲染完成后对整棵内容树放开裁剪。焦点放大 4.5% + 外扩白环
-     * 都画在 View 边界之外，边缘卡片不放开裁剪必然缺一角。
+     * 页面渲染完成后对整棵内容树放开裁剪。
      *
-     * 只放开 clipChildren 不够：RecyclerView/ScrollView/LinearLayout 默认
-     * clipToPadding=true，会把子项画进 padding 区的部分裁掉 —— 首行海报的
-     * 焦点环上缘、最左列海报的左缘缺角正是栽在这里。两类裁剪一并放开。
+     * 两类裁剪要区分对待：
+     *  - **非滚动容器**：全部放开 clipChildren/clipToPadding。焦点放大 4.5% 的
+     *    白环画在 View 边界之外，不放开必然缺一角。
+     *  - **滚动容器（RecyclerView/ScrollView/HorizontalScrollView 等）**：
+     *    只放开 clipToPadding，**保留 clipChildren**。视口外的半张海报属于
+     *    "还没滚进来"的内容，一旦越界绘制就会叠到竖栏甚至整张压上去（真机
+     *    实测）；视口内边缘卡片的焦点环则靠 clipToPadding=false 加容器自身
+     *    预留的焦点呼吸位（padding）完整显示。
      */
     fun unclipTree(view: ViewGroup) {
-        view.clipChildren = false
+        val scroll = view is android.widget.ScrollView ||
+            view is android.widget.HorizontalScrollView ||
+            view is androidx.recyclerview.widget.RecyclerView ||
+            view is android.widget.ListView ||
+            view is android.widget.GridView
+        if (!scroll) view.clipChildren = false
         view.clipToPadding = false
         for (index in 0 until view.childCount) {
             val child = view.getChildAt(index)

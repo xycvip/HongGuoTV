@@ -14,8 +14,8 @@ android {
         // targetSdk 34：兼容 Play 2024 起的最低要求。本项目没有 Service/通知，
         // 主要适配点是 Scoped Storage（备份目录已迁到应用专属存储）与导出组件声明。
         targetSdk = 34
-        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 15
-        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: appVersionProperties.getProperty("APP_VERSION", "1.1.3")
+        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 16
+        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: appVersionProperties.getProperty("APP_VERSION", "1.1.4")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }

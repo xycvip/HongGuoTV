@@ -40,7 +40,11 @@ import com.hongguotv.core.*
         val grid=GridLayoutManager(this,cols)
         grid.spanSizeLookup=object: GridLayoutManager.SpanSizeLookup() { override fun getSpanSize(position: Int)=if(adapter.isFooter(position)) cols else 1 }
         val recycler=RecyclerView(this).apply {
-            id=View.generateViewId(); clipToPadding=false; clipChildren=false; isVerticalScrollBarEnabled=false; itemAnimator=null; isNestedScrollingEnabled=true
+            // 滚动容器保留自身裁剪：视口外的半张卡不得越界画到竖栏上。
+            // 左上各 10dp 焦点呼吸位：首列/首行卡片的焦点环画在 padding 区内
+            // （clipToPadding=false），既不缺角也不会越出视口。
+            id=View.generateViewId(); clipToPadding=false; isVerticalScrollBarEnabled=false; itemAnimator=null; isNestedScrollingEnabled=true
+            setPadding(dp(10),dp(10),dp(4),dp(4))
             layoutManager=grid; this.adapter=adapter
             val focusRecycler=this
             // 筛选头把焦点交给 RecyclerView 时，必须先由容器自身接住，

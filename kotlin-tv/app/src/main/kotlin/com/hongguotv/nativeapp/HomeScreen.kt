@@ -38,7 +38,9 @@ class HomeScreen(
     private fun shape(focus: Boolean)=TvStyle.card(context,focus)
     private fun label(value: String,size: Float,color: Int=TvStyle.text)=TextView(context).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
     private val scroll=ScrollView(context).apply {
-        isVerticalScrollBarEnabled=false; clipToPadding=false; clipChildren=false
+        // 滚动容器保留自身裁剪：货架海报滚出视口的部分不允许越界绘制；
+        // clipToPadding=false 让边缘卡片的焦点环画进 padding 区仍完整。
+        isVerticalScrollBarEnabled=false; clipToPadding=false
         setOnTouchListener { _,event ->
             when(event.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_MOVE,
@@ -174,9 +176,11 @@ class HomeScreen(
                 block.addView(heading)
             }
             val horizontal=VerticalFriendlyHorizontalScrollView(context).apply {
-                isHorizontalScrollBarEnabled=false; clipToPadding=false; clipChildren=false
-                // 左右留 6dp：焦点外扩与投影需要的呼吸位，同时首列焦点框不再贴边被裁。
-                setPadding(dp(6),dp(2),dp(6),dp(2)); isFillViewport=shelf.key=="random"
+                isHorizontalScrollBarEnabled=false; clipToPadding=false
+                // 上下 10dp、左右 6dp 焦点呼吸位：卡片焦点环（放大 4.5%）画在
+                // padding 区内不缺角；视口外的半张卡仍被货架自身裁剪，
+                // 不会越界叠到左侧竖栏上（真机实测）。
+                setPadding(dp(6),dp(10),dp(6),dp(10)); isFillViewport=shelf.key=="random"
                 setOnTouchListener { _,event ->
                     when(event.actionMasked) {
                         android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_MOVE,

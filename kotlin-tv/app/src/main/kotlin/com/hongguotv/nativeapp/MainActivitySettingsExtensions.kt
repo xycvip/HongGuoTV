@@ -47,14 +47,17 @@ import java.util.Locale
             setPadding(0,dp(6),0,0)
         }
         val body=column()
-        val bodyScroll=ScrollView(this).apply { clipChildren=false }
+        val bodyScroll=ScrollView(this).apply { clipToPadding=false }
         bodyScroll.addView(body)
         bodyScroll.setOnScrollChangeListener { _,_,scrollY,_,oldY -> onCatalogContentScroll(scrollY>dp(1)) }
         val contentHost=row().apply { gravity=Gravity.TOP }
         contentHost.addView(categoryCard,lp(dp(headingWidth),-1))
         contentHost.addView(Space(this),lp(dp(if(narrow) TvMetric.GAP_M else TvMetric.GAP_XL),1))
         contentHost.addView(bodyScroll,LinearLayout.LayoutParams(0,-1,1f))
-        parent.addView(contentHost,lp(-1,0).apply { weight=1f })
+        // 注意：settingsHost 是横向容器，这里必须占满父容器高度（-1）；
+        // 误用竖向惯用的 (−1,0)+weight 会把 weight 作用到宽度上、高度量成 0，
+        // 左侧分类列随之整列消失、右侧滚动区脱离页面骨架（真机实测）。
+        parent.addView(contentHost,lp(-1,-1))
         val sectionsHost=column()
         body.addView(sectionsHost,lp(-1,-2))
 

@@ -591,7 +591,7 @@ private fun MainActivity.pushText(value:String,size:Float,color:Int=TvStyle.text
     text=value;textSize=size;setTextColor(color);setLineSpacing(dp(6).toFloat(),1f)
 }
 internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
-    val scroll=ScrollView(this).apply { isFillViewport=true;isVerticalScrollBarEnabled=false;clipChildren=false }
+    val scroll=ScrollView(this).apply { isFillViewport=true;isVerticalScrollBarEnabled=false;clipToPadding=false }
     val page=LinearLayout(this).apply {
         orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER
         setPadding(dp(TvMetric.GAP_XL),dp(TvMetric.GAP_L),dp(TvMetric.GAP_XL),dp(TvMetric.GAP_L))

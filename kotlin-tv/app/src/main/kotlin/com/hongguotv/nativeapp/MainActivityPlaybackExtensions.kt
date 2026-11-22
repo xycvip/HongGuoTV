@@ -201,7 +201,6 @@ import com.hongguotv.core.*
             controls=column().apply { setPadding(0,dp(12),0,0); visibility=View.GONE }; hud.addView(controls)
             root.addView(ScrollView(this).apply {
                 isVerticalScrollBarEnabled=false
-                clipChildren=false
                 clipToPadding=false
                 elevation=dp(8).toFloat()
                 addView(hud)
