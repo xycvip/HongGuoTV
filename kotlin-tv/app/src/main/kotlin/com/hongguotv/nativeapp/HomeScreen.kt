@@ -28,14 +28,18 @@ class HomeScreen(
     data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
     data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null)
     data class Position(val focus: String,val shelf: String?,val column: Int,val row: Int,val vertical: Int,val horizontal: Map<String,Int>)
-    private data class Card(val key: String,val view: LinearLayout,val image: ImageView?,val title: TextView,val tags: TextView,val label: TextView,val progress: ProgressBar?,var entry: Entry?,var pending: Boolean=false)
+    private data class Card(val key: String,val view: LinearLayout,val image: ImageView?,val title: TextView,val label: TextView,val progress: ProgressBar?,var entry: Entry?,var pending: Boolean=false)
     private data class Row(val key: String,val block: LinearLayout,val horizontal: HorizontalScrollView,val cards: List<Card>)
     private val accent=TvStyle.accent
     private fun dp(n: Int)=(n*resources.displayMetrics.density).toInt()
     private fun shape(focus: Boolean)=TvStyle.card(context,focus)
+    /** 海报底部渐隐，供标题压图使用；终点用墨黑而非主题背景，浅色主题下也能压住浅色画面。 */
+    private fun posterScrim()=android.graphics.drawable.GradientDrawable(
+        android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(android.graphics.Color.TRANSPARENT,withAlpha(TvPalette.INK_950,.88f)))
     private fun label(value: String,size: Float,color: Int=TvStyle.text)=TextView(context).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
     private val scroll=ScrollView(context).apply {
-        isVerticalScrollBarEnabled=false; clipToPadding=false
+        isVerticalScrollBarEnabled=false; clipToPadding=false; clipChildren=false
         setOnTouchListener { _,event ->
             when(event.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_MOVE,
@@ -48,12 +52,14 @@ class HomeScreen(
             onVerticalScroll(y-oldY)
         }
     }
-    private val contents=LinearLayout(context).apply { orientation=VERTICAL }
+    private val contents=LinearLayout(context).apply { orientation=VERTICAL; clipChildren=false }
     private val rows=mutableListOf<Row>()
     private val cards=linkedMapOf<String,Card>()
     private var shelves=emptyList<Shelf>()
     private var footerMore: (() -> Unit)?=null
     private var moreButton: View?=null
+    private var heroView: HomeHeroView?=null
+    private val HERO_KEY="home:hero"
     private var lastFocus=""
     private var lastRow: String?=null
     private var restoring=false
@@ -94,7 +100,7 @@ class HomeScreen(
     init { orientation=VERTICAL; scroll.addView(contents); addView(scroll,LayoutParams(-1,0,1f)) }
 
     fun capturePosition(): Position {
-        val key=findFocus()?.tag?.toString()?.takeIf { it in cards || it=="home:refresh" || it=="home:more" } ?: lastFocus
+        val key=findFocus()?.tag?.toString()?.takeIf { it in cards || it==HERO_KEY || it=="home:refresh" || it=="home:more" } ?: lastFocus
         val row=rows.indexOfFirst { item -> item.cards.any { it.key==key } }
         val column=rows.getOrNull(row)?.cards?.indexOfFirst { it.key==key } ?: 0
         return Position(key,rows.getOrNull(row)?.key,column.coerceAtLeast(0),row.coerceAtLeast(0),scroll.scrollY,rows.associate { it.key to it.horizontal.scrollX })
@@ -118,7 +124,7 @@ class HomeScreen(
     fun updateEntry(shelfKey: String,entry: Entry): Boolean {
         val card=cards["$shelfKey:${entry.series.id}"] ?: return false
         if(card.entry?.series?.cover!=entry.series.cover) { card.image?.setImageDrawable(null) }
-        card.entry=entry; card.title.text=entry.series.title; card.tags.text=entry.series.tags.split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3).joinToString("  ·  "); card.tags.visibility=if(card.tags.text.isNullOrBlank()) View.INVISIBLE else View.VISIBLE; card.label.text=entry.label
+        card.entry=entry; card.title.text=entry.series.title; card.label.text=entry.label
         card.progress?.apply { progress=entry.progress ?: 0; visibility=if(entry.progress==null) INVISIBLE else VISIBLE }
         card.view.contentDescription="${shelves.firstOrNull { it.key==shelfKey }?.title.orEmpty()}，${entry.series.title}，${entry.label}"
         shelves=shelves.map { shelf -> if(shelf.key==shelfKey) shelf.copy(entries=shelf.entries.map { if(it.series.id==entry.series.id) entry else it }) else shelf }
@@ -140,6 +146,16 @@ class HomeScreen(
         val previous=position ?: if(rows.isNotEmpty()) capturePosition() else null
         this.shelves=shelves; footerMore=more; revision++; val ticket=revision; restoring=true
         contents.removeAllViews(); rows.clear(); cards.clear(); moreButton=null; lastRow=null
+        // 顶部主推位：优先"接着看"的第一条，其次"收藏有更新"，最后退回第一个有内容的货架。
+        val lead=shelves.firstOrNull { it.entries.isNotEmpty() && it.key=="resume" }
+            ?: shelves.firstOrNull { it.entries.isNotEmpty() && it.key=="updates" }
+            ?: shelves.firstOrNull { it.entries.isNotEmpty() }
+        if(lead!=null) {
+            val hero=heroView ?: HomeHeroView(context,loadCover) { item -> lastFocus=HERO_KEY; remember(HERO_KEY); open(item.series,item.resume) }
+                .also { it.id=View.generateViewId(); it.tag=HERO_KEY; heroView=it }
+            hero.bind(lead.entries.first())
+            contents.addView(hero,LayoutParams(-1,-2))
+        }
         shelves.filter { it.entries.isNotEmpty() || it.more!=null }.forEach { shelf ->
             val block=LinearLayout(context).apply { orientation=VERTICAL }
             // 随机推荐区保留居中的操作卡片，不再额外显示重复的栏目标题。
@@ -151,7 +167,7 @@ class HomeScreen(
                 block.addView(heading)
             }
             val horizontal=VerticalFriendlyHorizontalScrollView(context).apply {
-                isHorizontalScrollBarEnabled=false; clipToPadding=false
+                isHorizontalScrollBarEnabled=false; clipToPadding=false; clipChildren=false
                 setPadding(dp(2),dp(2),dp(2),dp(2)); isFillViewport=shelf.key=="random"
                 setOnTouchListener { _,event ->
                     when(event.actionMasked) {
@@ -161,18 +177,28 @@ class HomeScreen(
                     false
                 }
             }
-            val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=if(shelf.key=="random") Gravity.CENTER else Gravity.TOP }
+            val line=LinearLayout(context).apply { orientation=HORIZONTAL; clipChildren=false; gravity=if(shelf.key=="random") Gravity.CENTER else Gravity.TOP }
             horizontal.addView(line, if(shelf.key=="random") LayoutParams(-1,-2) else LayoutParams(-2,-2)); block.addView(horizontal)
             val rowCards=mutableListOf<Card>()
             fun addCard(entry: Entry?,moreAction: (() -> Unit)?=null) {
+                // 五列：单卡约 190dp，与剧场网格的列宽对齐；改回 6 会立刻变小一圈。
                 val width=if(shelf.key=="random") dp(320)
-                    else ((resources.displayMetrics.widthPixels*.9f-dp(70))/6).toInt().coerceAtLeast(dp(100))
+                    else ((resources.displayMetrics.widthPixels*.9f-dp(70))/5).toInt().coerceAtLeast(dp(100))
                 val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
-                val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),if(shelf.key=="random") dp(4) else dp(8)); background=shape(false) }
-                val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
+                val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(4)); background=shape(false) }
+                val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.CENTER_CROP; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
                 val posterHeight=if(shelf.key=="random") dp(76) else ((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()
+                // 海报容器：圆角裁剪，标题稍后压进底部遮罩。原来图片是方角且 FIT_CENTER，
+                // 非 0.7 比例的封面会在卡里留黑边，标题又单独占一行，卡面显得零碎。
+                var artwork: FrameLayout? = null
                 if(image!=null) {
-                    view.addView(image,LayoutParams(-1,posterHeight))
+                    artwork=FrameLayout(context).apply {
+                        background=TvStyle.shape(context,TvStyle.colors.surface,radius=12)
+                        clipToOutline=true
+                        addView(image,FrameLayout.LayoutParams(-1,-1))
+                        addView(View(context).apply { background=posterScrim() },FrameLayout.LayoutParams(-1,(posterHeight*.42f).toInt(),Gravity.BOTTOM))
+                    }
+                    view.addView(artwork,LayoutParams(-1,posterHeight))
                 } else {
                     // “查看全部”使用完整的探索卡片，不再是空白海报框里孤零零的箭头。
                     val moreTile=LinearLayout(context).apply {
@@ -215,17 +241,19 @@ class HomeScreen(
                     }
                     view.addView(moreTile,LayoutParams(-1,if(shelf.key=="random") dp(96) else posterHeight))
                 }
-                val title=label(entry?.series?.title ?: "查看全部",14f).apply { minLines=2; maxLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) }
-                val tags=label(entry?.series?.tags.orEmpty().split(Regex("\\s*[·|，,、]\\s*")).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3).joinToString("  ·  "),10.5f,TvStyle.accent).apply { minLines=1; maxLines=1; minHeight=dp(17); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0); visibility=if(text.isNullOrBlank()) INVISIBLE else VISIBLE }
-                val badge=label(entry?.label ?: shelf.title,12f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(2),0,0) }
+                // 标题压在海报底部遮罩上：字号提一档、只留一行，卡片下方只保留集数/进度。
+                val title=label(entry?.series?.title ?: "查看全部",15f,TvPalette.INK_100).apply {
+                    setLines(1); ellipsize=TextUtils.TruncateAt.END
+                    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                }
+                artwork?.addView(title,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM).apply { leftMargin=dp(11); rightMargin=dp(11); bottomMargin=dp(9) })
+                val badge=label(entry?.label ?: shelf.title,11.5f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) }
                 val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }
                 if(shelf.key!="random") {
-                    view.addView(title)
-                    view.addView(tags)
                     view.addView(badge)
-                    view.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(4) })
+                    view.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(5) })
                 }
-                val card=Card(key,view,image,title,tags,badge,progress,entry)
+                val card=Card(key,view,image,title,badge,progress,entry)
                 view.contentDescription=entry?.let { "${shelf.title}，${it.series.title}，${it.label}" } ?: "查看全部${shelf.title}"
                 view.setOnClickListener { lastFocus=key; remember(key); card.entry?.let { open(it.series,it.resume) } ?: moreAction?.invoke() }
                 if(entry!=null) {
@@ -234,6 +262,10 @@ class HomeScreen(
                 }
                 view.setOnFocusChangeListener { _,focused ->
                     view.background=shape(focused)
+                    // 遥控器逐格移动时给一点位移反馈；缩放要靠上面几层容器 clipChildren=false 才不被裁掉。
+                    view.animate().scaleX(if(focused) 1.04f else 1f).scaleY(if(focused) 1.04f else 1f)
+                        .setDuration(if(focused) 150 else 110)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
                     if(focused) {
                         lastFocus=key; remember(key); card.entry?.let { selected(it.series,it.label) }
                         if(!restoring) {
@@ -257,9 +289,13 @@ class HomeScreen(
         moreButton=null
         rows.forEachIndexed { i,row -> row.cards.forEachIndexed { j,card ->
             card.view.nextFocusLeftId=row.cards[(j-1).coerceAtLeast(0)].view.id; card.view.nextFocusRightId=row.cards[(j+1).coerceAtMost(row.cards.lastIndex)].view.id
-            card.view.nextFocusUpId=if(i==0) top.id else rows[i-1].cards[j.coerceAtMost(rows[i-1].cards.lastIndex)].view.id
+            card.view.nextFocusUpId=if(i==0) (heroView?.id ?: top.id) else rows[i-1].cards[j.coerceAtMost(rows[i-1].cards.lastIndex)].view.id
             card.view.nextFocusDownId=if(i==rows.lastIndex) card.view.id else rows[i+1].cards[j.coerceAtMost(rows[i+1].cards.lastIndex)].view.id
         } }
+        heroView?.let { hero ->
+            hero.nextFocusUpId=top.id
+            hero.nextFocusDownId=rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: hero.id
+        }
         top.nextFocusDownId=firstId()
         val preferred=focus.ifBlank { previous?.focus.orEmpty() }
         val target=target(preferred,previous)
@@ -284,6 +320,7 @@ class HomeScreen(
     }
 
     private fun target(key: String,position: Position?): View {
+        if(key==HERO_KEY) heroView?.let { return it }
         if(key=="home:refresh") return top
         if(key=="home:more") moreButton?.let { return it }
         cards[key]?.let { return it.view }
@@ -359,5 +396,5 @@ class HomeScreen(
             row.cards.forEach { card -> card.view.getChildAt(0).let { artwork -> if(artwork.layoutParams.height!=imageHeight) artwork.layoutParams=artwork.layoutParams.apply { height=imageHeight } } }
         }
     }
-    fun firstId()=rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id
+    fun firstId()=heroView?.id ?: rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id
 }
