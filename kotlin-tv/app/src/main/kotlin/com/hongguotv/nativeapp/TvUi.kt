@@ -221,3 +221,36 @@ internal fun MainActivity.addToneButton(
     })
     return view
 }
+
+/**
+ * 顶部导航项的统一画法。
+ *
+ * 改造前的焦点态是"整块纯白底 + 深色字"，在磨砂胶囊里像贴了一张白标签；
+ * 当前页用棕褐色块，同样抢眼。现在焦点是"半透明白底 + 白色描边环 + 6% 放大"，
+ * 当前页是"强调色文字 + 14% 强调底色"，两者层次分明，也不会盖住品牌色。
+ */
+internal fun MainActivity.paintNavItem(item: TextView, focused: Boolean, active: Boolean) {
+    item.setTextColor(
+        when {
+            focused -> TvStyle.colors.textPrimary
+            active -> TvStyle.colors.accent
+            else -> TvStyle.colors.textSecondary
+        },
+    )
+    item.background = when {
+        focused -> TvStyle.shape(
+            this,
+            withAlpha(TvStyle.colors.textPrimary, 0.16f),
+            TvStyle.colors.focusRing,
+            TvMetric.RADIUS_S,
+        )
+        active -> TvStyle.shape(this, withAlpha(TvStyle.colors.accent, 0.14f), Color.TRANSPARENT, TvMetric.RADIUS_S)
+        else -> null
+    }
+    item.typeface = Typeface.create(
+        if (focused || active) "sans-serif-medium" else "sans-serif",
+        Typeface.NORMAL,
+    )
+    item.elevation = if (focused) dp(5).toFloat() else 0f
+    item.animateFocus(focused, 1.06f)
+}

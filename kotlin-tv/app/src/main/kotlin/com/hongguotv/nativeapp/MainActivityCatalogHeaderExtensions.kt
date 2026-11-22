@@ -60,8 +60,9 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             addView(flower,FrameLayout.LayoutParams(flowerSize,flowerSize,Gravity.CENTER))
             setOnClickListener { showRandomPicks() }
             fun paint(focused:Boolean) {
-                background=rounded(if(focused) white else Color.TRANSPARENT)
+                background=if(focused) TvStyle.shape(this@renderCatalogHeader,withAlpha(TvStyle.colors.textPrimary,.16f),TvStyle.colors.focusRing,TvMetric.RADIUS_PILL) else null
                 elevation=if(focused) dp(4).toFloat() else 0f
+                animateFocus(focused,1.05f)
             }
             paint(false)
             setOnFocusChangeListener { _,focused ->
@@ -85,11 +86,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
                 layoutParams=params
             }
             fun paint(focused:Boolean) {
-                val active=tab==1
-                setTextColor(if(focused) bg else if(active) accent else muted)
-                background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
-                typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
-                elevation=if(focused) dp(4).toFloat() else 0f
+                paintNavItem(this,focused,tab==1)
             }
             // 与首页、剧场等导航标签使用完全相同的未选中透明背景规则。
             paint(false)
@@ -111,18 +108,12 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             val active=if(pushPlaybackPageActive) tabId==-1 else when(tabId) { -1 -> false; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
             val item=addButton(pageNav,label,active) { if(tabId==-1) showPushPlayback() else switchTab(tabId) }
             if(tabId==-1) item.tag="nav:push-playback"
-            item.textSize=if(compactHeader) 13.5f else 14f
+            item.textSize=if(compactHeader) TvMetric.TEXT_BODY else TvMetric.TEXT_LABEL
             item.minHeight=dp(40)
             item.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
             fun paint(focused:Boolean) {
                 val active=if(pushPlaybackPageActive) tabId==-1 else when(tabId) { -1 -> false; 9 -> tab==3 || tab==4; 6 -> screen=="account"; else -> tabId==tab }
-                item.setTextColor(if(focused) bg else if(active) accent else muted)
-                item.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
-                item.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
-                item.animate().cancel()
-                item.scaleX=1f
-                item.scaleY=1f
-                item.elevation=if(focused) dp(5).toFloat() else 0f
+                paintNavItem(item,focused,active)
             }
             paint(false)
             item.setOnFocusChangeListener { _,focused ->
@@ -139,15 +130,11 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             .getBoolean("show_third_source",false)
         if(showThirdSource) {
             val sourceItem=addButton(pageNav,"片源",screen=="third_source") { pushPlaybackPageActive=false; closePushPlaybackService(); openThirdSource() }
-            sourceItem.textSize=if(compactHeader) 13.5f else 14f
+            sourceItem.textSize=if(compactHeader) TvMetric.TEXT_BODY else TvMetric.TEXT_LABEL
             sourceItem.minHeight=dp(40)
             sourceItem.setPadding(dp(if(compactHeader) 11 else 14),dp(8),dp(if(compactHeader) 11 else 14),dp(8))
             fun paintSource(focused:Boolean) {
-                val active=!pushPlaybackPageActive && screen=="third_source"
-                sourceItem.setTextColor(if(focused) bg else if(active) accent else muted)
-                sourceItem.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
-                sourceItem.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
-                sourceItem.elevation=if(focused) dp(5).toFloat() else 0f
+                paintNavItem(sourceItem,focused,!pushPlaybackPageActive && screen=="third_source")
             }
             paintSource(false)
             sourceItem.setOnFocusChangeListener { _,focused -> paintSource(focused); if(focused) revealCatalogNavForFocus() }

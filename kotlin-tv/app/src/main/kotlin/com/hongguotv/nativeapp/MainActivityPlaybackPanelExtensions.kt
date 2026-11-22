@@ -46,7 +46,8 @@ internal fun MainActivity.showFramePicker(anchor: View,inPlayer: Boolean) {
             controls.addView(primaryStrip,lp(-1,-2))
         }
         addButton(transport,"评论") { openOfficialComments(transport.findViewWithTag<View>("player:comments")) }.apply { tag="player:comments" }
-        val play=addButton(transport,if(player?.playWhenReady==true) "暂停" else "播放") { togglePlayback() }.also { transportPlay=it }
+        // 播放/暂停是这一屏唯一的主操作，用实心强调色；其余按钮保持描边，避免一排同级按钮。
+        val play=addToneButton(transport,if(player?.playWhenReady==true) "暂停" else "播放",TvTone.Primary) { togglePlayback() }.also { transportPlay=it }
         addButton(transport,"重播") { playEpisode(episodeIndex,0,autoplay=true,forceRebuild=true) }
         addButton(transport,"上集") { if(episodeIndex>0) playEpisode(episodeIndex-1) }.apply { isEnabled=episodeIndex>0; isFocusable=episodeIndex>0; alpha=if(episodeIndex>0) 1f else .4f }
         addButton(transport,"下集") { if(episodeIndex<(detail?.episodes?.lastIndex ?: 0)) playEpisode(episodeIndex+1) }.apply { val enabled=episodeIndex<(detail?.episodes?.lastIndex ?: 0); isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .4f }

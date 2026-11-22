@@ -190,9 +190,13 @@ import java.util.concurrent.atomic.AtomicLong
             // 手机竖屏可用宽度有限，控制栏贴近屏幕两侧；横屏与电视沿用原有留白。
             val phonePortraitHud=isPhoneDevice && heightDp()>widthDp()
             val hudHorizontalInset=if(phonePortraitHud) dp(2) else dp(widthDp()*.05f)
-            hud=column().apply { setPadding(hudHorizontalInset,dp(20),hudHorizontalInset,(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,withAlpha(TvStyle.colors.background, 0.94f))) }
-            playbackTitle=text("",23f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setTypeface(null,Typeface.BOLD) }; hud.addView(playbackTitle)
-            playbackText=text("",15f,muted).apply { setPadding(0,dp(10),0,dp(9)) }; hud.addView(playbackText)
+            hud=column().apply { setPadding(hudHorizontalInset,dp(20),hudHorizontalInset,(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(
+                Color.TRANSPARENT,
+                withAlpha(TvPalette.INK_950,0.30f),
+                withAlpha(TvPalette.INK_950,0.86f),
+                withAlpha(TvPalette.INK_950,0.96f))) }
+            playbackTitle=text("",TvMetric.TEXT_TITLE).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setTypeface(null,Typeface.BOLD); includeFontPadding=false }; hud.addView(playbackTitle)
+            playbackText=text("",TvMetric.TEXT_BODY,TvStyle.colors.textSecondary).apply { setPadding(0,dp(8),0,dp(10)); includeFontPadding=false }; hud.addView(playbackText)
             progressBar=(if(isPhoneDevice) SeekBar(this) else ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal)).apply {
                 max=1000
                 progressTintList=android.content.res.ColorStateList.valueOf(accent)
@@ -220,8 +224,9 @@ import java.util.concurrent.atomic.AtomicLong
                 }
             }
             if(isPhoneDevice && heightDp()>widthDp()) progressBar.setPadding(0,progressBar.paddingTop,0,progressBar.paddingBottom)
-            hud.addView(progressBar,lp(-1,if(isPhoneDevice) dp(36) else dp(4)))
-            hud.addView(text(if(isPhoneDevice) "拖动进度条定位    左右滑动快进/快退    左侧上下调亮度 / 右侧上下调音量    双击播放/暂停" else "确认 播放/暂停    ↑ 上一集    ↓ 下一集    左右 快退/快进    菜单 播放菜单    返回 收起 / 退出",13f,muted).apply { setPadding(0,dp(12),0,0) })
+            // 电视端进度条只有 4dp，隔着 3 米几乎看不见；加到 6dp 并留出一点上下空隙。
+            hud.addView(progressBar,lp(-1,if(isPhoneDevice) dp(36) else dp(6)).apply { topMargin=dp(2); bottomMargin=dp(2) })
+            hud.addView(text(if(isPhoneDevice) "拖动进度条定位    左右滑动快进/快退    左侧上下调亮度 / 右侧上下调音量    双击播放/暂停" else "确认 播放/暂停    ↑ 上一集    ↓ 下一集    左右 快退/快进    菜单 播放菜单    返回 收起 / 退出",TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary).apply { setPadding(0,dp(10),0,0); includeFontPadding=false })
             controls=column().apply { setPadding(0,dp(12),0,0); visibility=View.GONE }; hud.addView(controls)
             root.addView(ScrollView(this).apply {
                 isVerticalScrollBarEnabled=false

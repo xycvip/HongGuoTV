@@ -52,7 +52,7 @@ object TvStyle {
         GradientDrawable.Orientation.TOP_BOTTOM,
         intArrayOf(colors.navTop, colors.navMid, colors.navBottom)
     ).apply {
-        cornerRadius=16*context.resources.displayMetrics.density
+        cornerRadius=20*context.resources.displayMetrics.density
         setStroke(
             (1*context.resources.displayMetrics.density).toInt().coerceAtLeast(1),
             currentColors().navStroke
