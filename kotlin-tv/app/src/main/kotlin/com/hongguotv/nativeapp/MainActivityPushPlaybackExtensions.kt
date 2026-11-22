@@ -546,10 +546,10 @@ internal fun MainActivity.closePushPlaybackService() {
     pushPlaybackServer=null
     pushPlaybackQrView?.setImageDrawable(null)
     pushPlaybackUrlView?.text="访问地址：服务未开启"
-    pushPlaybackStatusView?.text="推送服务已停止。"
+    pushPlaybackStatusView?.text="投播服务已停止。"
 }
 private fun MainActivity.pushForm()=PhoneForm(
-    heading="推送播放",
+    heading="投播",
     description="复制红果短剧或抖音 App 中的完整分享文案，粘贴到下方输入框，再发送到电视。",
     fields=listOf(PhoneField("share","分享文案 / 分享链接","请粘贴完整分享文案，支持多行内容……",10000,true,true)),
     submitLabel="发送到电视",doneMessage="发送成功",doneHint="电视已收到分享内容，正在搜索匹配剧集。"
@@ -578,7 +578,7 @@ private fun MainActivity.startPushPlaybackService() {
         pushPlaybackServer=null
         pushPlaybackQrView?.setImageDrawable(null)
         pushPlaybackStatusView?.text=if(problem is java.net.BindException) "端口 3309 已被占用，请关闭占用端口的服务后重试。"
-            else "启动推送服务失败：${problem.message ?: "请检查网络设置"}"
+            else "启动投播服务失败：${problem.message ?: "请检查网络设置"}"
     }
 }
 private fun pushQr(url:String):Bitmap {
@@ -610,7 +610,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
 
     // ── 左栏：眉题 + 两行大标题 + 副文 + 状态与访问地址
     val left=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-    left.addView(pushText("推送播放  ·  PUSH TO TV",TvMetric.TEXT_CAPTION,TvStyle.colors.accent).apply {
+    left.addView(pushText("投播  ·  PUSH TO TV",TvMetric.TEXT_CAPTION,TvStyle.colors.accent).apply {
         setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL))
         letterSpacing=0.12f
     })
@@ -667,7 +667,7 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
             v.animateFocus(focused,1.02f)
         }
     }
-    val qr=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="手机扫码打开推送播放网页" }
+    val qr=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="手机扫码打开投播网页" }
     qrCard.addView(qr,LinearLayout.LayoutParams(dp(216),dp(216)))
     right.addView(qrCard,LinearLayout.LayoutParams(-2,-2))
     val steps=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(0,dp(20),0,0) }

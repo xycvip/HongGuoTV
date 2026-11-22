@@ -23,10 +23,10 @@ class PosterLayoutTest {
         assertEquals(3, PosterLayout.autoColumns(508f, 360f))
     }
 
-    /** 4K 电视：内容区 1716dp，封顶 7 列，避免单张海报薄成一条。 */
+    /** 4K 电视：内容区 1716dp，自动档封顶 5 列（真机反馈 6/7 列太碎），手动档仍可选 7。 */
     @Test
-    fun `4k is capped at seven columns`() {
-        assertEquals(7, PosterLayout.autoColumns(1716f, 1080f))
+    fun `4k auto is capped at five columns`() {
+        assertEquals(5, PosterLayout.autoColumns(1716f, 1080f))
     }
 
     /** 极窄内容区（手机竖屏）退到两列，但不会掉到 1 列或 0 列。 */

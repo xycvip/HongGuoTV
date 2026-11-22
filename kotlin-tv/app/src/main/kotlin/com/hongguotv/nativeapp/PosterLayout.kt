@@ -25,6 +25,9 @@ internal object PosterLayout {
     const val MIN_COLUMNS = 2
     const val MAX_COLUMNS = 7
 
+    /** 自动档的上限：真机反馈 6/7 列海报太碎，自适应默认最多给到 5 列。 */
+    const val AUTO_MAX_COLUMNS = 5
+
     /** 单张海报的目标宽度：低于 140dp，剧名开始被截成两三个字。 */
     private const val TARGET_CARD_DP = 136f
 
@@ -52,7 +55,7 @@ internal object PosterLayout {
     fun autoColumns(contentWidthDp: Float, screenHeightDp: Float): Int {
         val target = if (screenHeightDp < 430f) 134f else TARGET_CARD_DP
         val fit = ((contentWidthDp + GAP_DP) / (target + GAP_DP)).toInt()
-        return fit.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
+        return fit.coerceIn(MIN_COLUMNS, AUTO_MAX_COLUMNS)
     }
 
     /** 这一屏最多放得下几列（保证单张不小于 [MIN_CARD_DP]）。 */

@@ -38,9 +38,14 @@ internal object FocusRules {
     /**
      * 页面渲染完成后对整棵内容树放开裁剪。焦点放大 4.5% + 外扩白环
      * 都画在 View 边界之外，边缘卡片不放开裁剪必然缺一角。
+     *
+     * 只放开 clipChildren 不够：RecyclerView/ScrollView/LinearLayout 默认
+     * clipToPadding=true，会把子项画进 padding 区的部分裁掉 —— 首行海报的
+     * 焦点环上缘、最左列海报的左缘缺角正是栽在这里。两类裁剪一并放开。
      */
     fun unclipTree(view: ViewGroup) {
         view.clipChildren = false
+        view.clipToPadding = false
         for (index in 0 until view.childCount) {
             val child = view.getChildAt(index)
             if (child is ViewGroup) unclipTree(child)

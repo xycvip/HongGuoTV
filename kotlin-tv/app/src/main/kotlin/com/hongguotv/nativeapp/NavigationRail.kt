@@ -72,8 +72,8 @@ internal fun MainActivity.createApiStatusFlower(): ApiStatusFlowerView {
 /**
  * 渲染竖栏。
  *
- * 结构：品牌 → 内容页签（首页/剧场/排行榜/追剧）→ 细线 → 搜索/我的 → 弹性空隙 → 工具区（设置/推送/片源）。
- * 工具区贴底，视觉上和内容页签分开，避免"设置"和"追剧"看起来是同一级内容。
+ * 结构：品牌 → 内容页签（首页/剧场/排行榜/追剧）→ 细线 → 搜索/投播 → 弹性空隙 → 栏底（我的/设置/片源）。
+ * 高频入口在上方，账户与设置收在栏底，视觉上和内容页签分开。
  *
  * 行高不是写死的：先按 540dp（1080p）的舒适值排一遍，装不下就整体降档，
  * 直到最矮 26dp 为止。这样 720p 的 360dp 高屏和 4K 的 1080dp 高屏都能各自排满一屏，
@@ -82,29 +82,23 @@ internal fun MainActivity.createApiStatusFlower(): ApiStatusFlowerView {
 internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container: LinearLayout) {
     val showThirdSource = getSharedPreferences(APPEARANCE_PREFS, Context.MODE_PRIVATE)
         .getBoolean("show_third_source", false)
-    val utilCount = if (showThirdSource) 3 else 2
 
-    // 品牌行在高度不够时先让位：它是装饰，页签才是功能。
+    // 真机反馈：工具区（我的/设置）字体比主页签明显小一号。改为全部页签同一行高、
+    // 同一字号 —— 一条竖栏里只允许一种文字尺度，层级改用位置（上下分隔线）表达。
     val tall = heightDp() >= 800f
     var brandHeight = if (heightDp() >= 470f) (if (tall) 68 else 52) else 0
     var itemHeight = if (tall) 58 else 46
-    var utilHeight = if (tall) 44 else 34
-    fun totalHeight() = brandHeight + 14 + itemHeight * 6 + utilHeight * utilCount + 2 * 13 + 12
-    // 逐档收缩，直到一屏放得下（含上下内边距与两条分隔线）。
+    val itemCount = 8 + if (showThirdSource) 1 else 0
+    // 高度预算：品牌行 + 14dp 呼吸位 + 全部页签 + 两条分隔线(30) + 上下内边距(28)。
+    fun totalHeight() = brandHeight + 14 + itemHeight * itemCount + 30 + 28
     while (totalHeight() > heightDp() - 12 && itemHeight > 26) {
         itemHeight -= 2
-        utilHeight = (utilHeight - 2).coerceAtLeast(24)
         if (totalHeight() > heightDp() + 40 && brandHeight > 0) brandHeight = 0
     }
 
-    // 真机反馈字号偏小：整体上一档，主项 17sp、工具项 15sp 起步。
     val labelSize = when {
         itemHeight >= 44 -> TvMetric.TEXT_SUBTITLE
         itemHeight >= 34 -> TvMetric.TEXT_LABEL
-        else -> 13.5f
-    }
-    val utilSize = when {
-        utilHeight >= 36 -> TvMetric.TEXT_LABEL
         else -> 13.5f
     }
     val horizontalPadding = if (railWidthDp() >= 120) 12 else 9
@@ -146,12 +140,13 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
     fun addItem(
         label: String,
         active: Boolean,
-        util: Boolean,
+        itemTag: String?,
         tabId: Int?,
         onPick: () -> Unit,
     ): FrameLayout {
         val item = FrameLayout(this).apply {
             id = View.generateViewId()
+            if (itemTag != null) tag = itemTag
             isFocusable = true; isFocusableInTouchMode = true; isClickable = true
             contentDescription = label
         }
@@ -161,7 +156,7 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
             bar,
             FrameLayout.LayoutParams(dp(3), dp(if (itemHeight >= 40) 18 else 14), Gravity.START or Gravity.CENTER_VERTICAL),
         )
-        val labelView = text(label, if (util) utilSize else labelSize, TvStyle.colors.textSecondary).apply {
+        val labelView = text(label, labelSize, TvStyle.colors.textSecondary).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(labelPaddingStart), 0, dp(6), 0)
             maxLines = 1
@@ -175,13 +170,7 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
                 active -> TvStyle.shape(this, TvStyle.colors.railSelected, Color.TRANSPARENT, TvMetric.RADIUS_M)
                 else -> null
             }
-            labelView.setTextColor(
-                when {
-                    focused || active -> TvStyle.colors.textPrimary
-                    util -> TvStyle.colors.textTertiary
-                    else -> TvStyle.colors.textSecondary
-                },
-            )
+            labelView.setTextColor(if (focused || active) TvStyle.colors.textPrimary else TvStyle.colors.textSecondary)
             labelView.setTypeface(
                 Typeface.create(
                     "sans-serif",
@@ -193,7 +182,7 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
         item.setOnFocusChangeListener { _, focused -> paint(focused) }
         // 只按确认键才切页。
         item.setOnClickListener { onPick() }
-        rail.addView(item, LinearLayout.LayoutParams(-1, dp(if (util) utilHeight else itemHeight)))
+        rail.addView(item, LinearLayout.LayoutParams(-1, dp(itemHeight)))
         items += item
         nav += item
         when (tabId) {
@@ -219,24 +208,26 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
         else -> tabId == tab
     }
 
-    addItem("首页", activeOf(0), false, 0) { switchTab(0) }
-    addItem("剧场", activeOf(7), false, 7) { switchTab(7) }
-    addItem("排行榜", activeOf(2), false, 2) { switchTab(2) }
-    addItem("追剧", activeOf(9), false, 9) { switchTab(9) }
+    addItem("首页", activeOf(0), null, 0) { switchTab(0) }
+    addItem("剧场", activeOf(7), null, 7) { switchTab(7) }
+    addItem("排行榜", activeOf(2), null, 2) { switchTab(2) }
+    addItem("追剧", activeOf(9), null, 9) { switchTab(9) }
     rail.addView(
         hairline(),
         lp(-1, dp(1)).apply { topMargin = dp(if (itemHeight >= 40) 10 else 5); bottomMargin = dp(if (itemHeight >= 40) 10 else 5) },
     )
-    addItem("搜索", activeOf(1), false, 1) { switchTab(1) }
-    addItem("我的", activeOf(6), false, 6) { switchTab(6) }
+    addItem("搜索", activeOf(1), null, 1) { switchTab(1) }
+    // 投播（原"推送播放"）紧跟搜索：都是"把内容弄到电视上看"的入口，语义相邻。
+    // tag 供推送来源的视频退出时把焦点还回来（pushPlaybackAnchor）。
+    addItem("投播", activeOf(-1), "nav:push-playback", -1) { showPushPlayback() }
 
     rail.addView(View(this), lp(-1, 0).apply { weight = 1f })
     rail.addView(hairline(), lp(-1, dp(1)).apply { bottomMargin = dp(8) })
-    // 随机播放入口已合并进顶部的四叶状态灯（点它直接随便看一部），工具区不再重复放一格。
-    addItem("设置", activeOf(5), true, 5) { switchTab(5) }
-    addItem("推送播放", activeOf(-1), true, -1) { showPushPlayback() }
+    // 账户与设置收在栏底：低频但必须好找，设置永远是最下面一格。
+    addItem("我的", activeOf(6), null, 6) { switchTab(6) }
+    addItem("设置", activeOf(5), null, 5) { switchTab(5) }
     if (showThirdSource) {
-        addItem("片源", activeOf(8), true, 8) {
+        addItem("片源", activeOf(8), null, 8) {
             pushPlaybackPageActive = false; closePushPlaybackService(); openThirdSource()
         }
     }

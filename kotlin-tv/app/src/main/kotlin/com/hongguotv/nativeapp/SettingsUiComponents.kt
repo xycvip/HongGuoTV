@@ -18,8 +18,8 @@ import android.widget.TextView
  *
  * 视觉分层（三种状态互不混淆）：
  *  - 焦点：卡片提亮 + 白环描边，遥控器上永远看得见自己停在哪；
- *  - 当前分类：浅强调色底 + 徽章反色，表示"右侧正在编辑的是它"；
- *  - 其余：安静的资源色卡片，编号徽章只作引导。
+ *  - 当前分类：浅强调色底，表示"右侧正在编辑的是它"；
+ *  - 其余：安静的资源色卡片，橘色光标常亮作引导。
  */
 internal class SettingsCategoryController(
     private val activity: MainActivity,
@@ -67,14 +67,6 @@ internal class SettingsCategoryController(
                     TvStyle.colors.strokeSubtle,
                     TvMetric.RADIUS_M,
                 )
-            }
-            card.findViewWithTag<TextView>("settings:cat-chip")?.apply {
-                background = if (headingFocused || active) {
-                    TvStyle.shape(activity, TvStyle.colors.accent, Color.TRANSPARENT, TvMetric.RADIUS_S)
-                } else {
-                    TvStyle.shape(activity, TvStyle.colors.surfaceRaised, Color.TRANSPARENT, TvMetric.RADIUS_S)
-                }
-                setTextColor(if (headingFocused || active) TvStyle.colors.onAccent else TvStyle.colors.textTertiary)
             }
             card.findViewWithTag<TextView>("settings:cat-title")?.apply {
                 setTextColor(if (headingFocused || active) TvStyle.colors.textPrimary else TvStyle.colors.textSecondary)
@@ -154,8 +146,8 @@ internal class SettingsItemFactory(
 /**
  * 设置分组：左侧一个分类入口，右侧「标题 + 说明 + 若干行」。
  *
- * 左侧入口是编号徽章卡片：两位编号 + 类别名，整列像一册目录，
- * 不再是裸文字列表。卡片等分整列高度，间距由高度预算控制。
+ * 左侧入口是分类卡：橘色光标 + 类别名，整列像一条安静的导航；
+ * 分类列固定不滚动，卡片等分整列高度。
  */
 internal class SettingsSectionFactory(
     private val activity: MainActivity,
@@ -170,8 +162,8 @@ internal class SettingsSectionFactory(
     private val createText: (String, Float, Int) -> TextView,
 ) {
     fun section(title: String, subtitle: String): Pair<LinearLayout, LinearLayout> {
-        val index = categoryHeadingCards.size
-        // ── 左：编号徽章卡片。
+        // ── 左：分类入口卡。真机反馈去掉编号徽章（01/02…），恢复前方橘色光标：
+        // 一条 3dp 强调色竖条常亮在分类名前，和主导航栏的选中条同一语言。
         val heading = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -179,17 +171,8 @@ internal class SettingsSectionFactory(
             setPadding(dp(11), dp(6), dp(9), dp(6))
             isFocusable = false
         }
-        val chip = TextView(activity).apply {
-            tag = "settings:cat-chip"
-            text = String.format("%02d", index + 1)
-            textSize = TvMetric.TEXT_CAPTION
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            background = TvStyle.shape(activity, TvStyle.colors.surfaceRaised, Color.TRANSPARENT, TvMetric.RADIUS_S)
-            setTextColor(TvStyle.colors.textTertiary)
-        }
-        heading.addView(chip, LinearLayout.LayoutParams(dp(30), dp(30)).apply { rightMargin = dp(12) })
+        val cursor = View(activity).apply { setBackgroundColor(TvStyle.colors.accent) }
+        heading.addView(cursor, LinearLayout.LayoutParams(dp(3), dp(20)).apply { rightMargin = dp(10) })
 
         val headingTitle = createText(title, TvMetric.TEXT_LABEL, TvStyle.colors.textSecondary).apply {
             tag = "settings:cat-title"
