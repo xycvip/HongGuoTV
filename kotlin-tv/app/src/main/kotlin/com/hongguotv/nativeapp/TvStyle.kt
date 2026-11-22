@@ -64,9 +64,16 @@ object TvStyle {
         GradientDrawable.Orientation.TOP_BOTTOM,
         intArrayOf(colors.railTop,colors.railBottom)
     )
-    fun card(context: Context,focused: Boolean)=
-        if(focused) FocusFrame.ring(context,colors.surfaceRaised,TvMetric.RADIUS_M)
-        else shape(context,colors.surface,Color.TRANSPARENT,TvMetric.RADIUS_M)
+    /**
+     * 卡片填充（不含选项框）。选项框由 [FocusFrame.frame] / [FocusFrame.paintCard]
+     * 画在前景——画在背景会被卡内的封面图盖掉（真机：四角被啃/整圈缺失）。
+     */
+    fun card(context: Context,focused: Boolean)=shape(
+        context,
+        if(focused) colors.surfaceRaised else colors.surface,
+        Color.TRANSPARENT,
+        TvMetric.RADIUS_M
+    )
 
     /**
      * 焦点描边：兼容旧调用点。新代码请直接用 [FocusFrame.ring]（柔光+白环双层，零越界）。

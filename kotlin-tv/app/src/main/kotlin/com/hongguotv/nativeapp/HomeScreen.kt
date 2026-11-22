@@ -35,7 +35,6 @@ class HomeScreen(
     private data class Row(val key: String,val block: LinearLayout,val horizontal: HorizontalScrollView,val cards: List<Card>)
     private val accent=TvStyle.accent
     private fun dp(n: Int)=(n*resources.displayMetrics.density).toInt()
-    private fun shape(focus: Boolean)=TvStyle.card(context,focus)
     private fun label(value: String,size: Float,color: Int=TvStyle.text)=TextView(context).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
     private val scroll=ScrollView(context).apply {
         // 滚动容器保留自身裁剪：货架海报滚出视口的部分不允许越界绘制；
@@ -97,7 +96,7 @@ class HomeScreen(
         updateHandler.removeCallbacks(applyPendingShelves)
         updateHandler.postDelayed(applyPendingShelves,500L)
     }
-    val refresh=label("正在更新热门…",14f,TvStyle.muted).apply { id=View.generateViewId(); tag="home:refresh"; isFocusable=true; isFocusableInTouchMode=true; gravity=Gravity.CENTER; minHeight=dp(44); setPadding(dp(16),dp(10),dp(16),dp(10)); background=shape(false); setOnFocusChangeListener { _,f -> background=shape(f); setTextColor(if(f) TvStyle.text else TvStyle.muted); if(f) lastFocus=tag.toString() } }
+    val refresh=label("正在更新热门…",14f,TvStyle.muted).apply { id=View.generateViewId(); tag="home:refresh"; isFocusable=true; isFocusableInTouchMode=true; gravity=Gravity.CENTER; minHeight=dp(44); setPadding(dp(16),dp(10),dp(16),dp(10)); FocusFrame.paintCard(this,false); setOnFocusChangeListener { _,f -> FocusFrame.paintCard(this,f); setTextColor(if(f) TvStyle.text else TvStyle.muted); if(f) lastFocus=tag.toString() } }
     init { orientation=VERTICAL; scroll.addView(contents); addView(scroll,LayoutParams(-1,0,1f)) }
 
     fun capturePosition(): Position {

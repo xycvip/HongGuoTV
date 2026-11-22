@@ -46,10 +46,14 @@ internal class PosterCard private constructor(
      * 铁律：卡片自身不缩放、不投影，每一个像素都不越出边界 —— 滚动容器
      * 必须保留裁剪（防半滚出的海报叠上竖栏），任何越界都会被裁成缺角。
      * 海报的轻微放大只作用于卡内 artwork（封顶 1.02，收在 3dp 内缩里）。
+     *
+     * 环画在**前景**而不是背景：artwork 子视图盖在背景之上，会把背景环啃掉——
+     * 3dp 内缩的卡片四角圆弧被 artwork 直角盖住（真机：首页四个角）。
+     * 前景环在所有内容之上，四边四角永远完整。
      */
     fun paintFocus(focused: Boolean, scale: Float = 1.02f, ringRadius: Int = TvMetric.RADIUS_M) {
-        val context = card.context
-        card.background = if (focused) FocusFrame.ring(context, Color.TRANSPARENT, ringRadius) else null
+        card.background = null
+        FocusFrame.frame(card, focused, ringRadius)
         card.elevation = 0f
         card.animate().cancel(); card.scaleX = 1f; card.scaleY = 1f
         (artwork ?: tile)?.animateFocus(focused, minOf(scale, 1.02f))

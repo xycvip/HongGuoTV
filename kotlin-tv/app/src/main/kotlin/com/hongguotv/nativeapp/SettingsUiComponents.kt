@@ -49,8 +49,12 @@ internal class SettingsCategoryController(
             val active = index == focusedCategory
             val headingFocused = index == headingFocusIndex
             card.background = when {
-                // 焦点态走 FocusFrame（柔光+白环，零越界）
-                headingFocused -> FocusFrame.ring(activity, TvStyle.colors.surfaceRaised, TvMetric.RADIUS_M)
+                headingFocused -> TvStyle.shape(
+                    activity,
+                    TvStyle.colors.surfaceRaised,
+                    Color.TRANSPARENT,
+                    TvMetric.RADIUS_M,
+                )
                 active -> TvStyle.shape(
                     activity,
                     withAlpha(TvStyle.colors.accent, 0.12f),
@@ -64,6 +68,8 @@ internal class SettingsCategoryController(
                     TvMetric.RADIUS_M,
                 )
             }
+            // 焦点环画在前景（文字盖不住环），零越界。
+            FocusFrame.frame(card, headingFocused)
             card.findViewWithTag<TextView>("settings:cat-title")?.apply {
                 setTextColor(if (headingFocused || active) TvStyle.colors.textPrimary else TvStyle.colors.textSecondary)
                 typeface = Typeface.create(
@@ -193,11 +199,9 @@ internal class SettingsSectionFactory(
         }
         heading.addView(headingTitle, LinearLayout.LayoutParams(0, -2, 1f))
         categoryHeadingCards += heading
-        // 真机反馈：等分拉伸把每个分类隔得太开，"分列感"太重。改为紧凑堆叠
-        // （内容高度 + 小间距），整组在列内垂直居中 —— 分类是一列目录，不是一摞卡片墙。
-        val cell = android.widget.FrameLayout(activity).apply { clipChildren = false }
-        cell.addView(heading, android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_VERTICAL))
-        categoryCard.addView(cell, LinearLayout.LayoutParams(-1, -2).apply {
+        // 真机反馈：等分拉伸分列感太重、整组垂直居中很丑。改为顶部对齐、
+        // 紧凑堆叠（内容高度 + 小间距）——分类是一列安静的目录。
+        categoryCard.addView(heading, LinearLayout.LayoutParams(-1, -2).apply {
             rightMargin = dp(6)
             topMargin = dp(3)
             bottomMargin = dp(3)

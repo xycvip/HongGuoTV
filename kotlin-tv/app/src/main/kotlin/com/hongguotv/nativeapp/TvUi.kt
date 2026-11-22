@@ -150,13 +150,9 @@ internal fun MainActivity.toneButton(
                     radius = TvMetric.RADIUS_PILL
                 }
             }
-            // 选项框统一走 FocusFrame（柔光+白环，零越界）；Primary/Chip 焦点态保留
-            // 实心强调底，环压在底色外缘，同样不越界。
-            background = if (focused) {
-                FocusFrame.ring(this@toneButton, fill, radius, colors.focusRing)
-            } else {
-                TvStyle.shape(this@toneButton, fill, stroke, radius)
-            }
+            // 背景只管填充，选项框画在前景（文字/图标盖不住环）；零越界。
+            background = TvStyle.shape(this@toneButton, fill, if (focused) Color.TRANSPARENT else stroke, radius)
+            FocusFrame.frame(this, focused, radius)
             setTextColor(ink)
             typeface = Typeface.create(
                 if (focused || selected) "sans-serif-medium" else "sans-serif",

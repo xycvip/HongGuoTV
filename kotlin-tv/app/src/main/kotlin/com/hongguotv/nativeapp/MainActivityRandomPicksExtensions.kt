@@ -105,7 +105,7 @@ import com.hongguotv.core.*
                     loadCover(image,item.cover)
                     title.text=item.title; badge.text=item.badge
                     card.setOnClickListener { randomDialog?.dismiss(); openDetail(item,false) }
-                    card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(this@showRandomDialog,focused); if(focused) loadCover(image,item.cover) }
+                    card.setOnFocusChangeListener { _,focused -> FocusFrame.paintCard(card,focused); if(focused) loadCover(image,item.cover) }
                 }
             }
             val grid=GridLayoutManager(this,4)

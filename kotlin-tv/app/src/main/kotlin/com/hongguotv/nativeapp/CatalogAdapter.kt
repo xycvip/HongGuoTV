@@ -140,7 +140,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             if(actorRanked) true else { quickActions(item,card); true }
         }
         card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP && !actorRanked) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
-        // 焦点态：白色环画在卡片背景上（海报外侧 3dp），同时轻微放大并抬升。
+        // 焦点态：选项框画在前景（FocusFrame），卡内海报盖不住环。
         fun paintCard(focused: Boolean) {
             holder.poster.paintFocus(focused)
         }
@@ -168,7 +168,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         (holder as? CardHolder)?.let { h ->
             if(h.boundId.isNotEmpty() && favoriteBadges[h.boundId]===h.badge) favoriteBadges.remove(h.boundId)
             // 复用前复位焦点动画，避免滚动后残留放大态（放大现在挂在卡内 artwork/tile 上）
-            h.card.animate().cancel(); h.card.scaleX=1f; h.card.scaleY=1f; h.card.elevation=0f
+            h.card.animate().cancel(); h.card.scaleX=1f; h.card.scaleY=1f; h.card.elevation=0f; h.card.foreground=null
             h.poster.artwork?.let { it.animate().cancel(); it.scaleX=1f; it.scaleY=1f }
             h.poster.tile?.let { it.animate().cancel(); it.scaleX=1f; it.scaleY=1f }
         }

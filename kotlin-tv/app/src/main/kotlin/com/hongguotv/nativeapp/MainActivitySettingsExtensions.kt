@@ -41,11 +41,10 @@ import java.util.Locale
         )
         // 分类列直接挂在页面骨架上、高度撑满可视区：右侧子选项在独立 ScrollView 里滚动时，
         // 分类列纹丝不动 —— 真机反馈"主选项要固定位置，不跟着右边滚"。
+        // 顶部对齐、紧凑堆叠（真机反馈：整组垂直居中很丑）。
         val categoryCard=column().apply {
             clipChildren=false
             clipToPadding=false
-            // 分类项紧凑堆叠后整组垂直居中：既不散成"分列"，下方也不留大块空白。
-            gravity=Gravity.CENTER_VERTICAL
             setPadding(0,dp(6),0,0)
         }
         val body=column()

@@ -663,9 +663,9 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         isFocusableInTouchMode=true
         background=TvStyle.shape(this@renderPushPlaybackPage,Color.WHITE,Color.TRANSPARENT,TvMetric.RADIUS_L)
         setOnFocusChangeListener { v,focused ->
-            // 选项框统一走 FocusFrame（柔光+白环，零越界）：卡自身不缩放不投影。
-            v.background=if(focused) FocusFrame.ring(this@renderPushPlaybackPage,Color.WHITE,TvMetric.RADIUS_L)
-                else TvStyle.shape(this@renderPushPlaybackPage,Color.WHITE,Color.TRANSPARENT,TvMetric.RADIUS_L)
+            // 选项框走前景（柔光+白环，零越界）：QR 图盖不住环；白底保留。
+            v.background=TvStyle.shape(this@renderPushPlaybackPage,Color.WHITE,Color.TRANSPARENT,TvMetric.RADIUS_L)
+            FocusFrame.frame(v,focused,TvMetric.RADIUS_L)
             v.elevation=0f
             v.animate().cancel(); v.scaleX=1f; v.scaleY=1f
         }
@@ -878,7 +878,7 @@ private fun MainActivity.showPushCandidates(candidates:List<Series>) {
             setPadding(dp(8),dp(8),dp(8),dp(9))
             background=TvStyle.card(this@showPushCandidates,false)
             contentDescription="选择剧集：\${series.title}"
-            setOnFocusChangeListener { v,focused -> v.background=TvStyle.card(this@showPushCandidates,focused) }
+            setOnFocusChangeListener { v,focused -> FocusFrame.paintCard(v,focused) }
             setOnClickListener {
                 pushPlaybackCandidateDialog?.dismiss()
                 pushPlaybackCandidateDialog=null

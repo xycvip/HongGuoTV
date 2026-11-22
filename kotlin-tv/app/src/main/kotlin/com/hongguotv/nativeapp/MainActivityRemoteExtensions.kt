@@ -39,7 +39,7 @@ import com.hongguotv.core.*
                 loadCover(image,item.cover)
                 cardTitle.text=item.title; badge.text=if(fromUpdates) library.favoriteLabel(item.id) else item.badge
                 card.setOnClickListener { exitDialog?.dismiss(); openDetail(item,false) }
-                card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(this,focused); if(focused) loadCover(image,item.cover) }
+                card.setOnFocusChangeListener { _,focused -> FocusFrame.paintCard(card,focused); if(focused) loadCover(image,item.cover) }
                 cards.addView(card,lp(cardWidth,-2).apply { rightMargin=dp(if(compactDialog) 4 else 12) })
             }
             content.addView(cards,lp(-1,-2))

@@ -104,10 +104,9 @@ internal class ThirdSourceGridAdapter(
         holder.card.isFocusable = true
         holder.card.isFocusableInTouchMode = true
         fun paint(focused: Boolean) {
-            // 选项框统一走 FocusFrame（柔光+白环，零越界）；卡内图片保留轻微放大。
-            holder.card.background = if (focused) {
-                FocusFrame.ring(holder.card.context, Color.TRANSPARENT, TvMetric.RADIUS_M)
-            } else null
+            // 选项框走前景：卡内图片填满整卡也盖不住环；卡内图片保留轻微放大。
+            holder.card.background = null
+            FocusFrame.frame(holder.card, focused, TvMetric.RADIUS_M)
             holder.card.elevation = 0f
             holder.card.animate().cancel(); holder.card.scaleX = 1f; holder.card.scaleY = 1f
             holder.image.animateFocus(focused, 1.02f)

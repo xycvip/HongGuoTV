@@ -85,16 +85,13 @@ object TvDialog {
                     primary -> TvStyle.colors.accent
                     else -> TvStyle.colors.strokeSubtle
                 }
-                // 焦点态走 FocusFrame（柔光+白环，零越界）；主按钮焦点环压在强调底上。
-                background = if (focused) {
-                    FocusFrame.ring(activity, fill, 24)
-                } else {
-                    GradientDrawable().apply {
-                        setColor(fill)
-                        cornerRadius = dp(24).toFloat()
-                        setStroke(dp(1), stroke)
-                    }
+                // 背景只管填充；焦点环画在前景（文字盖不住环），零越界。
+                background = GradientDrawable().apply {
+                    setColor(fill)
+                    cornerRadius = dp(24).toFloat()
+                    setStroke(dp(1), if (focused) Color.TRANSPARENT else stroke)
                 }
+                FocusFrame.frame(this, focused, 24)
                 setTextColor(
                     when {
                         primary -> TvStyle.colors.onAccent

@@ -49,7 +49,7 @@ internal class AccountArtworkShelfRenderer(
                 background = TvStyle.card(activity, false)
                 contentDescription = "${series.title}，$subtitle"
                 setOnFocusChangeListener { view, focused ->
-                    view.background = TvStyle.card(activity, focused)
+                    FocusFrame.paintCard(view, focused)
                 }
                 setOnClickListener { click() }
             }

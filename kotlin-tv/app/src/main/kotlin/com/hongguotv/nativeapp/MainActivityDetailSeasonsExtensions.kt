@@ -52,7 +52,7 @@ internal fun MainActivity.loadSameNameInBackground(snapshot: Detail) {
                 setPadding(dp(3),dp(2),0,0)
             })
             card.setOnFocusChangeListener { _,focused ->
-                card.background=TvStyle.card(this@appendSeasonRecommendations,focused)
+                FocusFrame.paintCard(card,focused)
                 if(focused) loadCover(image,series.cover)
             }
             card.setOnClickListener { openDetail(series) }

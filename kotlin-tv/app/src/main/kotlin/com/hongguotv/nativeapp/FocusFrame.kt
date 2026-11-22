@@ -24,6 +24,11 @@ import android.view.ViewGroup
  * （强调色 30% 透明度）铺 5dp，白环 2dp 压在最外缘，深浅两套主题下都醒目，
  * 且整个环带都在 View 内 —— 任何容器、任何边缘、任何页面都不可能缺角。
  *
+ * **环必须画在前景（[frame]），不能画在背景**：海报/封面等子内容会盖在背景之上，
+ * 背景环会被啃掉——卡片有内缩时四角的圆弧被子内容直角盖掉（真机：首页四个角），
+ * 图片填满卡片时整圈环被完全盖住（真机：其他页面选项框缺失）。前景画在
+ * 所有子内容之上，谁都盖不住它。
+ *
  * 本文件同时收敛焦点链与裁剪策略（原 FocusRules）：
  *  - [applyRailChain] 竖栏上下链，只在建栏时写一次，页面渲染不得改写；
  *  - [unclipTree] 非滚动容器放开裁剪（保呼吸位内的细节），滚动容器只放开
@@ -59,7 +64,17 @@ internal object FocusFrame {
     }
 
     /**
-     * 通用焦点绘制。焦点态换 [ring]，失焦还原常态背景；
+     * 前景选项框：环画在所有子内容之上（foreground），海报/封面/文字都盖不住它。
+     * 失焦时清掉前景，不留任何残影。仍是零越界（环带完全在 View 边界内）。
+     */
+    fun frame(view: View, focused: Boolean, radius: Int = TvMetric.RADIUS_M) {
+        view.foreground = if (focused) {
+            ring(view.context, Color.TRANSPARENT, radius)
+        } else null
+    }
+
+    /**
+     * 通用焦点绘制。背景只负责填充，选项框交给前景 [frame]；
      * 卡片自身的缩放与投影一律归零（铁律的执行处）。
      */
     fun paint(
@@ -71,10 +86,29 @@ internal object FocusFrame {
         radius: Int = TvMetric.RADIUS_M,
     ) {
         view.background = if (focused) {
-            ring(view.context, focusedFill, radius)
+            TvStyle.shape(view.context, focusedFill, Color.TRANSPARENT, radius)
         } else {
             TvStyle.shape(view.context, normalFill, normalStroke, radius)
         }
+        frame(view, focused, radius)
+        view.elevation = 0f
+        view.animate().cancel()
+        view.scaleX = 1f
+        view.scaleY = 1f
+    }
+
+    /**
+     * 图片卡焦点（详情推荐/远程/随机弹窗/账户作品架等）：背景只管填充，
+     * 选项框走前景——卡内的封面图填满整卡也盖不住环。
+     */
+    fun paintCard(view: View, focused: Boolean, radius: Int = TvMetric.RADIUS_M) {
+        view.background = TvStyle.shape(
+            view.context,
+            if (focused) TvStyle.colors.surfaceRaised else TvStyle.colors.surface,
+            Color.TRANSPARENT,
+            radius,
+        )
+        frame(view, focused, radius)
         view.elevation = 0f
         view.animate().cancel()
         view.scaleX = 1f
