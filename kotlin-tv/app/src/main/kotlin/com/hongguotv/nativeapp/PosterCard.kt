@@ -40,14 +40,24 @@ internal class PosterCard private constructor(
     /** 海报卡：剧场/榜单/追剧/搜索/首页货架共用。 */
     enum class Mode { POSTER, MORE, RANDOM }
 
-    /** 焦点态：白环画在卡背景上，轻微放大并抬升。两个页面共用同一画法。 */
-    fun paintFocus(focused: Boolean, scale: Float = 1.045f, ringRadius: Int = TvMetric.RADIUS_M) {
+    /**
+     * 焦点态：白环画在卡背景上，卡内海报轻微放大。
+     *
+     * 卡片本身**不缩放、不投影**：一旦放大卡片，边缘就越出自身边界，而滚动
+     * 容器（货架/网格）必须保留裁剪防止半滚出的海报叠上竖栏 —— 越界的边缘
+     * 就必然被裁成「选项框缺角」（真机实测左/上/下三边都缺）。把放大收进卡的
+     * 3dp 内缩里，卡片每一个像素都不越界，焦点环在任何容器里都完整。
+     */
+    fun paintFocus(focused: Boolean, scale: Float = 1.02f, ringRadius: Int = TvMetric.RADIUS_M) {
         val context = card.context
         card.background = if (focused) {
             TvStyle.shape(context, Color.TRANSPARENT, TvStyle.colors.focusRing, ringRadius)
         } else null
-        card.elevation = if (focused) context.dp(4).toFloat() else 0f
-        card.animateFocus(focused, scale)
+        card.elevation = 0f
+        card.animate().cancel(); card.scaleX = 1f; card.scaleY = 1f
+        // 放大只作用于卡内元素，且封顶 1.02：海报（约 2:3）放大越出自身约 2dp，
+        // 仍收在卡片 3dp 内缩里，不会碰到焦点环。
+        (artwork ?: tile)?.animateFocus(focused, minOf(scale, 1.02f))
     }
 
     /** 观看进度：null 隐藏；否则按比例填充海报底边进度条。 */

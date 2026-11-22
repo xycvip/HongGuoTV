@@ -267,7 +267,10 @@ import java.util.Locale
                 card.addView(text(series.badge.ifBlank { series.tags },11.5f,muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) })
                 card.setOnFocusChangeListener { _,focused ->
                     card.background=TvStyle.card(this@showDetail,focused)
-                    card.animateFocus(focused,1.04f)
+                    // 同 PosterCard 的焦点规则：卡片自身不缩放，放大收进卡的 4dp 内缩里，
+                    // 焦点环/放大态都不越出卡片边界，任何裁剪容器里都完整。
+                    card.animate().cancel(); card.scaleX=1f; card.scaleY=1f
+                    artwork.animateFocus(focused,1.02f)
                     if(focused) loadCover(image,series.cover)
                 }
                 card.setOnClickListener { openDetail(series) }

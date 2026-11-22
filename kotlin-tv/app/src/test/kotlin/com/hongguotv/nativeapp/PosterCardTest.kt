@@ -87,11 +87,15 @@ class PosterCardTest {
     }
 
     @Test
-    fun `焦点态画白环并抬升，失焦还原`() {
+    fun `焦点态画白环且卡片不越界，失焦还原`() {
         val poster = PosterCard.create(context, PosterCard.Mode.POSTER)
         poster.paintFocus(true)
         assertNotNull(poster.card.background)
-        assertTrue(poster.card.elevation > 0f)
+        // 卡片自身不投影、不缩放：放大只作用于卡内 artwork（封顶 1.02），
+        // 保证任何裁剪容器里焦点环都完整（真机回归用例）。
+        assertEquals(0f, poster.card.elevation, 1e-6f)
+        assertEquals(1f, poster.card.scaleX, 1e-6f)
+        assertEquals(1f, poster.card.scaleY, 1e-6f)
         poster.paintFocus(false)
         assertNull(poster.card.background)
         assertEquals(0f, poster.card.elevation, 1e-6f)

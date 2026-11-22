@@ -167,8 +167,10 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
 
         (holder as? CardHolder)?.let { h ->
             if(h.boundId.isNotEmpty() && favoriteBadges[h.boundId]===h.badge) favoriteBadges.remove(h.boundId)
-            // 复用前复位焦点动画，避免滚动后残留放大态
+            // 复用前复位焦点动画，避免滚动后残留放大态（放大现在挂在卡内 artwork/tile 上）
             h.card.animate().cancel(); h.card.scaleX=1f; h.card.scaleY=1f; h.card.elevation=0f
+            h.poster.artwork?.let { it.animate().cancel(); it.scaleX=1f; it.scaleY=1f }
+            h.poster.tile?.let { it.animate().cancel(); it.scaleX=1f; it.scaleY=1f }
         }
     
     }

@@ -197,8 +197,12 @@ internal class SettingsSectionFactory(
         }
         heading.addView(headingTitle, LinearLayout.LayoutParams(0, -2, 1f))
         categoryHeadingCards += heading
-        // 等分剩余高度：调试分类可隐藏，隐藏后其余分类自动重新均分。
-        categoryCard.addView(heading, LinearLayout.LayoutParams(-1, 0, 1f).apply { rightMargin = dp(6) })
+        // 分类卡高度恢复正常（内容高度），但间距沿整列等分铺开：
+        // 外层格子等分剩余高度、卡片在格子里垂直居中，既不拉成大长条，
+        // 下方也不留大块空白（真机反馈：卡片不要那么高）。
+        val cell = android.widget.FrameLayout(activity).apply { clipChildren = false }
+        cell.addView(heading, android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_VERTICAL))
+        categoryCard.addView(cell, LinearLayout.LayoutParams(-1, 0, 1f).apply { rightMargin = dp(6) })
 
         // ── 右：分组标题 + 说明 + 行列表
         val panel = LinearLayout(activity).apply {
