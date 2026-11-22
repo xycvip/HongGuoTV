@@ -10,17 +10,22 @@ import com.hongguotv.core.*
 
 /** 搜索页键盘、历史/联想布局与结果网格挂载。 */
 internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
-            // 机型分级：≥900dp 三栏（键盘+历史 / 联想 / 结果），700-900dp 两栏，<700dp 回退纵向堆叠
-            val mode=when { widthDp()>=900 -> 3; widthDp()>=700 -> 2; else -> 0 }
+            // 分栏按「竖栏之后的内容宽度」判断，不能按整屏宽度：
+            // 1080p 电视整屏 960dp、内容区只有 788dp，用整屏宽度会误判成三栏，
+            // 结果区被挤到 288dp，只剩两张卡。
+            val contentDp=contentWidthDp()
+            val mode=when { contentDp>=880f -> 3; contentDp>=600f -> 2; else -> 0 }
             val tall=heightDp()>=520
-            val roomy=widthDp()>=1100
+            val roomy=contentDp>=1150f
+            val leftWidth=if(roomy) 430f else 340f
+            val midWidth=if(roomy) 180f else 130f
             searchColumns=when(mode) {
-                3 -> (((contentWidthDp()-(if(roomy) 430f else 360f)-(if(roomy) 180f else 140f)-24f)+14f)/118f).toInt().coerceIn(2,gridColumns)
-                2 -> (((contentWidthDp()-360f-24f)+14f)/118f).toInt().coerceIn(2,gridColumns)
+                3 -> (((contentDp-leftWidth-midWidth-24f)+14f)/118f).toInt().coerceIn(2,gridColumns)
+                2 -> (((contentDp-leftWidth-24f)+14f)/118f).toInt().coerceIn(2,gridColumns)
                 else -> gridColumns
             }
             // 无联想词时中栏整列消失，结果网格按全宽重新算列数
-            fullSearchColumns=if(mode==3) (((contentWidthDp()-(if(roomy) 430f else 360f)-24f)+14f)/118f).toInt().coerceIn(2,gridColumns) else searchColumns
+            fullSearchColumns=if(mode==3) (((contentDp-leftWidth-24f)+14f)/118f).toInt().coerceIn(2,gridColumns) else searchColumns
             // 输入框原来没有任何底色，在深色背景上只剩一行白字，看不出"这里可以输入"。
             val searchRow=row(); val input=EditText(this).apply {
                 id=View.generateViewId(); hint="输入剧名，或用字母键拼首拼"
@@ -175,7 +180,7 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
                 keyboardScroll.addView(keyboard,lp(-1,-1))
                 leftColumn.addView(keyboardScroll,lp(0,-1).apply { weight=1f; leftMargin=dp(14) })
                 leftPane.addView(leftColumn,lp(-1,0).apply { weight=1f })
-                contentRow.addView(leftPane,lp(if(mode==3) dp(if(roomy) 430 else 360) else dp(360),-1))
+                contentRow.addView(leftPane,lp(dp(leftWidth.toInt()),-1))
                 val midScroll=ScrollView(this).apply {
                     isVerticalScrollBarEnabled=false
                     clipToPadding=false
@@ -187,7 +192,7 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
                 val rightColumn=SearchResultsColumn(this)
                 if(mode==3) {
                     suggestRow=midColumn; suggestVertical=true; suggestScrollRef=midScroll
-                    contentRow.addView(midScroll,lp(if(roomy) dp(180) else dp(140),-1))
+                    contentRow.addView(midScroll,lp(dp(midWidth.toInt()),-1))
                     contentRow.addView(rightColumn,lp(0,-1).apply { weight=1f })
                 } else {
                     contentRow.addView(rightColumn,lp(0,-1).apply { weight=1f })

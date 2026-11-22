@@ -261,8 +261,7 @@ import com.hongguotv.core.*
             view.nextFocusUpId = actionViews.lastOrNull()?.id ?: accountNavigation.id
             view.nextFocusDownId = firstAccountArtworkCard?.id ?: view.id
         }
-        accountNavigation.nextFocusDownId = actionViews.firstOrNull()?.id
-            ?: accountTabs.firstOrNull()?.id ?: firstAccountArtworkCard?.id ?: accountNavigation.id
+        // 竖栏里「我的」的下键必须继续在竖栏内换页；进内容走右键。
         scroll.addView(page, ViewGroup.LayoutParams(-1, -2))
         host.addView(scroll, FrameLayout.LayoutParams(-1, -1))
         // 页面因云端刷新而重绘时，恢复原按钮/卡片焦点与滚动位置，避免焦点掉回顶部导航。

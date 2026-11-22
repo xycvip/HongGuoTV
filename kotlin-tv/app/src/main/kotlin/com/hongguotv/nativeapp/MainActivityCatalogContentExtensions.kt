@@ -17,7 +17,6 @@ internal fun MainActivity.renderCatalogContent(
     focusNav: Boolean,
     focusType: Boolean,
     focusFilter: Boolean,
-    compactHeader: Boolean,
 ) {
         if(tab==0) container.post { if(screen=="catalog" && tab==0) runAutomaticApiChecks() }
         if(pushPlaybackPageActive) {
@@ -324,9 +323,8 @@ internal fun MainActivity.renderCatalogContent(
                 val target=catalogAdapter?.displayed?.indexOfFirst { it.id==catalogFocus } ?: -1
                 if(target>=0) posterRecycler.post { (posterRecycler.layoutManager as? GridLayoutManager)?.scrollToPositionWithOffset(target+1,0) }
             } else {
-                // 有竖栏时顶部不再占用 52dp，可视高度按实际剩余空间算。
-                val chromeDp=if(catalogRailHost!=null) 0f else if(compactHeader) 91f else 51f
-                val viewportDp=(heightDp()-chromeDp-24f).coerceAtLeast(180f)
+                // 顶部不再有导航条，可视高度就是屏幕高度减去上下内边距。
+                val viewportDp=(heightDp()-44f).coerceAtLeast(180f)
                 body.layoutParams=lp(-1,dp(viewportDp))
                 val pageScroll=ScrollView(this).apply {
                     isVerticalScrollBarEnabled=false
@@ -357,11 +355,7 @@ internal fun MainActivity.showCatalog(load: Boolean=false,focusNav: Boolean=fals
             catalog=cached?.items ?: emptyList(); hasMore=cached?.hasMore ?: false; ranking=null; homeFromCache=cached!=null
         }
         invalidatePage(); screen="catalog"; applyDeviceOrientationPolicy(); releaseCatalogViews()
-        // 电视/平板走左侧竖栏，手机保留顶部横排。判断放在 base() 之前，页面骨架需要知道给不给竖栏留位。
-        val compactHeader=widthDp()<900
-        val container=base(rail=useNavigationRail())
+        val container=base()
         if(foreground && library.isLoaded && !favoriteMonitor.running) main.post { if(foreground && screen=="catalog") favoriteMonitor.check() }
-        renderCatalogHeader(container, compactHeader)
-
-        renderCatalogContent(container, load, focusNav, focusType, focusFilter, compactHeader)
+        renderCatalogContent(container, load, focusNav, focusType, focusFilter)
     }

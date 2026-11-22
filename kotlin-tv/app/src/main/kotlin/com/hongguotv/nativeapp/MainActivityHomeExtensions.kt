@@ -12,7 +12,8 @@ import com.hongguotv.core.*
         val home=HomeScreen(this,top,::loadCover,
             { item,resume -> openDetail(item,resume) },::quickActions,{ catalogFocus=it },
             onVerticalScroll=::onCatalogContentScroll,
-            contentWidthPx={ dp(contentWidthDp()) })
+            contentWidthPx={ dp(contentWidthDp()) },
+            columns={ posterColumns() })
         homeScreen=home; body.addView(home,lp(-1,0).apply { weight=1f })
         val hot=catalog.filterNot { it.id in library.hidden() }
         home.render(homeShelves(),catalogFocus,!focusNav && !focusType,null,homePosition)

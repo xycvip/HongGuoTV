@@ -28,6 +28,8 @@ internal class HomeHeroView(
     private val onOpen: (HomeScreen.Entry)->Unit
 ): FrameLayout(context) {
     private fun dp(n: Int)=(n*resources.displayMetrics.density).toInt()
+    /** 矮屏（720p 电视）上主推位只有 150dp 高，字号与间距必须同步收一档。 */
+    private val compact=resources.displayMetrics.heightPixels/resources.displayMetrics.density<430f
     private var entry: HomeScreen.Entry?=null
 
     private val image=ImageView(context).apply {
@@ -57,7 +59,8 @@ internal class HomeHeroView(
         letterSpacing=.09f; typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
     }
     private val title=TextView(context).apply {
-        textSize=TvMetric.TEXT_DISPLAY; setTextColor(TvPalette.INK_100); includeFontPadding=false
+        textSize=if(compact) TvMetric.TEXT_TITLE else TvMetric.TEXT_DISPLAY
+        setTextColor(TvPalette.INK_100); includeFontPadding=false
         setLines(1); ellipsize=TextUtils.TruncateAt.END
         typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
     }
@@ -73,12 +76,12 @@ internal class HomeHeroView(
     }
     private val content=LinearLayout(context).apply {
         orientation=LinearLayout.VERTICAL; gravity=Gravity.BOTTOM
-        setPadding(dp(40),0,dp(40),dp(30))
+        setPadding(dp(if(compact) 22 else 40),0,dp(if(compact) 22 else 40),dp(if(compact) 18 else 30))
         addView(eyebrow,LinearLayout.LayoutParams(-2,-2))
-        addView(title,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(10) })
-        addView(meta,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) })
-        addView(progress,LinearLayout.LayoutParams(dp(260),dp(4)).apply { topMargin=dp(15) })
-        addView(hint,LinearLayout.LayoutParams(-2,-2).apply { topMargin=dp(10) })
+        addView(title,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(if(compact) 6 else 10) })
+        addView(meta,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(if(compact) 5 else 8) })
+        addView(progress,LinearLayout.LayoutParams(dp(if(compact) 180 else 260),dp(4)).apply { topMargin=dp(if(compact) 10 else 15) })
+        addView(hint,LinearLayout.LayoutParams(-2,-2).apply { topMargin=dp(if(compact) 7 else 10) })
     }
 
     init {
@@ -93,7 +96,7 @@ internal class HomeHeroView(
         addView(scrimLeft,FrameLayout.LayoutParams(-1,-1))
         addView(scrimBottom,FrameLayout.LayoutParams(-1,-1))
         addView(content,FrameLayout.LayoutParams(-1,-1))
-        addView(focusBar,FrameLayout.LayoutParams(dp(4),dp(58),Gravity.START or Gravity.BOTTOM).apply { bottomMargin=dp(86) })
+        addView(focusBar,FrameLayout.LayoutParams(dp(4),dp(if(compact) 44 else 58),Gravity.START or Gravity.BOTTOM).apply { bottomMargin=dp(if(compact) 56 else 86) })
         setOnClickListener { entry?.let(onOpen) }
         setOnFocusChangeListener { _,focused ->
             focusBar.animate().alpha(if(focused) 1f else .35f).setDuration(140).start()
@@ -117,13 +120,17 @@ internal class HomeHeroView(
     }
 
     /**
-     * 高度跟宽度走。1080p 电视的内容区是 864dp 宽、约 486dp 高，0.30 得到 259dp，
-     * 占屏高不到一半：首屏能看到完整主推位、一行标题和几乎整排海报，
-     * 既有大画面的体量，又不至于一屏只有一张图。
+     * 高度跟宽度走。1080p 电视的内容区是 788dp 宽、约 540dp 高，0.30 得到 236dp，
+     * 首屏能看到完整主推位加一整排海报。
+     *
+     * 下限必须跟着屏幕高度走：720p 电视只有 360dp 高，固定 240dp 的下限会让主推位
+     * 一口吃掉三分之二屏，海报只能露出半行——那是"看起来大气，实际没法用"。
      */
     override fun onMeasure(widthMeasureSpec: Int,heightMeasureSpec: Int) {
         val width=MeasureSpec.getSize(widthMeasureSpec)
-        val height=(width*.30f).toInt().coerceIn(dp(240),dp(400))
+        val screenDp=resources.displayMetrics.heightPixels/resources.displayMetrics.density
+        val minHeight=if(screenDp<430f) dp(150) else dp(220)
+        val height=(width*.30f).toInt().coerceIn(minHeight,dp(400))
         super.onMeasure(widthMeasureSpec,MeasureSpec.makeMeasureSpec(height,MeasureSpec.EXACTLY))
     }
 }

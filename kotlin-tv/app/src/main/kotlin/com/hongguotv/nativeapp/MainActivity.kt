@@ -165,9 +165,8 @@ class MainActivity: Activity() {
     internal var collectionReturn by navigationUiState::collectionReturn
     internal var collectionFocus by navigationUiState::collectionFocus
     internal var collectionBack by navigationUiState::collectionBack
-    // 六列在 1080p 电视上单卡只有 156dp，海报显得零碎；五列可以把卡面放大到约 190dp。
-    // 想恢复密度把这里改回 6 即可，其余布局都按 gridColumns 自适应。
-    internal val gridColumns=5
+    /** 海报列数：按内容区宽度自适应，用户也可在「外观 · 海报列数」里固定档位。 */
+    internal val gridColumns get()=posterColumns()
     internal val waterfallMaxPages=10
     internal var catalogRecycler: RecyclerView?=null
     internal var catalogAdapter: CatalogAdapter?=null
@@ -331,8 +330,6 @@ class MainActivity: Activity() {
     internal val apiStatusElapsedMs get() = apiStatusUiState.elapsedMs
     internal val apiStatusAnimators get() = apiStatusUiState.animators
     internal var catalogNavFlower by apiStatusUiState::catalogNavFlower
-    internal var catalogRailHost by navigationUiState::catalogRailHost
-    internal var catalogContentHost by navigationUiState::catalogContentHost
     internal var apiStatusCheckStarted by apiStatusUiState::checkStarted
     internal val homeShelfLoads get() = homeUiState.homeShelfLoads
     internal val queuedHomeShelfRefresh get() = homeUiState.queuedHomeShelfRefresh

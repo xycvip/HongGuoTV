@@ -24,6 +24,8 @@ class HomeScreen(
     private val onVerticalScroll: (Int)->Unit = {},
     /** 内容区可用宽度（像素）。有左侧竖栏时比屏幕窄，卡片必须按它等分，否则最后一列会被裁掉。 */
     private val contentWidthPx: (() -> Int)? = null,
+    /** 一行放几张。跟随「外观 · 海报列数」设置，默认五列。 */
+    private val columns: (() -> Int)? = null,
 ): LinearLayout(context) {
     data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
     data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null)
@@ -142,6 +144,8 @@ class HomeScreen(
     }
 
     fun render(shelves: List<Shelf>,focus: String,requestFocus: Boolean,more: (() -> Unit)?,position: Position?=null) {
+        // 列数在每次重建时算一次：屏幕宽度、竖栏宽度、用户设置三者都变了才需要重算。
+        val columnCount=(columns?.invoke() ?: 5).coerceAtLeast(2)
         val previous=position ?: if(rows.isNotEmpty()) capturePosition() else null
         this.shelves=shelves; footerMore=more; revision++; val ticket=revision; restoring=true
         contents.removeAllViews(); rows.clear(); cards.clear(); moreButton=null; lastRow=null
@@ -181,10 +185,10 @@ class HomeScreen(
             horizontal.addView(line, if(shelf.key=="random") LayoutParams(-1,-2) else LayoutParams(-2,-2)); block.addView(horizontal)
             val rowCards=mutableListOf<Card>()
             fun addCard(entry: Entry?,moreAction: (() -> Unit)?=null) {
-                // 五列等分内容区。宽度必须按「竖栏之后剩下的宽度」算，用屏幕宽会让第五张卡被裁掉右半边。
+                // 按列数等分内容区。宽度必须按「竖栏之后剩下的宽度」算，用屏幕宽会让最后一列被裁掉右半边。
                 val available = contentWidthPx?.invoke() ?: (resources.displayMetrics.widthPixels * .9f).toInt()
                 val width=if(shelf.key=="random") dp(320)
-                    else ((available-dp(70))/5).toInt().coerceAtLeast(dp(100))
+                    else ((available-dp(4)-dp(14)*columnCount)/columnCount).toInt().coerceAtLeast(dp(96))
                 val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
                 val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(4)); background=shape(false) }
                 val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.CENTER_CROP; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
@@ -289,7 +293,9 @@ class HomeScreen(
         // 刷新按钮由首页顶部快捷操作栏承载；底部不再重复放置“刷新热门/更多热门”。
         moreButton=null
         rows.forEachIndexed { i,row -> row.cards.forEachIndexed { j,card ->
-            card.view.nextFocusLeftId=row.cards[(j-1).coerceAtLeast(0)].view.id; card.view.nextFocusRightId=row.cards[(j+1).coerceAtMost(row.cards.lastIndex)].view.id
+            // 最左一张按下左键回到竖栏，而不是把自己再选中一次（焦点"卡住"是最常见的抱怨）。
+            card.view.nextFocusLeftId=if(j==0) top.id else row.cards[j-1].view.id
+            card.view.nextFocusRightId=row.cards[(j+1).coerceAtMost(row.cards.lastIndex)].view.id
             card.view.nextFocusUpId=if(i==0) (heroView?.id ?: top.id) else rows[i-1].cards[j.coerceAtMost(rows[i-1].cards.lastIndex)].view.id
             card.view.nextFocusDownId=if(i==rows.lastIndex) card.view.id else rows[i+1].cards[j.coerceAtMost(rows[i+1].cards.lastIndex)].view.id
         } }
@@ -297,7 +303,8 @@ class HomeScreen(
             hero.nextFocusUpId=top.id
             hero.nextFocusDownId=rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: hero.id
         }
-        top.nextFocusDownId=firstId()
+        // 不要再把「导航项的下键」接到主推位：竖栏里下键必须继续换页，
+        // 进内容的通道是右键（交给系统的空间搜索）。
         val preferred=focus.ifBlank { previous?.focus.orEmpty() }
         val target=target(preferred,previous)
         if(requestFocus) target.requestFocus()

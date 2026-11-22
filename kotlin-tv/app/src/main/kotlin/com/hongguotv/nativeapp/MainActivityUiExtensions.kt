@@ -113,38 +113,37 @@ import java.util.Locale
     }
 
     /**
-     * 页面骨架。
+     * 页面骨架：左侧竖栏 + 右侧内容。
      *
-     * [rail] = true 时换成「左侧竖栏 + 右侧内容」：竖栏单独占一列，内容区不再被顶部
-     * 横条切掉一条，也更符合电视遥控器的方向直觉 —— 上下在竖栏内换页，左右在内容里浏览。
-     * 手机等窄屏仍走原来的整页布局（顶部导航）。
+     * 竖栏在这里统一挂载，而不是由各页面自己调 —— 详情页、片源页、设置页都是同一套外壳，
+     * 从首页点进详情不会出现"导航忽然消失、按返回才回来"。播放器不走这个骨架。
      */
-    internal fun MainActivity.base(title: String?=null, rail: Boolean=false): LinearLayout {
+    internal fun MainActivity.base(title: String?=null): LinearLayout {
         root.removeAllViews(); root.setBackgroundColor(bg)
         val container=column()
-        if(rail) {
-            val railWidth=dp(railWidthDp())
-            val shell=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; clipChildren=false }
-            val railHost=FrameLayout(this).apply {
-                id=View.generateViewId(); setBackgroundColor(TvStyle.colors.rail); clipChildren=false
-            }
-            shell.addView(railHost,LinearLayout.LayoutParams(railWidth,-1))
-            container.setPadding(dp(28),dp(22),dp(40),dp(22))
-            shell.addView(container,LinearLayout.LayoutParams(0,-1,1f))
-            // 竖栏与内容之间只留一条 1dp 细线，不用阴影堆层次。
-            railHost.addView(
-                View(this).apply { setBackgroundColor(TvStyle.colors.railStroke) },
-                FrameLayout.LayoutParams(dp(1),-1,Gravity.END),
-            )
-            root.addView(shell,FrameLayout.LayoutParams(-1,-1))
-            catalogRailHost=railHost
-        } else {
-            val horizontal=dp(widthDp()*.05f); val vertical=(resources.displayMetrics.heightPixels*.05f).toInt()
-            container.setPadding(horizontal,vertical,horizontal,vertical)
-            root.addView(container,FrameLayout.LayoutParams(-1,-1))
-            catalogRailHost=null
+        val wide=widthDp() >= 780f
+        val shell=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; clipChildren=false }
+        val railHost=FrameLayout(this).apply {
+            id=View.generateViewId(); setBackgroundColor(TvStyle.colors.rail); clipChildren=false
         }
-        catalogContentHost=container
+        shell.addView(railHost,LinearLayout.LayoutParams(dp(railWidthDp()),-1))
+        container.setPadding(
+            dp(if(wide) 28 else 20),
+            dp(if(wide) 22 else 16),
+            dp(if(wide) 40 else 24),
+            dp(if(wide) 22 else 16),
+        )
+        shell.addView(container,LinearLayout.LayoutParams(0,-1,1f))
+        // 竖栏与内容之间只留一条 1dp 细线，不用阴影堆层次。
+        railHost.addView(
+            View(this).apply { setBackgroundColor(TvStyle.colors.railStroke) },
+            FrameLayout.LayoutParams(dp(1),-1,Gravity.END),
+        )
+        root.addView(shell,FrameLayout.LayoutParams(-1,-1))
+        // 页面重建时清空上一轮的导航引用，再按当前页面重新登记。
+        nav.clear(); navByTab.clear(); searchNavShortcut=null
+        stopApiStatusAnimations(); apiStatusViews.clear()
+        renderNavigationRail(railHost,container)
         if(title!=null) {
             // 返回是次要操作，用纯文字语气；原来给它一块灰底，和页面标题抢了同一行的高度。
             val heading=row(); addToneButton(heading,"‹ 返回",TvTone.Ghost) { goBack() }

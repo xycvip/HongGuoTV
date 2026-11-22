@@ -16,18 +16,63 @@ internal fun MainActivity.backupFolder(): java.io.File {
 }
 
 
+    /**
+     * 备份与恢复入口。
+     *
+     * 原来只有两条纯文字选项，看不到备份存在哪、已有几份，选完还得靠记忆找文件。
+     * 现在先给出目录与文件数，再给"导出（主）/恢复（次）/取消（纯文字）"三级操作。
+     */
     internal fun MainActivity.showFileBackupDialog(anchor: View) {
-        tvTools.choose(
-            "备份与恢复",
-            listOf("导出备份文件","从备份文件恢复"),
-            anchor,
-            { choice ->
-                pendingBackupAction = choice
-                pendingBackupAnchor = anchor
-                ensureBackupStoragePermission()
-            },
-            "备份会包含红果账户登录凭据（明文），请勿分享备份文件。云端账户的观看历史、收藏和预约记录不会写入备份；恢复后会尝试登录并从云端刷新。"
-        )
+        val folder=backupFolder()
+        val files=runCatching {
+            if (!folder.exists()) folder.mkdirs()
+            folder.listFiles()?.filter {
+                it.isFile && it.extension.equals("json",true) && !it.name.startsWith("hongguotv-debug-",true)
+            }
+        }.getOrNull().orEmpty().sortedByDescending { it.lastModified() }
+
+        val content=column()
+        content.addView(TvDialog.title(this,"备份与恢复"))
+        content.addView(TvDialog.body(this,"备份包含收藏、观看记录、稍后看、搜索记录、第三方片源与播放偏好。红果账户凭据以明文写入备份，请不要分享备份文件。"))
+
+        val info=column().apply {
+            setPadding(dp(16),dp(13),dp(16),dp(13))
+            background=TvStyle.shape(this@showFileBackupDialog,TvStyle.colors.surfaceSunken,TvStyle.colors.strokeSubtle,TvMetric.RADIUS_M)
+        }
+        info.addView(text("备份目录",TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary))
+        info.addView(text(folder.absolutePath,TvMetric.TEXT_BODY,TvStyle.colors.textSecondary).apply {
+            setPadding(0,dp(5),0,0)
+            maxLines=1
+            ellipsize=android.text.TextUtils.TruncateAt.MIDDLE
+        })
+        info.addView(text(
+            if(files.isEmpty()) "还没有备份文件"
+            else "已有 ${files.size} 个备份 · 最近一次 ${java.text.SimpleDateFormat("MM-dd HH:mm",Locale.CHINA).format(java.util.Date(files.first().lastModified()))}",
+            TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary,
+        ).apply { setPadding(0,dp(5),0,0) })
+        content.addView(info,lp(-1,-2).apply { bottomMargin=dp(20) })
+
+        val buttons=row().apply { gravity=Gravity.END }
+        lateinit var dialog:android.app.AlertDialog
+        fun start(action:Int) {
+            dialog.dismiss()
+            pendingBackupAction=action
+            pendingBackupAnchor=anchor
+            ensureBackupStoragePermission()
+        }
+        val export=TvDialog.capsuleButton(this,"导出备份",primary=true) { start(0) }
+        val restore=TvDialog.capsuleButton(this,"从文件恢复") { start(1) }
+        val cancel=TvDialog.capsuleButton(this,"取消") { dialog.dismiss() }
+        buttons.addView(export,lp(-2,-2).apply { rightMargin=dp(10) })
+        buttons.addView(restore,lp(-2,-2).apply { rightMargin=dp(10) })
+        buttons.addView(cancel,lp(-2,-2))
+        content.addView(buttons)
+
+        dialog=android.app.AlertDialog.Builder(this).setView(TvDialog.card(this,content)).create()
+        TvDialog.styleWindow(this,dialog,widthFraction=0.5f,maxWidthDp=560)
+        dialog.setOnDismissListener { if(anchor.isAttachedToWindow) anchor.requestFocus() }
+        dialog.show()
+        export.post { if(dialog.isShowing) export.requestFocus() }
     }
 
     internal fun MainActivity.hasBackupStoragePermission(): Boolean {

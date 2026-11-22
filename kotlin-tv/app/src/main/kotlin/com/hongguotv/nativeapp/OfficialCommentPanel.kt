@@ -19,7 +19,16 @@ import com.hongguotv.core.DanmakuEmoji
 import com.hongguotv.core.OfficialComment
 import com.hongguotv.core.OfficialCommentPage
 
-/** Right-side TV panel for ordinary episode comments; never displays time-anchored danmaku. */
+/**
+ * 播放页右侧的官方评论面板。
+ *
+ * 改造前它是"一列同样大小的灰按钮"：上一集/下一集/关闭和每条评论的点赞/回复长得一样，
+ * 标题和正文字号只差 3sp，一屏十几块同色矩形，视线没有落点。
+ *
+ * 现在分三层：标题区（剧名 + 条数，操作退到右上角的小号 ghost）、
+ * 评论列表（头像 + 昵称 + 时间 + 正文 + 一行操作）、回复用左侧细线缩进。
+ * 颜色全部走语义令牌，浅色主题下不再是"播放器上贴了一块深色板"。
+ */
 internal class OfficialCommentPanel(
     context: Context,
     private val signedIn: Boolean,
@@ -39,42 +48,37 @@ internal class OfficialCommentPanel(
         fun login()
     }
 
-    // 评论面板原来自带一套深灰 + 粉红的固定配色，浅色主题下依旧是一片黑，和全站主题脱节。
-    // 现在统一读语义令牌：面板是"播放器上的一层纸"，跟随当前主题换色。
     private val backgroundColor = TvStyle.colors.background
     private val surfaceColor = TvStyle.colors.surface
     private val textColor = TvStyle.colors.textPrimary
     private val mutedColor = TvStyle.colors.textSecondary
     private val accentColor = TvStyle.colors.accent
-    /** TV 遥控器界面使用紧凑操作按钮，减少点赞/回复/查看回复对评论正文的挤占。 */
-    private val compactTvActions =
-        context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) ||
-            context.packageManager.hasSystemFeature("android.hardware.type.television") ||
-            (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) ==
-                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-    private val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+
+    private val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
     private val scroll = ScrollView(context).apply {
         isFillViewport = false
-        isVerticalScrollBarEnabled = true
+        isVerticalScrollBarEnabled = false
+        clipToPadding = false
         addView(list, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
     }
-    private val countLabel = label("本集评论", 17f, true)
-    private val statusLabel = label("", 13f, false, mutedColor).apply { isFocusable = true }
-    private val composerLabel = label("", 12f, false, mutedColor)
+    private val countLabel = label("评论", TvMetric.TEXT_SUBTITLE, true)
+    private val episodeLabel = label("", TvMetric.TEXT_CAPTION, false, mutedColor)
+    private val statusLabel = label("", TvMetric.TEXT_CAPTION, false, mutedColor).apply { isFocusable = true }
+    private val composerLabel = label("", TvMetric.TEXT_CAPTION, false, mutedColor)
     private val input = EditText(context).apply {
         setTextColor(textColor)
         setHintTextColor(mutedColor)
-        textSize = 14f
+        textSize = TvMetric.TEXT_BODY
         hint = "说说你的看法……"
         minLines = 1
         maxLines = 3
         isSingleLine = false
         imeOptions = EditorInfo.IME_ACTION_SEND
-        setPadding(dp(10), dp(8), dp(10), dp(8))
+        setPadding(dp(12), dp(9), dp(12), dp(9))
         background = TvStyle.shape(context, surfaceColor, TvStyle.colors.strokeSubtle, TvMetric.RADIUS_M)
         isFocusable = true
     }
-    private val sendButton = action("发送") { listener.send(input.text.toString()) }
+    private val sendButton = action("发送", primary = true) { listener.send(input.text.toString()) }
     private var canSend = signedIn
     private var loading = false
     private var hasMore = false
@@ -93,21 +97,31 @@ internal class OfficialCommentPanel(
         isFocusable = false
         val page = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(14))
+            setPadding(dp(20), dp(18), dp(20), dp(14))
         }
+
+        // ── 标题区：左侧两级文字（标题 + 哪一集），右侧三个小号操作。
+        // 操作不再和标题同一字号，避免"关闭"看起来和剧名同等重要。
         val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+        }
+        val titles = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        titles.addView(countLabel, LinearLayout.LayoutParams(-1, -2))
+        titles.addView(episodeLabel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
+        header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
+        val headerActions = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(countLabel, LinearLayout.LayoutParams(0, dp(42), 1f))
-        header.addView(action("上一集") { listener.previousEpisode() })
-        header.addView(action("下一集") { listener.nextEpisode() })
-        header.addView(action("关闭") { listener.close() })
-        page.addView(header)
-        page.addView(label("当前播放集的官方评论", 12f, false, mutedColor))
-        page.addView(statusLabel)
+        headerActions.addView(action("上一集") { listener.previousEpisode() }, marginStart(6))
+        headerActions.addView(action("下一集") { listener.nextEpisode() }, marginStart(6))
+        headerActions.addView(action("关闭") { listener.close() }, marginStart(6))
+        header.addView(headerActions, LinearLayout.LayoutParams(-2, -2))
+        page.addView(header, LinearLayout.LayoutParams(-1, -2))
+        page.addView(statusLabel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         page.addView(scroll, LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {
-            topMargin = dp(8)
+            topMargin = dp(6)
             bottomMargin = dp(10)
         })
         page.addView(composerLabel)
@@ -116,9 +130,9 @@ internal class OfficialCommentPanel(
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.BOTTOM
             }
-            composer.addView(input, LinearLayout.LayoutParams(0, dp(76), 1f))
-            composer.addView(sendButton, LinearLayout.LayoutParams(dp(76), dp(52)).apply {
-                leftMargin = dp(8)
+            composer.addView(input, LinearLayout.LayoutParams(0, dp(72), 1f))
+            composer.addView(sendButton, LinearLayout.LayoutParams(dp(80), dp(44)).apply {
+                leftMargin = dp(TvMetric.GAP_S)
             })
             page.addView(composer)
             input.setOnEditorActionListener { _, actionId, _ ->
@@ -128,14 +142,22 @@ internal class OfficialCommentPanel(
                 } else false
             }
         } else {
-            page.addView(action("登录红果账号后发表评论、回复和点赞") { listener.login() })
+            page.addView(
+                action("登录红果账号后发表评论、回复和点赞") { listener.login() }.apply {
+                    gravity = Gravity.CENTER
+                },
+                LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(4) },
+            )
         }
         addView(page, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         showLoading()
     }
 
+    private fun marginStart(value: Int) = LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(value) }
+
     fun setEpisode(title: String, episodeNumber: Int) {
-        countLabel.text = "《$title》· 第 $episodeNumber 集评论"
+        countLabel.text = "评论"
+        episodeLabel.text = "《$title》· 第 $episodeNumber 集"
         currentItems = emptyList()
         currentReplies = emptyMap()
         replyCursors.clear()
@@ -237,10 +259,6 @@ internal class OfficialCommentPanel(
             ?: statusLabel.requestFocus()
     }
 
-    private fun actionFocusFallback() {
-        if (signedIn) input.requestFocus()
-    }
-
     private fun firstFocusable(view: View): View? {
         if (view.isFocusable && view.visibility == View.VISIBLE) return view
         if (view is android.view.ViewGroup) {
@@ -269,24 +287,28 @@ internal class OfficialCommentPanel(
                     "more-replies:${comment.id}"
                 ) {
                     if (comment.id !in replyLoading) listener.loadMoreReplies(comment)
+                }, LinearLayout.LayoutParams(-1, dp(36)).apply {
+                    leftMargin = dp(44)
+                    topMargin = dp(2)
                 })
             }
             list.addView(View(context).apply {
                 setBackgroundColor(TvStyle.colors.strokeSubtle)
             }, LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(1)).apply {
-                topMargin = dp(7)
-                bottomMargin = dp(3)
+                topMargin = dp(10)
+                bottomMargin = dp(2)
             })
         }
         if (hasMore) {
             list.addView(action(if (loading) "加载中…" else "加载更多评论", "more-comments") {
                 if (!loading) listener.loadMore()
-            })
+            }, LinearLayout.LayoutParams(-1, dp(40)))
         }
         if (currentItems.isEmpty() && !loading) {
-            list.addView(label("还没有人发表本集评论", 14f, false, mutedColor).apply {
-                setPadding(dp(8), dp(22), dp(8), dp(22))
-            })
+            list.addView(label("还没有人发表本集评论", TvMetric.TEXT_BODY, false, mutedColor).apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(8), dp(32), dp(8), dp(32))
+            }, LinearLayout.LayoutParams(-1, -2))
         }
         list.post {
             val target = focusTag?.let { list.findViewWithTag<View>(it) }
@@ -299,20 +321,26 @@ internal class OfficialCommentPanel(
     private fun commentCard(comment: OfficialComment, isReply: Boolean): View {
         val card = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(if (isReply) 38 else 0), dp(if (isReply) 7 else 11), dp(8), dp(8))
-            background = rounded(Color.TRANSPARENT, 8)
+            setPadding(dp(6), dp(if (isReply) 6 else 12), dp(6), dp(4))
+            background = rounded(Color.TRANSPARENT, TvMetric.RADIUS_S)
             isFocusable = isReply
             isClickable = isReply
             tag = if (isReply) "reply:${comment.id}" else "comment:${comment.id}"
             if (isReply) {
                 setOnFocusChangeListener { view, focused ->
-                    view.background = rounded(
+                    view.background = TvStyle.shape(
+                        context,
                         if (focused) TvStyle.colors.surfaceRaised else Color.TRANSPARENT,
-                        8
+                        if (focused) TvStyle.colors.focusRing else Color.TRANSPARENT,
+                        TvMetric.RADIUS_S,
                     )
                 }
                 setOnClickListener { listener.reply(comment) }
             }
+        }
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            if (isReply) setPadding(dp(44), 0, 0, 0)
         }
         val authorLine = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -320,36 +348,64 @@ internal class OfficialCommentPanel(
         }
         val avatar = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = rounded(surfaceColor, 18)
+            background = rounded(surfaceColor, 16)
             contentDescription = "${comment.author}头像"
         }
         if (comment.avatar.startsWith("https://")) avatarLoader(avatar, comment.avatar)
-        authorLine.addView(avatar, LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(8) })
-        authorLine.addView(label(comment.author, 13f, true), LinearLayout.LayoutParams(0, -2, 1f))
-        if (comment.createdAt > 0) authorLine.addView(label(timeText(comment.createdAt), 11f, false, mutedColor))
-        card.addView(authorLine)
-        card.addView(label(DanmakuEmoji.display(comment.text), 14f, false, textColor).apply {
-            setPadding(0, dp(6), 0, dp(7))
+        authorLine.addView(avatar, LinearLayout.LayoutParams(dp(30), dp(30)).apply { rightMargin = dp(9) })
+        authorLine.addView(
+            label(comment.author, TvMetric.TEXT_BODY, true).apply {
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            },
+            LinearLayout.LayoutParams(0, -2, 1f),
+        )
+        if (comment.createdAt > 0) {
+            authorLine.addView(label(timeText(comment.createdAt), TvMetric.TEXT_CAPTION, false, mutedColor))
+        }
+        body.addView(authorLine)
+        body.addView(label(DanmakuEmoji.display(comment.text), TvMetric.TEXT_BODY, false, textColor).apply {
+            setPadding(0, dp(6), 0, dp(6))
+            setLineSpacing(0f, 1.35f)
         })
+        body.addView(commentActions(comment, isReply))
+
+        if (isReply) {
+            // 回复用一根 2dp 竖线表示层级：只靠缩进时，深色背景下几乎看不出从属关系。
+            // 竖线放在 FrameLayout 里才能可靠地 match_parent 到正文高度。
+            val frame = FrameLayout(context)
+            frame.addView(
+                View(context).apply { setBackgroundColor(TvStyle.colors.strokeSubtle) },
+                FrameLayout.LayoutParams(dp(2), FrameLayout.LayoutParams.MATCH_PARENT),
+            )
+            frame.addView(body, FrameLayout.LayoutParams(-1, -2))
+            card.addView(frame, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            card.addView(body, LinearLayout.LayoutParams(-1, -2))
+        }
+        return card
+    }
+
+    /** 每条评论的操作行：点赞/回复是次要动作，用纯文字；数量以 caption 呈现。 */
+    private fun commentActions(comment: OfficialComment, isReply: Boolean): View {
         val actions = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        if (!isReply) {
-            actions.addView(action((if (comment.liked) "♥ " else "♡ ") + comment.likes, "comment:${comment.id}:like") {
-                listener.like(comment)
-            })
-            actions.addView(action("回复", "comment:${comment.id}:reply") { listener.reply(comment) })
-            if (comment.replies > 0) {
-                actions.addView(action("查看回复（${comment.replies}）", "comment:${comment.id}:open-replies") {
-                    listener.openReplies(comment)
-                })
-            }
-        } else {
-            actions.addView(label("选择此回复可继续回复", 11f, false, mutedColor))
+        if (isReply) {
+            actions.addView(label("选择此回复可继续回复", TvMetric.TEXT_CAPTION, false, mutedColor))
+            return actions
         }
-        card.addView(actions)
-        return card
+        actions.addView(action(if (comment.liked) "♥ 已赞 ${comment.likes}" else "♡ ${comment.likes}", "comment:${comment.id}:like") {
+            listener.like(comment)
+        })
+        actions.addView(action("回复", "comment:${comment.id}:reply") { listener.reply(comment) }, marginStart(4))
+        if (comment.replies > 0) {
+            actions.addView(action("查看 ${comment.replies} 条回复", "comment:${comment.id}:open-replies") {
+                listener.openReplies(comment)
+            }, marginStart(4))
+        }
+        return actions
     }
 
     private fun label(value: String, size: Float, bold: Boolean, color: Int = textColor) =
@@ -361,27 +417,43 @@ internal class OfficialCommentPanel(
             isFocusable = false
         }
 
-    private fun action(value: String, focusTag: String? = null, click: () -> Unit) =
+    private fun action(value: String, focusTag: String? = null, primary: Boolean = false, click: () -> Unit) =
         TextView(context).apply {
             text = value
             tag = focusTag
-            textSize = if (compactTvActions) 11f else 13f
-            setTextColor(textColor)
+            textSize = TvMetric.TEXT_BODY
+            setTextColor(if (primary) TvStyle.colors.onAccent else textColor)
             gravity = Gravity.CENTER
-            setPadding(
-                dp(if (compactTvActions) 7 else 12),
-                dp(if (compactTvActions) 4 else 8),
-                dp(if (compactTvActions) 7 else 12),
-                dp(if (compactTvActions) 4 else 8)
-            )
-            minHeight = dp(if (compactTvActions) 30 else 42)
+            setPadding(dp(if (primary) 14 else 10), dp(6), dp(if (primary) 14 else 10), dp(6))
+            minHeight = dp(34)
             isFocusable = true
             isClickable = true
-            background = rounded(surfaceColor, TvMetric.RADIUS_S)
-            setOnFocusChangeListener { view, focused ->
-                view.background = TvStyle.shape(context, if (focused) TvStyle.colors.surfaceRaised else surfaceColor,
-                    if (focused) TvStyle.colors.focusRing else Color.TRANSPARENT, TvMetric.RADIUS_S)
+            fun paint(focused: Boolean) {
+                background = when {
+                    primary -> TvStyle.shape(
+                        context,
+                        if (focused) TvStyle.colors.accentPressed else accentColor,
+                        if (focused) TvStyle.colors.focusRing else Color.TRANSPARENT,
+                        TvMetric.RADIUS_M,
+                    )
+                    focused -> TvStyle.shape(
+                        context,
+                        withAlpha(textColor, .12f),
+                        TvStyle.colors.focusRing,
+                        TvMetric.RADIUS_S,
+                    )
+                    else -> TvStyle.shape(context, Color.TRANSPARENT, Color.TRANSPARENT, TvMetric.RADIUS_S)
+                }
+                setTextColor(
+                    when {
+                        primary -> TvStyle.colors.onAccent
+                        focused -> TvStyle.colors.textPrimary
+                        else -> mutedColor
+                    },
+                )
             }
+            paint(false)
+            setOnFocusChangeListener { _, focused -> paint(focused) }
             setOnClickListener { click() }
         }
 

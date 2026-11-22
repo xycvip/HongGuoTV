@@ -75,7 +75,8 @@ import com.hongguotv.core.*
     }
 
     internal fun MainActivity.showDanmakuPrefsDialog(anchor: View) {
-        fun labels()=listOf("不透明度 ${library.danmakuOpacity}%","字体大小 ${DanmakuPrefs.fontLabel(library.danmakuFont)}","颜色 ${danmakuColorModeLabel()}","移动速度 ${DanmakuPrefs.speedLabel(library.danmakuSpeed)}","展示行数 ${library.danmakuRows} 行","恢复默认设置")
+        fun labels()=listOf("不透明度  ·  ${library.danmakuOpacity}%","字体大小  ·  ${DanmakuPrefs.fontLabel(library.danmakuFont)}","颜色  ·  ${danmakuColorModeLabel()}","移动速度  ·  ${DanmakuPrefs.speedLabel(library.danmakuSpeed)}","展示行数  ·  ${library.danmakuRows} 行","恢复默认设置")
+        // 用「标题 · 当前值」的两栏读法，和设置页里的弹幕分类保持同一套文案。
         tvTools.choose("弹幕设置",labels(),anchor,{ choice ->
             main.post {
                 if(screen!="player" || !anchor.isAttachedToWindow) return@post
@@ -88,7 +89,7 @@ import com.hongguotv.core.*
                     5 -> { resetDanmakuPrefs(); showDanmakuPrefsDialog(anchor) }
                 }
             }
-        })
+        },extra="弹幕设置只影响播放画面，不改动评论与剧集数据。")
     }
 
     internal fun MainActivity.showBlockedWordDialog(anchor: View) {

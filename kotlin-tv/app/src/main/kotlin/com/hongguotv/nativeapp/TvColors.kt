@@ -120,11 +120,7 @@ data class TvColors(
     // 主导航竖栏：比页面底色更沉一层，靠一条细线切出"框架"感
     val rail: Int,
     val railStroke: Int,
-    // 顶栏磨砂：三段渐变 + 描边
-    val navTop: Int,
-    val navMid: Int,
-    val navBottom: Int,
-    val navStroke: Int
+    val railSelected: Int
 ) {
     companion object {
         /** 深夜影院（默认）。色值与改造前完全一致，改令牌不改变现有观感。 */
@@ -153,10 +149,7 @@ data class TvColors(
             selectedSurface = 0xFF3D2722.toInt(),
             rail = TvPalette.INK_950,
             railStroke = 0x14FFFFFF,
-            navTop = 0xE82A3340.toInt(),
-            navMid = 0xDA181F2A.toInt(),
-            navBottom = 0xE0111720.toInt(),
-            navStroke = 0x9697A6B8.toInt()
+            railSelected = 0x0FFFFFFF,
         )
 
         /** 暖玉白。色值与改造前一致。 */
@@ -185,10 +178,7 @@ data class TvColors(
             selectedSurface = 0xFFE0CEBC.toInt(),
             rail = TvPalette.PAPER_300,
             railStroke = 0x1A000000,
-            navTop = 0xEEFFFDF7.toInt(),
-            navMid = 0xE2F6EFE2.toInt(),
-            navBottom = 0xDCEBE1D0.toInt(),
-            navStroke = 0xAFFFFFFF.toInt()
+            railSelected = 0x0F000000,
         )
 
         /** 备选：墨黑 + 暖金。切换时把 [Dark] 里的 accent / focusGlow 换成这两个即可。 */

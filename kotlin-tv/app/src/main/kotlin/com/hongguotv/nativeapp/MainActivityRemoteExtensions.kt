@@ -171,7 +171,6 @@ import com.hongguotv.core.*
                 } else {
                     // 内容区（包括海报网格）返回导航栏时，焦点和画面都回到顶部。
                     if(runCatching { root }.isSuccess) resetCatalogContentToTop(root)
-                    revealCatalogNavForFocus()
                     navForTab().requestFocus()
                 }
             }

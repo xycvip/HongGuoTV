@@ -100,11 +100,14 @@ import java.util.Locale
             setPadding(dp(9),dp(5),dp(9),dp(5))
             background=TvStyle.shape(this@showDetail,withAlpha(TvPalette.INK_950,.72f),Color.TRANSPARENT,TvMetric.RADIUS_S)
         },FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM or Gravity.START).apply { leftMargin=dp(12); bottomMargin=dp(12) })
-        hero.addView(posterBox,lp(dp(184),dp(263)).apply { rightMargin=dp(28) })
+        // 海报尺寸按可用宽度收：720p 的 360dp 高屏继续用 184×263 会顶掉简介和按钮。
+        val narrowDetail=widthDp()<780f
+        val posterWidth=if(narrowDetail) 132 else 184
+        hero.addView(posterBox,lp(dp(posterWidth),dp((posterWidth/TvStyle.POSTER_ASPECT).toInt())).apply { rightMargin=dp(if(narrowDetail) 20 else 28) })
         loadCover(image,data.series.cover)
 
         val info=column(); hero.addView(info,lp(0,-2).apply { weight=1f })
-        info.addView(text(data.series.title,TvMetric.TEXT_HEADLINE).apply {
+        info.addView(text(data.series.title,if(narrowDetail) TvMetric.TEXT_TITLE else TvMetric.TEXT_HEADLINE).apply {
             setTypeface(null,Typeface.BOLD); maxLines=2; ellipsize=TextUtils.TruncateAt.END; includeFontPadding=false
         })
         info.addView(text("${data.episodes.size} 集  ·  ${data.series.tags}"+library.progress(data.series.id)?.let { "  ·  看到第 ${it.episodeIndex+1} 集" }.orEmpty(),TvMetric.TEXT_CAPTION,muted).apply {
@@ -180,7 +183,7 @@ import java.util.Locale
         val seasonButtons=mutableListOf<View>()
         if(seasons.size>1) {
             val seasonRow=row(); seasonRow.setPadding(0,dp(3),0,dp(6))
-            seasonRow.addView(text("系列 ${seasons.size} 季",13f,muted),lp(dp(78),dp(42)))
+            seasonRow.addView(text("系列 ${seasons.size} 季",TvMetric.TEXT_CAPTION,muted),lp(dp(78),dp(42)))
             val strip=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false }
             val line=row(); strip.addView(line)
             seasons.forEach { season ->
@@ -195,7 +198,12 @@ import java.util.Locale
         val groupRow=row(); groupRow.setPadding(0,dp(3),0,dp(5))
         val maxGroup=data.episodes.lastIndex/20; group=group.coerceIn(0,maxGroup)
         val previous=addButton(groupRow,"‹ 上一组") { if(group>0) { group--; showDetail(true) } }.apply { isEnabled=group>0; isFocusable=group>0; alpha=if(group>0) 1f else .4f }
-        groupRow.addView(text("第 ${group*20+1}—${minOf((group+1)*20,data.episodes.size)} 集",16f).apply { gravity=Gravity.CENTER },lp(dp(190),dp(42)))
+        // 集数区间用权重占位：窄屏上四颗控件按固有宽度排会超出内容区，最后一颗被裁掉。
+        groupRow.addView(text("第 ${group*20+1}—${minOf((group+1)*20,data.episodes.size)} 集",TvMetric.TEXT_LABEL).apply {
+            gravity=Gravity.CENTER
+            maxLines=1
+            ellipsize=TextUtils.TruncateAt.END
+        },lp(0,dp(42)).apply { weight=1f })
         addButton(groupRow,"下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
         lateinit var jump: TextView
         jump=addButton(groupRow,"跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/20; showDetail(true) } }
@@ -278,7 +286,7 @@ import java.util.Locale
         val lastRowStart=((episodes.size-1)/10)*10
         val firstRow=extraRows.firstOrNull()
         episodes.forEachIndexed { i,v ->
-            v.nextFocusLeftId=if(i%10==0) v.id else episodes[i-1].id
+            v.nextFocusLeftId=if(i%10==0) navForTab().id else episodes[i-1].id
             v.nextFocusRightId=if(i%10==9 || i==episodes.lastIndex) v.id else episodes[i+1].id
             v.nextFocusUpId=if(i>=10) episodes[i-10].id else jump.id
             v.nextFocusDownId=when {
@@ -289,7 +297,7 @@ import java.util.Locale
         }
         extraRows.forEachIndexed { rowIndex,cards ->
             cards.forEachIndexed { i,v ->
-                v.nextFocusLeftId=cards[(i-1).coerceAtLeast(0)].id
+                v.nextFocusLeftId=if(i==0) navForTab().id else cards[i-1].id
                 v.nextFocusRightId=cards[(i+1).coerceAtMost(cards.lastIndex)].id
                 v.nextFocusUpId=if(rowIndex>0) extraRows[rowIndex-1].getOrNull(i.coerceAtMost(extraRows[rowIndex-1].lastIndex))?.id ?: play.id
                     else episodes.getOrNull((lastRowStart+i).coerceAtMost(episodes.lastIndex))?.id ?: play.id

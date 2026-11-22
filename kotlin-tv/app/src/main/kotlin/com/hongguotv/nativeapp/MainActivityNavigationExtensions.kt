@@ -13,14 +13,12 @@ internal fun MainActivity.nextRankBoard()=RankBoard.entries[(rankBoard.ordinal+1
 /** 首页筛选布局仅在宽屏且字体缩放适中时内联显示。 */
 internal fun MainActivity.inlineHomeFilters()=tab==0 && resources.configuration.fontScale<=1.2f && widthDp()>=900
 
-// 直接按 tab ID 获取导航项；调整顶部展示顺序时无需同步维护数字索引映射。
+// 直接按 tab ID 获取导航项；竖栏的展示顺序变化无需同步维护数字索引映射。
 internal fun MainActivity.navForTab():View=if(tab==1) searchNavShortcut ?: root else navByTab[if(tab==3 || tab==4) 3 else tab] ?: root
 
-/** 顶部导航栏固定显示，不再跟随内容滚动执行高度动画或透明度动画。 */
-// 保留滚动回调接口兼容现有页面，但不再因滚动改变顶部导航栏状态。
+// 保留滚动回调接口兼容现有页面：竖栏固定，不因内容滚动改变外观。
 internal fun MainActivity.onCatalogContentScroll(contentHasReachedNav:Boolean) = Unit
 internal fun MainActivity.onCatalogContentScroll(dy:Int) = Unit
-internal fun MainActivity.revealCatalogNavForFocus() = Unit
 
 /** 递归将目录页内的滚动容器恢复到顶部。 */
 internal fun MainActivity.resetCatalogContentToTop(view: View) {

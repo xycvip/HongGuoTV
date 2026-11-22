@@ -97,7 +97,6 @@ internal fun MainActivity.renderAccountLoginCard(
                 nextFocusDownId = id
                 nextFocusLeftId = id
                 nextFocusRightId = id
-                accountNavigation?.nextFocusDownId = id
             }
             accountQrRefreshView = refresh
             card.addView(refresh, lp(-2, dp(if (mobileLayout) 38 else 44)).apply {

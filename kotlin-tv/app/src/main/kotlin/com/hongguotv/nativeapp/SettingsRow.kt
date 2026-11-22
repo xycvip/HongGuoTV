@@ -71,7 +71,15 @@ internal class SettingsRow(context: Context) : LinearLayout(context) {
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            maxWidth = TvMetric.dp(context, 360)
+            // 值栏上限跟着屏幕走：1080p 电视上约 400dp，720p 上约 270dp，
+            // 固定 360dp 会在窄屏把左侧标题挤到只剩几个字。
+            maxWidth = TvMetric.dp(
+                context,
+                (
+                    context.resources.displayMetrics.widthPixels /
+                        context.resources.displayMetrics.density * 0.42f
+                    ).toInt().coerceIn(200, 420),
+            )
             setPadding(TvMetric.dp(context, 12), 0, TvMetric.dp(context, 6), 0)
         }
         addView(valueView, LayoutParams(-2, -2))

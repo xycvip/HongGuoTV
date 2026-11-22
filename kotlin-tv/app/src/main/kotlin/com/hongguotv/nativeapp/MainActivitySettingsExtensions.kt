@@ -25,7 +25,10 @@ import java.util.Locale
         // 「默认清晰度 · 自动（1080P 优先）」只能显示到「自动（…」，砍掉的恰好是状态。
         val screenWidthDp=contentWidthDp().coerceAtLeast(1f)
         val screenHeightDp=heightDp().coerceAtLeast(1f)
-        val headingWidth=(screenWidthDp*0.16f).toInt().coerceIn(132,190)
+        // 窄屏（720p 电视 / 手机）上分类栏按比例会吃掉三分之一宽度，固定封到 104dp，
+        // 右侧设置行仍有 340dp 以上，「标题 + 当前值 + 箭头」三栏排得下。
+        val narrow=screenWidthDp<620f
+        val headingWidth=if(narrow) 104 else (screenWidthDp*0.16f).toInt().coerceIn(132,190)
         val categoryScale=minOf(
             (screenWidthDp/800f).coerceIn(0.88f,1.16f),
             (screenHeightDp/600f).coerceIn(0.88f,1.12f)
@@ -45,7 +48,7 @@ import java.util.Locale
             setPadding(0,dp(6),0,0)
         }
         contentHost.addView(categoryCard,lp(dp(headingWidth),-2))
-        contentHost.addView(Space(this),lp(dp(TvMetric.GAP_XL),1))
+        contentHost.addView(Space(this),lp(dp(if(narrow) TvMetric.GAP_M else TvMetric.GAP_XL),1))
         val sectionsHost=column()
         contentHost.addView(sectionsHost,LinearLayout.LayoutParams(0,-2,1f))
 
@@ -132,6 +135,7 @@ import java.util.Locale
         lateinit var themeButton:SettingsRow
         lateinit var clockButton:SettingsRow
         lateinit var sourceDisplayButton:SettingsRow
+        lateinit var posterColumnsButton:SettingsRow
         lateinit var fileBackup:SettingsRow
         lateinit var backup:SettingsRow
         lateinit var hidden:SettingsRow
@@ -288,6 +292,22 @@ import java.util.Locale
             sourceDisplayButton.text="片源显示  ·  ${if(enabled) "开启" else "关闭"}"
             settingsFocusKey="片源显示"
             showCatalog()
+        }
+        // 列数直接影响所有海报墙的观感，放在外观分类里最容易被找到。
+        posterColumnsButton=setting(appearance,4,"海报列数  ·  ${PosterLayout.label(this,contentWidthDp(),heightDp())}") {
+            val choices=PosterLayout.choices
+            tvTools.choose(
+                "海报列数",
+                PosterLayout.choiceLabels(contentWidthDp(),heightDp()),
+                posterColumnsButton,
+                { index ->
+                    PosterLayout.save(this,choices[index])
+                    settingsFocusKey="海报列数"
+                    showCatalog()
+                },
+                selectedIndex=choices.indexOf(PosterLayout.stored(this)).coerceAtLeast(0),
+                extra="自动档会按内容区宽度选择列数；固定档位在屏幕放不下时会自动减到能放下的列数。",
+            )
         }
         fileBackup=setting(data,2,"备份与恢复") { showFileBackupDialog(fileBackup) }
         backup=setting(data,2,"远程文件管理") {
@@ -488,7 +508,7 @@ import java.util.Locale
                 indicator.nextFocusUpId=categoryIndicators.getOrNull(category-1)?.id ?: navForTab().id
                 indicator.nextFocusDownId=categoryIndicators.getOrNull(category+1)?.id ?: navForTab().id
             }
-            navForTab().nextFocusDownId=settingRows.firstOrNull()?.id ?: navForTab().id
+            // 竖栏里「设置」的下键继续在竖栏内换页；进内容走右键。
         }
         rechainSettings()
 

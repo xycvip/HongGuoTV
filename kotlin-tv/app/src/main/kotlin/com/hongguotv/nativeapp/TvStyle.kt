@@ -44,21 +44,6 @@ object TvStyle {
     val selectedSurface get() = colors.selectedSurface
     val badgeSurface get() = colors.badgeSurface
 
-    /**
-     * 顶部导航磨砂玻璃材质：按当前主题提供半透明渐变与柔和描边。
-     * 使用原生 GradientDrawable，兼容 Android 8.0+，不依赖新系统模糊 API。
-     */
-    fun navGlass(context: Context)=GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(colors.navTop, colors.navMid, colors.navBottom)
-    ).apply {
-        cornerRadius=20*context.resources.displayMetrics.density
-        setStroke(
-            (1*context.resources.displayMetrics.density).toInt().coerceAtLeast(1),
-            currentColors().navStroke
-        )
-    }
-
     const val POSTER_ASPECT=.7f
     fun shape(context: Context,color: Int,border: Int=Color.TRANSPARENT,radius: Int=10)=GradientDrawable().apply {
         setColor(color); cornerRadius=radius*context.resources.displayMetrics.density
