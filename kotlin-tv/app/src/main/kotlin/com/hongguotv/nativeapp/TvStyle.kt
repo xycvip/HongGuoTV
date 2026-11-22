@@ -49,6 +49,21 @@ object TvStyle {
         setColor(color); cornerRadius=radius*context.resources.displayMetrics.density
         setStroke((2*context.resources.displayMetrics.density).toInt(),border)
     }
+
+    /**
+     * 页面底：纵向渐变（顶亮底沉）。纯平色在大屏上像一块平板，
+     * 一点纵深就有"幕布"的质感，且所有页面共用同一块底。
+     */
+    fun pageBackground(context: Context)=GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(colors.backgroundTop,colors.backgroundBottom)
+    )
+
+    /** 竖栏底：同方向渐变但更深一档，框架从底色上浮出来。 */
+    fun railBackground(context: Context)=GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(colors.railTop,colors.railBottom)
+    )
     fun card(context: Context,focused: Boolean)=
         if(focused) FocusFrame.ring(context,colors.surfaceRaised,TvMetric.RADIUS_M)
         else shape(context,colors.surface,Color.TRANSPARENT,TvMetric.RADIUS_M)

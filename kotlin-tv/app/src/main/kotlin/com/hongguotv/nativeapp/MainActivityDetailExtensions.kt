@@ -237,7 +237,7 @@ import java.util.Locale
             val heading=row(); heading.setPadding(0,dp(20),0,dp(9))
             heading.addView(View(this).apply { background=TvStyle.shape(this@showDetail,TvStyle.accent,radius=2) },lp(dp(3),dp(14)).apply { rightMargin=dp(8) })
             heading.addView(text(title,16f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
-            heading.addView(text("左右查看更多",10f,muted))
+            heading.addView(text("左右查看更多",TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary).apply { alpha=.85f })
             section.addView(heading)
             val horizontal=HorizontalScrollView(this).apply {
                 isHorizontalScrollBarEnabled=false; clipToPadding=false

@@ -168,11 +168,15 @@ class HomeScreen(
             val block=LinearLayout(context).apply { orientation=VERTICAL; clipChildren=false }
             // 随机推荐区保留居中的操作卡片，不再额外显示重复的栏目标题。
             if(shelf.key!="random") {
-                val heading=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),dp(TvMetric.GAP_XS),dp(2),dp(TvMetric.GAP_S)) }
-                heading.addView(View(context).apply { background=TvStyle.shape(context,accent,radius=2) },LayoutParams(dp(3),dp(16)).apply { rightMargin=dp(TvMetric.GAP_S) })
-                heading.addView(label(shelf.title,TvMetric.TEXT_SUBTITLE).apply { setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL)) },LayoutParams(0,-2,1f))
+                val heading=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),dp(TvMetric.GAP_S),dp(2),dp(TvMetric.GAP_S)) }
+                // 标题行的质感三件套：圆角橘条 + 加强字重 + 轻字距，一眼是"栏目"不是"便签"。
+                heading.addView(View(context).apply { background=TvStyle.shape(context,accent,radius=2) },LayoutParams(dp(3),dp(20)).apply { rightMargin=dp(TvMetric.GAP_M) })
+                heading.addView(label(shelf.title,TvMetric.TEXT_SUBTITLE).apply {
+                    setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL))
+                    letterSpacing=.02f
+                },LayoutParams(0,-2,1f))
                 // 操作提示只在第一个货架出现一次：每条都挂一遍等于没有提示。
-                if(shelfIndex==0) heading.addView(label("左右选剧  ·  上下切换分区",TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary))
+                if(shelfIndex==0) heading.addView(label("左右选剧  ·  上下切换分区",TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary).apply { alpha=.85f })
                 block.addView(heading)
             }
             val horizontal=VerticalFriendlyHorizontalScrollView(context).apply {

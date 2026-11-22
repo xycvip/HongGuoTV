@@ -526,7 +526,7 @@ class MainActivity: Activity() {
         library.thirdHistoryRestore = { thirdStore.restoreHistory(it) }
         library.thirdFavoritesProvider = { thirdStore.backupFavorites() }
         library.thirdFavoritesRestore = { thirdStore.restoreFavorites(it) }
-        artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root); showBootSplash()
+        artwork=ArtworkLoader(this); tvTools=TvTools(this); extras=PlaybackExtras(this); root=FrameLayout(this).apply { background=TvStyle.pageBackground(this@MainActivity) }; setContentView(root); showBootSplash()
         // 全局焦点变化统一记录，覆盖电视遥控器导航、设置项、列表和弹窗焦点迁移。
         root.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus,newFocus ->
             if(debugEnabled) {

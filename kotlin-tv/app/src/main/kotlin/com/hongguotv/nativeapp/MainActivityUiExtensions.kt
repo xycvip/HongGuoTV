@@ -112,12 +112,13 @@ import java.util.Locale
      * 从首页点进详情不会出现"导航忽然消失、按返回才回来"。播放器不走这个骨架。
      */
     internal fun MainActivity.base(title: String?=null): LinearLayout {
-        root.removeAllViews(); root.setBackgroundColor(bg)
+        // 幕布底：纵向渐变（顶亮底沉），所有页面共用，大屏上不再是一块平板色。
+        root.removeAllViews(); root.background=TvStyle.pageBackground(this)
         val container=column()
         val wide=widthDp() >= 780f
         val shell=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; clipChildren=false }
         val railHost=FrameLayout(this).apply {
-            id=View.generateViewId(); setBackgroundColor(TvStyle.colors.rail); clipChildren=false
+            id=View.generateViewId(); background=TvStyle.railBackground(this@base); clipChildren=false
         }
         shell.addView(railHost,LinearLayout.LayoutParams(dp(railWidthDp()),-1))
         container.setPadding(
@@ -127,18 +128,32 @@ import java.util.Locale
             dp(if(wide) 22 else 16),
         )
         shell.addView(container,LinearLayout.LayoutParams(0,-1,1f))
-        // 竖栏与内容之间只留一条 1dp 细线，不用阴影堆层次。
+        // 竖栏与内容的分界：1dp 渐隐细线（上下两端收进去），比一条硬线精致。
         railHost.addView(
-            View(this).apply { setBackgroundColor(TvStyle.colors.railStroke) },
+            View(this).apply {
+                background=android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(0x00000000,TvStyle.colors.railStroke,TvStyle.colors.railStroke,0x00000000)
+                )
+            },
             FrameLayout.LayoutParams(dp(1),-1,Gravity.END),
         )
         root.addView(shell,FrameLayout.LayoutParams(-1,-1))
+        // 竖栏投影：内容区左缘一道 14dp 渐隐暗影（只落在 padding 带上，盖不到内容），
+        // 框架像浮在幕布上，而不是和内容拼在同一张纸上。
+        root.addView(View(this).apply {
+            background=android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(0x4D000000,0x00000000)
+            )
+            isFocusable=false; isClickable=false
+        },FrameLayout.LayoutParams(dp(14),-1).apply { leftMargin=dp(railWidthDp()) })
         // 页面重建时清空上一轮的导航引用，再按当前页面重新登记。
         nav.clear(); navByTab.clear(); searchNavShortcut=null
         stopApiStatusAnimations(); apiStatusViews.clear()
         renderNavigationRail(railHost,container)
-        // 焦点环画在 View 边界之外：页面建完统一放开整棵树的裁剪，
-        // 边缘海报/按钮的选项框不再缺一角（FocusFrame 是唯一入口）。
+        // FocusFrame 焦点环已零越界；unclipTree 只是兜底放开非滚动容器的裁剪，
+        // 让边缘细节（阴影、渐变端）不被中间容器误裁。
         main.post { if(!isDestroyed) FocusFrame.unclipTree(root) }
         if(title!=null) {
             // 返回是次要操作，用纯文字语气；原来给它一块灰底，和页面标题抢了同一行的高度。

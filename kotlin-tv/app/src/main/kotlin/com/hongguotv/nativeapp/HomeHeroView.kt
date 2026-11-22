@@ -62,6 +62,7 @@ internal class HomeHeroView(
         textSize=if(compact) TvMetric.TEXT_TITLE else TvMetric.TEXT_DISPLAY
         setTextColor(TvPalette.INK_100); includeFontPadding=false
         setLines(1); ellipsize=TextUtils.TruncateAt.END
+        letterSpacing=.015f
         typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
     }
     private val meta=TextView(context).apply {
@@ -70,6 +71,8 @@ internal class HomeHeroView(
     }
     private val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply {
         max=100; progressTintList=android.content.res.ColorStateList.valueOf(TvPalette.EMBER_400)
+        // 未播放部分给一条半透明轨道：进度不再是"孤零零一条橙线"，走完/没走完一目了然。
+        progressBackgroundTintList=android.content.res.ColorStateList.valueOf(0x33FFFFFF)
     }
     private val hint=TextView(context).apply {
         text="按「确定」继续播放"; textSize=TvMetric.TEXT_CAPTION; setTextColor(TvPalette.INK_400); includeFontPadding=false

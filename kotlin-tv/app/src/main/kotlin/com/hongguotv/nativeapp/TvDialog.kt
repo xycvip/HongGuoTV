@@ -21,7 +21,7 @@ object TvDialog {
 
     private fun dp(activity: Activity, value: Int) = (value * activity.resources.displayMetrics.density).toInt()
 
-    /** 弹窗内容卡片：圆角 + 细描边 + 主题 surface 底色。 */
+    /** 弹窗内容卡片：圆角 + 细描边 + 主题 surface 底色 + 投影浮起。 */
     fun card(activity: Activity, content: View): LinearLayout {
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -30,6 +30,9 @@ object TvDialog {
                 cornerRadius = dp(activity, 20).toFloat()
                 setStroke(dp(activity, 1), TvStyle.outline)
             }
+            // 弹窗在最顶层、无裁剪容器，静态投影安全：一道淡影让卡片浮在页面之上，
+            // 而不是和背景贴在同一张纸上。
+            elevation = dp(activity, 12).toFloat()
             setPadding(dp(activity, 28), dp(activity, 26), dp(activity, 28), dp(activity, 22))
         }
         card.addView(content)
