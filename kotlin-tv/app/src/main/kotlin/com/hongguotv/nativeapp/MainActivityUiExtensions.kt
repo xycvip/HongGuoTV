@@ -108,7 +108,7 @@ import java.util.concurrent.atomic.AtomicLong
     internal fun MainActivity.addButton(parent: LinearLayout,label: String,selected: Boolean=false,onClick: ()->Unit = {}): TextView {
         val view=button(label,selected,onClick)
         if (screen=="player" && isPhoneDevice) {
-            view.textSize=14f
+            view.textSize=TvMetric.TEXT_BODY
             view.minHeight=dp(48)
             view.setPadding(dp(7),dp(12),dp(7),dp(12))
         }

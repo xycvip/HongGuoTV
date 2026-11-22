@@ -183,7 +183,7 @@ import java.util.concurrent.atomic.AtomicLong
             setTypeface(Typeface.create("sans-serif",Typeface.BOLD)); setShadowLayer(dp(18).toFloat(),0f,0f,accent)
         }
         val tagline=TextView(this).apply {
-            text="精彩即将呈现"; textSize=16f; setTextColor(Color.rgb(190,202,225)); gravity=Gravity.CENTER
+            text="精彩即将呈现"; textSize=TvMetric.TEXT_SUBTITLE; setTextColor(Color.rgb(190,202,225)); gravity=Gravity.CENTER
             letterSpacing=0.18f; setPadding(0,dp(12),0,dp(18))
         }
         val sweep=View(this).apply { background=GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,intArrayOf(Color.TRANSPARENT,accent,Color.TRANSPARENT)) }

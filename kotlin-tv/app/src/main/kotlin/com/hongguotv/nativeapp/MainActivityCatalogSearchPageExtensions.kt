@@ -171,7 +171,7 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
                     head.addView(text("搜索历史",14f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
                     lateinit var clearHistory: TextView
                     clearHistory=button("清空历史") { tvTools.confirm("清空搜索历史","清除本机保存的搜索词？",clearHistory) { library.clearSearches(); showCatalog(); main.post { searchInput?.requestFocus() } } }
-                        .apply { textSize=12f; minHeight=dp(30); setPadding(dp(6),dp(4),dp(6),dp(4)) }
+                        .apply { textSize=TvMetric.TEXT_CAPTION; minHeight=dp(30); setPadding(dp(6),dp(4),dp(6),dp(4)) }
                     historyClear=clearHistory
                     head.addView(clearHistory,lp(-2,-2))
                     block.addView(head)
@@ -182,7 +182,7 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
                     val visibleHistoryCount=((historyAvailable-70f)/(historyItemHeight+8f)).toInt().coerceIn(2,10)
                     val items=history.take(visibleHistoryCount).map { entry ->
                         button("${entry.type.label} · ${entry.query}") { runSearch(entry.query,entry.type) }.apply {
-                            textSize=13f; minHeight=dp(historyItemHeight); setPadding(dp(8),dp(5),dp(8),dp(5)); gravity=Gravity.CENTER_VERTICAL
+                            textSize=TvMetric.TEXT_CAPTION; minHeight=dp(historyItemHeight); setPadding(dp(8),dp(5),dp(8),dp(5)); gravity=Gravity.CENTER_VERTICAL
                             maxLines=2; ellipsize=android.text.TextUtils.TruncateAt.END
                         }
                     }
@@ -194,7 +194,7 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
                     clearHistory.nextFocusDownId=items.firstOrNull()?.id ?: clearHistory.id
                     if(history.size>visibleHistoryCount) {
                         lateinit var all: TextView
-                        all=button("全部历史（${history.size}）›") { showSearchHistory(all) }.apply { textSize=12f; minHeight=dp(34); setPadding(dp(8),dp(4),dp(8),dp(4)) }
+                        all=button("全部历史（${history.size}）›") { showSearchHistory(all) }.apply { textSize=TvMetric.TEXT_CAPTION; minHeight=dp(34); setPadding(dp(8),dp(4),dp(8),dp(4)) }
                         block.addView(all,lp(-1,-2)); historyItems=items+all
                     }
                     historyScroll.addView(block)

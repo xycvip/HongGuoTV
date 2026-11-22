@@ -53,23 +53,23 @@ internal class HomeHeroView(
         alpha=.35f
     }
     private val eyebrow=TextView(context).apply {
-        text="继续观看"; textSize=12f; setTextColor(TvPalette.EMBER_300); includeFontPadding=false
+        text="继续观看"; textSize=TvMetric.TEXT_CAPTION; setTextColor(TvPalette.EMBER_300); includeFontPadding=false
         letterSpacing=.09f; typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
     }
     private val title=TextView(context).apply {
-        textSize=34f; setTextColor(TvPalette.INK_100); includeFontPadding=false
+        textSize=TvMetric.TEXT_DISPLAY; setTextColor(TvPalette.INK_100); includeFontPadding=false
         setLines(1); ellipsize=TextUtils.TruncateAt.END
         typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
     }
     private val meta=TextView(context).apply {
-        textSize=13.5f; setTextColor(TvPalette.INK_300); includeFontPadding=false
+        textSize=TvMetric.TEXT_BODY; setTextColor(TvPalette.INK_300); includeFontPadding=false
         setLines(1); ellipsize=TextUtils.TruncateAt.END
     }
     private val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply {
         max=100; progressTintList=android.content.res.ColorStateList.valueOf(TvPalette.EMBER_400)
     }
     private val hint=TextView(context).apply {
-        text="按「确定」继续播放"; textSize=12f; setTextColor(TvPalette.INK_400); includeFontPadding=false
+        text="按「确定」继续播放"; textSize=TvMetric.TEXT_CAPTION; setTextColor(TvPalette.INK_400); includeFontPadding=false
     }
     private val content=LinearLayout(context).apply {
         orientation=LinearLayout.VERTICAL; gravity=Gravity.BOTTOM

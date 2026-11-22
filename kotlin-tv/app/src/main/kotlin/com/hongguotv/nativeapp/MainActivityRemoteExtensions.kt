@@ -99,7 +99,7 @@ import java.util.concurrent.atomic.AtomicLong
         val exitButton=TvDialog.capsuleButton(this,"退出不看了") { killOnDestroy=true; library.flush(); exitDialog?.dismiss(); finish() }
         val stayButton=TvDialog.capsuleButton(this,"再看一会儿") { exitDialog?.dismiss() }
         if(compactDialog) {
-            exitButton.textSize=13f; stayButton.textSize=13f
+            exitButton.textSize=TvMetric.TEXT_CAPTION; stayButton.textSize=TvMetric.TEXT_CAPTION
             exitButton.setPadding(dp(10),0,dp(10),0); stayButton.setPadding(dp(10),0,dp(10),0)
         }
         buttons.addView(exitButton,lp(-2,-2).apply { rightMargin=dp(if(compactDialog) 6 else 12) })

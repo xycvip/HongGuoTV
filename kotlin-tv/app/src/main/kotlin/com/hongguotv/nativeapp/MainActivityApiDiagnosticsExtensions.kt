@@ -302,7 +302,7 @@ private object ApiStatusColors {
             btn=TvDialog.capsuleButton(this,name) { check(name,btn,probe) }
             btn.id=View.generateViewId()
             btn.text=dotLabel(name,dotIdle)
-            btn.textSize=13f
+            btn.textSize=TvMetric.TEXT_CAPTION
             btn.nextFocusUpId=refreshAll.id
             btn.nextFocusDownId=refreshAll.id
             actionButtons+=btn

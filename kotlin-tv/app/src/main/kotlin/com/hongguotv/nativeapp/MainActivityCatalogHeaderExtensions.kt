@@ -75,7 +75,7 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         val searchShortcut=addButton(shortcuts,"⌕",tab==1) { switchTab(1) }.apply {
             contentDescription="搜索"
             gravity=Gravity.CENTER
-            textSize=21f
+            textSize=TvMetric.TEXT_TITLE
             minWidth=dp(40)
             minHeight=dp(40)
             setPadding(dp(8),dp(5),dp(8),dp(5))

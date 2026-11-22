@@ -108,7 +108,7 @@ import java.util.concurrent.atomic.AtomicLong
         val availableSuggestDp=(suggestScrollRef?.height?.takeIf { it>0 }?.div(resources.displayMetrics.density) ?: (heightDp()-240f)).coerceAtLeast(1f)
         val suggestItemHeight=if(suggestVertical) dp((availableSuggestDp/words.size-2f).toInt().coerceIn(32,46)) else dp(((heightDp()-480f)/20f).toInt().coerceIn(26,34))
         val suggestGap=dp(if(suggestVertical) ((availableSuggestDp-words.size*32f)/(words.size*2f)).toInt().coerceIn(2,7) else ((heightDp()-480f)/100f).toInt().coerceIn(2,7))
-        val views=words.map { word -> button(word) { runSearch(word) }.apply { textSize=14f; minHeight=suggestItemHeight; setSingleLine(true); marqueeRepeatLimit=-1; ellipsize=android.text.TextUtils.TruncateAt.END; setPadding(dp(10),dp(5),dp(10),dp(5)) } }
+        val views=words.map { word -> button(word) { runSearch(word) }.apply { textSize=TvMetric.TEXT_BODY; minHeight=suggestItemHeight; setSingleLine(true); marqueeRepeatLimit=-1; ellipsize=android.text.TextUtils.TruncateAt.END; setPadding(dp(10),dp(5),dp(10),dp(5)) } }
         views.forEachIndexed { index,view ->
             if(suggestVertical) {
                 // height=0 + weight 让少量联想词均分整栏；词条过多时 minHeight 保底并由 ScrollView 滚动。

@@ -23,9 +23,6 @@ internal class ThirdSourceGridAdapter(
     private val onNearEnd: () -> Unit,
     private val onOpen: (ThirdVideo) -> Unit,
 ) : RecyclerView.Adapter<ThirdSourceGridAdapter.Holder>() {
-    private val contentPx = (activity.resources.displayMetrics.widthPixels * 0.88f).toInt()
-    private val cellPx = (contentPx - ui.dp(12) * (columns - 1)) / columns
-    private val posterPx = (cellPx / TvStyle.POSTER_ASPECT).toInt()
     private val items: List<ThirdVideo> get() = source()
 
     fun submit(appendFrom: Int) {
@@ -34,7 +31,7 @@ internal class ThirdSourceGridAdapter(
     }
 
     inner class Holder(
-        val card: LinearLayout,
+        val card: FrameLayout,
         val image: ImageView,
         val name: TextView,
         val badge: TextView,
@@ -43,34 +40,57 @@ internal class ThirdSourceGridAdapter(
     override fun getItemCount() = items.size
 
     override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): Holder {
-        val card = ui.column().apply { setPadding(ui.dp(4), ui.dp(4), ui.dp(4), ui.dp(4)) }
-        val imageFrame = FrameLayout(activity)
+        val card = FrameLayout(activity).apply {
+            setPadding(ui.dp(3), ui.dp(3), ui.dp(3), ui.dp(3))
+            clipChildren = false
+        }
+        // 高度按实际测量宽度算，和主站海报网格同一套比例，列宽变化不会出现两套卡高。
+        val imageFrame = object : FrameLayout(activity) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val width = MeasureSpec.getSize(widthMeasureSpec)
+                super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec((width / TvStyle.POSTER_ASPECT).toInt(), MeasureSpec.EXACTLY))
+            }
+        }.apply {
+            background = ui.rounded(TvStyle.surface, radius = TvMetric.RADIUS_M)
+            clipToOutline = true
+        }
         val image = ImageView(activity).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             setBackgroundColor(TvStyle.badgeSurface)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        imageFrame.addView(image, FrameLayout.LayoutParams(-1, posterPx))
-        val badge = ui.text("", 12f, Color.WHITE).apply {
-            setPadding(ui.dp(6), ui.dp(3), ui.dp(6), ui.dp(3))
-            background = ui.rounded(TvStyle.badgeSurface, radius = 6)
+        imageFrame.addView(image, FrameLayout.LayoutParams(-1, -1))
+        val scrim = View(activity).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.TRANSPARENT, withAlpha(TvPalette.INK_950, .96f)),
+            )
+        }
+        imageFrame.addView(scrim, FrameLayout.LayoutParams(-1, ui.dp(88), Gravity.BOTTOM))
+        // 更新到第几集压在海报底部，和卡片标题同一条基线；换成右上角小胶囊会和标题抢同一块颜色。
+        val name = ui.text("", TvMetric.TEXT_LABEL, withAlpha(TvPalette.INK_100, .97f)).apply {
+            maxLines = 1
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(ui.dp(11), 0, ui.dp(11), ui.dp(10))
+        }
+        imageFrame.addView(name, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        val badge = ui.text("", TvMetric.TEXT_CAPTION, TvPalette.INK_100).apply {
+            includeFontPadding = false
+            setPadding(ui.dp(7), ui.dp(3), ui.dp(7), ui.dp(4))
+            background = ui.rounded(withAlpha(TvPalette.INK_950, .68f), radius = TvMetric.RADIUS_S)
         }
         imageFrame.addView(
             badge,
             FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
-                topMargin = ui.dp(5)
-                rightMargin = ui.dp(5)
+                topMargin = ui.dp(8)
+                rightMargin = ui.dp(8)
             },
         )
-        val name = ui.text("", 15f).apply {
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(ui.dp(2), ui.dp(6), ui.dp(2), 0)
-        }
-        card.addView(imageFrame)
-        card.addView(name)
+        card.addView(imageFrame, FrameLayout.LayoutParams(-1, -1))
         card.layoutParams = RecyclerView.LayoutParams(-1, -2).apply {
-            bottomMargin = ui.dp(12)
-            rightMargin = ui.dp(4)
+            bottomMargin = ui.dp(14)
+            rightMargin = ui.dp(12)
         }
         return Holder(card, image, name, badge)
     }
@@ -82,12 +102,18 @@ internal class ThirdSourceGridAdapter(
         holder.badge.text = item.remarks
         artwork.load(holder.image, item.cover, ArtworkLoader.PRIORITY_VISIBLE)
         holder.card.id = View.generateViewId()
-        ui.focusStyle(holder.card)
-        // 保留 focusStyle 的绘制监听，再追加名称高亮与分页预取。
-        val paint = holder.card.onFocusChangeListener
-        holder.card.setOnFocusChangeListener { view, focused ->
-            paint?.onFocusChange(view, focused)
-            holder.name.setTextColor(if(focused) TvStyle.accent else TvStyle.text)
+        holder.card.isFocusable = true
+        holder.card.isFocusableInTouchMode = true
+        fun paint(focused: Boolean) {
+            holder.card.background = if(focused) {
+                ui.rounded(Color.TRANSPARENT, TvStyle.colors.focusRing, TvMetric.RADIUS_M)
+            } else null
+            holder.card.elevation = if(focused) ui.dp(10).toFloat() else 0f
+            holder.card.animateFocus(focused, 1.045f)
+        }
+        paint(false)
+        holder.card.setOnFocusChangeListener { _, focused ->
+            paint(focused)
             if(focused && isBrowseMode()) onBrowseFocus(item.id)
             if(focused && position >= items.size - 3) onNearEnd()
         }

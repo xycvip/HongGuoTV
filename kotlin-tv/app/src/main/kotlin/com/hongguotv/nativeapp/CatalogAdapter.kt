@@ -100,7 +100,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
 
         // 名次方牌：只放数字。左边距 9dp 与标题左边距对齐，视觉上压在一条竖线上。
         val rank=TextView(host).apply {
-            textSize=13f
+            textSize=TvMetric.TEXT_BODY
             gravity=Gravity.CENTER
             includeFontPadding=false
             minWidth=dp(24); minHeight=dp(24)

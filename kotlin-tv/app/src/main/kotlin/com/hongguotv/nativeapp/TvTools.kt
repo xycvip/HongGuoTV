@@ -68,7 +68,7 @@ class TvTools(private val activity: Activity) {
             keys.forEach { key ->
                 val button=Button(activity).apply {
                     id=View.generateViewId(); text=key; minHeight=dp(48)
-                    textSize=15f
+                    textSize=TvMetric.TEXT_LABEL
                     background=GradientDrawable().apply {
                         setColor(TvStyle.surface)
                         cornerRadius=dp(12).toFloat()
