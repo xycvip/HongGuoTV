@@ -189,7 +189,7 @@ private object ApiStatusColors {
 
         val snapshot=column().apply {
             setPadding(dp(8),dp(8),dp(8),dp(8))
-            background=rounded(Color.rgb(31,34,40))
+            background=rounded(TvStyle.colors.surfaceSunken)
         }
         val names=listOf("首页","搜索","播放","联想")
         fun stateLabel(color:Int):String = when(color) {

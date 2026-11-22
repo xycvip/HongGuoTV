@@ -63,7 +63,7 @@ internal class AccountArtworkShelfRenderer(
             }
             val poster = ImageView(activity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                background = rounded(Color.rgb(25, 29, 35))
+                background = rounded(TvStyle.colors.surfaceRaised)
                 contentDescription = "${series.title} 封面"
             }
             artwork.addView(poster, FrameLayout.LayoutParams(-1, -1))

@@ -26,20 +26,20 @@ internal fun MainActivity.renderAccountLoginCard(
             val cardWidth = dp(cardWidthDp.toInt())
             val card = column().apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                background = rounded(Color.rgb(36, 42, 51), Color.rgb(48, 57, 70))
+                background = rounded(TvStyle.colors.surface, TvStyle.colors.strokeSubtle)
                 setPadding(dp(if (mobileLayout) 14 else 26), dp(if (mobileLayout) 14 else 24),
                     dp(if (mobileLayout) 14 else 26), dp(if (mobileLayout) 14 else 24))
                 elevation = dp(6).toFloat()
             }
             val loginHeading = row().apply {
                 gravity = Gravity.CENTER_VERTICAL
-                addView(text("登录红果账户", if (mobileLayout) 21f else 26f, white).apply {
+                addView(text("登录红果账户", if (mobileLayout) TvMetric.TEXT_TITLE else TvMetric.TEXT_HEADLINE, TvStyle.colors.textPrimary).apply {
                     typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                     gravity = Gravity.CENTER_VERTICAL
                 }, lp(0, -2).apply { weight = 1f })
             }
             card.addView(loginHeading, lp(-1, -2))
-            card.addView(text("使用手机红果 App 扫码，安全同步收藏与观看记录", if (mobileLayout) 12f else 14f, muted).apply {
+            card.addView(text("使用手机红果 App 扫码，安全同步收藏与观看记录", if (mobileLayout) TvMetric.TEXT_CAPTION else TvMetric.TEXT_BODY, TvStyle.colors.textSecondary).apply {
                 gravity = Gravity.CENTER
                 setPadding(0, dp(6), 0, dp(if (mobileLayout) 10 else 16))
             }, lp(-1, -2))
@@ -64,7 +64,7 @@ internal fun MainActivity.renderAccountLoginCard(
             }
             val placeholder = FrameLayout(this).apply {
                 background = rounded(Color.WHITE)
-                addView(text(if (cloudAccount.inlineBusy) "正在获取二维码…" else "二维码暂不可用", 13f, Color.DKGRAY).apply {
+                addView(text(if (cloudAccount.inlineBusy) "正在获取二维码…" else "二维码暂不可用", TvMetric.TEXT_CAPTION, Color.DKGRAY).apply {
                     gravity = Gravity.CENTER
                 }, FrameLayout.LayoutParams(-1, -1))
                 visibility = if (qr == null) View.VISIBLE else View.GONE
@@ -77,7 +77,7 @@ internal fun MainActivity.renderAccountLoginCard(
                 gravity = Gravity.CENTER_HORIZONTAL
                 bottomMargin = dp(if (mobileLayout) 8 else 12)
             })
-            val qrStatus = text(cloudAccount.inlineStatus, if (mobileLayout) 11f else 13f, muted).apply {
+            val qrStatus = text(cloudAccount.inlineStatus, TvMetric.TEXT_CAPTION, TvStyle.colors.textTertiary).apply {
                 gravity = Gravity.CENTER
                 maxLines = 2
                 setPadding(0, 0, 0, dp(if (mobileLayout) 8 else 12))
@@ -133,7 +133,7 @@ internal fun MainActivity.accountStatusIndicator(): LinearLayout = row().apply {
     setPadding(dp(9), dp(6), dp(9), dp(6))
     isFocusable = false
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
-    val dot = text("●", 10f, Color.rgb(70, 150, 255)).apply {
+    val dot = text("●", 10f, TvStyle.colors.info).apply {
         setPadding(0, 0, dp(5), 0)
     }
     val label = text(

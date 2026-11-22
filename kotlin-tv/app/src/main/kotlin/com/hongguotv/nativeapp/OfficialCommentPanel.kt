@@ -39,11 +39,13 @@ internal class OfficialCommentPanel(
         fun login()
     }
 
-    private val backgroundColor = Color.rgb(20, 24, 31)
-    private val surfaceColor = Color.rgb(31, 37, 47)
-    private val textColor = Color.rgb(245, 247, 250)
-    private val mutedColor = Color.rgb(166, 176, 190)
-    private val accentColor = Color.rgb(255, 91, 110)
+    // 评论面板原来自带一套深灰 + 粉红的固定配色，浅色主题下依旧是一片黑，和全站主题脱节。
+    // 现在统一读语义令牌：面板是"播放器上的一层纸"，跟随当前主题换色。
+    private val backgroundColor = TvStyle.colors.background
+    private val surfaceColor = TvStyle.colors.surface
+    private val textColor = TvStyle.colors.textPrimary
+    private val mutedColor = TvStyle.colors.textSecondary
+    private val accentColor = TvStyle.colors.accent
     /** TV 遥控器界面使用紧凑操作按钮，减少点赞/回复/查看回复对评论正文的挤占。 */
     private val compactTvActions =
         context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) ||
@@ -69,7 +71,7 @@ internal class OfficialCommentPanel(
         isSingleLine = false
         imeOptions = EditorInfo.IME_ACTION_SEND
         setPadding(dp(10), dp(8), dp(10), dp(8))
-        background = rounded(surfaceColor, 10)
+        background = TvStyle.shape(context, surfaceColor, TvStyle.colors.strokeSubtle, TvMetric.RADIUS_M)
         isFocusable = true
     }
     private val sendButton = action("发送") { listener.send(input.text.toString()) }
@@ -270,7 +272,7 @@ internal class OfficialCommentPanel(
                 })
             }
             list.addView(View(context).apply {
-                setBackgroundColor(Color.rgb(48, 54, 64))
+                setBackgroundColor(TvStyle.colors.strokeSubtle)
             }, LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(1)).apply {
                 topMargin = dp(7)
                 bottomMargin = dp(3)
@@ -305,7 +307,7 @@ internal class OfficialCommentPanel(
             if (isReply) {
                 setOnFocusChangeListener { view, focused ->
                     view.background = rounded(
-                        if (focused) Color.rgb(43, 51, 63) else Color.TRANSPARENT,
+                        if (focused) TvStyle.colors.surfaceRaised else Color.TRANSPARENT,
                         8
                     )
                 }
@@ -375,9 +377,10 @@ internal class OfficialCommentPanel(
             minHeight = dp(if (compactTvActions) 30 else 42)
             isFocusable = true
             isClickable = true
-            background = rounded(surfaceColor, 9)
+            background = rounded(surfaceColor, TvMetric.RADIUS_S)
             setOnFocusChangeListener { view, focused ->
-                view.background = rounded(if (focused) Color.rgb(55, 75, 100) else surfaceColor, 9)
+                view.background = TvStyle.shape(context, if (focused) TvStyle.colors.surfaceRaised else surfaceColor,
+                    if (focused) TvStyle.colors.focusRing else Color.TRANSPARENT, TvMetric.RADIUS_S)
             }
             setOnClickListener { click() }
         }

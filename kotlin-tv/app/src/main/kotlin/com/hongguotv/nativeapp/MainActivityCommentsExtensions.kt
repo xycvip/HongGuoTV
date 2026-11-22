@@ -78,7 +78,7 @@ import java.util.concurrent.atomic.AtomicLong
             val panelWidth=(screenWidth-dp(24)).coerceAtLeast(dp(1))
             view.tag="comment-bottom-sheet"
             view.background=GradientDrawable().apply {
-                setColor(Color.rgb(20,24,31))
+                setColor(TvStyle.colors.surface)
                 cornerRadii=floatArrayOf(dp(18).toFloat(),dp(18).toFloat(),dp(18).toFloat(),dp(18).toFloat(),0f,0f,0f,0f)
             }
             view.elevation=dp(18).toFloat()
