@@ -66,10 +66,10 @@ import java.util.concurrent.atomic.AtomicLong
                 isFocusable=true; isClickable=true
                 setPadding(dp(16),dp(13),dp(16),dp(13))
                 background=rounded(surface,TvStyle.outline)
-                setOnFocusChangeListener { _,focused -> background=rounded(if(focused) TvStyle.raised else surface,if(focused) accent else TvStyle.outline) }
+                setOnFocusChangeListener { _,focused -> background=TvStyle.shape(this@showResetOptions,if(focused) TvStyle.colors.surfaceRaised else surface,if(focused) TvStyle.colors.focusRing else TvStyle.colors.strokeSubtle,TvMetric.RADIUS_M) }
                 setOnClickListener { onClick() }
-                addView(text(title,16f).apply { setTypeface(null,Typeface.BOLD); setTextColor(white) })
-                addView(text(description,13f,muted).apply { setPadding(0,dp(5),0,0) })
+                addView(text(title,TvMetric.TEXT_LABEL).apply { setTypeface(null,Typeface.BOLD); setTextColor(TvStyle.colors.textPrimary) })
+                addView(text(description,TvMetric.TEXT_CAPTION,TvStyle.colors.textSecondary).apply { setPadding(0,dp(TvMetric.GAP_XS),0,0) })
             }
         fun cacheBytes():Long = listOfNotNull(cacheDir,externalCacheDir).sumOf { dir ->
             dir.walkBottomUp().filter { it.isFile }.sumOf { it.length() }

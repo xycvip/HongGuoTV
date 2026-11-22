@@ -20,8 +20,8 @@ class EpisodePanel(
     private var group=current/20
     private var focused=current
     private fun dp(n: Int)=(n*activity.resources.displayMetrics.density).toInt()
-    private fun label(value: String,size: Float=17f)=TextView(activity).apply { text=value; textSize=size; setTextColor(TvStyle.text); setPadding(dp(8),dp(6),dp(8),dp(6)) }
-    private fun button(value: String,active: Boolean=false,action: ()->Unit)=label(value,16f).apply {
+    private fun label(value: String,size: Float=TvMetric.TEXT_SUBTITLE)=TextView(activity).apply { text=value; textSize=size; setTextColor(TvStyle.text); setPadding(dp(8),dp(6),dp(8),dp(6)) }
+    private fun button(value: String,active: Boolean=false,action: ()->Unit)=label(value,TvMetric.TEXT_LABEL).apply {
         id=View.generateViewId(); gravity=Gravity.CENTER; minHeight=dp(48); isFocusable=true; isFocusableInTouchMode=true
         fun paint(focus: Boolean) {
             background=GradientDrawable().apply {
@@ -50,7 +50,7 @@ class EpisodePanel(
         val content=LinearLayout(activity).apply {
             orientation=LinearLayout.VERTICAL
         }
-        content.addView(label("选集  /  正在看第 ${current+1} 集",20f).apply {
+        content.addView(label("选集  /  正在看第 ${current+1} 集",TvMetric.TEXT_TITLE).apply {
             setTypeface(null,android.graphics.Typeface.BOLD)
             setPadding(0,0,0,dp(14))
         })
@@ -65,8 +65,8 @@ class EpisodePanel(
         val next=button("下一组 ›") { group++; focused=group*20; render() }.apply { isEnabled=(group+1)*20<count; isFocusable=isEnabled; alpha=if(isEnabled) 1f else .4f }
         listOf(previous,next).forEach { paging.addView(it,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(4),dp(4),dp(4),dp(4)) }) }
         content.addView(paging)
-        content.addView(label("第 ${group*20+1}—${minOf((group+1)*20,count)} 集 / 共 $count 集",14f).apply {
-            setTextColor(TvStyle.muted)
+        content.addView(label("第 ${group*20+1}—${minOf((group+1)*20,count)} 集 / 共 $count 集",TvMetric.TEXT_CAPTION).apply {
+            setTextColor(TvStyle.colors.textTertiary)
             setPadding(0,dp(6),0,dp(6))
         })
         val scroll=ScrollView(activity); val grid=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL }; scroll.addView(grid)

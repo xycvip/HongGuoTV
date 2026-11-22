@@ -113,7 +113,8 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             leftMargin=dp(9); topMargin=dp(9)
         })
 
-        card.addView(artwork,FrameLayout.LayoutParams(-1,-1))
+        // 高度由 artwork 自己按比例测量，这里用 wrap_content 交接，父容器不会把它拉成满高。
+        card.addView(artwork,FrameLayout.LayoutParams(-1,-2))
         card.layoutParams=RecyclerView.LayoutParams(-1,-2).apply { rightMargin=dp(12); bottomMargin=dp(14) }
         return CardHolder(card,artwork,image,rank,title,badge,progressFill,progressRest)
     

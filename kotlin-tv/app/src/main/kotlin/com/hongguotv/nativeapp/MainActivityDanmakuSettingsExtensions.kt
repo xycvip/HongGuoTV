@@ -149,7 +149,7 @@ import java.util.concurrent.atomic.AtomicLong
             checked.fill(false)
             list.post { (list.adapter as? android.widget.BaseAdapter)?.notifyDataSetChanged(); list.invalidateViews(); list.requestLayout() }
         }
-        val save=TvDialog.capsuleButton(this,"保存") {
+        val save=TvDialog.capsuleButton(this,"保存",primary=true) {
             extras.blockedWords=words.filterIndexed { index,_ -> checked[index] }.toSet()
             applyBlockedWords(); setLabel(anchor, "弹幕屏蔽词  ·  ${extras.blockedWords.size} 个")
             Toast.makeText(this@showBlockedWordDialog,"屏蔽词已保存，立即生效",Toast.LENGTH_SHORT).show()

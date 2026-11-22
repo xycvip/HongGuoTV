@@ -34,7 +34,7 @@ internal class ThirdSourceAddSourceDialog(
         form.addView(ui.text("可用电视输入法/USB 键盘输入，或点「扫码填写」用手机输入。", 12f, TvStyle.muted).apply { setPadding(0, ui.dp(6), 0, 0) })
         val actions = ui.row().apply { setPadding(0, ui.dp(12), 0, 0) }
         lateinit var dialog: AlertDialog
-        val save = TvDialog.capsuleButton(activity, "保存并探活") { }
+        val save = TvDialog.capsuleButton(activity, "保存并探活", primary = true) { }
         val scan = TvDialog.capsuleButton(activity, "扫码填写") { }
         val cancel = TvDialog.capsuleButton(activity, "取消") { dialog.dismiss() }
         actions.addView(save, ui.lp(-2, -2).apply { rightMargin = ui.dp(10) })

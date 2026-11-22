@@ -55,29 +55,52 @@ object TvDialog {
         setPadding(0, 0, 0, dp(activity, 14))
     }
 
-    /** 胶囊按钮：默认 surface 底，焦点 accent 填充 + 深色文字。 */
-    fun capsuleButton(activity: Activity, text: String, onClick: () -> Unit): Button {
+    /**
+     * 胶囊按钮。
+     *
+     * 改造前"取消"和"确认"长得一模一样：都是灰底 + 橙色描边，焦点态一起变成橙色实心。
+     * 用户没法从外观判断哪个是安全出口、哪个会真的执行。现在分两级：
+     *  - [primary] = true 的确认按钮常态就是强调色实心，焦点态加白环；
+     *  - 其余按钮常态是浅表面 + 细描边，焦点态抬到 surfaceRaised + 白环。
+     * 白环和页面里的按钮、卡片是同一套焦点语言。
+     */
+    fun capsuleButton(activity: Activity, text: String, primary: Boolean = false, onClick: () -> Unit): Button {
         val dp = { v: Int -> dp(activity, v) }
         return Button(activity).apply {
             this.text = text
             textSize = TvMetric.TEXT_LABEL
-            setTextColor(TvStyle.text)
-            minHeight = dp(46)
+            minHeight = dp(TvMetric.ROW_HEIGHT_COMPACT + 2)
             setPadding(dp(22), 0, dp(22), 0)
-            background = GradientDrawable().apply {
-                setColor(TvStyle.surface)
-                cornerRadius = dp(24).toFloat()
-                setStroke(dp(1), TvStyle.outline)
-            }
-            setOnFocusChangeListener { _, focused ->
+            fun paint(focused: Boolean) {
                 background = GradientDrawable().apply {
-                    setColor(if(focused) TvStyle.accent else TvStyle.surface)
+                    setColor(
+                        when {
+                            primary -> if (focused) TvStyle.colors.accentPressed else TvStyle.colors.accent
+                            focused -> TvStyle.colors.surfaceRaised
+                            else -> TvStyle.colors.surface
+                        },
+                    )
                     cornerRadius = dp(24).toFloat()
-                    setStroke(dp(1), if(focused) TvStyle.accent else TvStyle.outline)
+                    setStroke(
+                        dp(1),
+                        when {
+                            focused -> TvStyle.colors.focusRing
+                            primary -> TvStyle.colors.accent
+                            else -> TvStyle.colors.strokeSubtle
+                        },
+                    )
                 }
-                setTextColor(if(focused) TvStyle.background else TvStyle.text)
-                setTypeface(null, if(focused) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                setTextColor(
+                    when {
+                        primary -> TvStyle.colors.onAccent
+                        focused -> TvStyle.colors.textPrimary
+                        else -> TvStyle.colors.textPrimary
+                    },
+                )
+                setTypeface(null, if (focused || primary) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
             }
+            paint(false)
+            setOnFocusChangeListener { _, focused -> paint(focused) }
             setOnClickListener { onClick() }
         }
     }
@@ -246,7 +269,7 @@ object TvDialog {
             setPadding(0, dp(activity, 14), 0, 0)
         }
         val cancel = capsuleButton(activity, "取消") {}
-        val ok = capsuleButton(activity, "确认") { action() }
+        val ok = capsuleButton(activity, "确认", primary = true) { action() }
         buttons.addView(cancel, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(activity, 12) })
         buttons.addView(ok, LinearLayout.LayoutParams(-2, -2))
         content.addView(buttons)

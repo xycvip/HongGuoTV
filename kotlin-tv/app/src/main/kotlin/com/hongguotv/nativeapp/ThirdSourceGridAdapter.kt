@@ -87,7 +87,7 @@ internal class ThirdSourceGridAdapter(
                 rightMargin = ui.dp(8)
             },
         )
-        card.addView(imageFrame, FrameLayout.LayoutParams(-1, -1))
+        card.addView(imageFrame, FrameLayout.LayoutParams(-1, -2))
         card.layoutParams = RecyclerView.LayoutParams(-1, -2).apply {
             bottomMargin = ui.dp(14)
             rightMargin = ui.dp(12)

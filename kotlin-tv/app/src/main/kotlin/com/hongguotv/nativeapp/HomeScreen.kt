@@ -156,14 +156,15 @@ class HomeScreen(
             hero.bind(lead.entries.first())
             contents.addView(hero,LayoutParams(-1,-2))
         }
-        shelves.filter { it.entries.isNotEmpty() || it.more!=null }.forEach { shelf ->
+        shelves.filter { it.entries.isNotEmpty() || it.more!=null }.forEachIndexed { shelfIndex,shelf ->
             val block=LinearLayout(context).apply { orientation=VERTICAL }
             // 随机推荐区保留居中的操作卡片，不再额外显示重复的栏目标题。
             if(shelf.key!="random") {
-                val heading=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),dp(4),dp(2),dp(9)) }
-                heading.addView(View(context).apply { background=TvStyle.shape(context,accent,radius=2) },LayoutParams(dp(3),dp(14)).apply { rightMargin=dp(8) })
-                heading.addView(label(shelf.title,16f).apply { setTypeface(null,Typeface.BOLD) },LayoutParams(0,-2,1f))
-                heading.addView(label("左右选剧  ·  上下切换分区",10f,TvStyle.muted))
+                val heading=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),dp(TvMetric.GAP_XS),dp(2),dp(TvMetric.GAP_S)) }
+                heading.addView(View(context).apply { background=TvStyle.shape(context,accent,radius=2) },LayoutParams(dp(3),dp(16)).apply { rightMargin=dp(TvMetric.GAP_S) })
+                heading.addView(label(shelf.title,TvMetric.TEXT_SUBTITLE).apply { setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL)) },LayoutParams(0,-2,1f))
+                // 操作提示只在第一个货架出现一次：每条都挂一遍等于没有提示。
+                if(shelfIndex==0) heading.addView(label("左右选剧  ·  上下切换分区",TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary))
                 block.addView(heading)
             }
             val horizontal=VerticalFriendlyHorizontalScrollView(context).apply {
@@ -247,7 +248,7 @@ class HomeScreen(
                     typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
                 }
                 artwork?.addView(title,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM).apply { leftMargin=dp(11); rightMargin=dp(11); bottomMargin=dp(9) })
-                val badge=label(entry?.label ?: shelf.title,11.5f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) }
+                val badge=label(entry?.label ?: shelf.title,TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) }
                 val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }
                 if(shelf.key!="random") {
                     view.addView(badge)
