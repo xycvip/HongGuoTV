@@ -17,4 +17,6 @@ internal class TheaterUiState {
     val filtersByType = mutableMapOf<String, List<TheaterFilterGroup>>()
     var contentType: ContentType? = null
     val selections = mutableMapOf<String, String>()
+    /** 筛选面板是否展开。默认收起，首屏优先给内容而不是控件。 */
+    var expanded = false
 }

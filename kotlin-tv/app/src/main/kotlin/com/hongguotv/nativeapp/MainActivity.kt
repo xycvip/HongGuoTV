@@ -341,6 +341,7 @@ class MainActivity: Activity() {
     internal var theaterFocusTag by theaterUiState::focusTag
     internal val theaterFiltersByType get() = theaterUiState.filtersByType
     internal var theaterContentType by theaterUiState::contentType
+    internal var theaterExpanded by theaterUiState::expanded
     internal val theaterSelections get() = theaterUiState.selections
     internal val tabState=mutableMapOf<Int,CatalogState>()
     internal val tabFocus get() = navigationUiState.tabFocus

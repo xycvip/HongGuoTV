@@ -10,7 +10,7 @@ import com.hongguotv.core.*
     internal fun MainActivity.renderTheaterFilters(host:LinearLayout) {
         // 重建前优先读取真正持有焦点的选项；仅有点击记录时才使用旧记录。
         host.removeAllViews()
-        val types=row().apply { id=View.generateViewId(); setPadding(0,dp(6),0,dp(8)) }
+        val types=row().apply { id=View.generateViewId(); setPadding(0,dp(6),0,dp(6)) }
         addButton(types,"全部体裁",theaterContentType==null).apply {
             tag="theater-filter:type:all"
             setOnClickListener {
@@ -27,17 +27,38 @@ import com.hongguotv.core.*
                 }
             }
         }
-        if(theaterSelections.isNotEmpty()) {
-            addButton(types,"清除筛选").apply {
-                tag="theater-filter:clear"
-                setOnClickListener {
-                    theaterFocusTag=tag.toString()
-                    theaterSelections.clear(); page=1; catalogFocus=""; tabState.remove(7); showCatalog(load=true)
-                }
-            }
-        }
         host.addView(types)
+
         val groups=theaterFiltersByType[theaterFilterKey(theaterContentType)].orEmpty().filterNot { it.type=="genre" }
+
+        // 收起态：一行入口 + 当前条件摘要。
+        // 改造前八行筛选吃掉六成屏高，首排海报被压到屏幕下缘；电视上第一眼该看到内容。
+        if(!theaterExpanded) {
+            val line=row().apply { setPadding(0,dp(2),0,dp(6)) }
+            val count=theaterSelections.size
+            if(groups.isEmpty() && count==0) {
+                // 官方筛选项还没返回：先不给入口，避免点开是空面板
+                line.addView(text("正在读取筛选条件…",12.5f,muted))
+                host.addView(line)
+                return
+            }
+            addButton(line,if(count==0) "筛选剧集" else "筛选剧集 · 已选 $count 项") {
+                theaterExpanded=true
+                // 展开后把焦点送到第一个筛选项，否则会掉回顶部导航栏
+                theaterFocusTag=groups.firstOrNull()?.let { "theater-filter:${it.type}:all" } ?: "theater-filter:type:all"
+                showCatalog()
+            }.apply { tag="theater-filter:expand" }
+            val summary=theaterFilterSummary()
+            if(summary.isNotBlank()) {
+                line.addView(text(summary,12.5f,muted).apply {
+                    setPadding(dp(10),0,0,0); maxLines=1
+                    ellipsize=android.text.TextUtils.TruncateAt.END
+                })
+            }
+            host.addView(line)
+            return
+        }
+
         if(groups.isEmpty()) host.addView(text("正在读取红果官方筛选条件…",13f,muted).apply { setPadding(0,dp(5),0,dp(10)) })
         else groups.forEach { group ->
             val line=row().apply { gravity=Gravity.CENTER_VERTICAL; setPadding(0,dp(2),0,dp(2)) }
@@ -71,6 +92,23 @@ import com.hongguotv.core.*
             host.addView(line)
         }
 
+        // 展开态的出口放在最下面：从上往下选完，顺手收起，不用再折回顶部。
+        val foot=row().apply { setPadding(0,dp(6),0,dp(6)) }
+        addButton(foot,"收起筛选") {
+            theaterExpanded=false
+            theaterFocusTag="theater-filter:expand"
+            showCatalog()
+        }.apply { tag="theater-filter:collapse" }
+        if(theaterSelections.isNotEmpty()) addButton(foot,"清除筛选").apply {
+            tag="theater-filter:clear"
+            setOnClickListener {
+                theaterSelections.clear(); page=1; catalogFocus=""; tabState.remove(7)
+                // 清除后这一项本身会消失，把焦点交给第一个筛选项而不是导航栏
+                theaterFocusTag=groups.firstOrNull()?.let { "theater-filter:${it.type}:all" } ?: "theater-filter:type:all"
+                showCatalog(load=true)
+            }
+        }
+        host.addView(foot)
     }
 /**
  * 在筛选头与海报网格合并进同一个 RecyclerView 后重新连线。
