@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "d5cd0deab34f537364f24096eeba7221c9b730b0",
-  "versionCode": 97,
-  "versionName": "0.0.97",
+  "sourceCommit": "97bc2021a7cdfc3bbcb7082f5c68ac10850ff96e",
+  "versionCode": 98,
+  "versionName": "0.0.98",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.97",
+  "tag": "hongguotv-bate-v0.0.98",
   "apk": {
-    "name": "HongguoTV-0.0.97.apk",
-    "size": 2027649,
-    "sha256": "07c75ddc43c85c8054d435515113ce92d6967177abf653fb69b8a83356934f18",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.97/HongguoTV-0.0.97.apk"
+    "name": "HongguoTV-0.0.98.apk",
+    "size": 2030929,
+    "sha256": "144feef9c56151563928eeabbba7fd7cd174c45eb417062cf74e7779a6c4026e",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.98/HongguoTV-0.0.98.apk"
   },
-  "notes": "【播放与播放器】\n- 播放新集时清除线路失效提示\n【片源与数据管理】\n- 补齐线路失效提示所需 UI 导入\n【界面与交互】\n- 线路全部尝试失败时显示居中提示\n【其他功能与问题修复】\n- Remove unused QuickJS scaffolding\n- Remove unused QuickJS scaffolding\n- Fix QuickJS host object binding for CommonJS modules\n- Add QuickJS host bridge and CommonJS module runtime\n- Add QuickJS host bridge and CommonJS module runtime"
+  "notes": "【播放与播放器】\n- 真机反馈十项：竖栏版式、焦点框裁切、导航交互与推送播放页重做\n- 播放器与导航：HUD 可读性、主操作分级、导航焦点重做\n【焦点与遥控器】\n- 选项框绘制推倒重写为 FocusFrame：焦点态零越界铁律；设置主栏收拢间距\n- 焦点环缺角归零：放大收进卡内、卡片零越界；设置分类卡恢复正常高度\n- 首页焦点框缺角收口：焦点投影降档+呼吸位加宽；设置分类列收窄\n- 真机反馈五项：设置分类列固定、自动列数上限5、焦点环clipToPadding根治、竖栏统一字号与顺序\n- 真机反馈八项：焦点规则重写进 FocusRules、恢复确认切页、搜索页三栏定式\n- 三方片源与推送页：网格卡片并入主站样式，通用控件统一焦点环与令牌字号\n- 设计系统：尺度令牌、焦点动效、按钮语气分级\n- 卡片观感：圆角海报、焦点位移、五列栅格\n【调试与诊断】\n- 评论面板/登录页/诊断页：去掉了自带的固定配色，改跟随语义令牌\n【界面与交互】\n- 选项框改画前景：环不再被海报盖住；设置主栏取消居中\n- 全量 UI 审查优化：幕布渐变底、竖栏质感、标题行精修、弹窗浮起\n- 修复设置页主分类列消失：横向行内误用 (−1,0)+weight 把高度量成 0\n- 竖栏品牌字标与大屏阈值；修正页面容器索引假设\n- 主导航改成左侧竖栏：上下换页、左右浏览，顶部让给主推位\n- 搜索/弹窗/次要页面：统一到新令牌与语气\n- 设置页：四列网格改成单列宽行 + 窄分类导航\n- 设计令牌：抽出配色层，界面统一从 TvStyle.colors 取色\n【其他功能与问题修复】\n- 搜索页重做：删除联想中栏、结果列数恒定、海报测高按最终宽度\n- 统一海报卡实现；targetSdk 升到 34；补 UI 层测试\n- 补海报列数边界测试：四个分辨率 + 手动档位被宽度夹住\n- 竖栏常开并按分辨率自适应；外观新增海报列数\n- 清理 696 条未使用的 import\n- 海报进度条加粗到 4dp，远距离也能看出看到哪了\n- 对话框与面板：确认操作升为主色，剧集面板/重置页/首页货架标题统一到令牌\n- 海报网格：卡片改成整块海报压字，名次/进度贴在图上；筛选与栏目统一成胶囊\n- 加载与错误态：统一成进度指示与可重试的错误面板\n- 详情页：大海报头图、动作按钮分级、卡片与首页统一\n- 剧场：筛选默认收起成两行\n- 主推位：按内容区实际宽度校正高度，补圆角与压暗\n- 首页：顶部主推位 + 卡片改成压图样式\n- 把散落的颜色收进令牌\n- baseline: upstream snapshot (main)"
 }
