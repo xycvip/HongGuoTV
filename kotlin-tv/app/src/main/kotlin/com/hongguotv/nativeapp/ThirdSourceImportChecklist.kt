@@ -3,7 +3,6 @@ package com.hongguotv.nativeapp
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.graphics.Color
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
@@ -110,7 +109,7 @@ internal class ThirdSourceImportChecklist(
             probeRequests.request(source, isCurrent = { token == currentGeneration() }) { probe ->
                 statusViews[index]?.let { view ->
                     view.text = if(probe.ok) "可连接 · ${ui.formatCount(probe.total)}" else (probe.reason ?: "不可用")
-                    view.setTextColor(if(probe.ok) Color.rgb(76, 175, 80) else TvStyle.muted)
+                    view.setTextColor(if(probe.ok) TvStyle.colors.success else TvStyle.muted)
                 }
                 if(!touched[index]) {
                     checked[index] = probe.ok

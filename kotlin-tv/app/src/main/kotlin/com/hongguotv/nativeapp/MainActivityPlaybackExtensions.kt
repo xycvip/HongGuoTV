@@ -190,7 +190,7 @@ import java.util.concurrent.atomic.AtomicLong
             // 手机竖屏可用宽度有限，控制栏贴近屏幕两侧；横屏与电视沿用原有留白。
             val phonePortraitHud=isPhoneDevice && heightDp()>widthDp()
             val hudHorizontalInset=if(phonePortraitHud) dp(2) else dp(widthDp()*.05f)
-            hud=column().apply { setPadding(hudHorizontalInset,dp(20),hudHorizontalInset,(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(240,11,15,21))) }
+            hud=column().apply { setPadding(hudHorizontalInset,dp(20),hudHorizontalInset,(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,withAlpha(TvStyle.colors.background, 0.94f))) }
             playbackTitle=text("",23f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setTypeface(null,Typeface.BOLD) }; hud.addView(playbackTitle)
             playbackText=text("",15f,muted).apply { setPadding(0,dp(10),0,dp(9)) }; hud.addView(playbackText)
             progressBar=(if(isPhoneDevice) SeekBar(this) else ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal)).apply {

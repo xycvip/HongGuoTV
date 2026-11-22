@@ -158,7 +158,7 @@ import java.util.concurrent.atomic.AtomicLong
                 if (isDestroyed || !cloudAccount.signedIn) return@checkConnection
                 accountApiOnline = connected
                 accountApiDotView?.setTextColor(
-                    if (connected) Color.rgb(76, 205, 125) else Color.rgb(235, 75, 75)
+                    if (connected) TvStyle.colors.success else TvStyle.colors.danger
                 )
                 accountApiLabelView?.text = if (connected) "已上线" else "已下线"
             }

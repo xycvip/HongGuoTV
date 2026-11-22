@@ -76,7 +76,7 @@ internal class SettingsCategoryController(
             subtitleParams.weight=1f
             subtitle.layoutParams=subtitleParams
         }
-        subtitle.setTextColor(if(enabled) Color.argb(235,255,255,255) else muted)
+        subtitle.setTextColor(if(enabled) withAlpha(TvStyle.colors.textPrimary, 0.92f) else muted)
         card.requestLayout()
     }
 

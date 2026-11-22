@@ -68,6 +68,7 @@ object TvPalette {
     const val RED_400 = 0xFFEB4B4B.toInt()
     const val RED_700 = 0xFFC62828.toInt()
     const val AMBER_400 = 0xFFEEBE37.toInt()
+    const val AMBER_500 = 0xFFF4A640.toInt()
     const val AMBER_700 = 0xFFB26A00.toInt()
     const val GREEN_400 = 0xFF4CAF50.toInt()
     const val GREEN_700 = 0xFF2E7D32.toInt()

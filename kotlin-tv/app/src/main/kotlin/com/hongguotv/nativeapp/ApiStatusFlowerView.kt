@@ -2,7 +2,6 @@ package com.hongguotv.nativeapp
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.view.View
@@ -25,7 +24,7 @@ internal class ApiStatusFlowerView(context: Context): View(context) {
         val halfWidth=length*0.09f
         val angles=listOf(180f,-90f,0f,90f)
         names.forEachIndexed { index,name ->
-            val color=colors[name] ?: Color.rgb(238,190,55)
+            val color=colors[name] ?: TvStyle.colors.warning
             paint.color=color
             paint.alpha=(255f*(alphas[name] ?: 1f)).toInt().coerceIn(0,255)
             val leaf=Path().apply {

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
-import android.graphics.Color
 
 /**
  * 三方片源页状态文案与状态颜色规则。
@@ -80,8 +79,8 @@ internal object ThirdSourceStatusText {
     }
 
     fun dotColor(dot: ThirdSourceProbeDot?): Int = when (dot) {
-        ThirdSourceProbeDot.OK -> Color.rgb(76, 175, 80)
-        ThirdSourceProbeDot.DEAD -> Color.rgb(120, 128, 140)
-        else -> Color.rgb(255, 180, 80)
+        ThirdSourceProbeDot.OK -> TvStyle.colors.success
+        ThirdSourceProbeDot.DEAD -> TvStyle.colors.textTertiary
+        else -> TvStyle.colors.warning
     }
 }

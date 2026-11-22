@@ -44,6 +44,22 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
+/**
+ * 接口检测状态的配色。
+ *
+ * 生产端（runAutomaticApiChecks）与展示端（stateLabel）共用这一组定义。
+ * 之前两边各写一份 Color.rgb(...)，只要改一处，状态标签就会静默错位。
+ * retrying / unknown 保持两个不同色值，否则 "重试中" 会被显示成 "未验证"。
+ */
+private object ApiStatusColors {
+    val checking: Int get()=TvStyle.colors.info
+    val retrying: Int get()=TvPalette.AMBER_500
+    val ok: Int get()=TvStyle.colors.success
+    val failed: Int get()=TvStyle.colors.danger
+    val unknown: Int get()=TvPalette.AMBER_400
+}
+
+
     internal fun MainActivity.setApiStatus(name: String,color: Int,detail: String,elapsedMs: Long? = null) {
         apiStatusAnimators.remove(name)?.let { animator ->
             animator.removeAllUpdateListeners()
@@ -89,7 +105,7 @@ import java.util.concurrent.atomic.AtomicLong
         val batch=++apiStatusUiState.checkBatchId
         apiStatusUiState.cancelPlaybackProbes()
         if(!hasValidatedInternet()) {
-            val failed=Color.rgb(235,75,75)
+            val failed=ApiStatusColors.failed
             listOf("首页","搜索","播放","联想").forEach { setApiStatus(it,failed,"网络不可用") }
             apiNetworkUnavailable=true
             apiStatusCheckStarted=false
@@ -97,11 +113,11 @@ import java.util.concurrent.atomic.AtomicLong
         }
         apiNetworkUnavailable=false
         apiStatusCheckStarted=true
-        val checking=Color.rgb(70,150,255)
-        val retrying=Color.rgb(244,166,64)
-        val ok=Color.rgb(70,190,110)
-        val failed=Color.rgb(235,75,75)
-        val unknown=Color.rgb(238,190,55)
+        val checking=ApiStatusColors.checking
+        val retrying=ApiStatusColors.retrying
+        val ok=ApiStatusColors.ok
+        val failed=ApiStatusColors.failed
+        val unknown=ApiStatusColors.unknown
         listOf("首页","搜索","播放","联想").forEach { animateApiStatus(it,checking,"检测中") }
         val progress=runCatching { library.history().firstOrNull() }.getOrNull()
         val playbackSource=playbackStreamSource(repository.http, notifyOnFallback = false)
@@ -177,18 +193,18 @@ import java.util.concurrent.atomic.AtomicLong
         }
         val names=listOf("首页","搜索","播放","联想")
         fun stateLabel(color:Int):String = when(color) {
-            Color.rgb(70,150,255) -> "检测中"
-            Color.rgb(244,166,64) -> "重试中"
-            Color.rgb(70,190,110) -> "正常"
-            Color.rgb(235,75,75) -> "异常"
-            Color.rgb(238,190,55) -> "未验证"
+            ApiStatusColors.checking -> "检测中"
+            ApiStatusColors.retrying -> "重试中"
+            ApiStatusColors.ok -> "正常"
+            ApiStatusColors.failed -> "异常"
+            ApiStatusColors.unknown -> "未验证"
             else -> "未知"
         }
         fun refreshSnapshot() {
             snapshot.removeAllViews()
             names.forEach { name ->
                 val result=apiStatusResults[name]
-                val color=result?.first ?: Color.rgb(238,190,55)
+                val color=result?.first ?: ApiStatusColors.unknown
                 val detail=result?.second ?: "尚无检测记录"
                 val elapsed=apiStatusElapsedMs[name]?.let { " · ${it}ms" }.orEmpty()
                 val updated=apiStatusUpdatedAt[name]?.let {
@@ -226,8 +242,8 @@ import java.util.concurrent.atomic.AtomicLong
             descendantFocusability=ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
         val dotIdle=TvStyle.outline
-        val dotOk=Color.rgb(86,196,122)
-        val dotFail=Color.rgb(235,95,95)
+        val dotOk=ApiStatusColors.ok
+        val dotFail=ApiStatusColors.failed
         val lastAt=mutableMapOf<String,Long>()
         val busy=mutableSetOf<String>()
         val actionButtons=mutableListOf<Button>()

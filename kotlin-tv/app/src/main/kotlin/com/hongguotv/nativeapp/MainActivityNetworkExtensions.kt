@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
-import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -20,7 +19,7 @@ internal fun MainActivity.createNetworkCallback(): ConnectivityManager.NetworkCa
                     if (!apiNetworkUnavailable) {
                         apiNetworkUnavailable = true
                         apiStatusCheckStarted = false
-                        val failed = Color.rgb(235, 75, 75)
+                        val failed = TvStyle.colors.danger
                         listOf("首页", "搜索", "播放", "联想").forEach {
                             setApiStatus(it, failed, "网络不可用")
                         }

@@ -4,7 +4,6 @@ package com.hongguotv.nativeapp
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.res.ColorStateList
-import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -1077,9 +1076,9 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
     private fun probeLabel(id: String): Pair<String, Int> {
         val state = probes[id] ?: return "待探活" to muted
         return when(state.dot) {
-            ThirdSourceProbeDot.OK -> "可连接 · ${ui.formatCount(state.total)}" + (latencyMs[id]?.takeIf { it >= 0 }?.let { " · ${it}ms" }.orEmpty()) to Color.rgb(76, 175, 80)
+            ThirdSourceProbeDot.OK -> "可连接 · ${ui.formatCount(state.total)}" + (latencyMs[id]?.takeIf { it >= 0 }?.let { " · ${it}ms" }.orEmpty()) to TvStyle.colors.success
             ThirdSourceProbeDot.DEAD -> (state.reason ?: "不可用") to muted
-            ThirdSourceProbeDot.RUNNING -> "探活中…" to Color.rgb(255, 180, 80)
+            ThirdSourceProbeDot.RUNNING -> "探活中…" to TvStyle.colors.warning
         }
     }
 
