@@ -75,7 +75,20 @@ import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.focusStyle(view: View,selected: Boolean=false) {
         view.id=View.generateViewId(); view.isFocusable=true; view.isFocusableInTouchMode=true
-        fun paint(focused: Boolean) { view.background=rounded(if(focused) TvStyle.raised else if(selected) TvStyle.selectedSurface else surface,if(focused) accent else Color.TRANSPARENT) }
+        fun paint(focused: Boolean) {
+            // 焦点态从"橙色细描边"改为"白色 2dp 环 + 抬升"：白色环在深浅两套主题下都能读，
+            // 也不会和 accent 的语义（当前选中/进度）打架。
+            view.background=rounded(
+                when {
+                    focused -> TvStyle.colors.surfaceRaised
+                    selected -> TvStyle.colors.selectedSurface
+                    else -> TvStyle.colors.surface
+                },
+                if(focused) TvStyle.colors.focusRing else Color.TRANSPARENT
+            )
+            view.elevation=if(focused) dp(6).toFloat() else 0f
+            view.animateFocus(focused)
+        }
         paint(false); view.setOnFocusChangeListener { focusedView,focused ->
             paint(focused)
             val focusTag=focusedView.tag?.toString()
@@ -228,8 +241,10 @@ internal fun MainActivity.heightDp()=resources.displayMetrics.heightPixels/resou
 internal fun MainActivity.lp(w: Int=LinearLayout.LayoutParams.MATCH_PARENT,h: Int=LinearLayout.LayoutParams.WRAP_CONTENT)=LinearLayout.LayoutParams(w,h)
 internal fun MainActivity.rounded(color: Int,border: Int=Color.TRANSPARENT)=TvStyle.shape(this,color,border)
 internal fun MainActivity.text(value: String,size: Float=16f,color: Int=white)=TextView(this).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
-internal fun MainActivity.column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-internal fun MainActivity.row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
+// 容器默认放开 clipChildren：焦点放大的按钮/卡片需要画到自身边界之外，
+// 否则 3% 的放大刚好被父容器裁掉四个角，看起来像"边框被啃掉"。
+internal fun MainActivity.column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; clipChildren=false }
+internal fun MainActivity.row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; clipChildren=false }
 
 internal fun MainActivity.button(label: String,selected: Boolean=false,onClick: ()->Unit): TextView = text(label,15f).apply {
     gravity=Gravity.CENTER; setPadding(dp(14),dp(10),dp(14),dp(10)); minHeight=dp(42); focusStyle(this,selected); setOnClickListener { onClick() }

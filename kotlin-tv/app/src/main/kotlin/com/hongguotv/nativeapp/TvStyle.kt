@@ -20,8 +20,17 @@ object TvStyle {
     fun apply(raw: String?) { theme = Theme.of(raw) }
     fun toggle(): Theme { theme = if (theme == Theme.NIGHT) Theme.PORCELAIN else Theme.NIGHT; return theme }
 
-    /** 当前主题的语义色板。新代码请一律从这里取色，不要再写 `Color.rgb(...)`。 */
-    val colors: TvColors get() = if (theme == Theme.NIGHT) TvColors.Dark else TvColors.Light
+    /**
+     * 当前主题的语义色板。新代码请一律从这里取色，不要再写 `Color.rgb(...)`。
+     *
+     * 下面的 Drawable 工厂里统一用 [currentColors] 而不是 [colors]：在 `setStroke(...)` 的实参位置，
+     * Kotlin 会把 `colors.xxx` 解析到宿主 object 的同名成员上（`focusRing` 恰好同名），
+     * 导致编译期报 Unresolved。显式函数调用可以稳定拿到 TvColors 的字段。
+     */
+    val colors: TvColors get() = currentColors()
+
+    private fun currentColors(): TvColors =
+        if (theme == Theme.NIGHT) TvColors.Dark else TvColors.Light
 
     // ── 兼容旧调用点的别名 ─────────────────────────────────────────────
     // 逐条指向语义令牌，行为与改造前一致；后续可逐个替换为 TvStyle.colors.xxx。
@@ -46,7 +55,7 @@ object TvStyle {
         cornerRadius=16*context.resources.displayMetrics.density
         setStroke(
             (1*context.resources.displayMetrics.density).toInt().coerceAtLeast(1),
-            colors.navStroke
+            currentColors().navStroke
         )
     }
 
@@ -64,6 +73,6 @@ object TvStyle {
     fun focusRing(context: Context,radius: Int=12)=GradientDrawable().apply {
         setColor(Color.TRANSPARENT)
         cornerRadius=radius*context.resources.displayMetrics.density
-        setStroke((2*context.resources.displayMetrics.density).toInt(),colors.focusRing)
+        setStroke((2*context.resources.displayMetrics.density).toInt(),currentColors().focusRing)
     }
 }
