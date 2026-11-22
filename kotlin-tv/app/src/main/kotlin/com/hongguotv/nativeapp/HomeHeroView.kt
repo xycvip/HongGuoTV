@@ -38,7 +38,7 @@ internal class HomeHeroView(
     private val scrimLeft=View(context).apply {
         background=GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(withAlpha(TvPalette.INK_950,.95f),withAlpha(TvPalette.INK_950,.72f),withAlpha(TvPalette.INK_950,0f))
+            intArrayOf(withAlpha(TvPalette.INK_950,.96f),withAlpha(TvPalette.INK_950,.82f),withAlpha(TvPalette.INK_950,0f))
         )
     }
     // 底部纵向压暗：让主推位和下方的货架平滑过渡，而不是硬切一条边。
@@ -83,6 +83,10 @@ internal class HomeHeroView(
 
     init {
         isFocusable=true; isFocusableInTouchMode=true
+        // 主推位落在内容区里（base() 已留 5% 边距），左右不是出血到屏幕边缘，
+        // 所以按大卡片处理：圆角 + 裁剪，而不是一块方图贴在左上角。
+        background=TvStyle.shape(context,TvStyle.colors.background,radius=20)
+        clipToOutline=true
         // 焦点时封面要能微微放大，不能被自己裁掉
         clipChildren=false
         addView(image,FrameLayout.LayoutParams(-1,-1))
@@ -112,10 +116,14 @@ internal class HomeHeroView(
         contentDescription="${next.series.title}，${next.label}"
     }
 
-    /** 高度跟屏宽走：960dp 的电视上是 326dp，1080p 竖屏手机上自动收到下限。 */
+    /**
+     * 高度跟宽度走。1080p 电视的内容区是 864dp 宽、约 486dp 高，0.30 得到 259dp，
+     * 占屏高不到一半：首屏能看到完整主推位、一行标题和几乎整排海报，
+     * 既有大画面的体量，又不至于一屏只有一张图。
+     */
     override fun onMeasure(widthMeasureSpec: Int,heightMeasureSpec: Int) {
         val width=MeasureSpec.getSize(widthMeasureSpec)
-        val height=(width*.34f).toInt().coerceIn(dp(260),dp(430))
+        val height=(width*.30f).toInt().coerceIn(dp(240),dp(400))
         super.onMeasure(widthMeasureSpec,MeasureSpec.makeMeasureSpec(height,MeasureSpec.EXACTLY))
     }
 }
