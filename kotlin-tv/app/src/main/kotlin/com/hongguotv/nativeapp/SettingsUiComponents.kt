@@ -49,12 +49,8 @@ internal class SettingsCategoryController(
             val active = index == focusedCategory
             val headingFocused = index == headingFocusIndex
             card.background = when {
-                headingFocused -> TvStyle.shape(
-                    activity,
-                    TvStyle.colors.surfaceRaised,
-                    TvStyle.colors.focusRing,
-                    TvMetric.RADIUS_M,
-                )
+                // 焦点态走 FocusFrame（柔光+白环，零越界）
+                headingFocused -> FocusFrame.ring(activity, TvStyle.colors.surfaceRaised, TvMetric.RADIUS_M)
                 active -> TvStyle.shape(
                     activity,
                     withAlpha(TvStyle.colors.accent, 0.12f),
@@ -197,12 +193,15 @@ internal class SettingsSectionFactory(
         }
         heading.addView(headingTitle, LinearLayout.LayoutParams(0, -2, 1f))
         categoryHeadingCards += heading
-        // 分类卡高度恢复正常（内容高度），但间距沿整列等分铺开：
-        // 外层格子等分剩余高度、卡片在格子里垂直居中，既不拉成大长条，
-        // 下方也不留大块空白（真机反馈：卡片不要那么高）。
+        // 真机反馈：等分拉伸把每个分类隔得太开，"分列感"太重。改为紧凑堆叠
+        // （内容高度 + 小间距），整组在列内垂直居中 —— 分类是一列目录，不是一摞卡片墙。
         val cell = android.widget.FrameLayout(activity).apply { clipChildren = false }
         cell.addView(heading, android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_VERTICAL))
-        categoryCard.addView(cell, LinearLayout.LayoutParams(-1, 0, 1f).apply { rightMargin = dp(6) })
+        categoryCard.addView(cell, LinearLayout.LayoutParams(-1, -2).apply {
+            rightMargin = dp(6)
+            topMargin = dp(3)
+            bottomMargin = dp(3)
+        })
 
         // ── 右：分组标题 + 说明 + 行列表
         val panel = LinearLayout(activity).apply {

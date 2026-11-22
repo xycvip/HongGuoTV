@@ -41,22 +41,17 @@ internal class PosterCard private constructor(
     enum class Mode { POSTER, MORE, RANDOM }
 
     /**
-     * 焦点态：白环画在卡背景上，卡内海报轻微放大。
+     * 焦点态：选项框交给 [FocusFrame] 统一绘制（外圈柔光 + 内圈白环）。
      *
-     * 卡片本身**不缩放、不投影**：一旦放大卡片，边缘就越出自身边界，而滚动
-     * 容器（货架/网格）必须保留裁剪防止半滚出的海报叠上竖栏 —— 越界的边缘
-     * 就必然被裁成「选项框缺角」（真机实测左/上/下三边都缺）。把放大收进卡的
-     * 3dp 内缩里，卡片每一个像素都不越界，焦点环在任何容器里都完整。
+     * 铁律：卡片自身不缩放、不投影，每一个像素都不越出边界 —— 滚动容器
+     * 必须保留裁剪（防半滚出的海报叠上竖栏），任何越界都会被裁成缺角。
+     * 海报的轻微放大只作用于卡内 artwork（封顶 1.02，收在 3dp 内缩里）。
      */
     fun paintFocus(focused: Boolean, scale: Float = 1.02f, ringRadius: Int = TvMetric.RADIUS_M) {
         val context = card.context
-        card.background = if (focused) {
-            TvStyle.shape(context, Color.TRANSPARENT, TvStyle.colors.focusRing, ringRadius)
-        } else null
+        card.background = if (focused) FocusFrame.ring(context, Color.TRANSPARENT, ringRadius) else null
         card.elevation = 0f
         card.animate().cancel(); card.scaleX = 1f; card.scaleY = 1f
-        // 放大只作用于卡内元素，且封顶 1.02：海报（约 2:3）放大越出自身约 2dp，
-        // 仍收在卡片 3dp 内缩里，不会碰到焦点环。
         (artwork ?: tile)?.animateFocus(focused, minOf(scale, 1.02f))
     }
 

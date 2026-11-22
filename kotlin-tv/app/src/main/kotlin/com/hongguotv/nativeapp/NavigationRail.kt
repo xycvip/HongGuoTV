@@ -232,8 +232,8 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
         }
     }
 
-    // 焦点链统一写在 FocusRules：竖栏上下自链、左键原地不动；
+    // 焦点链统一写在 FocusFrame：竖栏上下自链、左键原地不动；
     // 页面渲染代码不得改写竖栏项的 nextFocusUp/Down（旧横排"下键进内容"已废除）。
     if (brandItem != null) items.add(0, brandItem!!)
-    FocusRules.applyRailChain(items)
+    FocusFrame.applyRailChain(items)
 }

@@ -44,17 +44,11 @@ import java.util.Locale
     internal fun MainActivity.focusStyle(view: View,selected: Boolean=false) {
         view.id=View.generateViewId(); view.isFocusable=true; view.isFocusableInTouchMode=true
         fun paint(focused: Boolean) {
-            // 焦点态从"橙色细描边"改为"白色 2dp 环 + 抬升"：白色环在深浅两套主题下都能读，
-            // 也不会和 accent 的语义（当前选中/进度）打架。
-            view.background=rounded(
-                when {
-                    focused -> TvStyle.colors.surfaceRaised
-                    selected -> TvStyle.colors.selectedSurface
-                    else -> TvStyle.colors.surface
-                },
-                if(focused) TvStyle.colors.focusRing else Color.TRANSPARENT
+            // 选项框统一走 FocusFrame：外圈柔光 + 内圈白环，零越界（不缩放不投影）。
+            FocusFrame.paint(
+                view, focused,
+                normalFill = if(selected) TvStyle.colors.selectedSurface else TvStyle.colors.surface,
             )
-            view.elevation=if(focused) dp(6).toFloat() else 0f
             // 选中项用强调色文字标出"当前在哪"，焦点移上去时回到主文字色，避免同色叠同色。
             if(view is TextView) view.setTextColor(
                 when {
@@ -63,7 +57,6 @@ import java.util.Locale
                     else -> TvStyle.colors.textPrimary
                 }
             )
-            view.animateFocus(focused)
         }
         paint(false); view.setOnFocusChangeListener { focusedView,focused ->
             paint(focused)
@@ -145,8 +138,8 @@ import java.util.Locale
         stopApiStatusAnimations(); apiStatusViews.clear()
         renderNavigationRail(railHost,container)
         // 焦点环画在 View 边界之外：页面建完统一放开整棵树的裁剪，
-        // 边缘海报/按钮的选项框不再缺一角（FocusRules 是唯一入口）。
-        main.post { if(!isDestroyed) FocusRules.unclipTree(root) }
+        // 边缘海报/按钮的选项框不再缺一角（FocusFrame 是唯一入口）。
+        main.post { if(!isDestroyed) FocusFrame.unclipTree(root) }
         if(title!=null) {
             // 返回是次要操作，用纯文字语气；原来给它一块灰底，和页面标题抢了同一行的高度。
             val heading=row(); addToneButton(heading,"‹ 返回",TvTone.Ghost) { goBack() }

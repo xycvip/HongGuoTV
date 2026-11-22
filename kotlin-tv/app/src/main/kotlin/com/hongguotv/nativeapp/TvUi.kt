@@ -150,14 +150,20 @@ internal fun MainActivity.toneButton(
                     radius = TvMetric.RADIUS_PILL
                 }
             }
-            background = TvStyle.shape(this@toneButton, fill, stroke, radius)
+            // 选项框统一走 FocusFrame（柔光+白环，零越界）；Primary/Chip 焦点态保留
+            // 实心强调底，环压在底色外缘，同样不越界。
+            background = if (focused) {
+                FocusFrame.ring(this@toneButton, fill, radius, colors.focusRing)
+            } else {
+                TvStyle.shape(this@toneButton, fill, stroke, radius)
+            }
             setTextColor(ink)
             typeface = Typeface.create(
                 if (focused || selected) "sans-serif-medium" else "sans-serif",
                 Typeface.NORMAL,
             )
-            elevation = if (focused) dp(6).toFloat() else 0f
-            animateFocus(focused)
+            elevation = 0f
+            animate().cancel(); scaleX = 1f; scaleY = 1f
         }
         paint(false)
         setOnFocusChangeListener { _, focused -> paint(focused) }

@@ -663,8 +663,11 @@ internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
         isFocusableInTouchMode=true
         background=TvStyle.shape(this@renderPushPlaybackPage,Color.WHITE,Color.TRANSPARENT,TvMetric.RADIUS_L)
         setOnFocusChangeListener { v,focused ->
-            v.background=TvStyle.shape(this@renderPushPlaybackPage,Color.WHITE,if(focused) TvStyle.colors.focusRing else Color.TRANSPARENT,TvMetric.RADIUS_L)
-            v.animateFocus(focused,1.02f)
+            // 选项框统一走 FocusFrame（柔光+白环，零越界）：卡自身不缩放不投影。
+            v.background=if(focused) FocusFrame.ring(this@renderPushPlaybackPage,Color.WHITE,TvMetric.RADIUS_L)
+                else TvStyle.shape(this@renderPushPlaybackPage,Color.WHITE,Color.TRANSPARENT,TvMetric.RADIUS_L)
+            v.elevation=0f
+            v.animate().cancel(); v.scaleX=1f; v.scaleY=1f
         }
     }
     val qr=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="手机扫码打开投播网页" }

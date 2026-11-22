@@ -32,16 +32,11 @@ internal class ThirdSourceUi(private val activity: Activity) {
     fun focusStyle(view: View, selected: Boolean = false) {
         view.id = View.generateViewId(); view.isFocusable = true; view.isFocusableInTouchMode = true
         fun paint(focused: Boolean) {
-            view.background = rounded(
-                when {
-                    focused -> TvStyle.colors.surfaceRaised
-                    selected -> TvStyle.colors.selectedSurface
-                    else -> TvStyle.colors.surface
-                },
-                if(focused) TvStyle.colors.focusRing else Color.TRANSPARENT,
-                TvMetric.RADIUS_M,
+            // 选项框统一走 FocusFrame（柔光+白环，零越界：不缩放不投影），与主站同一套语言。
+            FocusFrame.paint(
+                view, focused,
+                normalFill = if (selected) TvStyle.colors.selectedSurface else TvStyle.colors.surface,
             )
-            view.elevation = if(focused) dp(6).toFloat() else 0f
             if(view is TextView) view.setTextColor(
                 when {
                     focused -> TvStyle.colors.textPrimary
@@ -49,7 +44,6 @@ internal class ThirdSourceUi(private val activity: Activity) {
                     else -> TvStyle.colors.textPrimary
                 },
             )
-            view.animateFocus(focused)
         }
         paint(false)
         view.setOnFocusChangeListener { _, focused -> paint(focused) }

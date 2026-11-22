@@ -49,20 +49,12 @@ object TvStyle {
         setColor(color); cornerRadius=radius*context.resources.displayMetrics.density
         setStroke((2*context.resources.displayMetrics.density).toInt(),border)
     }
-    fun card(context: Context,focused: Boolean)=shape(
-        context,
-        if(focused) colors.surfaceRaised else colors.surface,
-        if(focused) colors.focusRing else Color.TRANSPARENT,
-        TvMetric.RADIUS_M
-    )
+    fun card(context: Context,focused: Boolean)=
+        if(focused) FocusFrame.ring(context,colors.surfaceRaised,TvMetric.RADIUS_M)
+        else shape(context,colors.surface,Color.TRANSPARENT,TvMetric.RADIUS_M)
 
     /**
-     * 焦点描边：透明底 + 白色圆环，供卡片/按钮在获得遥控器焦点时叠加使用。
-     * 电视端远距离观看，2dp 是最低可见宽度。
+     * 焦点描边：兼容旧调用点。新代码请直接用 [FocusFrame.ring]（柔光+白环双层，零越界）。
      */
-    fun focusRing(context: Context,radius: Int=12)=GradientDrawable().apply {
-        setColor(Color.TRANSPARENT)
-        cornerRadius=radius*context.resources.displayMetrics.density
-        setStroke((2*context.resources.displayMetrics.density).toInt(),currentColors().focusRing)
-    }
+    fun focusRing(context: Context,radius: Int=12)=FocusFrame.ring(context,Color.TRANSPARENT,radius)
 }

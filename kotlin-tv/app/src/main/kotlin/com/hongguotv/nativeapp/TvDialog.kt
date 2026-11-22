@@ -72,23 +72,25 @@ object TvDialog {
             minHeight = dp(TvMetric.ROW_HEIGHT_COMPACT + 2)
             setPadding(dp(22), 0, dp(22), 0)
             fun paint(focused: Boolean) {
-                background = GradientDrawable().apply {
-                    setColor(
-                        when {
-                            primary -> if (focused) TvStyle.colors.accentPressed else TvStyle.colors.accent
-                            focused -> TvStyle.colors.surfaceRaised
-                            else -> TvStyle.colors.surface
-                        },
-                    )
-                    cornerRadius = dp(24).toFloat()
-                    setStroke(
-                        dp(1),
-                        when {
-                            focused -> TvStyle.colors.focusRing
-                            primary -> TvStyle.colors.accent
-                            else -> TvStyle.colors.strokeSubtle
-                        },
-                    )
+                val fill = when {
+                    primary -> if (focused) TvStyle.colors.accentPressed else TvStyle.colors.accent
+                    focused -> TvStyle.colors.surfaceRaised
+                    else -> TvStyle.colors.surface
+                }
+                val stroke = when {
+                    focused -> TvStyle.colors.focusRing
+                    primary -> TvStyle.colors.accent
+                    else -> TvStyle.colors.strokeSubtle
+                }
+                // 焦点态走 FocusFrame（柔光+白环，零越界）；主按钮焦点环压在强调底上。
+                background = if (focused) {
+                    FocusFrame.ring(activity, fill, 24)
+                } else {
+                    GradientDrawable().apply {
+                        setColor(fill)
+                        cornerRadius = dp(24).toFloat()
+                        setStroke(dp(1), stroke)
+                    }
                 }
                 setTextColor(
                     when {
@@ -98,6 +100,8 @@ object TvDialog {
                     },
                 )
                 setTypeface(null, if (focused || primary) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                elevation = 0f
+                animate().cancel(); scaleX = 1f; scaleY = 1f
             }
             paint(false)
             setOnFocusChangeListener { _, focused -> paint(focused) }

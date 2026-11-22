@@ -109,7 +109,7 @@ import com.hongguotv.core.*
             // 剧场与排行榜稍后会把筛选头与海报网格合并进同一个 RecyclerView。
             body.addView(recycler,lp(-1,-2))
         } else body.addView(recycler,lp(-1,0).apply { weight=1f })
-        // 竖栏项的上下链由 FocusRules 在建栏时统一写死，页面渲染一律不改写
+        // 竖栏项的上下链由 FocusFrame 在建栏时统一写死，页面渲染一律不改写
         // （旧横排导航的"下键进内容"覆写会让竖栏下键跳进页面，已废除）。
         // 从竖栏进内容走右键，由系统空间搜索就近落点。
         rankSwitch?.nextFocusDownId=recycler.id; rankRefresh?.nextFocusDownId=recycler.id; historyManage?.nextFocusDownId=recycler.id; favoriteCheck?.nextFocusDownId=favoriteFilterFirst?.id ?: recycler.id

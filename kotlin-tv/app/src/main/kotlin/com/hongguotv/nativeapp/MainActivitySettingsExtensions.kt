@@ -44,6 +44,8 @@ import java.util.Locale
         val categoryCard=column().apply {
             clipChildren=false
             clipToPadding=false
+            // 分类项紧凑堆叠后整组垂直居中：既不散成"分列"，下方也不留大块空白。
+            gravity=Gravity.CENTER_VERTICAL
             setPadding(0,dp(6),0,0)
         }
         val body=column()

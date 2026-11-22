@@ -119,12 +119,8 @@ internal class SettingsRow(context: Context) : LinearLayout(context) {
 
     private fun paint(focused: Boolean) {
         focusedNow = focused
-        background = TvStyle.shape(
-            context,
-            if (focused) TvStyle.colors.surfaceRaised else TvStyle.colors.surface,
-            if (focused) TvStyle.colors.focusRing else Color.TRANSPARENT,
-            TvMetric.RADIUS_M,
-        )
+        // 选项框统一走 FocusFrame（外圈柔光 + 内圈白环，零越界：不缩放不投影）。
+        FocusFrame.paint(this, focused, normalFill = TvStyle.colors.surface)
         // 左侧竖条只在获得焦点时亮起，用强调色标出"当前这一行"，代替整块高亮。
         bar.setBackgroundColor(if (focused) TvStyle.colors.accent else Color.TRANSPARENT)
         titleView.typeface = Typeface.create(
@@ -137,8 +133,5 @@ internal class SettingsRow(context: Context) : LinearLayout(context) {
         chevron.setTextColor(
             if (focused) TvStyle.colors.textSecondary else TvStyle.colors.textTertiary,
         )
-        elevation = if (focused) TvMetric.dp(context, 6).toFloat() else 0f
-        // 整行接近整屏宽，放大比例必须比按钮小得多，否则会顶到两侧页边距。
-        animateFocus(focused, 1.008f)
     }
 }
