@@ -11,11 +11,11 @@ import android.widget.*
 import androidx.media3.common.*
 import com.hongguotv.core.*
 
-internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
+internal fun MainActivity.showFramePicker(anchor: View,inPlayer: Boolean) {
         val options=listOf("完整画面 · 保留比例与全部内容","等比铺满 · 会裁掉部分画面与字幕","拉伸铺满 · 画面比例会改变")
         tvTools.choose("全局画面模式",options,anchor,{ index ->
             library.frameMode=VideoFrameMode.entries[index]; playerView?.resizeMode=activeFrameResizeMode()
-            if(anchor.tag!="playback-settings") anchor.text=(if(inPlayer) "画面 " else "画面模式  ·  ")+library.frameMode.label
+            if(anchor.tag!="playback-settings") setLabel(anchor, (if(inPlayer) "画面 " else "画面模式  ·  ")+library.frameMode.label)
         },selectedIndex=VideoFrameMode.entries.indexOf(library.frameMode))
     }
 
@@ -131,7 +131,7 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
         showHud()
     }
 
-    internal fun MainActivity.showSkipPicker(anchor: TextView,intro: Boolean) {
+    internal fun MainActivity.showSkipPicker(anchor: View,intro: Boolean) {
         val data=detail ?: return
         val options=listOf(0,15,30,45,60,90,120)
         val current=library.skipMark(data.series.id)?.let { if(intro) it.introSeconds else it.outroSeconds } ?: 0
@@ -140,29 +140,31 @@ internal fun MainActivity.showFramePicker(anchor: TextView,inPlayer: Boolean) {
             val next=if(intro) old.copy(introSeconds=options[index]) else old.copy(outroSeconds=options[index])
             library.setSkipMark(data.series.id,next)
             if(!intro) { outroSkipSeconds=next.outroSeconds; outroTriggered=false }
-            if(anchor.isAttachedToWindow) anchor.text=skipButtonLabel(intro,options[index])
+            if(anchor.isAttachedToWindow) setLabel(anchor, skipButtonLabel(intro,options[index]))
             Toast.makeText(this,"已保存，仅对《${data.series.title}》生效",Toast.LENGTH_SHORT).show()
             showHud()
         },"当前 ${if(current>0) "$current 秒" else "关闭"}",selectedIndex=options.indexOf(current))
     }
 
-    internal fun MainActivity.showSpeedPicker(anchor: TextView,inPlayer: Boolean=true) {
+    internal fun MainActivity.showSpeedPicker(anchor: View,inPlayer: Boolean=true) {
         val speeds=PlaybackSpeed.options
         tvTools.choose("全局默认倍速",speeds.map(PlaybackSpeed::label),anchor,{ index ->
             library.playbackSpeed=speeds[index]
             if(inPlayer) player?.setPlaybackSpeed(library.playbackSpeed)
-            if(anchor.tag!="playback-settings") anchor.text=String.format(java.util.Locale.US,"%.2f",library.playbackSpeed.toDouble()) else "默认倍速  ·  "+PlaybackSpeed.label(library.playbackSpeed)
+            // 播放器里的倍速按钮只显示数字；设置页的行要显示完整标签。
+            setLabel(anchor, if(anchor.tag=="playback-settings") String.format(java.util.Locale.US,"%.2f",library.playbackSpeed.toDouble())
+                else "默认倍速  ·  "+PlaybackSpeed.label(library.playbackSpeed))
             if(inPlayer) updatePlaybackText()
         },selectedIndex=speeds.indexOf(library.playbackSpeed))
     }
 
-    internal fun MainActivity.showQualityPicker(anchor: TextView,inPlayer: Boolean) {
+    internal fun MainActivity.showQualityPicker(anchor: View,inPlayer: Boolean) {
         val options=PlaybackQuality.options
         tvTools.choose("全局画质",options.map(PlaybackQuality::label),anchor,{ index ->
             val target=options[index]
             val changed=library.maxQuality!=target
             library.maxQuality=target
-            if(anchor.tag!="playback-settings") anchor.text=if(inPlayer) "画质" else "画质  ·  ${PlaybackQuality.label(target)}"
+            if(anchor.tag!="playback-settings") setLabel(anchor, if(inPlayer) "画质" else "画质  ·  ${PlaybackQuality.label(target)}")
             if(inPlayer && changed) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
         },selectedIndex=options.indexOf(library.maxQuality))
     }

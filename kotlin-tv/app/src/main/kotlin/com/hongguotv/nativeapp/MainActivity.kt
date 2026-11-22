@@ -164,7 +164,10 @@ class MainActivity: Activity() {
     internal var debugPlaybackStartedAt by debugUiState::playbackStartedAt
     internal var debugPlaybackReadyAt by debugUiState::playbackReadyAt
     internal var debugFirstFrameAt by debugUiState::firstFrameAt
-    internal var debugSettingButton by debugUiState::settingButton
+    // 显式声明类型：属性引用委托在增量编译下会退化到旧的视图类型，导致设置页赋值报类型不符。
+    internal var debugSettingButton: SettingsRow?
+        get() = debugUiState.settingButton
+        set(value) { debugUiState.settingButton = value }
     internal val debugEnabled get()=getSharedPreferences("debug-mode-v1",MODE_PRIVATE).getBoolean("enabled",false)
     // 手动解锁状态只保留在当前进程；若调试开关保持开启，则由持久化开关决定重启后继续显示。
     // Activity 构造阶段 Context 尚未挂接，不能在属性初始化时读取 SharedPreferences。

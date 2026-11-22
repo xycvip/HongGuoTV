@@ -57,32 +57,32 @@ import java.util.concurrent.atomic.AtomicLong
         applyDanmakuPrefs()
     }
 
-    internal fun MainActivity.showDanmakuOpacityPicker(anchor: TextView,done: (()->Unit)?=null) {
+    internal fun MainActivity.showDanmakuOpacityPicker(anchor: View,done: (()->Unit)?=null) {
         val options=listOf(100,90,80,70,60,50,40,30,21)
         tvTools.choose("弹幕不透明度 · ${library.danmakuOpacity}%",options.map { "$it%" },anchor,{ choice ->
             library.danmakuOpacity=options[choice]; applyDanmakuPrefs()
-            if(anchor.tag!="playback-settings") anchor.text="弹幕不透明度  ·  ${library.danmakuOpacity}%"
+            if(anchor.tag!="playback-settings") setLabel(anchor, "弹幕不透明度  ·  ${library.danmakuOpacity}%")
             done?.invoke()
         },selectedIndex=options.indexOf(library.danmakuOpacity))
     }
 
-    internal fun MainActivity.showDanmakuFontPicker(anchor: TextView,done: (()->Unit)?=null) {
+    internal fun MainActivity.showDanmakuFontPicker(anchor: View,done: (()->Unit)?=null) {
         tvTools.choose("弹幕字体大小 · ${DanmakuPrefs.fontLabel(library.danmakuFont)}",DanmakuPrefs.FONT_LABELS,anchor,{ choice ->
             library.danmakuFont=choice; applyDanmakuPrefs()
-            if(anchor.tag!="playback-settings") anchor.text="弹幕字体大小  ·  ${DanmakuPrefs.fontLabel(library.danmakuFont)}"
+            if(anchor.tag!="playback-settings") setLabel(anchor, "弹幕字体大小  ·  ${DanmakuPrefs.fontLabel(library.danmakuFont)}")
             done?.invoke()
         },selectedIndex=DanmakuPrefs.font(library.danmakuFont))
     }
 
-    internal fun MainActivity.showDanmakuSpeedPicker(anchor: TextView,done: (()->Unit)?=null) {
+    internal fun MainActivity.showDanmakuSpeedPicker(anchor: View,done: (()->Unit)?=null) {
         tvTools.choose("弹幕移动速度 · ${DanmakuPrefs.speedLabel(library.danmakuSpeed)}",DanmakuPrefs.SPEED_LABELS,anchor,{ choice ->
             library.danmakuSpeed=choice; applyDanmakuPrefs()
-            if(anchor.tag!="playback-settings") anchor.text="弹幕移动速度  ·  ${DanmakuPrefs.speedLabel(library.danmakuSpeed)}"
+            if(anchor.tag!="playback-settings") setLabel(anchor, "弹幕移动速度  ·  ${DanmakuPrefs.speedLabel(library.danmakuSpeed)}")
             done?.invoke()
         },selectedIndex=DanmakuPrefs.speed(library.danmakuSpeed))
     }
 
-    internal fun MainActivity.showDanmakuColorPicker(anchor: TextView,done: (()->Unit)?=null) {
+    internal fun MainActivity.showDanmakuColorPicker(anchor: View,done: (()->Unit)?=null) {
         val options = listOf("默认", "多彩") + DanmakuView.COLOR_NAMES
         tvTools.choose("弹幕颜色 · ${danmakuColorModeLabel()}",options,anchor,{ choice ->
             val mode = when(choice) {
@@ -93,7 +93,7 @@ import java.util.concurrent.atomic.AtomicLong
             getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit()
                 .putInt("danmaku_color_mode",mode).apply()
             danmakuView?.setColorMode(mode)
-            if(anchor.tag!="playback-settings") anchor.text="弹幕颜色  ·  ${danmakuColorModeLabel(mode)}"
+            if(anchor.tag!="playback-settings") setLabel(anchor, "弹幕颜色  ·  ${danmakuColorModeLabel(mode)}")
             done?.invoke()
         },selectedIndex=when(danmakuColorMode) {
             DanmakuView.COLOR_MODE_COLORFUL -> 1
@@ -102,15 +102,15 @@ import java.util.concurrent.atomic.AtomicLong
         })
     }
 
-    internal fun MainActivity.showDanmakuRowsPicker(anchor: TextView,done: (()->Unit)?=null) {
+    internal fun MainActivity.showDanmakuRowsPicker(anchor: View,done: (()->Unit)?=null) {
         tvTools.choose("弹幕展示行数 · ${library.danmakuRows} 行",(DanmakuPrefs.ROWS_MIN..DanmakuPrefs.ROWS_MAX).map { "$it 行" },anchor,{ choice ->
             library.danmakuRows=choice+DanmakuPrefs.ROWS_MIN; applyDanmakuPrefs()
-            if(anchor.tag!="playback-settings") anchor.text="弹幕展示行数  ·  ${library.danmakuRows} 行"
+            if(anchor.tag!="playback-settings") setLabel(anchor, "弹幕展示行数  ·  ${library.danmakuRows} 行")
             done?.invoke()
         },selectedIndex=library.danmakuRows-DanmakuPrefs.ROWS_MIN)
     }
 
-    internal fun MainActivity.showDanmakuPrefsDialog(anchor: TextView) {
+    internal fun MainActivity.showDanmakuPrefsDialog(anchor: View) {
         fun labels()=listOf("不透明度 ${library.danmakuOpacity}%","字体大小 ${DanmakuPrefs.fontLabel(library.danmakuFont)}","颜色 ${danmakuColorModeLabel()}","移动速度 ${DanmakuPrefs.speedLabel(library.danmakuSpeed)}","展示行数 ${library.danmakuRows} 行","恢复默认设置")
         tvTools.choose("弹幕设置",labels(),anchor,{ choice ->
             main.post {
@@ -127,7 +127,7 @@ import java.util.concurrent.atomic.AtomicLong
         })
     }
 
-    internal fun MainActivity.showBlockedWordDialog(anchor: TextView) {
+    internal fun MainActivity.showBlockedWordDialog(anchor: View) {
         val presets=listOf("加群","微信","公众号","QQ群","QQ","广告","私聊","代看","抖音","快手")
         val current=extras.blockedWords
         val words=(presets+current.filterNot { it in presets }).distinct()
@@ -145,13 +145,13 @@ import java.util.concurrent.atomic.AtomicLong
         content.addView(list,lp(-1,0).apply { weight=1f })
         val buttons=row().apply { gravity=Gravity.END; setPadding(0,dp(14),0,0) }
         val clear=TvDialog.capsuleButton(this,"清空") {
-            extras.blockedWords=emptySet(); applyBlockedWords(); anchor.text="弹幕屏蔽词  ·  0 个"
+            extras.blockedWords=emptySet(); applyBlockedWords(); setLabel(anchor, "弹幕屏蔽词  ·  0 个")
             checked.fill(false)
             list.post { (list.adapter as? android.widget.BaseAdapter)?.notifyDataSetChanged(); list.invalidateViews(); list.requestLayout() }
         }
         val save=TvDialog.capsuleButton(this,"保存") {
             extras.blockedWords=words.filterIndexed { index,_ -> checked[index] }.toSet()
-            applyBlockedWords(); anchor.text="弹幕屏蔽词  ·  ${extras.blockedWords.size} 个"
+            applyBlockedWords(); setLabel(anchor, "弹幕屏蔽词  ·  ${extras.blockedWords.size} 个")
             Toast.makeText(this@showBlockedWordDialog,"屏蔽词已保存，立即生效",Toast.LENGTH_SHORT).show()
         }
         buttons.addView(clear,lp(-2,-2).apply { rightMargin=dp(12) })

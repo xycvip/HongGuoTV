@@ -180,7 +180,7 @@ private object ApiStatusColors {
         probe("联想") { "官方接口直连成功 · 返回 ${repository.probeSuggest("xx")} 个词（已绕过缓存）" }
     }
 
-    internal fun MainActivity.showInterfaceCheck(anchor: TextView) {
+    internal fun MainActivity.showInterfaceCheck(anchor: View) {
         val content=column()
         content.addView(TvDialog.title(this,"接口状态详情"))
         val status=text("可查看最近一次自动检测结果，也可手动重新检测。",13f,muted)

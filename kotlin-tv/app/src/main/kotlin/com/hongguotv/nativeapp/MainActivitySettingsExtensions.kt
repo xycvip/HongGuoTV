@@ -44,90 +44,59 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
     internal fun MainActivity.settings(parent: LinearLayout, footerHost: LinearLayout) {
-        val settingRows=mutableListOf<TextView>()
-        val categoryItems=mutableListOf<MutableList<TextView>>()
+        val settingRows=mutableListOf<SettingsRow>()
+        val categoryItems=mutableListOf<MutableList<SettingsRow>>()
         val categoryIndicators=mutableListOf<TextView>()
         val categoryHeadingCards=mutableListOf<LinearLayout>()
-        // 左侧主分类只显示分类名称；获得右侧具体设置项焦点时，才显示该子项说明。
-        val categoryHeadingSubtitles=mutableListOf<TextView>()
-        val categoryHeadingTitles=mutableListOf<TextView>()
+        val sectionNotes=mutableListOf<TextView>()
+        val defaultNotes=mutableListOf<String>()
 
-        // Settings sections are listed in the same order as the left navigation.
-
-        val columns=when {
-            widthDp()<600f -> 2
-            widthDp()<1100f -> 3
-            else -> 4
-        }
-        // A single seamless settings surface: subtle separators define sections instead of nested cards.
         val contentHost=row().apply { gravity=Gravity.TOP }
         parent.addView(contentHost,lp())
-        // 左侧分类栏按当前可用屏幕尺寸自适应，避免手机端过窄、电视端比例失衡。
+
+        // 左侧窄导航 + 右侧单列宽行。
+        // 原来右侧是 2/3/4 列自适应网格，1080p 电视上一行四格、单格约 176dp，
+        // 「默认清晰度 · 自动（1080P 优先）」只能显示到「自动（…」，砍掉的恰好是状态。
         val screenWidthDp=widthDp().coerceAtLeast(1f)
         val screenHeightDp=heightDp().coerceAtLeast(1f)
-        val headingWidth=(screenWidthDp*0.125f).toInt().coerceIn(84,168)
+        val headingWidth=(screenWidthDp*0.16f).toInt().coerceIn(132,190)
         val categoryScale=minOf(
             (screenWidthDp/800f).coerceIn(0.88f,1.16f),
             (screenHeightDp/600f).coerceIn(0.88f,1.12f)
         )
-        // 设置页采用更克制的字号层级，避免分类标题过大、说明文字过小。
-        val categoryTitleSize=(16.5f*categoryScale).coerceIn(15f,19f)
-        val categoryTitleHeight=(headingWidth*0.40f*categoryScale).toInt().coerceIn(44,60)
-        val categorySubtitleSize=(12.5f*categoryScale).coerceIn(11.5f,14f)
-        val categoryController = SettingsCategoryController(
-            activity = this@settings,
-            categoryHeadingCards = categoryHeadingCards,
-            categoryIndicators = categoryIndicators,
-            categoryHeadingSubtitles = categoryHeadingSubtitles,
-            categoryHeadingTitles = categoryHeadingTitles,
-            categoryScale = categoryScale,
-            categoryTitleSize = categoryTitleSize,
-            categoryTitleHeight = categoryTitleHeight,
-            categorySubtitleSize = categorySubtitleSize,
-            muted = muted,
-            white = white,
-            dp = { value -> dp(value) },
-            rounded = { color -> rounded(color) },
+        val rowHeight=(56f*categoryScale).toInt().coerceIn(50,64)
+
+        val categoryController=SettingsCategoryController(
+            activity=this@settings,
+            categoryHeadingCards=categoryHeadingCards,
+            categoryIndicators=categoryIndicators,
+            sectionNotes=sectionNotes,
+            defaultNotes=defaultNotes,
         )
-        val categoryCardExtension=(8f*categoryScale).toInt().coerceIn(6,10)
         val categoryCard=column().apply {
-            // 分类背景卡片向右适度延伸；允许子卡片绘制到列宽之外。
             clipChildren=false
             clipToPadding=false
+            setPadding(0,dp(6),0,0)
         }
         contentHost.addView(categoryCard,lp(dp(headingWidth),-2))
-        // 左右两栏保留与设置项外边距一致的留白，不绘制竖向分割线。
-        val columnGap=(5f*categoryScale).toInt().coerceIn(3,7)
-        contentHost.addView(Space(this),lp(dp(columnGap),1))
+        contentHost.addView(Space(this),lp(dp(TvMetric.GAP_XL),1))
         val sectionsHost=column()
         contentHost.addView(sectionsHost,LinearLayout.LayoutParams(0,-2,1f))
 
-        val sectionFactory = SettingsSectionFactory(
-            activity = this@settings,
-            categoryIndicators = categoryIndicators,
-            categoryHeadingSubtitles = categoryHeadingSubtitles,
-            categoryHeadingTitles = categoryHeadingTitles,
-            categoryHeadingCards = categoryHeadingCards,
-            categoryItems = categoryItems,
-            categoryController = categoryController,
-            categoryScale = categoryScale,
-            categoryTitleSize = categoryTitleSize,
-            categoryTitleHeight = categoryTitleHeight,
-            categorySubtitleSize = categorySubtitleSize,
-            categoryCardExtension = categoryCardExtension,
-            headingWidth = headingWidth,
-            columns = columns,
-            categoryCard = categoryCard,
-            sectionsHost = sectionsHost,
-            white = white,
-            muted = muted,
-            dp = { value -> dp(value) },
-            createText = { value, size, color -> text(value, size, color) },
-            createColumn = { column() },
-            layoutParams = { width, height -> lp(width, height) },
-            rounded = { color -> rounded(color) }
+        val sectionFactory=SettingsSectionFactory(
+            activity=this@settings,
+            categoryIndicators=categoryIndicators,
+            categoryHeadingCards=categoryHeadingCards,
+            sectionNotes=sectionNotes,
+            defaultNotes=defaultNotes,
+            categoryItems=categoryItems,
+            categoryCard=categoryCard,
+            sectionsHost=sectionsHost,
+            dp={ value -> dp(value) },
+            createText={ value,size,color -> text(value,size,color) },
         )
-        val section: (String, String) -> Pair<LinearLayout, GridLayout> = sectionFactory::section
+        sectionFactory.categoryControllerRef=categoryController
+        val section: (String,String) -> Pair<LinearLayout,LinearLayout> = sectionFactory::section
         val playback=section("播放","清晰度、倍速与连播设置").second
         val danmaku=section("弹幕","官方弹幕、显示效果与屏蔽词设置").second
         val data=section("数据","备份记录、统计与缓存管理").second
@@ -137,52 +106,17 @@ import java.util.concurrent.atomic.AtomicLong
         val debugSection=section("调试模式","运行状态、诊断信息与日志管理")
         val debug=debugSection.second
 
-        // 左侧主设置分类卡片的右边缘，动态对齐导航栏搜索按钮背景框的右边缘。
-        fun alignCategoryCardsToSearchShortcut() {
-            val search=searchNavShortcut ?: return
-            if(categoryCard.width<=0 || search.width<=0) return
-            val categoryLocation=IntArray(2)
-            val searchLocation=IntArray(2)
-            categoryCard.getLocationOnScreen(categoryLocation)
-            search.getLocationOnScreen(searchLocation)
-            val alignedWidth=(searchLocation[0]+search.width-categoryLocation[0]).coerceAtLeast(dp(1))
-            val categoryParams=categoryCard.layoutParams as? LinearLayout.LayoutParams
-            if(categoryParams!=null && categoryParams.width!=alignedWidth) {
-                categoryParams.width=alignedWidth
-                categoryCard.layoutParams=categoryParams
-            }
-            categoryHeadingCards.forEach { card ->
-                val params=card.layoutParams as? LinearLayout.LayoutParams ?: return@forEach
-                if(params.width!=alignedWidth || params.rightMargin!=0) {
-                    params.width=alignedWidth
-                    params.rightMargin=0
-                    card.layoutParams=params
-                }
-            }
-        }
-        categoryCard.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> alignCategoryCardsToSearchShortcut() }
-        searchNavShortcut?.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> alignCategoryCardsToSearchShortcut() }
-        parent.post { alignCategoryCardsToSearchShortcut() }
-
-        // 右侧设置项与左侧分类栏共用屏幕缩放系数，保持两侧视觉比例一致。
-        val settingTextSize=(13.5f*categoryScale).coerceIn(12.5f,14.5f)
-        val settingItemHeight=(64f*categoryScale).toInt().coerceIn(54,72)
-        val settingHorizontalPadding=(10f*categoryScale).toInt().coerceIn(7,13)
-        val settingVerticalPadding=(8f*categoryScale).toInt().coerceIn(6,11)
-        val settingFactory = SettingsItemFactory(
-            activity = this@settings,
-            settingRows = settingRows,
-            categoryItems = categoryItems,
-            categoryController = categoryController,
-            settingTextSize = settingTextSize,
-            settingItemHeight = settingItemHeight,
-            settingHorizontalPadding = settingHorizontalPadding,
-            settingVerticalPadding = settingVerticalPadding,
-            categoryScale = categoryScale,
-            dp = { value -> dp(value) },
-            createButton = { label, action -> button(label, onClick = action) },
+        // 单列：一行一件事，右侧的值不会被挤掉。
+        val columns=1
+        val settingFactory=SettingsItemFactory(
+            activity=this@settings,
+            settingRows=settingRows,
+            categoryItems=categoryItems,
+            categoryController=categoryController,
+            rowHeight=rowHeight,
+            dp={ value -> dp(value) },
         )
-        fun setting(group:GridLayout,category:Int,label:String,action:()->Unit):TextView =
+        fun setting(group:LinearLayout,category:Int,label:String,action:()->Unit):SettingsRow =
             settingFactory.setting(group,category,label,action)
 
 
@@ -212,37 +146,37 @@ import java.util.concurrent.atomic.AtomicLong
             }
         }
 
-        lateinit var startupAutoplayButton:TextView
-        lateinit var qualityButton:TextView
-        lateinit var playbackApiButton:TextView
-        lateinit var defaultSpeed:TextView
-        lateinit var frame:TextView
-        lateinit var videoRendererButton:TextView
-        lateinit var autoNextButton:TextView
-        lateinit var autoSeasonButton:TextView
-        lateinit var danmakuButton:TextView
-        lateinit var danmakuOpacity:TextView
-        lateinit var danmakuFont:TextView
-        lateinit var danmakuColor:TextView
-        lateinit var danmakuSpeed:TextView
-        lateinit var danmakuRows:TextView
-        lateinit var danmakuReset:TextView
-        lateinit var blockedWords:TextView
-        lateinit var keySettings:TextView
-        lateinit var themeButton:TextView
-        lateinit var clockButton:TextView
-        lateinit var sourceDisplayButton:TextView
-        lateinit var fileBackup:TextView
-        lateinit var backup:TextView
-        lateinit var hidden:TextView
-        lateinit var resetButton:TextView
-        lateinit var aboutButton:TextView
+        lateinit var startupAutoplayButton:SettingsRow
+        lateinit var qualityButton:SettingsRow
+        lateinit var playbackApiButton:SettingsRow
+        lateinit var defaultSpeed:SettingsRow
+        lateinit var frame:SettingsRow
+        lateinit var videoRendererButton:SettingsRow
+        lateinit var autoNextButton:SettingsRow
+        lateinit var autoSeasonButton:SettingsRow
+        lateinit var danmakuButton:SettingsRow
+        lateinit var danmakuOpacity:SettingsRow
+        lateinit var danmakuFont:SettingsRow
+        lateinit var danmakuColor:SettingsRow
+        lateinit var danmakuSpeed:SettingsRow
+        lateinit var danmakuRows:SettingsRow
+        lateinit var danmakuReset:SettingsRow
+        lateinit var blockedWords:SettingsRow
+        lateinit var keySettings:SettingsRow
+        lateinit var themeButton:SettingsRow
+        lateinit var clockButton:SettingsRow
+        lateinit var sourceDisplayButton:SettingsRow
+        lateinit var fileBackup:SettingsRow
+        lateinit var backup:SettingsRow
+        lateinit var hidden:SettingsRow
+        lateinit var resetButton:SettingsRow
+        lateinit var aboutButton:SettingsRow
 
         fun paintStartupAutoplayButton(focused:Boolean=startupAutoplayButton.hasFocus()) {
             val enabled=startupAutoplayEnabled()
             startupAutoplayButton.text="启动时播放推荐  ·  ${if(enabled) "开启" else "关闭"}"
             // 开启/关闭仅作为文字状态显示，不在失焦后留下类似光标的选中底色。
-            startupAutoplayButton.background=TvStyle.card(this@settings,focused)
+            startupAutoplayButton.refreshTone()
         }
         startupAutoplayButton=setting(playback,0,"启动时播放推荐") {
             val enabled=!startupAutoplayEnabled()
@@ -262,7 +196,7 @@ import java.util.concurrent.atomic.AtomicLong
                 }
             }
         }
-        lateinit var sleepActionButton: TextView
+        lateinit var sleepActionButton:SettingsRow
         sleepActionButton=setting(playback,0,"定时关闭·${sleepActionLabel()}") {
             if(shouldShowSleepSettingHint()) {
                 Toast.makeText(this@settings,"请在播放视频页面启用定时功能",Toast.LENGTH_LONG).show()
@@ -299,7 +233,7 @@ import java.util.concurrent.atomic.AtomicLong
             val actual="当前已切换为 ${videoRendererModeLabel(next)}"
             Toast.makeText(this@settings,actual,Toast.LENGTH_LONG).show()
         }
-        lateinit var seamlessPlaybackButton:TextView
+        lateinit var seamlessPlaybackButton:SettingsRow
         seamlessPlaybackButton=setting(playback,0,"无感连播  ·  ${if(seamlessPlaybackEnabled) "开启" else "关闭"}") {
             val enabled=!seamlessPlaybackEnabled
             getSharedPreferences("playback-settings-v1",Context.MODE_PRIVATE)
@@ -328,7 +262,7 @@ import java.util.concurrent.atomic.AtomicLong
             autoSeasonButton.text="系列剧连播  ·  ${if(library.autoSeason) "开启" else "关闭"}"
         }
 
-        lateinit var interfaceStatusButton:TextView
+        lateinit var interfaceStatusButton:SettingsRow
         interfaceStatusButton=setting(playback,0,"接口状态") { showInterfaceCheck(interfaceStatusButton) }
 
         danmakuButton=setting(danmaku,1,"官方弹幕  ·  ${if(library.danmaku) "开启" else "关闭"}") {
@@ -354,8 +288,8 @@ import java.util.concurrent.atomic.AtomicLong
         val remoteActions = SETTINGS_REMOTE_ACTIONS
         val remoteActionLabels = SETTINGS_REMOTE_ACTION_LABELS
         fun remoteActionLabel(value:String)=remoteActionLabels.getOrNull(remoteActions.indexOf(value)) ?: "无"
-        fun remoteKeySetting(title:String,current:()->String,update:(String)->Unit):TextView {
-            lateinit var item:TextView
+        fun remoteKeySetting(title:String,current:()->String,update:(String)->Unit):SettingsRow {
+            lateinit var item:SettingsRow
             fun sync() { item.text="$title  ·  ${remoteActionLabel(current())}" }
             item=setting(remote,3,"$title  ·  ${remoteActionLabel(current())}") {
                 TvDialog.choose(this,"${title}功能",remoteActionLabels,{ index ->

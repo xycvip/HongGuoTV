@@ -3,258 +3,213 @@ package com.hongguotv.nativeapp
 
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
-import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 
+/**
+ * 设置页左侧分类与右侧说明的联动。
+ *
+ * 改造前左侧是一列大卡片，焦点落到右侧某一项时，说明文字塞进左侧卡片里，
+ * 于是分类卡的高度随说明长度变化，整列跟着上下跳。现在说明回到它所属分组的标题下，
+ * 左侧只负责"我在哪一类"，位置稳定。
+ */
 internal class SettingsCategoryController(
     private val activity: MainActivity,
     private val categoryHeadingCards: List<LinearLayout>,
     private val categoryIndicators: List<TextView>,
-    private val categoryHeadingSubtitles: List<TextView>,
-    private val categoryHeadingTitles: List<TextView>,
-    private val categoryScale: Float,
-    private val categoryTitleSize: Float,
-    private val categoryTitleHeight: Int,
-    private val categorySubtitleSize: Float,
-    private val muted: Int,
-    private val white: Int,
-    private val dp: (Int) -> Int,
-    private val rounded: (Int) -> Drawable,
+    private val sectionNotes: List<TextView>,
+    private val defaultNotes: List<String>,
 ) {
     var focusedCategory: Int = -1
         private set
 
     fun markFocusedCategory(category: Int) {
-        if(category !in categoryIndicators.indices) return
-        focusedCategory=category
-        categoryHeadingCards.forEachIndexed { index,card ->
-            val focused=categoryIndicators.getOrNull(index)?.hasFocus()==true
-            val active=index==focusedCategory
-            card.background=when {
-                focused -> TvStyle.card(activity,true)
-                active -> TvStyle.shape(activity,TvStyle.selectedSurface)
-                else -> TvStyle.card(activity,false)
+        if (category !in categoryHeadingCards.indices) return
+        focusedCategory = category
+        categoryHeadingCards.forEachIndexed { index, card ->
+            val active = index == category
+            card.background = when {
+                active -> TvStyle.shape(
+                    activity,
+                    withAlpha(TvStyle.colors.accent, 0.14f),
+                    Color.TRANSPARENT,
+                    TvMetric.RADIUS_S,
+                )
+                else -> null
             }
-        }
-        categoryIndicators.forEach { indicator ->
-            val focused=indicator.hasFocus()
-            indicator.background=rounded(Color.TRANSPARENT)
-            indicator.setTextColor(if(focused) white else muted)
-            indicator.setTypeface(null,if(focused) Typeface.BOLD else Typeface.NORMAL)
+            card.findViewWithTag<View>("settings:cat-bar")
+                ?.setBackgroundColor(if (active) TvStyle.colors.accent else Color.TRANSPARENT)
+            card.findViewWithTag<TextView>("settings:cat-title")?.apply {
+                setTextColor(if (active) TvStyle.colors.textPrimary else TvStyle.colors.textSecondary)
+                typeface = Typeface.create(
+                    if (active) "sans-serif-medium" else "sans-serif",
+                    Typeface.NORMAL,
+                )
+            }
         }
     }
 
-    private fun setCategoryDetailMode(category: Int, enabled: Boolean) {
-        if(category !in categoryHeadingSubtitles.indices || category !in categoryHeadingTitles.indices || category !in categoryHeadingCards.indices) return
-        val title=categoryHeadingTitles[category]
-        val subtitle=categoryHeadingSubtitles[category]
-        val card=categoryHeadingCards[category]
-        card.gravity=android.view.Gravity.CENTER_VERTICAL
-        card.setPadding(dp(if(enabled) 7 else 8),dp(if(enabled) 7 else 9),dp(8),dp(if(enabled) 7 else 9))
-        title.visibility=if(enabled) View.GONE else View.VISIBLE
-        subtitle.visibility=if(enabled) View.VISIBLE else View.GONE
-        title.textSize=categoryTitleSize
-        title.gravity=android.view.Gravity.CENTER
-        title.textAlignment=View.TEXT_ALIGNMENT_CENTER
-        val titleParams=title.layoutParams as? LinearLayout.LayoutParams
-        titleParams?.height=dp(categoryTitleHeight)
-        if(titleParams!=null) title.layoutParams=titleParams
-        subtitle.textSize=if(enabled) (17f*categoryScale).coerceIn(15f,19f) else categorySubtitleSize
-        subtitle.gravity=android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
-        subtitle.maxLines=Int.MAX_VALUE
-        subtitle.ellipsize=null
-        subtitle.setPadding(dp(5),dp(if(enabled) 4 else 3),dp(2),dp(if(enabled) 4 else 3))
-        val subtitleParams=subtitle.layoutParams as? LinearLayout.LayoutParams
-        if(subtitleParams!=null) {
-            subtitleParams.height=0
-            subtitleParams.weight=1f
-            subtitle.layoutParams=subtitleParams
-        }
-        subtitle.setTextColor(if(enabled) withAlpha(TvStyle.colors.textPrimary, 0.92f) else muted)
-        card.requestLayout()
+    /** 把某个设置项的说明写到它所属分组标题下；其余分组恢复成默认副标题。 */
+    fun showSettingDescription(category: Int, label: String) {
+        if (category !in sectionNotes.indices) return
+        val key = label.substringBefore("·").trim()
+        // 播放线路选项标签为"线路首选 · Native/Phoenix"，文案表登记名为"播放线路"。
+        val descriptionKey = if (key == "线路首选") "播放线路" else key
+        val description = SETTINGS_DESCRIPTIONS[descriptionKey] ?: return
+        sectionNotes.indices.filter { it != category }.forEach { restoreCategoryDescription(it) }
+        sectionNotes[category].text = description.second
     }
 
     fun restoreCategoryDescription(category: Int) {
-        if(category !in categoryHeadingSubtitles.indices) return
-        categoryHeadingSubtitles[category].text=""
-        setCategoryDetailMode(category,false)
-    }
-
-    fun showSettingDescription(category: Int, label: String) {
-        if(category !in categoryHeadingSubtitles.indices) return
-        val key=label.substringBefore("·").trim()
-        // 播放线路选项标签为“线路首选 · Native/Phoenix”，文案表登记名为“播放线路”。
-        val descriptionKey=if(key=="线路首选") "播放线路" else key
-        val description=SETTINGS_DESCRIPTIONS[descriptionKey] ?: return
-        categoryHeadingSubtitles.indices.filter { it!=category }.forEach { restoreCategoryDescription(it) }
-        categoryHeadingSubtitles[category].text=description.second
-        setCategoryDetailMode(category,true)
+        if (category !in sectionNotes.indices) return
+        sectionNotes[category].text = defaultNotes.getOrNull(category).orEmpty()
     }
 }
 
+/**
+ * 设置项工厂。一行就是 [SettingsRow]：左标题、右当前值、右端箭头，永远单列。
+ *
+ * 改造前是 2/3/4 列自适应网格，每个格子是居中文字按钮。1080p 电视上一行四个，
+ * 单格约 176dp，「默认清晰度 · 自动（1080P 优先）」只能显示到「自动（…」。
+ * 电视是远距离观看，设置页应该横向铺开、一行一件事，而不是把手机上的网格搬过来。
+ */
 internal class SettingsItemFactory(
     private val activity: MainActivity,
-    private val settingRows: MutableList<TextView>,
-    private val categoryItems: MutableList<MutableList<TextView>>,
+    private val settingRows: MutableList<SettingsRow>,
+    private val categoryItems: MutableList<MutableList<SettingsRow>>,
     private val categoryController: SettingsCategoryController,
-    private val settingTextSize: Float,
-    private val settingItemHeight: Int,
-    private val settingHorizontalPadding: Int,
-    private val settingVerticalPadding: Int,
-    private val categoryScale: Float,
+    private val rowHeight: Int,
     private val dp: (Int) -> Int,
-    private val createButton: (String, () -> Unit) -> TextView,
 ) {
-    fun setting(group: GridLayout, category: Int, label: String, action: () -> Unit): TextView {
-        val view=createButton(label,action).apply {
-            gravity=Gravity.CENTER
-            textSize=settingTextSize
-            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-            includeFontPadding=false
-            maxLines=1
-            ellipsize=TextUtils.TruncateAt.END
-            setPadding(dp(settingHorizontalPadding),dp(settingVerticalPadding),dp(settingHorizontalPadding),dp(settingVerticalPadding))
-            minHeight=dp(settingItemHeight)
-            background=TvStyle.card(activity,false)
-            setOnFocusChangeListener { _,focused ->
-                background=TvStyle.card(activity,focused)
-                if(focused) {
+    fun setting(group: LinearLayout, category: Int, label: String, action: () -> Unit): SettingsRow {
+        val view = SettingsRow(activity).apply {
+            id = View.generateViewId()
+            text = label
+            minimumHeight = rowHeight
+            setOnClickListener { action() }
+            onFocusChanged = { focused ->
+                if (focused) {
                     categoryController.markFocusedCategory(category)
-                    categoryController.showSettingDescription(category,label)
+                    categoryController.showSettingDescription(category, label)
                 } else {
+                    // 焦点在组内移动时会先 after 再 before，等一帧再判断是否已离开整组。
                     post {
-                        if(settingRows.none { it.hasFocus() }) categoryController.restoreCategoryDescription(categoryController.focusedCategory)
+                        if (settingRows.none { it.hasFocus() }) {
+                            categoryController.restoreCategoryDescription(categoryController.focusedCategory)
+                        }
                     }
                 }
             }
         }
-        val params=GridLayout.LayoutParams(
-            GridLayout.spec(GridLayout.UNDEFINED),
-            GridLayout.spec(GridLayout.UNDEFINED,1f)
-        ).apply {
-            width=0; height=dp(settingItemHeight)
-            val itemMargin=(5f*categoryScale).toInt().coerceIn(3,7)
-            setMargins(dp(itemMargin),dp(itemMargin),dp(itemMargin),dp(itemMargin))
-        }
-        group.addView(view,params)
-        settingRows+=view
-        categoryItems[category]+=view
+        group.addView(
+            view,
+            LinearLayout.LayoutParams(-1, rowHeight).apply {
+                val gap = dp(2)
+                setMargins(gap, gap, gap, gap)
+            },
+        )
+        settingRows += view
+        categoryItems[category] += view
         return view
     }
 }
 
+/**
+ * 设置分组：左侧一个分类入口，右侧「标题 + 说明 + 若干行」。
+ */
 internal class SettingsSectionFactory(
     private val activity: MainActivity,
     private val categoryIndicators: MutableList<TextView>,
-    private val categoryHeadingSubtitles: MutableList<TextView>,
-    private val categoryHeadingTitles: MutableList<TextView>,
     private val categoryHeadingCards: MutableList<LinearLayout>,
-    private val categoryItems: MutableList<MutableList<TextView>>,
-    private val categoryController: SettingsCategoryController,
-    private val categoryScale: Float,
-    private val categoryTitleSize: Float,
-    private val categoryTitleHeight: Int,
-    private val categorySubtitleSize: Float,
-    private val categoryCardExtension: Int,
-    private val headingWidth: Int,
-    private val columns: Int,
+    private val sectionNotes: MutableList<TextView>,
+    private val defaultNotes: MutableList<String>,
+    private val categoryItems: MutableList<MutableList<SettingsRow>>,
     private val categoryCard: LinearLayout,
     private val sectionsHost: LinearLayout,
-    private val white: Int,
-    private val muted: Int,
     private val dp: (Int) -> Int,
     private val createText: (String, Float, Int) -> TextView,
-    private val createColumn: () -> LinearLayout,
-    private val layoutParams: (Int, Int) -> LinearLayout.LayoutParams,
-    private val rounded: (Int) -> Drawable
 ) {
-    fun section(title: String, subtitle: String): Pair<LinearLayout, GridLayout> {
-        val headingTitle = createText(title, categoryTitleSize, white).apply {
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            gravity = Gravity.CENTER
-            textAlignment = View.TEXT_ALIGNMENT_CENTER
+    fun section(title: String, subtitle: String): Pair<LinearLayout, LinearLayout> {
+        // ── 左：窄导航项。名称 + 选中竖条，不加卡片底，和右侧的宽行形成主次。
+        val heading = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            clipChildren = false
+            setPadding(0, dp(1), dp(6), dp(1))
+            isFocusable = false
+        }
+        val bar = View(activity).apply {
+            tag = "settings:cat-bar"
+            setBackgroundColor(Color.TRANSPARENT)
+        }
+        heading.addView(bar, LinearLayout.LayoutParams(dp(3), dp(16)).apply { rightMargin = dp(11) })
+
+        val headingTitle = createText(title, TvMetric.TEXT_LABEL, TvStyle.colors.textSecondary).apply {
+            tag = "settings:cat-title"
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            textAlignment = View.TEXT_ALIGNMENT_VIEW_START
             includeFontPadding = false
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(2), 0, dp(2), 0)
             isFocusable = true
             isFocusableInTouchMode = true
+            setPadding(0, dp(13), dp(8), dp(13))
         }
         categoryIndicators += headingTitle
-        headingTitle.setOnFocusChangeListener { _, _ ->
+        headingTitle.setOnFocusChangeListener { _, focused ->
             val category = categoryIndicators.indexOf(headingTitle)
-            if(category == categoryController.focusedCategory || headingTitle.hasFocus()) {
-                categoryController.markFocusedCategory(category)
-                if(headingTitle.hasFocus()) {
-                    categoryHeadingSubtitles.indices.forEach { categoryController.restoreCategoryDescription(it) }
-                }
-            }
+            if (focused) categoryControllerRef?.markFocusedCategory(category)
+            // 左侧窄栏里的焦点也要看得见：加一层更亮的强调底色，和"当前分类"的浅底色区分开。
+            headingTitle.background = if (focused) {
+                TvStyle.shape(activity, withAlpha(TvStyle.colors.accent, 0.22f), Color.TRANSPARENT, TvMetric.RADIUS_S)
+            } else null
         }
-        headingTitle.background = rounded(Color.TRANSPARENT)
         headingTitle.setOnClickListener {
             val category = categoryIndicators.indexOf(headingTitle)
-            categoryItems.getOrNull(category)?.firstOrNull()?.requestFocus()
+            categoryItems.getOrNull(category)?.firstOrNull { it.visibility == View.VISIBLE }?.requestFocus()
         }
+        heading.addView(headingTitle, LinearLayout.LayoutParams(0, -2, 1f))
+        categoryHeadingCards += heading
+        categoryCard.addView(heading, LinearLayout.LayoutParams(-1, -2))
 
-        val headingSubtitle = createText(subtitle, categorySubtitleSize, muted).apply {
+        // ── 右：分组标题 + 说明 + 行列表
+        val panel = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            setPadding(0, 0, 0, dp(14))
+        }
+        panel.addView(
+            createText(title, TvMetric.TEXT_SUBTITLE, TvStyle.colors.textPrimary).apply {
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                includeFontPadding = false
+                setPadding(dp(3), dp(20), 0, dp(3))
+            },
+            LinearLayout.LayoutParams(-1, -2),
+        )
+        val note = createText(subtitle, TvMetric.TEXT_CAPTION, TvStyle.colors.textTertiary).apply {
+            includeFontPadding = false
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(5), dp(3), dp(2), 0)
+            setPadding(dp(3), 0, 0, dp(7))
         }
-        headingSubtitle.visibility = View.GONE
-        categoryHeadingSubtitles += headingSubtitle
-        categoryHeadingTitles += headingTitle
+        panel.addView(note, LinearLayout.LayoutParams(-1, -2))
+        sectionNotes += note
+        defaultNotes += subtitle
 
-        val heading = createColumn().apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(9), dp(8), dp(9))
-            background = TvStyle.card(activity, false)
-            addView(headingTitle, layoutParams(-1, dp(categoryTitleHeight)))
-            addView(headingSubtitle)
+        val grid = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
         }
-        categoryHeadingCards += heading
-        categoryCard.addView(
-            heading,
-            layoutParams(dp(headingWidth + categoryCardExtension), -2).apply {
-                rightMargin = -dp(categoryCardExtension)
-            }
-        )
-
-        val panel = createColumn().apply {
-            setPadding(dp(8), dp(7), dp(8), dp(7))
-        }
-        val grid = GridLayout(activity).apply {
-            columnCount = columns
-            useDefaultMargins = false
-        }
-        panel.addView(grid, layoutParams(-1, -2))
-
-        sectionsHost.addView(panel, layoutParams(-1, -2))
-        fun alignHeadingToSettingCards() {
-            if(panel.height <= 0 || grid.childCount <= 0) return
-            val firstMargins = grid.getChildAt(0).layoutParams as? ViewGroup.MarginLayoutParams
-            val lastMargins = grid.getChildAt(grid.childCount - 1).layoutParams as? ViewGroup.MarginLayoutParams
-            val topInset = panel.paddingTop + (firstMargins?.topMargin ?: 0)
-            val bottomInset = panel.paddingBottom + (lastMargins?.bottomMargin ?: 0)
-            val cardHeight = (panel.height - topInset - bottomInset).coerceAtLeast(dp(1))
-            val params = heading.layoutParams as? LinearLayout.LayoutParams ?: return
-            if(params.height != cardHeight || params.topMargin != topInset || params.bottomMargin != bottomInset) {
-                params.height = cardHeight
-                params.topMargin = topInset
-                params.bottomMargin = bottomInset
-                heading.layoutParams = params
-            }
-        }
-        panel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignHeadingToSettingCards() }
-        grid.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignHeadingToSettingCards() }
-        panel.post { alignHeadingToSettingCards() }
+        panel.addView(grid, LinearLayout.LayoutParams(-1, -2))
+        sectionsHost.addView(panel, LinearLayout.LayoutParams(-1, -2))
         categoryItems.add(mutableListOf())
         return panel to grid
     }
+
+    /** 由外部注入，避免 section() 用不上 controller 时还要多传一个参数。 */
+    var categoryControllerRef: SettingsCategoryController? = null
 }

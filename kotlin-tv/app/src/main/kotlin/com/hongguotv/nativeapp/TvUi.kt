@@ -187,3 +187,14 @@ internal fun MainActivity.sectionHeader(title: String, hint: String? = null): Li
     }
     return line
 }
+
+/**
+ * 统一的文案写入。设置项从 TextView 换成 [SettingsRow] 之后，弹窗回调里仍要更新"当前值"，
+ * 用它同时兼容两种载体，避免每处都写 when。
+ */
+internal fun setLabel(view: View?, value: CharSequence) {
+    when (view) {
+        is SettingsRow -> view.text = value
+        is TextView -> view.text = value
+    }
+}

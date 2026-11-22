@@ -18,7 +18,7 @@ internal class DebugUiState {
     var playbackStartedAt = 0L
     var playbackReadyAt = 0L
     var firstFrameAt = 0L
-    var settingButton: TextView? = null
+    var settingButton: SettingsRow? = null
     var lastSpeedBytes = 0L
     var lastSpeedAt = 0L
     var currentSpeedBytesPerSecond = 0L
