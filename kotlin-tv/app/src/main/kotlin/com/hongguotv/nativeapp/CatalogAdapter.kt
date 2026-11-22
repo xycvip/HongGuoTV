@@ -56,6 +56,13 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         val item=displayed[position]; holder.boundId=item.id
         if(position==0) resultFirstCard=holder.card
         val card=holder.card
+        // 防御性复位：海报高度一律交给 PosterCard 按实际宽度测量，
+        // 绝不让上一屏/上一次布局留下的显式高度混进网格。
+        holder.poster.artwork?.let { artwork ->
+            (artwork.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+                if(params.height>=0) { params.height=FrameLayout.LayoutParams.WRAP_CONTENT; artwork.layoutParams=params }
+            }
+        }
         card.tag=item.id; card.contentDescription=item.title
         loadCover(holder.image,item.cover)
         // 演员榜复用卡片网格布局，但数据与可播放短剧保持独立。

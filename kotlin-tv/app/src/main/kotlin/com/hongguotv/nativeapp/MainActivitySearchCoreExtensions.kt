@@ -6,7 +6,6 @@ import android.view.inputmethod.InputMethodManager
 import android.content.Context
 import android.widget.*
 import android.text.TextUtils
-import androidx.recyclerview.widget.GridLayoutManager
 import androidx.media3.common.*
 import com.hongguotv.core.*
 
@@ -103,13 +102,11 @@ import com.hongguotv.core.*
     }
 
     internal fun MainActivity.syncSuggestPanel(hasWords: Boolean) {
+        // 列数不再随联想显隐切换：真机上抓到 GridLayoutManager 在换列后给首张
+        // 结果卡残留旧列宽的测量尺寸（海报比同排高一半、还越界画进键盘）。
+        // 联想词已改为结果区顶部的横向词条，列数从页面建立起恒定不变。
         val scroll=suggestScrollRef ?: return
-        val target=if(hasWords) View.VISIBLE else View.GONE
-        if(scroll.visibility!=target) {
-            scroll.visibility=target
-            (catalogRecycler?.layoutManager as? GridLayoutManager)?.spanCount=if(hasWords) searchColumns else fullSearchColumns
-            catalogAdapter?.notifyDataSetChanged()
-        }
+        scroll.visibility=if(hasWords) View.VISIBLE else View.GONE
     }
 
     internal fun MainActivity.wireSearchPanel(recycler: View?) {

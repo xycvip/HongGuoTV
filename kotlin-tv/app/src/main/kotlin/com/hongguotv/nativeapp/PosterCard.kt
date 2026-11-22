@@ -83,12 +83,25 @@ internal class PosterCard private constructor(
             }
             // 海报容器按自身实际测量宽度定高，回收复用、列宽变化都不会出现同屏高低不一；
             // 首页需要压矮海报时直接改 layoutParams.height，这里优先尊重显式高度。
+            // 高度必须来自本轮 super.onMeasure 得到的 measuredWidth：若直接取
+            // MeasureSpec 规格，布局中途列宽变化（换列/容器加宽）会把旧规格的高度
+            // 残留到新宽度上，真机上出现过首张卡比同排高一半的废版式。
             val artwork = object : FrameLayout(context) {
                 override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-                    val w = MeasureSpec.getSize(widthMeasureSpec)
                     val declared = layoutParams?.height ?: -2
-                    val h = if (declared >= 0) declared else (w / TvStyle.POSTER_ASPECT).toInt()
-                    super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
+                    if (declared >= 0) {
+                        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(declared, MeasureSpec.EXACTLY))
+                        return
+                    }
+                    if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.EXACTLY) {
+                        val h = (MeasureSpec.getSize(widthMeasureSpec) / TvStyle.POSTER_ASPECT).toInt()
+                        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
+                    } else {
+                        // 宽度不确定（wrap 内容）：先量一遍拿实际宽度，再按海报比例定高重量。
+                        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+                        val h = (measuredWidth / TvStyle.POSTER_ASPECT).toInt()
+                        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
+                    }
                 }
             }
             val image = ImageView(context).apply {
