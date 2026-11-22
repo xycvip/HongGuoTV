@@ -189,7 +189,9 @@ class MainActivity: Activity() {
     internal var collectionReturn by navigationUiState::collectionReturn
     internal var collectionFocus by navigationUiState::collectionFocus
     internal var collectionBack by navigationUiState::collectionBack
-    internal val gridColumns=6
+    // 六列在 1080p 电视上单卡只有 156dp，海报显得零碎；五列可以把卡面放大到约 190dp。
+    // 想恢复密度把这里改回 6 即可，其余布局都按 gridColumns 自适应。
+    internal val gridColumns=5
     internal val waterfallMaxPages=10
     internal var catalogRecycler: RecyclerView?=null
     internal var catalogAdapter: CatalogAdapter?=null

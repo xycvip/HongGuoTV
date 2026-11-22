@@ -81,7 +81,7 @@ import java.util.concurrent.atomic.AtomicLong
         val grid=GridLayoutManager(this,cols)
         grid.spanSizeLookup=object: GridLayoutManager.SpanSizeLookup() { override fun getSpanSize(position: Int)=if(adapter.isFooter(position)) cols else 1 }
         val recycler=RecyclerView(this).apply {
-            id=View.generateViewId(); clipToPadding=false; isVerticalScrollBarEnabled=false; itemAnimator=null; isNestedScrollingEnabled=true
+            id=View.generateViewId(); clipToPadding=false; clipChildren=false; isVerticalScrollBarEnabled=false; itemAnimator=null; isNestedScrollingEnabled=true
             layoutManager=grid; this.adapter=adapter
             val focusRecycler=this
             // 筛选头把焦点交给 RecyclerView 时，必须先由容器自身接住，

@@ -42,11 +42,15 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             }
         }
         val image=ImageView(host).apply { scaleType=ImageView.ScaleType.CENTER_CROP; importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+        // 海报本身裁成圆角：原来只有底板是圆角，方角图片压在上面，边缘会露出一圈直角
+        artwork.background=rounded(TvStyle.surface)
+        artwork.clipToOutline=true
         artwork.addView(image,FrameLayout.LayoutParams(-1,-1))
         val rank=TextView(host).apply { textSize=11f; setTypeface(null,Typeface.BOLD); setPadding(dp(8),dp(4),dp(8),dp(4)) }
         artwork.addView(rank,FrameLayout.LayoutParams(-2,-2,Gravity.TOP or Gravity.START))
         val fixedSearchCard=tab==1
-        val title=text("",14f).apply { setLines(2); ellipsize=TextUtils.TruncateAt.END; includeFontPadding=false; gravity=Gravity.TOP or Gravity.START; setPadding(dp(3),dp(7),dp(3),0) }
+        // 标题只留一行：原来两行会在窄卡里把"第六季"折成"第六/季"，且让卡片高度参差
+        val title=text("",15f).apply { setLines(1); ellipsize=TextUtils.TruncateAt.END; includeFontPadding=false; gravity=Gravity.TOP or Gravity.START; setPadding(dp(3),dp(8),dp(3),0) }
         val tags=text("",10.5f).apply { maxLines=1; minLines=1; minHeight=dp(18); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,dp(3),0); setTextColor(TvStyle.accent) }
         val badge=text("",12f).apply { maxLines=1; minLines=1; minHeight=dp(if(fixedSearchCard) 22 else 19); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,0,0) }
         card.addView(artwork,lp(-1,-2))
@@ -145,7 +149,17 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             if(actorRanked) true else { quickActions(item,card); true }
         }
         card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP && !actorRanked) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
-        card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(host,focused); if(focused) { catalogFocus=item.id; loadCover(holder.image,item.cover); if(!actorRanked) selectionPreview?.show(item,selectionStatus(item)) } }
+        card.setOnFocusChangeListener { _,focused ->
+            card.background=TvStyle.card(host,focused)
+            // 焦点位移：轻微放大并抬升，遥控器逐格移动时才有"选中感"。
+            // 缩放需要父容器不裁剪子视图，见网格构建处的 clipChildren=false。
+            card.translationZ=if(focused) dp(12).toFloat() else 0f
+            card.animate().scaleX(if(focused) 1.045f else 1f).scaleY(if(focused) 1.045f else 1f)
+                .setDuration(if(focused) 150 else 110)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .start()
+            if(focused) { catalogFocus=item.id; loadCover(holder.image,item.cover); if(!actorRanked) selectionPreview?.show(item,selectionStatus(item)) }
+        }
         card.nextFocusUpId=if(position<cols) {
             // 搜索页右侧海报栏的首行向上直接回到顶部“搜索”导航，避免被中栏联想/历史区截走。
             if(tab==1) searchNavShortcut?.id ?: View.NO_ID
@@ -159,7 +173,11 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
     with(host) {
 
-        (holder as? CardHolder)?.let { h -> if(h.boundId.isNotEmpty() && favoriteBadges[h.boundId]===h.badge) favoriteBadges.remove(h.boundId) }
+        (holder as? CardHolder)?.let { h ->
+            if(h.boundId.isNotEmpty() && favoriteBadges[h.boundId]===h.badge) favoriteBadges.remove(h.boundId)
+            // 复用前复位焦点动画，避免滚动后残留放大态
+            h.card.animate().cancel(); h.card.scaleX=1f; h.card.scaleY=1f; h.card.translationZ=0f
+        }
     
     }
 }
