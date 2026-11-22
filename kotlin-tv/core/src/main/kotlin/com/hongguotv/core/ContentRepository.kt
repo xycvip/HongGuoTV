@@ -1,0 +1,208 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package com.hongguotv.core
+
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
+import org.json.JSONObject
+import org.json.JSONArray
+import java.io.IOException
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).cookieJar(MemoryCookies()).build(), private val clock: () -> Long = System::currentTimeMillis, private val playbackSession: PlaybackDeviceSession = PlaybackDeviceSession.shared) {
+    private val signer = Signer()
+    private val site = "https://hongguoduanju.com"
+    private val playbackRepository by lazy { PlaybackRepository(http,clock,playbackSession) }
+    private fun categoryPath(type: ContentType)=when(type) {
+        ContentType.COMIC -> "comic-drama"
+        ContentType.SHORT -> "real-drama"
+        ContentType.AI -> "ai-drama"
+    }
+    private fun text(url: String, signed: Signer.Request? = null, cookie: String? = null): String {
+        val request = Request.Builder().url(url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
+        signed?.headers?.forEach { (k,v) -> request.header(k,v) }
+        cookie?.takeIf { it.isNotBlank() }?.let { request.header("Cookie",it) }
+        signed?.body?.let { request.post(it.toRequestBody("application/json; charset=utf-8".toMediaType())) }
+        return RequestScope.execute(http.newCall(request.build())) { response ->
+            if (!response.isSuccessful) throw IOException("内容请求失败（HTTP ${response.code}）")
+            val body = response.body ?: throw IOException("内容响应为空")
+            if (body.contentLength() > 16*1024*1024) throw IOException("内容响应过大")
+            val input=body.byteStream(); val out=java.io.ByteArrayOutputStream(); val buffer=ByteArray(8192)
+            while(out.size()<=16*1024*1024) { val n=input.read(buffer); if(n<0) break; out.write(buffer,0,n) }; val bytes=out.toByteArray()
+            if(bytes.size > 16*1024*1024) throw IOException("内容响应过大")
+            if(bytes.isEmpty()) throw IOException("接口响应为空（HTTP ${response.code}，响应字节数=0），请稍后重试")
+            String(bytes,Charsets.UTF_8)
+        }
+    }
+    private fun router(url: String) = extractRouter(text(url)).getJSONObject("loaderData")
+    private fun card(item: JSONObject): Series {
+        val o=item.optJSONObject("video_data") ?: item
+        val count=o.optInt("episode_cnt",o.optJSONObject("series_episode_info")?.optInt("episode_cnt",0) ?: 0)
+        val tags=o.optJSONArray("tags") ?: o.optJSONArray("category_list") ?: JSONArray()
+        return Series(o.str("series_id"),o.str("series_name").ifEmpty { o.str("series_title").ifEmpty { item.str("name") } },cleanUrl(o.str("series_cover")),o.str("series_intro"),o.str("episode_right_text").ifEmpty { if(count>0) "全 ${count} 集" else "" },(0 until minOf(tags.length(),5)).joinToString(" · ") { tags.optJSONObject(it)?.str("name") ?: tags.optString(it) })
+    }
+    private fun valid(rows: List<Series>) = rows.filter { it.id.matches(Regex("[0-9]{1,30}")) && it.title.isNotBlank() }.distinctBy { it.id }
+    open fun ranking(board: RankBoard, page: Int = 1): CatalogPage {
+        require(page in 1..100)
+        return ComicRank.parse(text("$site/rank/${board.path}?page=$page"),page,board)
+    }
+
+    /** 红果短剧排行榜中的演员榜；分页游标必须与同一次榜单会话配对。 */
+    open fun actorRanking(offset: Int = 0, sessionId: String = "", subBoard: String = "ranklist_series_actor"): ActorRankPage {
+        require(offset >= 0)
+        require(subBoard == "ranklist_series_actor" || subBoard == "ranklist_actor_fans") { "未知演员榜类型" }
+        val profile = playbackSession.profile(http)
+        val identity = profile.values
+        val values = linkedMapOf(
+            "iid" to identity.getValue("iid"),
+            "device_id" to identity.getValue("device_id"),
+            "ac" to "wifi",
+            "channel" to identity.getValue("channel"),
+            "aid" to identity.getValue("aid"),
+            "app_name" to identity.getValue("app_name"),
+            "cdid" to identity.getValue("cdid"),
+            "version_code" to identity.getValue("version_code"),
+            "version_name" to identity.getValue("version_name"),
+            "device_platform" to identity.getValue("device_platform"),
+            "os" to identity.getValue("os"),
+            "ssmix" to identity.getValue("ssmix"),
+            "device_type" to identity.getValue("device_type"),
+            "device_brand" to identity.getValue("device_brand"),
+            "language" to identity.getValue("language"),
+            "os_api" to identity.getValue("os_api"),
+            "os_version" to identity.getValue("os_version"),
+            "manifest_version_code" to identity.getValue("manifest_version_code"),
+            "resolution" to identity.getValue("resolution"),
+            "dpi" to identity.getValue("dpi"),
+            "update_version_code" to identity.getValue("update_version_code"),
+            "host_abi" to identity.getValue("host_abi"),
+            "dragon_device_type" to identity.getValue("dragon_device_type"),
+            "pv_player" to identity.getValue("pv_player"),
+            "compliance_status" to identity.getValue("compliance_status"),
+            "need_personal_recommend" to identity.getValue("need_personal_recommend"),
+            "player_so_load" to identity.getValue("player_so_load"),
+            "is_android_pad_screen" to identity.getValue("is_android_pad_screen"),
+            "openudid" to identity.getValue("openudid"),
+            "cell_id" to "7470092475068071998",
+            // 演员榜两个子榜共用官方 cell，但请求必须补齐 cell 子项及筛选上下文。
+            // 缺少这些字段时，接口可能只返回外层 cell 元数据而不下发可展示的演员卡片。
+            "cell_sub_id" to "0",
+            "category_id" to "0",
+            // 红果客户端首次进入演员榜使用 tab_type=26；同一 session 翻页使用 18。
+            "tab_type" to if(offset > 0) "18" else "26",
+            "selected_items" to "ranklist_celebrity",
+            "sub_selected_items" to subBoard,
+            "offset" to offset.toString(),
+            "limit" to "20",
+            "client_req_type" to "2",
+            "client_template" to "2",
+            "gender" to "2",
+            "background_selected_items" to "",
+            "panel_selected_items" to "",
+            "filter_ids" to "",
+            "unlimited_selector_change_type" to "0",
+        )
+        if (sessionId.isNotBlank()) values["session_id"] = sessionId
+        values["user_is_login"] = "0"
+        val base = "https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/bookmall/cell/change/v"
+        val signed = signer.sign(base,values,identity=identity)
+        return ActorRankParser.parse(text(signed.url,signed,profile.cookie),offset)
+    }
+
+    /** 红果官方演员参演作品列表；按演员 ID 查询，并用累计 count 保持分页结果稳定。 */
+    open fun actorWorks(actorId: String, offset: Int = 0, pageSize: Int = 20): ActorWorksPage {
+        require(actorId.matches(Regex("[0-9]{1,30}"))) { "无效的演员 ID" }
+        require(offset >= 0 && pageSize in 1..50)
+        val profile = playbackSession.profile(http)
+        val identity = profile.values
+        val values = linkedMapOf(
+            "iid" to identity.getValue("iid"),
+            "device_id" to identity.getValue("device_id"),
+            "ac" to "wifi",
+            "channel" to identity.getValue("channel"),
+            "aid" to identity.getValue("aid"),
+            "app_name" to identity.getValue("app_name"),
+            "cdid" to identity.getValue("cdid"),
+            "version_code" to identity.getValue("version_code"),
+            "version_name" to identity.getValue("version_name"),
+            "device_platform" to identity.getValue("device_platform"),
+            "os" to identity.getValue("os"),
+            "ssmix" to identity.getValue("ssmix"),
+            "device_type" to identity.getValue("device_type"),
+            "device_brand" to identity.getValue("device_brand"),
+            "language" to identity.getValue("language"),
+            "os_api" to identity.getValue("os_api"),
+            "os_version" to identity.getValue("os_version"),
+            "manifest_version_code" to identity.getValue("manifest_version_code"),
+            "resolution" to identity.getValue("resolution"),
+            "dpi" to identity.getValue("dpi"),
+            "update_version_code" to identity.getValue("update_version_code"),
+            "host_abi" to identity.getValue("host_abi"),
+            "dragon_device_type" to identity.getValue("dragon_device_type"),
+            "pv_player" to identity.getValue("pv_player"),
+            "compliance_status" to identity.getValue("compliance_status"),
+            "need_personal_recommend" to identity.getValue("need_personal_recommend"),
+            "player_so_load" to identity.getValue("player_so_load"),
+            "is_android_pad_screen" to identity.getValue("is_android_pad_screen"),
+            "openudid" to identity.getValue("openudid"),
+            "encrypted_celebrity_ids" to actorId,
+            "offset" to offset.toString(),
+            "count" to (offset + pageSize).coerceAtLeast(40).coerceAtMost(300).toString(),
+            "req_scene" to "0",
+            "user_is_login" to "0",
+        )
+        val base = "https://api5-normal-sinfonlinea.fqnovel.com/reading/user/celebrity/works/v1/"
+        val signed = signer.sign(base, values, identity = identity)
+        return ActorWorksParser.parse(text(signed.url, signed, profile.cookie), actorId, offset, pageSize)
+    }
+
+    fun comicRanking(page: Int = 1)=ranking(RankBoard.COMIC,page)
+    fun realRanking(page: Int = 1)=ranking(RankBoard.REAL,page)
+    private val theaterRepository by lazy { TheaterRepository(http,playbackSession) { url,signed -> text(url,signed) } }
+    open fun theater(page:Int=1,type:ContentType?=null,selected:Map<String,String> = emptyMap()):TheaterCatalogPage =
+        theaterRepository.theater(page,type,selected)
+    /** Website genre picker remains separate from the App theater filter API. */
+    open fun theaterFilters(type:ContentType):List<TheaterFilterGroup> = theater(1,type).filters
+    /** Backward-compatible flat genre list used by the home-page picker. */
+    open fun genres(type: ContentType): List<Genre> = searchRepository.genres(type)
+    open fun home(page: Int = 1, type: ContentType = ContentType.SHORT, genre: Genre? = null): CatalogPage {
+        require(page in 1..100)
+        if(genre!=null) return searchRepository.categoryListing("$site/category/${categoryPath(type)}/${genre.slug}"+if(page>1) "?page=$page" else "",page,"题材",genre)
+        if(type==ContentType.COMIC) return comicRanking(page)
+        if(type==ContentType.AI) return searchRepository.categoryListing("$site/category/ai-drama"+if(page>1) "?page=$page" else "",page,"AI剧")
+        return searchRepository.categoryListing("$site/category?tab=1&sort_type=1"+if(page>1) "&page=$page" else "",page,"首页")
+    }
+    private val searchRepository by lazy {
+        SearchRepository(http,clock,playbackSession,signer,site,{ url,signed -> text(url,signed) },::router,::card,::valid,::categoryPath)
+    }
+    fun search(keyword: String, page: Int = 1, type: ContentType = ContentType.SHORT): CatalogPage =
+        searchRepository.search(keyword,page,type)
+    fun searchCombined(keyword: String, page: Int = 1): CatalogPage = searchRepository.searchCombined(keyword,page)
+    fun suggest(query: String): List<String> = searchRepository.suggest(query)
+    fun probeSuggest(query: String): Int = searchRepository.probeSuggest(query)
+
+    private val detailRepository by lazy { DetailRepository(site,{ url -> text(url) },::card,::valid,searchRepository) }
+    fun detail(id: String): Detail = detailRepository.detail(id)
+    fun sameNameSeasons(current: Series, related: List<Series>): List<Series> =
+        detailRepository.sameNameSeasons(current,related)
+
+    /** Native N playback follows the V5 multi_video_model/player/v1 request path. */
+    fun stream(id: String, maxQuality: Int = 1080): StreamInfo = playbackRepository.stream(id,maxQuality)
+
+    companion object {
+        fun extractRouter(html: String): JSONObject {
+            val marker=html.indexOf("_ROUTER_DATA"); if(marker<0) throw IOException("页面没有内容数据")
+            val first=html.indexOf('{',marker); if(first<0) throw IOException("页面数据格式错误")
+            var depth=0; var quoted=false; var escaped=false
+            for(i in first until html.length) {
+                val ch=html[i]
+                if(quoted) { if(escaped) escaped=false else if(ch=='\\') escaped=true else if(ch=='"') quoted=false; continue }
+                when(ch) { '"' -> quoted=true; '{','[' -> depth++; '}',']' -> { depth--; if(depth==0) return JSONObject(html.substring(first,i+1)) } }
+            }
+            throw IOException("页面数据不完整")
+        }
+        fun qualityNumber(value: String): Int = Regex("2160|1440|1080|720|576|540|480|360").find(value)?.value?.toInt() ?: mapOf("1920" to 1080,"1280" to 720,"1024" to 576,"854" to 480,"640" to 360)[value] ?: value.toIntOrNull() ?: 0
+    }
+}

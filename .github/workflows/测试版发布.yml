@@ -1,0 +1,364 @@
+# 测试版发布：仅手动触发，发布到本源码仓库 Releases
+name: 红果TV测试版发布
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_beta_release:
+        description: 确认构建并发布测试版到 HongGuoTV 仓库
+        required: true
+        type: boolean
+        default: true
+      skip_file_check:
+        description: 跳过APK文件存在性检查（包名、版本号和签名校验始终执行）
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hongguotv-bate-test-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: 构建、签名并发布测试版
+    if: ${{ inputs.confirm_beta_release }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 检出红果TV源码
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: 配置Java环境
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: 检查签名凭据
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$KEYSTORE_B64" ] || missing+=("HONGGUOTV_KEYSTORE_B64")
+          [ -n "$STORE_PASSWORD" ] || missing+=("HONGGUOTV_STORE_PASSWORD")
+          [ -n "$KEY_ALIAS" ] || missing+=("HONGGUOTV_KEY_ALIAS")
+          [ -n "$KEY_PASSWORD" ] || missing+=("HONGGUOTV_KEY_PASSWORD")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::缺少签名凭据：%s\n' "$(IFS='、'; echo "${missing[*]}")"
+            exit 1
+          fi
+          echo "签名凭据检查通过"
+
+      - name: 准备产品签名文件
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/hongguotv-test-release.p12"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+          echo "HONGGUOTV_KEYSTORE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "产品签名文件准备完成"
+
+      - name: 读取测试版独立版本号
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_FILE="kotlin-tv/test-version.properties"
+          test -s "$VERSION_FILE"
+          VERSION_NAME="$(sed -n 's/^TEST_VERSION_NAME=//p' "$VERSION_FILE" | tail -n 1)"
+          VERSION_CODE="$(sed -n 's/^TEST_VERSION_CODE=//p' "$VERSION_FILE" | tail -n 1)"
+          [[ "$VERSION_NAME" =~ ^0\.0\.[0-9]+$ ]] || { echo "::error::测试版版本号格式错误：$VERSION_NAME"; exit 1; }
+          [[ "$VERSION_CODE" =~ ^[0-9]+$ ]] || { echo "::error::测试版 versionCode 格式错误：$VERSION_CODE"; exit 1; }
+          # 如果上一次已创建Release、但版本记录提交失败，则自动跳过已占用版本，避免卡死
+          while true; do
+            TAG="hongguotv-bate-v$VERSION_NAME"
+            if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+              break
+            fi
+            echo "发现已发布版本 $TAG，自动递增后继续"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NAME"
+            VERSION_NAME="$MAJOR.$MINOR.$((PATCH + 1))"
+            VERSION_CODE="$((VERSION_CODE + 1))"
+          done
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "本次测试版版本：$VERSION_NAME"
+          echo "本次 versionCode：$VERSION_CODE"
+
+      - name: 对比上一个测试版并自动生成更新说明
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 只以最近一次已发布的测试版标签为基线，不拿上一次提交或上一次编辑作比较。
+          PREVIOUS_TAG="$(git tag --list 'hongguotv-bate-v*' --sort=-version:refname | head -n 1)"
+          if [ -z "$PREVIOUS_TAG" ]; then
+            BASE=""
+            echo "未找到历史测试版标签，本次按首次发布处理"
+          else
+            BASE="$(git rev-list -n 1 "$PREVIOUS_TAG")"
+            echo "本次更新基线：$PREVIOUS_TAG ($BASE)"
+          fi
+
+          if [ -n "$BASE" ]; then
+            COMMITS="$(git log "$BASE..HEAD" --no-merges --format='%s' -- kotlin-tv/app/src)"
+          else
+            COMMITS="$(git log HEAD --no-merges --format='%s' -- kotlin-tv/app/src)"
+          fi
+
+          # 只读取应用源码范围内的提交说明；发布工作流、版本递增、更新清单和文档变更不写进功能更新。
+          NOTES="$(python3 - "$COMMITS" <<'PY'
+          import sys
+          lines = [x.strip() for x in sys.argv[1].splitlines() if x.strip()]
+          # 过滤纯格式修正、版本递增及已被后续实现替代的中间提交，避免把开发过程误写成最终功能。
+          ignored = ("换行", "格式", "环境变量", "版本号", "精简调试日志复制内容", "精简日志复制内容", "精简调试摘要")
+          lines = [x for x in lines if not any(word in x for word in ignored)]
+          groups = [
+              ("播放与播放器", ("播放", "播放器", "解码", "首帧", "缓冲", "切集", "接续", "渲染", "音频", "视频")),
+              ("焦点与遥控器", ("焦点", "遥控器", "按键", "方向键")),
+              ("网络与接口", ("网络", "接口", "请求", "连接", "超时")),
+              ("调试与诊断", ("日志", "诊断", "调试", "错误信息")),
+              ("片源与数据管理", ("片源", "收藏", "历史", "备份", "恢复", "导入", "导出")),
+              ("界面与交互", ("界面", "页面", "导航", "设置", "主题", "弹窗", "布局", "显示")),
+          ]
+          assigned = set()
+          output = []
+          for title, words in groups:
+              matched = []
+              for line in lines:
+                  if line not in assigned and any(word in line for word in words):
+                      matched.append(line)
+                      assigned.add(line)
+              if matched:
+                  output.append("【" + title + "】")
+                  output.extend("- " + item for item in matched)
+          remaining = [x for x in lines if x not in assigned]
+          if remaining:
+              output.append("【其他功能与问题修复】")
+              output.extend("- " + item for item in remaining)
+          print("\n".join(output) if output else "本次未检测到相对上一个测试版新增的应用源码功能或修复。")
+          PY
+          )"
+
+          DELIMITER="RELEASE_NOTES_$(date +%s)_$RANDOM"
+          {
+            echo "release_notes<<$DELIMITER"
+            printf '%s\n' "$NOTES"
+            echo "$DELIMITER"
+          } >> "$GITHUB_OUTPUT"
+          echo "已根据上一个测试版与当前源码差异自动生成更新说明："
+          printf '%s\n' "$NOTES"
+
+      - name: 构建测试版APK
+        working-directory: kotlin-tv
+        shell: bash
+        env:
+          HONGGUOTV_APPLICATION_ID: com.x.hongguotv.bate
+          HONGGUOTV_APP_LABEL: 红果测试版
+          HONGGUOTV_STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
+          HONGGUOTV_KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
+          HONGGUOTV_KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
+          HONGGUOTV_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          HONGGUOTV_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          APK="app/build/outputs/apk/release/app-release.apk"
+          # Gradle构建结束后立即校验签名，早于复制、文件检查及包名版本检查。
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          echo "APK签名校验通过"
+          mkdir -p "$RUNNER_TEMP/test-release"
+          cp "$APK" "$RUNNER_TEMP/test-release/HongguoTV-${HONGGUOTV_VERSION_NAME}.apk"
+          echo "测试版APK构建完成"
+
+      - name: 检查测试版APK并计算发布信息
+        id: apk
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          SKIP_FILE_CHECK: ${{ inputs.skip_file_check }}
+        run: |
+          set -euo pipefail
+          APK="$RUNNER_TEMP/test-release/HongguoTV-$VERSION_NAME.apk"
+          if [ "$SKIP_FILE_CHECK" = "true" ]; then
+            echo "::warning::已按手动选择跳过APK文件存在性检查"
+          else
+            test -s "$APK"
+            echo "APK文件检查通过"
+          fi
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          BADGING="$("$AAPT" dump badging "$APK")"
+          echo "$BADGING" | grep -F "package: name='com.x.hongguotv.bate' versionCode='$VERSION_CODE' versionName='$VERSION_NAME'"
+          echo "包名、版本号和签名校验通过"
+          SIZE="$(stat -c '%s' "$APK")"
+          SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "APK大小：$SIZE 字节"
+          echo "APK SHA-256：$SHA256"
+
+      - name: 发布到HongGuoTV仓库
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.release_notes }}
+          APK_SIZE: ${{ steps.apk.outputs.size }}
+          APK_SHA256: ${{ steps.apk.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          APK="$RUNNER_TEMP/test-release/HongguoTV-$VERSION_NAME.apk"
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/HongguoTV-$VERSION_NAME.apk"
+          mkdir -p test-update
+          jq -n \
+            --arg sourceCommit "$SOURCE_COMMIT" \
+            --arg versionName "$VERSION_NAME" \
+            --arg tag "$RELEASE_TAG" \
+            --arg apkName "HongguoTV-$VERSION_NAME.apk" \
+            --arg sha256 "$APK_SHA256" \
+            --arg url "$DOWNLOAD_URL" \
+            --arg notes "$RELEASE_NOTES" \
+            --argjson versionCode "$VERSION_CODE" \
+            --argjson size "$APK_SIZE" \
+            '{
+              schema: 1,
+              packageName: "com.x.hongguotv.bate",
+              sourceCommit: $sourceCommit,
+              versionCode: $versionCode,
+              versionName: $versionName,
+              minSdk: 26,
+              tag: $tag,
+              apk: {
+                name: $apkName,
+                size: $size,
+                sha256: $sha256,
+                url: $url
+              },
+              notes: $notes
+            }' > test-update/latest.json
+          cp test-update/latest.json "$RUNNER_TEMP/test-release/update.json"
+          printf '%s  %s\n' "$APK_SHA256" "HongguoTV-$VERSION_NAME.apk" > "$RUNNER_TEMP/test-release/SHA256SUMS"
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          # 红果TV测试版 $VERSION_NAME
+
+          - 应用包名：com.x.hongguotv.bate
+          - versionCode：$VERSION_CODE
+          - APK大小：$APK_SIZE 字节
+          - SHA-256：$APK_SHA256
+
+          ## 更新说明
+          $RELEASE_NOTES
+
+          > 此版本为独立测试包，使用产品签名；不会上传或修改 AppDownload。
+          EOF
+          gh release create "$RELEASE_TAG" "$APK" "$RUNNER_TEMP/test-release/SHA256SUMS" "$RUNNER_TEMP/test-release/update.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "红果TV测试版 $VERSION_NAME" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --latest
+          echo "测试版已发布到本源码仓库 Releases"
+
+      - name: 更新下一次测试版版本号
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NAME"
+          NEXT_NAME="$MAJOR.$MINOR.$((PATCH + 1))"
+          NEXT_CODE="$((VERSION_CODE + 1))"
+          cat > kotlin-tv/test-version.properties <<EOF
+          TEST_VERSION_NAME=$NEXT_NAME
+          TEST_VERSION_CODE=$NEXT_CODE
+          EOF
+          # 将刚刚成功发布的测试版版本号和版本专属下载地址同步到仓库总说明。
+          python3 - <<'PY'
+          import os, re
+          path = "README.md"
+          with open(path, encoding="utf-8") as f:
+              content = f.read()
+          version = os.environ["VERSION_NAME"]
+          code = os.environ["VERSION_CODE"]
+          tag = "hongguotv-bate-v" + version
+          apk = "HongguoTV-" + version + ".apk"
+          block = (
+              "<!-- TEST_RELEASE_INFO_START -->\n"
+              f"- **当前版本：{version}**（versionCode：{code}）\n"
+              "- 应用包名：\x60com.x.hongguotv.bate\x60\n"
+              f"- [下载测试版 APK：{apk}](https://github.com/xycvip/HongGuoTV/releases/download/{tag}/{apk})\n"
+              f"- [查看测试版 {version} 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/{tag})\n"
+              "<!-- TEST_RELEASE_INFO_END -->"
+          )
+          pattern = r"<!-- TEST_RELEASE_INFO_START -->.*?<!-- TEST_RELEASE_INFO_END -->"
+          updated, count = re.subn(pattern, lambda _: block, content, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit("README 测试版信息标记缺失或重复，停止提交")
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(updated)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md kotlin-tv/test-version.properties test-update/latest.json
+          git commit -m "更新测试版 $VERSION_NAME 下载信息并递增版本号至 $NEXT_NAME"
+
+          # 发布期间 main 可能有文档或代码新提交。先同步远端再重放版本更新提交，
+          # 避免 APK 已发布后仅因非快进推送而把整个工作流标记为失败。
+          git fetch origin main
+          if ! git rebase origin/main; then
+            git rebase --abort || true
+            echo "::warning::测试版 APK 已发布，但版本记录与远端 main 发生冲突；本次跳过版本记录推送。下次发布会根据已占用的 Release 标签自动递增版本号。"
+            exit 0
+          fi
+
+          if ! git push origin HEAD:main; then
+            git fetch origin main
+            if ! git rebase origin/main || ! git push origin HEAD:main; then
+              git rebase --abort || true
+              echo "::warning::测试版 APK 已发布，但版本记录推送遇到并发更新；下次发布会根据已占用的 Release 标签自动递增版本号。"
+              exit 0
+            fi
+          fi
+          echo "下一次测试版版本号已更新为：$NEXT_NAME"
+          echo "下一次 versionCode 已更新为：$NEXT_CODE"
+
+      - name: 输出发布结果
+        if: success()
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          echo "测试版发布成功"
+          echo "应用包名：com.x.hongguotv.bate"
+          echo "版本号：$VERSION_NAME"
+          echo "versionCode：$VERSION_CODE"
+          echo "发布标签：$RELEASE_TAG"
+          echo "发布位置：当前 HongGuoTV 仓库 Releases"
