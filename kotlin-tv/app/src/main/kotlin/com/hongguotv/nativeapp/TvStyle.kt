@@ -64,7 +64,12 @@ object TvStyle {
         setColor(color); cornerRadius=radius*context.resources.displayMetrics.density
         setStroke((2*context.resources.displayMetrics.density).toInt(),border)
     }
-    fun card(context: Context,focused: Boolean)=shape(context,if(focused) colors.surfaceRaised else colors.surface,if(focused) colors.accent else Color.TRANSPARENT)
+    fun card(context: Context,focused: Boolean)=shape(
+        context,
+        if(focused) colors.surfaceRaised else colors.surface,
+        if(focused) colors.focusRing else Color.TRANSPARENT,
+        TvMetric.RADIUS_M
+    )
 
     /**
      * 焦点描边：透明底 + 白色圆环，供卡片/按钮在获得遥控器焦点时叠加使用。

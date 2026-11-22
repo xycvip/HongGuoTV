@@ -113,11 +113,33 @@ import java.util.concurrent.atomic.AtomicLong
         val body=base("剧集详情")
         val detailBack=(body.getChildAt(0) as? ViewGroup)?.getChildAt(0)
         val scroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false }; val content=column(); scroll.addView(content); body.addView(scroll,lp(-1,0).apply { weight=1f })
-        val hero=row(); hero.gravity=Gravity.TOP; hero.setPadding(0,dp(12),0,dp(12))
-        val image=ImageView(this).apply { scaleType=ImageView.ScaleType.CENTER_CROP }; hero.addView(image,lp(dp(123),dp(174)).apply { rightMargin=dp(24) }); loadCover(image,data.series.cover)
+        // ── 头图区：大竖版海报 + 右侧信息。
+        // 原来海报只有 123×174，右侧文字挤成四行小字，整屏的视觉锚点变成一块灰色按钮群。
+        val hero=row().apply { gravity=Gravity.TOP; setPadding(0,dp(4),0,dp(18)) }
+        val posterBox=FrameLayout(this).apply {
+            background=TvStyle.shape(this@showDetail,TvStyle.colors.surface,Color.TRANSPARENT,TvMetric.RADIUS_L)
+            clipToOutline=true
+        }
+        val image=ImageView(this).apply {
+            scaleType=ImageView.ScaleType.CENTER_CROP
+            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        posterBox.addView(image,FrameLayout.LayoutParams(-1,-1))
+        posterBox.addView(View(this).apply { background=posterScrim(.82f) },FrameLayout.LayoutParams(-1,dp(110),Gravity.BOTTOM))
+        posterBox.addView(text("全 ${data.episodes.size} 集",TvMetric.TEXT_CAPTION).apply {
+            setPadding(dp(9),dp(5),dp(9),dp(5))
+            background=TvStyle.shape(this@showDetail,withAlpha(TvPalette.INK_950,.72f),Color.TRANSPARENT,TvMetric.RADIUS_S)
+        },FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM or Gravity.START).apply { leftMargin=dp(12); bottomMargin=dp(12) })
+        hero.addView(posterBox,lp(dp(196),dp(280)).apply { rightMargin=dp(30) })
+        loadCover(image,data.series.cover)
+
         val info=column(); hero.addView(info,lp(0,-2).apply { weight=1f })
-        info.addView(text(data.series.title,26f).apply { setTypeface(null,Typeface.BOLD); maxLines=2; ellipsize=TextUtils.TruncateAt.END })
-        info.addView(text("${data.episodes.size} 集  ·  ${data.series.tags}"+library.progress(data.series.id)?.let { "  ·  看到第 ${it.episodeIndex+1} 集" }.orEmpty(),13f,muted).apply { maxLines=1; setPadding(0,dp(8),0,dp(8)) })
+        info.addView(text(data.series.title,TvMetric.TEXT_HEADLINE).apply {
+            setTypeface(null,Typeface.BOLD); maxLines=2; ellipsize=TextUtils.TruncateAt.END; includeFontPadding=false
+        })
+        info.addView(text("${data.episodes.size} 集  ·  ${data.series.tags}"+library.progress(data.series.id)?.let { "  ·  看到第 ${it.episodeIndex+1} 集" }.orEmpty(),TvMetric.TEXT_CAPTION,muted).apply {
+            maxLines=1; setPadding(0,dp(10),0,dp(10))
+        })
         // 评分与收藏数来自详情页同一份数据，卡片列表没有这些字段；缺失时整行不显示
         if(!data.social.isEmpty) {
             val metrics=mutableListOf<String>()
@@ -130,19 +152,30 @@ import java.util.concurrent.atomic.AtomicLong
                 line.setSpan(ForegroundColorSpan(accent),0,score.length,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 line.setSpan(StyleSpan(Typeface.BOLD),0,score.length,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
-            info.addView(TextView(this).apply { text=line; textSize=13f; setTextColor(muted); includeFontPadding=false; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(0,0,0,dp(6)) })
+            info.addView(TextView(this).apply {
+                text=line; textSize=TvMetric.TEXT_CAPTION; setTextColor(muted); includeFontPadding=false
+                maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(0,0,0,dp(8))
+            })
         }
         val description=data.series.description.ifBlank { "选择剧集开始观看" }
-        val synopsis=text(description,15f,muted).apply { maxLines=if(synopsisExpanded) 20 else 2; ellipsize=TextUtils.TruncateAt.END }
+        val synopsis=text(description,TvMetric.TEXT_BODY,muted).apply {
+            maxLines=if(synopsisExpanded) 20 else 3
+            ellipsize=TextUtils.TruncateAt.END
+            setLineSpacing(0f,1.35f)
+        }
         info.addView(synopsis)
-        val actions=row(); actions.setPadding(0,dp(12),0,0); info.addView(actions)
+        // 三个动作按钮语气分开：主操作实心强调、收藏描边、简介纯文字。
+        // 改造前三颗按钮长得一模一样，视线没有落点。
+        val actions=row(); actions.setPadding(0,dp(16),0,0); info.addView(actions)
         val progress=library.progress(data.series.id)
         val resumeIndex=progress?.let { data.episodes.indexOf(it.episodeId).takeIf { n -> n>=0 } } ?: 0
         val resumePosition=progress?.takeIf { !it.completed && resumeIndex==it.episodeIndex }?.position ?: 0
         val watched=library.watched(data.series.id)
-        val play=addButton(actions,if(watched) "重新观看" else if(progress!=null && !progress.completed) "继续第 ${resumeIndex+1} 集" else "开始观看") { playEpisode(if(watched) 0 else if(progress?.completed==true) (resumeIndex+1).coerceAtMost(data.episodes.lastIndex) else resumeIndex,if(watched) 0 else resumePosition) }
+        val play=addToneButton(actions,if(watched) "重新观看" else if(progress!=null && !progress.completed) "继续第 ${resumeIndex+1} 集" else "开始观看",TvTone.Primary) {
+            playEpisode(if(watched) 0 else if(progress?.completed==true) (resumeIndex+1).coerceAtMost(data.episodes.lastIndex) else resumeIndex,if(watched) 0 else resumePosition)
+        }
         lateinit var favorite: TextView
-        favorite=addButton(actions,if(library.favorite(data.series.id)) "已收藏" else "收藏") {
+        favorite=addToneButton(actions,if(library.favorite(data.series.id)) "已收藏" else "收藏",TvTone.Secondary) {
             favoriteMonitor.stop()
             val saved=library.toggle(data.series)
             if(saved) {
@@ -152,9 +185,9 @@ import java.util.concurrent.atomic.AtomicLong
             favorite.text=if(saved) "已收藏" else "收藏"
         }
         lateinit var synopsisButton: TextView
-        synopsisButton=addButton(actions,if(synopsisExpanded) "收起简介" else "完整简介") {
+        synopsisButton=addToneButton(actions,if(synopsisExpanded) "收起简介" else "完整简介",TvTone.Ghost) {
             synopsisExpanded=!synopsisExpanded
-            synopsis.maxLines=if(synopsisExpanded) 20 else 2
+            synopsis.maxLines=if(synopsisExpanded) 20 else 3
             synopsisButton.text=if(synopsisExpanded) "收起简介" else "完整简介"
             synopsisButton.post { synopsisButton.requestRectangleOnScreen(android.graphics.Rect(0,0,synopsisButton.width,synopsisButton.height),false) }
         }
@@ -212,9 +245,9 @@ import java.util.concurrent.atomic.AtomicLong
         val episodes=mutableListOf<View>()
         (group*20 until minOf((group+1)*20,data.episodes.size)).toList().chunked(10).forEach { numbers ->
             val line=row()
-            numbers.forEach { index -> val item=button("${index+1}",index==episodeIndex) { playEpisode(index,if(progress?.episodeId==data.episodes[index] && !progress.completed) progress.position else 0) }; item.contentDescription="第 ${index+1} 集"; line.addView(item,lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }); episodes+=item }
+            numbers.forEach { index -> val item=button("${index+1}",index==episodeIndex) { playEpisode(index,if(progress?.episodeId==data.episodes[index] && !progress.completed) progress.position else 0) }; item.contentDescription="第 ${index+1} 集"; line.addView(item,lp(0,dp(44)).apply { weight=1f; rightMargin=dp(8) }); episodes+=item }
             repeat(10-numbers.size) { line.addView(Space(this),lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }) }
-            content.addView(line,lp(-1,dp(49)))
+            content.addView(line,lp(-1,dp(52)))
         }
         groupButtons.forEach { it.nextFocusDownId=episodes.firstOrNull()?.id ?: it.id }
         detailActionButtons.forEach { it.nextFocusDownId=seasonButtons.firstOrNull()?.id ?: groupButtons.firstOrNull()?.id ?: it.id }
@@ -230,16 +263,31 @@ import java.util.concurrent.atomic.AtomicLong
             section.addView(heading)
             val horizontal=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false }
             val line=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.TOP }
-            val width=((resources.displayMetrics.widthPixels*.9f-dp(70))/6).toInt().coerceAtLeast(dp(100))
+            val width=((resources.displayMetrics.widthPixels*.9f-dp(70))/5).toInt().coerceAtLeast(dp(100))
             val posterHeight=((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()
             val cards=mutableListOf<View>()
             items.take(12).forEach { series ->
-                val card=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; id=View.generateViewId(); isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(8)); background=TvStyle.card(this@showDetail,false); contentDescription="$title，${series.title}" }
+                // 和首页、剧场同一套卡片：圆角海报 + 标题压进底部遮罩 + 焦点缩放，
+                // 避免同一部剧在不同页面长得不一样。
+                val card=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; id=View.generateViewId(); isFocusable=true; isFocusableInTouchMode=true; clipChildren=false; setPadding(dp(4),dp(4),dp(4),dp(4)); background=TvStyle.card(this@showDetail,false); contentDescription="$title，${series.title}" }
+                val artwork=FrameLayout(this).apply {
+                    background=TvStyle.shape(this@showDetail,TvStyle.colors.surface,Color.TRANSPARENT,TvMetric.RADIUS_M)
+                    clipToOutline=true
+                }
                 val image=ImageView(this).apply { scaleType=ImageView.ScaleType.CENTER_CROP; importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }
-                card.addView(image,lp(-1,posterHeight))
-                card.addView(text(series.title,14f).apply { minLines=2; maxLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) })
-                card.addView(text(series.badge.ifBlank { series.tags },12f,muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(2),0,0) })
-                card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(this@showDetail,focused); if(focused) loadCover(image,series.cover) }
+                artwork.addView(image,FrameLayout.LayoutParams(-1,-1))
+                artwork.addView(View(this).apply { background=posterScrim(.90f) },FrameLayout.LayoutParams(-1,(posterHeight*.42f).toInt(),Gravity.BOTTOM))
+                artwork.addView(text(series.title,TvMetric.TEXT_LABEL).apply {
+                    setLines(1); ellipsize=TextUtils.TruncateAt.END
+                    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                },FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM).apply { leftMargin=dp(11); rightMargin=dp(11); bottomMargin=dp(9) })
+                card.addView(artwork,lp(-1,posterHeight))
+                card.addView(text(series.badge.ifBlank { series.tags },11.5f,muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) })
+                card.setOnFocusChangeListener { _,focused ->
+                    card.background=TvStyle.card(this@showDetail,focused)
+                    card.animateFocus(focused,1.04f)
+                    if(focused) loadCover(image,series.cover)
+                }
                 card.setOnClickListener { openDetail(series) }
                 if(cards.size<6) loadCover(image,series.cover)
                 line.addView(card,lp(width,-2).apply { rightMargin=dp(14) })

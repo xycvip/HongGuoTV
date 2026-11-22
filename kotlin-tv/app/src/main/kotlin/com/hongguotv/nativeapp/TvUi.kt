@@ -37,6 +37,7 @@ internal object TvMetric {
     const val TEXT_LABEL = 15f
     const val TEXT_SUBTITLE = 17f
     const val TEXT_TITLE = 22f
+    const val TEXT_HEADLINE = 30f
     const val TEXT_DISPLAY = 34f
 
     /** 圆角（dp）。 */
@@ -197,4 +198,26 @@ internal fun setLabel(view: View?, value: CharSequence) {
         is SettingsRow -> view.text = value
         is TextView -> view.text = value
     }
+}
+
+/** 海报底部渐隐。终点用墨黑而非主题背景，浅色主题下也能压住浅色画面。 */
+internal fun MainActivity.posterScrim(alpha: Float = .90f) = android.graphics.drawable.GradientDrawable(
+    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+    intArrayOf(Color.TRANSPARENT, withAlpha(TvPalette.INK_950, alpha)),
+)
+
+/** 按语气添加一个按钮，并统一右侧间距。 */
+internal fun MainActivity.addToneButton(
+    parent: LinearLayout,
+    label: String,
+    tone: TvTone,
+    selected: Boolean = false,
+    onClick: () -> Unit = {},
+): TextView {
+    val view = toneButton(label, tone, selected, onClick)
+    parent.addView(view, lp().apply {
+        width = LinearLayout.LayoutParams.WRAP_CONTENT
+        rightMargin = dp(TvMetric.GAP_M)
+    })
+    return view
 }

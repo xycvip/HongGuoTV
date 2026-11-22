@@ -87,6 +87,14 @@ import java.util.concurrent.atomic.AtomicLong
                 if(focused) TvStyle.colors.focusRing else Color.TRANSPARENT
             )
             view.elevation=if(focused) dp(6).toFloat() else 0f
+            // 选中项用强调色文字标出"当前在哪"，焦点移上去时回到主文字色，避免同色叠同色。
+            if(view is TextView) view.setTextColor(
+                when {
+                    focused -> TvStyle.colors.textPrimary
+                    selected -> TvStyle.colors.accent
+                    else -> TvStyle.colors.textPrimary
+                }
+            )
             view.animateFocus(focused)
         }
         paint(false); view.setOnFocusChangeListener { focusedView,focused ->
