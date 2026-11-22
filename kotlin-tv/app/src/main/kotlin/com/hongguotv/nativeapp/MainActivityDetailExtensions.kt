@@ -130,7 +130,7 @@ import java.util.concurrent.atomic.AtomicLong
             setPadding(dp(9),dp(5),dp(9),dp(5))
             background=TvStyle.shape(this@showDetail,withAlpha(TvPalette.INK_950,.72f),Color.TRANSPARENT,TvMetric.RADIUS_S)
         },FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM or Gravity.START).apply { leftMargin=dp(12); bottomMargin=dp(12) })
-        hero.addView(posterBox,lp(dp(196),dp(280)).apply { rightMargin=dp(30) })
+        hero.addView(posterBox,lp(dp(184),dp(263)).apply { rightMargin=dp(28) })
         loadCover(image,data.series.cover)
 
         val info=column(); hero.addView(info,lp(0,-2).apply { weight=1f })

@@ -227,7 +227,7 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
             }
             container.addView(sectionRow)
             val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
-            heading.addView(text(if(tab==3) "我的收藏" else "接着上次看",25f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
+            heading.addView(text(if(tab==3) "我的收藏" else "接着上次看",26f).apply { setTypeface(null,Typeface.BOLD); includeFontPadding=false },lp(0,-2).apply { weight=1f })
             if(tab==3) {
                 favoriteCheck=addButton(heading,"检查更新") {
                     if(favoriteMonitor.running) Toast.makeText(this,"正在检查收藏更新…",Toast.LENGTH_SHORT).show()
@@ -256,7 +256,7 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
             }
             container.addView(heading)
             if(tab==3) {
-                favoriteStatus=text(favoriteMonitor.status,13f,muted).apply { setPadding(0,0,0,dp(6)) }; container.addView(favoriteStatus)
+                favoriteStatus=text(favoriteMonitor.status,TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary).apply { setPadding(dp(2),0,0,dp(8)) }; container.addView(favoriteStatus)
             }
 
 }
@@ -364,7 +364,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
             }
             container.addView(boardScroll,lp(-1,-2))
             val defaultSource=if(actorRanking) if(actorRankSubBoard=="ranklist_actor_fans") "来源：红果演员星光榜" else "来源：红果演员剧星榜" else rankBoard.sourceText
-            rankSubtitle=text(if(loading) "正在读取最新榜单…" else if(actorRanking) defaultSource else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,13f,muted).apply { setPadding(0,0,0,dp(8)) }
+            rankSubtitle=text(if(loading) "正在读取最新榜单…" else if(actorRanking) defaultSource else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary).apply { setPadding(dp(2),0,0,dp(10)) }
             container.addView(rankSubtitle)
             nav.forEach { it.nextFocusDownId=boardRow.getChildAt(0)?.id ?: View.NO_ID }
 }

@@ -30,7 +30,7 @@ object TvDialog {
                 cornerRadius = dp(activity, 20).toFloat()
                 setStroke(dp(activity, 1), TvStyle.outline)
             }
-            setPadding(dp(activity, 28), dp(activity, 24), dp(activity, 28), dp(activity, 20))
+            setPadding(dp(activity, 28), dp(activity, 26), dp(activity, 28), dp(activity, 22))
         }
         card.addView(content)
         return card
@@ -39,19 +39,20 @@ object TvDialog {
     /** 弹窗标题：20sp 加粗，底部留间距。 */
     fun title(activity: Activity, text: String): TextView = TextView(activity).apply {
         this.text = text
-        textSize = 20f
+        textSize = 21f
+        letterSpacing = 0.01f
         setTypeface(null, android.graphics.Typeface.BOLD)
         setTextColor(TvStyle.text)
-        setPadding(0, 0, 0, dp(activity, 14))
+        setPadding(0, 0, 0, dp(activity, 15))
     }
 
     /** 弹窗正文/说明：15sp，muted 色，行高舒适。 */
     fun body(activity: Activity, text: String): TextView = TextView(activity).apply {
         this.text = text
-        textSize = 15f
+        textSize = TvMetric.TEXT_BODY
         setTextColor(TvStyle.muted)
-        setLineSpacing(0f, 1.25f)
-        setPadding(0, 0, 0, dp(activity, 12))
+        setLineSpacing(0f, 1.35f)
+        setPadding(0, 0, 0, dp(activity, 14))
     }
 
     /** 胶囊按钮：默认 surface 底，焦点 accent 填充 + 深色文字。 */
@@ -59,10 +60,10 @@ object TvDialog {
         val dp = { v: Int -> dp(activity, v) }
         return Button(activity).apply {
             this.text = text
-            textSize = 15f
+            textSize = TvMetric.TEXT_LABEL
             setTextColor(TvStyle.text)
-            minHeight = dp(44)
-            setPadding(dp(20), 0, dp(20), 0)
+            minHeight = dp(46)
+            setPadding(dp(22), 0, dp(22), 0)
             background = GradientDrawable().apply {
                 setColor(TvStyle.surface)
                 cornerRadius = dp(24).toFloat()
@@ -86,8 +87,8 @@ object TvDialog {
         return object : android.widget.ArrayAdapter<String>(activity, 0, labels) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val view = (convertView as? TextView) ?: TextView(activity).apply {
-                    textSize = 16f
-                    setPadding(dp(activity, 16), dp(activity, 12), dp(activity, 16), dp(activity, 12))
+                    textSize = TvMetric.TEXT_LABEL
+                    setPadding(dp(activity, 18), dp(activity, 14), dp(activity, 18), dp(activity, 14))
                 }
                 view.text = getItem(position)
                 view.setTextColor(TvStyle.text)
@@ -107,8 +108,8 @@ object TvDialog {
                         tag = "tv-choice-row"
                         orientation = LinearLayout.HORIZONTAL
                         gravity = Gravity.CENTER_VERTICAL
-                        setPadding(dp(activity, 16), dp(activity, 10), dp(activity, 16), dp(activity, 10))
-                        minimumHeight = dp(activity, 48)
+                        setPadding(dp(activity, 18), dp(activity, 12), dp(activity, 18), dp(activity, 12))
+                        minimumHeight = dp(activity, 52)
                         // 不能让行容器自己获得焦点或变成 clickable：
                         // 否则它会拦截 ListView 的 item click，导致单选/多选点了没有反应。
                         isFocusable = false
@@ -117,7 +118,7 @@ object TvDialog {
                         descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                         addView(TextView(activity).apply {
                             tag = "tv-choice-label"
-                            textSize = 16f
+                            textSize = TvMetric.TEXT_LABEL
                             setTextColor(TvStyle.text)
                             gravity = Gravity.CENTER_VERTICAL
                         }, LinearLayout.LayoutParams(0, -2, 1f))

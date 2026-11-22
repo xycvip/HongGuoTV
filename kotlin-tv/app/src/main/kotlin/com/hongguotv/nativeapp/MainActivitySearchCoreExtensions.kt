@@ -182,7 +182,7 @@ internal fun MainActivity.submitCatalogSearch(input: EditText) {
 
 internal fun MainActivity.catalogAzKey(label: String,keyHeight: Int): TextView {
     val view=button(label) { onAzKey(label) }
-                    view.textSize=14f; view.minHeight=keyHeight; view.setPadding(dp(2),dp(3),dp(2),dp(3))
+                    view.textSize=TvMetric.TEXT_LABEL; view.minHeight=keyHeight; view.setPadding(dp(2),dp(3),dp(2),dp(3))
                     val paint=view.onFocusChangeListener
                     view.setOnFocusChangeListener { v,focused -> paint?.onFocusChange(v,focused); if(focused) keyboardLastLabel=label }
                     return view

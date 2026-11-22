@@ -186,7 +186,7 @@ internal class SettingsSectionFactory(
             createText(title, TvMetric.TEXT_SUBTITLE, TvStyle.colors.textPrimary).apply {
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 includeFontPadding = false
-                setPadding(dp(3), dp(20), 0, dp(3))
+                setPadding(dp(3), dp(16), 0, dp(3))
             },
             LinearLayout.LayoutParams(-1, -2),
         )
@@ -194,7 +194,7 @@ internal class SettingsSectionFactory(
             includeFontPadding = false
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(3), 0, 0, dp(7))
+            setPadding(dp(3), 0, 0, dp(10))
         }
         panel.addView(note, LinearLayout.LayoutParams(-1, -2))
         sectionNotes += note

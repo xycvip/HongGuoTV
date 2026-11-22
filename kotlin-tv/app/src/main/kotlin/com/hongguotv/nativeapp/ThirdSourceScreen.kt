@@ -503,14 +503,14 @@ class ThirdSourceScreen(private val activity: Activity, private val rebuild: () 
 
     private fun sourceCapsule(source: ThirdSource, index: Int): LinearLayout {
         val isCurrent = source.id == currentId
-        val capsule = ui.row().apply { setPadding(ui.dp(12), ui.dp(9), ui.dp(12), ui.dp(9)) }
+        val capsule = ui.row().apply { setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10)) }
         val dot = View(activity).apply {
             background = ui.rounded(dotColor(source.id), radius = 3)
-            layoutParams = LinearLayout.LayoutParams(ui.dp(7), ui.dp(7)).apply { rightMargin = ui.dp(6) }
+            layoutParams = LinearLayout.LayoutParams(ui.dp(8), ui.dp(8)).apply { rightMargin = ui.dp(7) }
         }
         capsuleDots[source.id] = dot
         capsule.addView(dot)
-        capsule.addView(ui.text(source.name, 14f, if(isCurrent) TvStyle.accent else TvStyle.text))
+        capsule.addView(ui.text(source.name, TvMetric.TEXT_LABEL, if(isCurrent) TvStyle.accent else TvStyle.text))
         ui.focusStyle(capsule, selected = isCurrent)
         capsule.setOnClickListener { switchSource(source) }
         return capsule

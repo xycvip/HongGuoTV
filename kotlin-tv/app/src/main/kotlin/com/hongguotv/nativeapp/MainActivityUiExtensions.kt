@@ -148,7 +148,12 @@ import java.util.concurrent.atomic.AtomicLong
         root.removeAllViews(); root.setBackgroundColor(bg)
         val container=column(); val horizontal=dp(widthDp()*.05f); val vertical=(resources.displayMetrics.heightPixels*.05f).toInt()
         container.setPadding(horizontal,vertical,horizontal,vertical); root.addView(container,FrameLayout.LayoutParams(-1,-1))
-        if(title!=null) { val heading=row(); addButton(heading,"‹ 返回") { goBack() }; heading.addView(text(title,22f).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.CENTER_VERTICAL },lp(0,dp(44)).apply { weight=1f }); container.addView(heading) }
+        if(title!=null) {
+            // 返回是次要操作，用纯文字语气；原来给它一块灰底，和页面标题抢了同一行的高度。
+            val heading=row(); addToneButton(heading,"‹ 返回",TvTone.Ghost) { goBack() }
+            heading.addView(text(title,TvMetric.TEXT_TITLE).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.CENTER_VERTICAL; includeFontPadding=false },lp(0,dp(44)).apply { weight=1f })
+            container.addView(heading)
+        }
         applyClock()
         // 启动画面覆盖在首个页面之上；自动播放时一直保留到视频首帧。
         bootSplash?.let { splash ->

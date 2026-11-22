@@ -57,9 +57,19 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
             }
             // 无联想词时中栏整列消失，结果网格按全宽重新算列数
             fullSearchColumns=if(mode==3) (((widthDp()-(if(roomy) 430f else 360f)-24f)+14f)/118f).toInt().coerceIn(3,gridColumns) else searchColumns
-            val searchRow=row(); val input=EditText(this).apply { id=View.generateViewId(); hint="输入剧名，或用字母键拼首拼"; setText(query); textSize=16f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1; filters=arrayOf(android.text.InputFilter.LengthFilter(80)); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH }
-            searchRow.addView(input,lp(0,dp(45)).apply { weight=1f; rightMargin=dp(10) })
-            searchInput=input; searchButton=addButton(searchRow,"搜索") { submitCatalogSearch(input) }
+            // 输入框原来没有任何底色，在深色背景上只剩一行白字，看不出"这里可以输入"。
+            val searchRow=row(); val input=EditText(this).apply {
+                id=View.generateViewId(); hint="输入剧名，或用字母键拼首拼"
+                setText(query); textSize=TvMetric.TEXT_LABEL; setTextColor(TvStyle.colors.textPrimary)
+                setHintTextColor(TvStyle.colors.textTertiary)
+                isSingleLine=true; maxLines=1
+                filters=arrayOf(android.text.InputFilter.LengthFilter(80))
+                imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                background=TvStyle.shape(this@renderCatalogSearchPage,TvStyle.colors.surface,TvStyle.colors.strokeSubtle,TvMetric.RADIUS_M)
+                setPadding(dp(16),0,dp(16),0)
+            }
+            searchRow.addView(input,lp(0,dp(48)).apply { weight=1f; rightMargin=dp(10) })
+            searchInput=input; searchButton=addToneButton(searchRow,"搜索",TvTone.Primary) { submitCatalogSearch(input) }
             // 搜索栏作为左侧键盘区的顶部内容；右侧结果区从同一高度开始展示，不留下搜索栏缩短后的空白带。
             searchRow.layoutParams=lp(-1)
             searchButton?.apply {
