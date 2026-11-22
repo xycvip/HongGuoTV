@@ -22,10 +22,10 @@ import java.util.Locale
         // 「默认清晰度 · 自动（1080P 优先）」只能显示到「自动（…」，砍掉的恰好是状态。
         val screenWidthDp=contentWidthDp().coerceAtLeast(1f)
         val screenHeightDp=heightDp().coerceAtLeast(1f)
-        // 窄屏（720p 电视 / 手机）上分类栏按比例会吃掉三分之一宽度，固定封到 104dp，
-        // 右侧设置行仍有 340dp 以上，「标题 + 当前值 + 箭头」三栏排得下。
+        // 分类列是导航不是内容：收窄到一行分类名刚好放下的宽度（96–120dp），
+        // 把空间留给右侧设置行；窄屏（720p 电视 / 手机）再收一档到 88dp。
         val narrow=screenWidthDp<620f
-        val headingWidth=if(narrow) 104 else (screenWidthDp*0.16f).toInt().coerceIn(132,190)
+        val headingWidth=if(narrow) 88 else (screenWidthDp*0.11f).toInt().coerceIn(96,120)
         val categoryScale=minOf(
             (screenWidthDp/800f).coerceIn(0.88f,1.16f),
             (screenHeightDp/600f).coerceIn(0.88f,1.12f)

@@ -241,8 +241,8 @@ import java.util.Locale
             section.addView(heading)
             val horizontal=HorizontalScrollView(this).apply {
                 isHorizontalScrollBarEnabled=false; clipToPadding=false
-                // 6dp 焦点呼吸位：推荐卡焦点环画在 padding 区不缺角，视口外内容仍被裁剪。
-                setPadding(dp(6),dp(6),dp(6),dp(6))
+                // 10dp 焦点呼吸位：推荐卡焦点环 + 4dp 投影画在 padding 区不缺角，视口外内容仍被裁剪。
+                setPadding(dp(10),dp(10),dp(10),dp(10))
             }
             val line=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.TOP }
             val width=((resources.displayMetrics.widthPixels*.9f-dp(70))/5).toInt().coerceAtLeast(dp(100))

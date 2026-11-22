@@ -46,7 +46,7 @@ internal class PosterCard private constructor(
         card.background = if (focused) {
             TvStyle.shape(context, Color.TRANSPARENT, TvStyle.colors.focusRing, ringRadius)
         } else null
-        card.elevation = if (focused) context.dp(10).toFloat() else 0f
+        card.elevation = if (focused) context.dp(4).toFloat() else 0f
         card.animateFocus(focused, scale)
     }
 

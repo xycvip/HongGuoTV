@@ -44,7 +44,7 @@ import com.hongguotv.core.*
             // 左上各 10dp 焦点呼吸位：首列/首行卡片的焦点环画在 padding 区内
             // （clipToPadding=false），既不缺角也不会越出视口。
             id=View.generateViewId(); clipToPadding=false; isVerticalScrollBarEnabled=false; itemAnimator=null; isNestedScrollingEnabled=true
-            setPadding(dp(10),dp(10),dp(4),dp(4))
+            setPadding(dp(10),dp(10),dp(8),dp(8))
             layoutManager=grid; this.adapter=adapter
             val focusRecycler=this
             // 筛选头把焦点交给 RecyclerView 时，必须先由容器自身接住，

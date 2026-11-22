@@ -177,10 +177,10 @@ class HomeScreen(
             }
             val horizontal=VerticalFriendlyHorizontalScrollView(context).apply {
                 isHorizontalScrollBarEnabled=false; clipToPadding=false
-                // 上下 10dp、左右 6dp 焦点呼吸位：卡片焦点环（放大 4.5%）画在
-                // padding 区内不缺角；视口外的半张卡仍被货架自身裁剪，
+                // 上下 12dp、左右 8dp 焦点呼吸位：卡片焦点环（放大 4%）+ 4dp 投影
+                // 画在 padding 区内不缺角；视口外的半张卡仍被货架自身裁剪，
                 // 不会越界叠到左侧竖栏上（真机实测）。
-                setPadding(dp(6),dp(10),dp(6),dp(10)); isFillViewport=shelf.key=="random"
+                setPadding(dp(8),dp(12),dp(8),dp(12)); isFillViewport=shelf.key=="random"
                 setOnTouchListener { _,event ->
                     when(event.actionMasked) {
                         android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_MOVE,
@@ -196,7 +196,7 @@ class HomeScreen(
                 // 按列数等分内容区。宽度必须按「竖栏之后剩下的宽度」算，用屏幕宽会让最后一列被裁掉右半边。
                 val available = contentWidthPx?.invoke() ?: (resources.displayMetrics.widthPixels * .9f).toInt()
                 val width=if(shelf.key=="random") dp(320)
-                    else ((available-dp(12)-dp(14)*columnCount)/columnCount).toInt().coerceAtLeast(dp(96))
+                    else ((available-dp(16)-dp(14)*columnCount)/columnCount).toInt().coerceAtLeast(dp(96))
                 val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
                 val isRandom=shelf.key=="random"
                 val mode=when { entry!=null -> PosterCard.Mode.POSTER; isRandom -> PosterCard.Mode.RANDOM; else -> PosterCard.Mode.MORE }
