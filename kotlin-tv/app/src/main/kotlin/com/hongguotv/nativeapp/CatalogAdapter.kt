@@ -72,9 +72,9 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         val track=LinearLayout(host).apply { orientation=LinearLayout.HORIZONTAL }
         val progressFill=View(host).apply { setBackgroundColor(TvStyle.colors.accent) }
         val progressRest=View(host).apply { setBackgroundColor(withAlpha(TvPalette.INK_100,.20f)) }
-        track.addView(progressFill,LinearLayout.LayoutParams(0,dp(3),0f))
-        track.addView(progressRest,LinearLayout.LayoutParams(0,dp(3),1f))
-        artwork.addView(track,FrameLayout.LayoutParams(-1,dp(3),Gravity.BOTTOM))
+        track.addView(progressFill,LinearLayout.LayoutParams(0,dp(4),0f))
+        track.addView(progressRest,LinearLayout.LayoutParams(0,dp(4),1f))
+        artwork.addView(track,FrameLayout.LayoutParams(-1,dp(4),Gravity.BOTTOM))
 
         val info=LinearLayout(host).apply {
             orientation=LinearLayout.VERTICAL
