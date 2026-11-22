@@ -85,12 +85,20 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
             View(this).apply { background=TvStyle.shape(this@renderNavigationRail,TvStyle.colors.accent) },
             lp(dp(6),dp(6)).apply { rightMargin=dp(8) },
         )
-        brand.addView(text("红果TV",14f,TvStyle.colors.textPrimary).apply {
+        // 「红果」用主字重、「TV」压小并降一级灰：竖栏净宽只有 58dp，一行塞四个字会换行。
+        val wordmark=row()
+        wordmark.addView(text("红果",15f,TvStyle.colors.textPrimary).apply {
             typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-            letterSpacing=.04f
             includeFontPadding=false
             maxLines=1
-        },lp(0,-2).apply { weight=1f })
+        },lp(-2,-2))
+        wordmark.addView(text("TV",9.5f,TvStyle.colors.textTertiary).apply {
+            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+            includeFontPadding=false
+            maxLines=1
+            setPadding(dp(4),0,0,dp(1))
+        },lp(-2,-2).apply { gravity=Gravity.BOTTOM })
+        brand.addView(wordmark,lp(0,-2).apply { weight=1f })
         rail.addView(brand,lp(-1,-2))
     }
 

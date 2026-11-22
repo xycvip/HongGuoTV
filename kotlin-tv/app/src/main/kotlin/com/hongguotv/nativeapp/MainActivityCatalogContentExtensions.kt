@@ -277,7 +277,9 @@ internal fun MainActivity.renderCatalogContent(
         // 剧场与排行榜使用单一 RecyclerView：筛选区作为全宽 Header，海报卡片仍由 CatalogAdapter 回收。
         // 收藏/最近观看等页面保留原有 ScrollView 结构。
         if(tab==2 || tab==3 || tab==4 || tab==7) {
-            val fixedCount=1
+            // 顶部导航改成左侧竖栏后，container 的第一个子项就是页面内容本身，
+            // 这里不能再跳过 1 个（原来的导航栏），否则第一块内容会被留在容器里、其余被搬走。
+            val fixedCount=0
             val pageContent=column()
             while(container.childCount>fixedCount) {
                 val child=container.getChildAt(fixedCount)
@@ -322,7 +324,9 @@ internal fun MainActivity.renderCatalogContent(
                 val target=catalogAdapter?.displayed?.indexOfFirst { it.id==catalogFocus } ?: -1
                 if(target>=0) posterRecycler.post { (posterRecycler.layoutManager as? GridLayoutManager)?.scrollToPositionWithOffset(target+1,0) }
             } else {
-                val viewportDp=(heightDp()-(if(compactHeader) 91f else 51f)-24f).coerceAtLeast(180f)
+                // 有竖栏时顶部不再占用 52dp，可视高度按实际剩余空间算。
+                val chromeDp=if(catalogRailHost!=null) 0f else if(compactHeader) 91f else 51f
+                val viewportDp=(heightDp()-chromeDp-24f).coerceAtLeast(180f)
                 body.layoutParams=lp(-1,dp(viewportDp))
                 val pageScroll=ScrollView(this).apply {
                     isVerticalScrollBarEnabled=false
