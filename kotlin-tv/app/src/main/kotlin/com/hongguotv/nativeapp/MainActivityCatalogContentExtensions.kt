@@ -142,7 +142,7 @@ internal fun MainActivity.renderCatalogContent(
         if(load) {
             if(tab==0 || tab==7 || (tab==2 && collection=="actor-works")) catalogGrid(body,focusNav,focusType,loading=true)
             else {
-                message(body,"正在加载…")
+                loading(body,"正在加载…")
                 if(focusType) (if(tab==1) searchInput else navForTab())?.requestFocus()
                 else if(pendingRefreshFocus==null && !(tab==2 && rankFocusTag!=null)) navForTab().requestFocus()
             }

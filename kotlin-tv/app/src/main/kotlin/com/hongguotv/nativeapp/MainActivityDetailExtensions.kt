@@ -80,7 +80,7 @@ import java.util.concurrent.atomic.AtomicLong
             } else {
                 randomLoadingLabel?.text="正在准备播放：${series.title}"
             }
-        } else message(body,"正在加载剧集…")
+        } else loading(body,"正在加载剧集…")
         work({ resolvedDetail ?: repository.detail(series.id) }, { result ->
             if(startupAttempt && startupRecommendationExpired) return@work
             detail=result; library.observeFavorite(series.id,result.episodes.size,System.currentTimeMillis(),acknowledge=true)

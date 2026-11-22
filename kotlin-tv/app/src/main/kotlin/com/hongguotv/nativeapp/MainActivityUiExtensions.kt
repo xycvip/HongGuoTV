@@ -234,13 +234,41 @@ import java.util.concurrent.atomic.AtomicLong
         favoriteStatus=null; favoriteCheck=null; favoriteFilterFirst=null; favoriteFilterButtons=emptyList(); homeUpdates=null; resumeCards.clear()
     }
 
-    internal fun MainActivity.message(parent: LinearLayout,label: String) { parent.addView(text(label,17f,muted).apply { setPadding(0,dp(28),0,dp(18)) }) }
+    internal fun MainActivity.message(parent: LinearLayout,label: String) {
+        parent.addView(text(label,TvMetric.TEXT_LABEL,TvStyle.colors.textSecondary).apply {
+            setPadding(0,dp(40),0,dp(24)); setLineSpacing(0f,1.35f)
+        })
+    }
+
+    /**
+     * 加载态。改造前只有一行灰字，电视上屏幕大半是空的，很难判断是"在加载"还是"卡住"。
+     * 现在给一个转圈 + 文案，位置在内容区上方而不是垂直居中，避免内容到位时大幅跳动。
+     */
+    internal fun MainActivity.loading(parent: LinearLayout,label: String) {
+        val box=column().apply { gravity=Gravity.CENTER_HORIZONTAL; setPadding(0,dp(52),0,dp(36)) }
+        box.addView(ProgressBar(this).apply {
+            isIndeterminate=true
+            indeterminateTintList=android.content.res.ColorStateList.valueOf(TvStyle.colors.accent)
+        },lp(dp(32),dp(32)))
+        box.addView(text(label,TvMetric.TEXT_BODY,TvStyle.colors.textSecondary).apply {
+            gravity=Gravity.CENTER; setPadding(0,dp(14),0,0)
+        },lp(-1,-2))
+        parent.addView(box,lp(-1,-2))
+    }
 
     internal fun MainActivity.error(parent: LinearLayout,problem: Throwable,retry: ()->Unit) {
         debugLogError("页面加载",problem)
-        message(parent,"暂时无法加载，请检查网络后重试。")
+        val box=column().apply { setPadding(0,dp(52),0,dp(10)) }
+        box.addView(text("暂时无法加载",TvMetric.TEXT_TITLE).apply {
+            setTypeface(null,Typeface.BOLD); includeFontPadding=false
+        })
+        box.addView(text("请检查网络后重试",TvMetric.TEXT_BODY,TvStyle.colors.textSecondary).apply {
+            setPadding(0,dp(8),0,0)
+        })
+        parent.addView(box)
         val detail=if(problem is java.net.UnknownHostException) "无法连接内容网站" else if(problem is java.net.SocketTimeoutException) "连接超时" else problem.message.orEmpty().replace(Regex("https?://\\S+"),"[地址]").take(160)
-        parent.addView(text(detail,13f,muted)); addButton(parent,"重试",onClick=retry).requestFocus()
+        parent.addView(text(detail,TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary).apply { setPadding(0,0,0,dp(12)) })
+        addToneButton(parent,"重试",TvTone.Primary) { retry() }.requestFocus()
     }
 
 internal fun MainActivity.dp(value: Number)=(value.toFloat()*resources.displayMetrics.density).toInt()
