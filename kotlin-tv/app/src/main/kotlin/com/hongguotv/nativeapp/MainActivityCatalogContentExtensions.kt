@@ -223,13 +223,13 @@ internal fun MainActivity.renderCatalogContent(
                     }
                     // 手机输入的精确剧名搜索零结果时自动恢复联想，帮助用户纠正剧名
                     if(requestTab==1 && result.items.isEmpty()) { phoneSearched=false; scheduleSuggest() }
-                    val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
+                    val keepNav=nav.any { it.hasFocus() }
                     if(requestTab==2 && !requestActorWorks) rankSubtitle?.text=if(requestActor) if(requestActorSubBoard=="ranklist_actor_fans") "来源：红果演员星光榜" else "来源：红果演员剧星榜" else ranking?.updatedText?.ifBlank { rankBoard.sourceText } ?: rankBoard.sourceText
                     if(requestTab==2 || requestTab==7) {
                         // 首屏数据到达后重建一次页面，让筛选头与海报网格在同一 RecyclerView 中组装。
                         val restore=pendingRefreshFocus
                         pendingRefreshFocus=null
-                        showCatalog(focusNav=keepNav || focusNav,focusType=keepType || focusType)
+                        showCatalog(focusNav=keepNav || focusNav,focusType=focusType)
                         if(!restore.isNullOrBlank()) root.post {
                             if(screen=="catalog" && tab==requestTab) {
                                 val target=when {
@@ -244,7 +244,7 @@ internal fun MainActivity.renderCatalogContent(
                         }
                         return@work
                     }
-                    body.removeAllViews(); catalogGrid(body,keepNav || focusNav,keepType || focusType)
+                    body.removeAllViews(); catalogGrid(body,keepNav || focusNav,focusType)
                     pendingRefreshFocus?.let { restore ->
                         pendingRefreshFocus=null
                         root.post {
@@ -388,9 +388,11 @@ internal fun MainActivity.showCatalog(load: Boolean=false,focusNav: Boolean=fals
             val cached=if(tab==0 && page==1) library.cachedHome(library.contentType) else null
             catalog=cached?.items ?: emptyList(); hasMore=cached?.hasMore ?: false; ranking=null; homeFromCache=cached!=null
         }
-        invalidatePage(); screen="catalog"; applyDeviceOrientationPolicy(); releaseCatalogViews(); val container=base()
-        if(foreground && library.isLoaded && !favoriteMonitor.running) main.post { if(foreground && screen=="catalog") favoriteMonitor.check() }
+        invalidatePage(); screen="catalog"; applyDeviceOrientationPolicy(); releaseCatalogViews()
+        // 电视/平板走左侧竖栏，手机保留顶部横排。判断放在 base() 之前，页面骨架需要知道给不给竖栏留位。
         val compactHeader=widthDp()<900
+        val container=base(rail=useNavigationRail())
+        if(foreground && library.isLoaded && !favoriteMonitor.running) main.post { if(foreground && screen=="catalog") favoriteMonitor.check() }
         renderCatalogHeader(container, compactHeader)
 
         renderCatalogContent(container, load, focusNav, focusType, focusFilter, compactHeader)

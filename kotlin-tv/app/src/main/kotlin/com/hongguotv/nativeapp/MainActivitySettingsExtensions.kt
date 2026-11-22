@@ -57,7 +57,7 @@ import java.util.concurrent.atomic.AtomicLong
         // 左侧窄导航 + 右侧单列宽行。
         // 原来右侧是 2/3/4 列自适应网格，1080p 电视上一行四格、单格约 176dp，
         // 「默认清晰度 · 自动（1080P 优先）」只能显示到「自动（…」，砍掉的恰好是状态。
-        val screenWidthDp=widthDp().coerceAtLeast(1f)
+        val screenWidthDp=contentWidthDp().coerceAtLeast(1f)
         val screenHeightDp=heightDp().coerceAtLeast(1f)
         val headingWidth=(screenWidthDp*0.16f).toInt().coerceIn(132,190)
         val categoryScale=minOf(

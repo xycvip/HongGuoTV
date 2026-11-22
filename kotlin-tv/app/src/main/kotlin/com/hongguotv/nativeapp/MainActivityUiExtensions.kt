@@ -144,10 +144,39 @@ import java.util.concurrent.atomic.AtomicLong
         }
     }
 
-    internal fun MainActivity.base(title: String?=null): LinearLayout {
+    /**
+     * 页面骨架。
+     *
+     * [rail] = true 时换成「左侧竖栏 + 右侧内容」：竖栏单独占一列，内容区不再被顶部
+     * 横条切掉一条，也更符合电视遥控器的方向直觉 —— 上下在竖栏内换页，左右在内容里浏览。
+     * 手机等窄屏仍走原来的整页布局（顶部导航）。
+     */
+    internal fun MainActivity.base(title: String?=null, rail: Boolean=false): LinearLayout {
         root.removeAllViews(); root.setBackgroundColor(bg)
-        val container=column(); val horizontal=dp(widthDp()*.05f); val vertical=(resources.displayMetrics.heightPixels*.05f).toInt()
-        container.setPadding(horizontal,vertical,horizontal,vertical); root.addView(container,FrameLayout.LayoutParams(-1,-1))
+        val container=column()
+        if(rail) {
+            val railWidth=dp(railWidthDp())
+            val shell=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; clipChildren=false }
+            val railHost=FrameLayout(this).apply {
+                id=View.generateViewId(); setBackgroundColor(TvStyle.colors.rail); clipChildren=false
+            }
+            shell.addView(railHost,LinearLayout.LayoutParams(railWidth,-1))
+            container.setPadding(dp(28),dp(22),dp(40),dp(22))
+            shell.addView(container,LinearLayout.LayoutParams(0,-1,1f))
+            // 竖栏与内容之间只留一条 1dp 细线，不用阴影堆层次。
+            railHost.addView(
+                View(this).apply { setBackgroundColor(TvStyle.colors.railStroke) },
+                FrameLayout.LayoutParams(dp(1),-1,Gravity.END),
+            )
+            root.addView(shell,FrameLayout.LayoutParams(-1,-1))
+            catalogRailHost=railHost
+        } else {
+            val horizontal=dp(widthDp()*.05f); val vertical=(resources.displayMetrics.heightPixels*.05f).toInt()
+            container.setPadding(horizontal,vertical,horizontal,vertical)
+            root.addView(container,FrameLayout.LayoutParams(-1,-1))
+            catalogRailHost=null
+        }
+        catalogContentHost=container
         if(title!=null) {
             // 返回是次要操作，用纯文字语气；原来给它一块灰底，和页面标题抢了同一行的高度。
             val heading=row(); addToneButton(heading,"‹ 返回",TvTone.Ghost) { goBack() }
@@ -175,11 +204,12 @@ import java.util.concurrent.atomic.AtomicLong
             val clockSize=if(mobile) 12f else 15f
             val horizontalPadding=if(mobile) 4 else 7
             val verticalPadding=if(mobile) 2 else 3
-            val view=text("",clockSize,muted).apply {
+            val view=text("",clockSize,TvStyle.colors.textSecondary).apply {
                 importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 isFocusable=false; isClickable=false
-                alpha=0.88f
-                setPadding(dp(horizontalPadding),dp(verticalPadding),dp(horizontalPadding),dp(verticalPadding))
+                // 内容改成从页面顶部开始后，时钟会压在图片上；裸文字在亮画面上几乎看不见。
+                background=TvStyle.shape(this@applyClock,withAlpha(TvStyle.colors.background,.55f),Color.TRANSPARENT,TvMetric.RADIUS_PILL)
+                setPadding(dp(horizontalPadding+3),dp(verticalPadding+2),dp(horizontalPadding+3),dp(verticalPadding+2))
             }
             val topMargin=if(mobile) 8 else (screenHeight*0.025f).toInt().coerceIn(12,26)
             val rightMargin=if(mobile) 14 else (screenWidth*0.03f).toInt().coerceIn(18,36)
@@ -223,11 +253,10 @@ import java.util.concurrent.atomic.AtomicLong
         stopApiStatusAnimations()
         apiStatusViews.clear()
         catalogNavFlower=null
-        catalogNavFrame=null
         homeScreen?.let { homePosition=it.capturePosition() }
         (catalogRecycler?.layoutManager as? GridLayoutManager)?.let { val first=it.findFirstVisibleItemPosition(); scrollPositions[catalogPageKey]=if(tab==2 || tab==7) (first-1).coerceAtLeast(0) else first }
-        homeScreen=null; selectionPreview=null; catalogRecycler=null; catalogAdapter=null; loadingMore=false
-        nav.clear(); navByTab.clear(); searchNavShortcut=null; theaterFilterHost=null; typeButtons.clear(); aggregateButton=null; searchInput=null; searchButton=null; searchActions.clear()
+        homeScreen=null; catalogRecycler=null; catalogAdapter=null; loadingMore=false
+        nav.clear(); navByTab.clear(); searchNavShortcut=null; theaterFilterHost=null; aggregateButton=null; searchInput=null; searchButton=null; searchActions.clear()
         azFirst=null; azLastRow.clear(); suggestRow=null; suggestFirst=null; suggestTicket++; main.removeCallbacks(pendingSuggest)
         suggestVertical=false; searchBody=null; keyboardKeys=emptyMap(); keyboardRows=emptyList(); historyFirst=null; historyItems=emptyList(); suggestScrollRef=null; resultFirstCard=null
         historyManage=null; rankSwitch=null; actorRankButton=null; rankRefresh=null; rankSubtitle=null; collectionBack=null; favoriteBadges.clear()

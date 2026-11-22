@@ -51,12 +51,12 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
             val tall=heightDp()>=520
             val roomy=widthDp()>=1100
             searchColumns=when(mode) {
-                3 -> (((widthDp()-(if(roomy) 430f else 360f)-(if(roomy) 180f else 140f)-24f)+14f)/118f).toInt().coerceIn(3,gridColumns)
-                2 -> (((widthDp()-360f-24f)+14f)/118f).toInt().coerceIn(3,gridColumns)
+                3 -> (((contentWidthDp()-(if(roomy) 430f else 360f)-(if(roomy) 180f else 140f)-24f)+14f)/118f).toInt().coerceIn(2,gridColumns)
+                2 -> (((contentWidthDp()-360f-24f)+14f)/118f).toInt().coerceIn(2,gridColumns)
                 else -> gridColumns
             }
             // 无联想词时中栏整列消失，结果网格按全宽重新算列数
-            fullSearchColumns=if(mode==3) (((widthDp()-(if(roomy) 430f else 360f)-24f)+14f)/118f).toInt().coerceIn(3,gridColumns) else searchColumns
+            fullSearchColumns=if(mode==3) (((contentWidthDp()-(if(roomy) 430f else 360f)-24f)+14f)/118f).toInt().coerceIn(2,gridColumns) else searchColumns
             // 输入框原来没有任何底色，在深色背景上只剩一行白字，看不出"这里可以输入"。
             val searchRow=row(); val input=EditText(this).apply {
                 id=View.generateViewId(); hint="输入剧名，或用字母键拼首拼"
@@ -85,7 +85,6 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
                 nextFocusUpId=input.id
             }
             input.nextFocusUpId=navForTab().id
-            nav.forEach { it.nextFocusDownId=input.id }
             if(mode==0) {
                 lateinit var recent: TextView
                 recent=addButton(searchRow,"历史") { showSearchHistory(recent) }

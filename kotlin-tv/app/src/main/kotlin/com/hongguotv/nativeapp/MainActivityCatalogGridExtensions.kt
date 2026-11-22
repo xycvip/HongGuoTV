@@ -50,19 +50,13 @@ import java.util.concurrent.atomic.AtomicLong
         if(collection!=null) {
             val heading=row()
             collectionBack=addButton(heading,if(collection=="actor-works") "‹ 返回演员榜" else "‹ 返回首页") { leaveCollection(); showCatalog() }.apply {
-                nextFocusUpId=typeButtons[library.contentType]?.id ?: navForTab().id
+                nextFocusUpId=navForTab().id
                 nextFocusDownId=id
             }
             heading.addView(text(when(collection) { "actor-works" -> "${actorWorksActor?.name ?: "演员"} · 参演作品"; "later" -> "稍后看"; "updates" -> "收藏有更新"; "hot" -> "热门发现"; "hot-short" -> "热门发现 · 短剧"; "hot-comic" -> "热门发现 · 漫剧"; "hot-ai" -> "热门发现 · AI剧"; else -> "接着看" },22f))
             body.addView(heading)
-            typeButtons.values.forEach { it.nextFocusDownId=collectionBack!!.id }
         }
         catalogPageKey="$tab:${if(actorRanking) "actor:$actorRankSubBoard" else ""}:${collection.orEmpty()}:${if(tab==7) theaterFilterKey(theaterContentType)+theaterSelections.toSortedMap() else ""}:$page:$query"
-        if(actorRanking) {
-            selectionPreview=null
-        } else {
-            val preview=SeriesPreview(this); selectionPreview=preview; body.addView(preview)
-        }
         val displayed=mutableListOf<Series>()
         displayed+=if(localCatalog()) catalog else if(tab==0) catalog.filterNot { it.id in library.hidden() } else catalog
         if(displayed.isEmpty()) {
@@ -165,7 +159,6 @@ import java.util.concurrent.atomic.AtomicLong
         root.findViewWithTag<View>("rank:actor:ranklist_actor_fans")?.nextFocusDownId=recycler.id
         favoriteFilterButtons.forEach { it.nextFocusDownId=recycler.id }
         collectionBack?.nextFocusDownId=recycler.id
-        typeButtons.values.forEach { it.nextFocusDownId=searchInput?.id ?: collectionBack?.id ?: recycler.id }
 
         searchInput?.nextFocusDownId=azFirst?.id ?: recycler.id
         searchButton?.nextFocusDownId=azFirst?.id ?: recycler.id

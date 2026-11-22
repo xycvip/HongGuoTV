@@ -7,15 +7,15 @@ import com.hongguotv.core.*
 
     internal fun MainActivity.renderHome(body: LinearLayout,focusNav: Boolean,focusType: Boolean,loading: Boolean) {
         homeUpdateCount=library.updatedFavorites()
-        val preview=SeriesPreview(this); selectionPreview=preview; body.addView(preview)
         val top=navByTab[0] ?: root
-        val home=HomeScreen(this,top,::loadCover,{ item,label -> preview.show(item,if(label.startsWith("第 ")) selectionStatus(item) else listOf(label,selectionStatus(item)).filter { it.isNotBlank() }.joinToString(" · ")) },
-            { item,resume -> openDetail(item,resume) },::quickActions,{ catalogFocus=it },::onCatalogContentScroll)
+        // 详情预览条已删除：两个 TextView 从未被 addView 过，整块一直 GONE，只留下每次焦点移动的空调用。
+        val home=HomeScreen(this,top,::loadCover,
+            { item,resume -> openDetail(item,resume) },::quickActions,{ catalogFocus=it },
+            onVerticalScroll=::onCatalogContentScroll,
+            contentWidthPx={ dp(contentWidthDp()) })
         homeScreen=home; body.addView(home,lp(-1,0).apply { weight=1f })
         val hot=catalog.filterNot { it.id in library.hidden() }
         home.render(homeShelves(),catalogFocus,!focusNav && !focusType,null,homePosition)
-        // 首页导航按下方向固定进入首页首排第一张海报。
-        nav.forEach { it.nextFocusDownId=home.firstId() }
         if(focusNav) navByTab[0]?.requestFocus() else if(focusType) home.firstId().takeIf { it!=View.NO_ID }?.let { root.findViewById<View>(it)?.requestFocus() }
         loadHomeShelf(if(library.contentType==ContentType.SHORT) ContentType.COMIC else ContentType.SHORT,false)
         loadHomeShelf(ContentType.AI,false)
@@ -93,7 +93,7 @@ import com.hongguotv.core.*
     internal fun MainActivity.refreshLibraryCards(changedId: String,removed: Boolean=false) {
         if(screen!="catalog") return
         val home=homeScreen
-        if(home!=null) { home.updateShelves(homeShelves(),requestFocus=true); home.refreshSelection(); return }
+        if(home!=null) { home.updateShelves(homeShelves(),requestFocus=true); return }
         val adapter=catalogAdapter
         if(removed && (localCatalog() || tab==0) && adapter!=null) {
             val index=adapter.displayed.indexOfFirst { it.id==changedId }
@@ -108,7 +108,6 @@ import com.hongguotv.core.*
                 recycler?.post { if(catalogRecycler===recycler) recycler.findViewHolderForAdapterPosition(next+if(tab==2 || tab==7) 1 else 0)?.itemView?.requestFocus() }
             }
         } else {
-            catalog.firstOrNull { it.id==changedId }?.let { selectionPreview?.show(it,selectionStatus(it)) }
             favoriteBadges[changedId]?.text=library.favoriteLabel(changedId)
         }
     }

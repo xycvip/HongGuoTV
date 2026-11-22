@@ -27,6 +27,9 @@ internal class NavigationUiState {
     val navByTab = mutableMapOf<Int, View>()
     var searchNavShortcut: View? = null
     var settingsFocusKey: String? = null
+    // 主导航竖栏的挂载点与当前内容列，供 base() 与页面装配共用。
+    var catalogRailHost: android.widget.FrameLayout? = null
+    var catalogContentHost: android.widget.LinearLayout? = null
 }
 
 internal data class CatalogState(

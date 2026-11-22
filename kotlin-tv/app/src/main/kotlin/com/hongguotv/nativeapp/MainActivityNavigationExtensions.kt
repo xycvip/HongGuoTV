@@ -127,14 +127,4 @@ internal fun MainActivity.resetCatalogContentToTop(view: View) {
         collection=kind; page=1; catalogFocus=""; showCatalog()
     }
 
-    internal fun MainActivity.setCatalogNavVisible(visible:Boolean=true,animated:Boolean=true) {
-        val frame=catalogNavFrame ?: return
-        if(catalogNavVisible && frame.layoutParams.height==dp(52)) return
-        catalogNavVisible=true
-        frame.layoutParams=frame.layoutParams.apply { height=dp(52) }
-        catalogNavFlower?.apply {
-            translationY=0f
-            alpha=1f
-        }
-    }
 

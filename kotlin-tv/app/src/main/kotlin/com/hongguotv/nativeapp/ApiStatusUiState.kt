@@ -14,9 +14,7 @@ internal class ApiStatusUiState {
     val elapsedMs = mutableMapOf<String, Long?>()
     var checkBatchId = 0L
     val animators = mutableMapOf<String, ValueAnimator>()
-    var catalogNavFrame: FrameLayout? = null
     var catalogNavFlower: View? = null
-    var catalogNavVisible = true
     var checkStarted = false
     val playbackProbeScopes = CopyOnWriteArrayList<RequestScope>()
     val playbackProbeJobs = CopyOnWriteArrayList<Future<*>>()

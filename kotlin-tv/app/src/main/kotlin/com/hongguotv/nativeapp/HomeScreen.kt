@@ -19,11 +19,12 @@ class HomeScreen(
     context: Context,
     private val top: View,
     private val loadCover: (ImageView,String)->Unit,
-    private val selected: (Series,String)->Unit,
     private val open: (Series,Boolean)->Unit,
     private val actions: (Series,View)->Unit,
     private val remember: (String)->Unit,
-    private val onVerticalScroll: (Int)->Unit = {}
+    private val onVerticalScroll: (Int)->Unit = {},
+    /** 内容区可用宽度（像素）。有左侧竖栏时比屏幕窄，卡片必须按它等分，否则最后一列会被裁掉。 */
+    private val contentWidthPx: (() -> Int)? = null,
 ): LinearLayout(context) {
     data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
     data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null)
@@ -128,12 +129,11 @@ class HomeScreen(
         card.progress?.apply { progress=entry.progress ?: 0; visibility=if(entry.progress==null) INVISIBLE else VISIBLE }
         card.view.contentDescription="${shelves.firstOrNull { it.key==shelfKey }?.title.orEmpty()}，${entry.series.title}，${entry.label}"
         shelves=shelves.map { shelf -> if(shelf.key==shelfKey) shelf.copy(entries=shelf.entries.map { if(it.series.id==entry.series.id) entry else it }) else shelf }
-        if(lastFocus==card.key) refreshSelection()
         loadNearbySelection()
         return true
     }
 
-    fun refreshSelection() { cards[lastFocus]?.entry?.let { selected(it.series,it.label) } }
+
 
     /** Retry visible cover requests after the owner cancels work for a page or lifecycle change. */
     fun reloadArtwork() {
@@ -182,9 +182,10 @@ class HomeScreen(
             horizontal.addView(line, if(shelf.key=="random") LayoutParams(-1,-2) else LayoutParams(-2,-2)); block.addView(horizontal)
             val rowCards=mutableListOf<Card>()
             fun addCard(entry: Entry?,moreAction: (() -> Unit)?=null) {
-                // 五列：单卡约 190dp，与剧场网格的列宽对齐；改回 6 会立刻变小一圈。
+                // 五列等分内容区。宽度必须按「竖栏之后剩下的宽度」算，用屏幕宽会让第五张卡被裁掉右半边。
+                val available = contentWidthPx?.invoke() ?: (resources.displayMetrics.widthPixels * .9f).toInt()
                 val width=if(shelf.key=="random") dp(320)
-                    else ((resources.displayMetrics.widthPixels*.9f-dp(70))/5).toInt().coerceAtLeast(dp(100))
+                    else ((available-dp(70))/5).toInt().coerceAtLeast(dp(100))
                 val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
                 val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(4)); background=shape(false) }
                 val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.CENTER_CROP; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
@@ -268,7 +269,7 @@ class HomeScreen(
                         .setDuration(if(focused) 150 else 110)
                         .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
                     if(focused) {
-                        lastFocus=key; remember(key); card.entry?.let { selected(it.series,it.label) }
+                        lastFocus=key; remember(key)
                         if(!restoring) {
                             loadNearbySelection()
                             if(lastRow!=shelf.key) scroll.post { if(revision==ticket && view.hasFocus()) reveal(block) }

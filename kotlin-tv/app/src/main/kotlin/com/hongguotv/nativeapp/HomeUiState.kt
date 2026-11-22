@@ -10,7 +10,6 @@ internal class HomeUiState {
     var homePosition: HomeScreen.Position? = null
     var scrollPositions = mutableMapOf<String, Int>()
     var homeScreen: HomeScreen? = null
-    var selectionPreview: SeriesPreview? = null
     var homeFromCache = false
     var homeUpdateCount = 0
     var homeContentLogged = false
@@ -18,7 +17,6 @@ internal class HomeUiState {
     var homeUpdates: TextView? = null
     var clockView: TextView? = null
     var clockTick: Runnable? = null
-    val typeButtons = mutableMapOf<ContentType, View>()
     val homeShelfLoads = mutableSetOf<ContentType>()
     val queuedHomeShelfRefresh = mutableSetOf<ContentType>()
     var initialCatalogPending = true

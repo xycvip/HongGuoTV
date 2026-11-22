@@ -117,6 +117,9 @@ data class TvColors(
     // 局部组件
     val badgeSurface: Int,
     val selectedSurface: Int,
+    // 主导航竖栏：比页面底色更沉一层，靠一条细线切出"框架"感
+    val rail: Int,
+    val railStroke: Int,
     // 顶栏磨砂：三段渐变 + 描边
     val navTop: Int,
     val navMid: Int,
@@ -148,6 +151,8 @@ data class TvColors(
             info = TvPalette.BLUE_400,
             badgeSurface = 0xFF1C1F27.toInt(),
             selectedSurface = 0xFF3D2722.toInt(),
+            rail = TvPalette.INK_950,
+            railStroke = 0x14FFFFFF,
             navTop = 0xE82A3340.toInt(),
             navMid = 0xDA181F2A.toInt(),
             navBottom = 0xE0111720.toInt(),
@@ -178,6 +183,8 @@ data class TvColors(
             info = TvPalette.BLUE_700,
             badgeSurface = 0xFF50463C.toInt(),
             selectedSurface = 0xFFE0CEBC.toInt(),
+            rail = TvPalette.PAPER_300,
+            railStroke = 0x1A000000,
             navTop = 0xEEFFFDF7.toInt(),
             navMid = 0xE2F6EFE2.toInt(),
             navBottom = 0xDCEBE1D0.toInt(),

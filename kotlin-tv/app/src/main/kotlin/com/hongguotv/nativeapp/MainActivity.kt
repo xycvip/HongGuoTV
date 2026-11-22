@@ -205,7 +205,6 @@ class MainActivity: Activity() {
     internal var prefetchAttemptAt by navigationUiState::prefetchAttemptAt
     internal var prefetchAttempts by navigationUiState::prefetchAttempts
     internal var homeScreen by homeUiState::homeScreen
-    internal var selectionPreview by homeUiState::selectionPreview
     internal var homeFromCache by homeUiState::homeFromCache
     internal var homeUpdateCount by homeUiState::homeUpdateCount
     internal var launchStarted=android.os.SystemClock.elapsedRealtime()
@@ -358,11 +357,10 @@ class MainActivity: Activity() {
     internal val apiStatusUpdatedAt get() = apiStatusUiState.updatedAt
     internal val apiStatusElapsedMs get() = apiStatusUiState.elapsedMs
     internal val apiStatusAnimators get() = apiStatusUiState.animators
-    internal var catalogNavFrame by apiStatusUiState::catalogNavFrame
     internal var catalogNavFlower by apiStatusUiState::catalogNavFlower
-    internal var catalogNavVisible by apiStatusUiState::catalogNavVisible
+    internal var catalogRailHost by navigationUiState::catalogRailHost
+    internal var catalogContentHost by navigationUiState::catalogContentHost
     internal var apiStatusCheckStarted by apiStatusUiState::checkStarted
-    internal val typeButtons get() = homeUiState.typeButtons
     internal val homeShelfLoads get() = homeUiState.homeShelfLoads
     internal val queuedHomeShelfRefresh get() = homeUiState.queuedHomeShelfRefresh
     internal var searchInput by searchUiState::searchInput

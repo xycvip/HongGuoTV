@@ -22,19 +22,12 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
         // 四叶状态灯位于导航栏的随便播放快捷入口内；点击仍执行随机播放。
         stopApiStatusAnimations()
         apiStatusViews.clear()
-        val flower=ApiStatusFlowerView(this).apply {
-            isFocusable=false; isFocusableInTouchMode=false; isClickable=false
-            background=null
-            contentDescription="四项接口状态指示灯"
+        // 宽屏走左侧竖栏；窄屏（手机）保留原来的顶部横排导航。
+        catalogRailHost?.let { host ->
+            renderNavigationRail(host,container)
+            return
         }
-        listOf("首页","搜索","播放","联想").forEach { name ->
-            apiStatusViews[name]=flower
-            apiStatusResults[name]?.let { (color,detail) ->
-                if(detail.startsWith("检测中") || detail.startsWith("重试中")) animateApiStatus(name,color,detail)
-                else setApiStatus(name,color,detail)
-            }
-        }
-        catalogNavFlower=flower
+        val flower=createApiStatusFlower()
         // 指示灯直接挂在导航栏容器内，使用 CENTER_VERTICAL 对齐导航栏中心线。
         // 叶片绘制尺寸变化不会参与定位计算，缩放时中心坐标始终固定。
 
@@ -189,8 +182,6 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
             item.nextFocusRightId=pageNavItems.getOrNull(index+1)?.id ?: item.id
         }
         nav.forEach { it.nextFocusUpId=it.id }
-        catalogNavFrame=navFrame
-        catalogNavVisible=true
         container.addView(navFrame,lp(-1,dp(52)))
 }
 
@@ -206,7 +197,7 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
                 addChip(sectionRow,"最近观看",tab==4) { if(tab!=4) switchTab(4) },
                 addChip(sectionRow,"收藏",tab==3) { if(tab!=3) switchTab(3) }
             )
-            navForTab().nextFocusDownId=sectionButtons.first().id
+            // 竖栏里"下"应该继续在竖栏内换页，这里不再把下键硬接到内容上。
             sectionButtons.forEachIndexed { index,button ->
                 button.tag=if(index==0) "watch:recent" else "watch:favorite"
                 button.nextFocusUpId=navForTab().id
@@ -363,5 +354,4 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
             val defaultSource=if(actorRanking) if(actorRankSubBoard=="ranklist_actor_fans") "来源：红果演员星光榜" else "来源：红果演员剧星榜" else rankBoard.sourceText
             rankSubtitle=text(if(loading) "正在读取最新榜单…" else if(actorRanking) defaultSource else ranking?.updatedText?.ifBlank { defaultSource } ?: defaultSource,TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary).apply { setPadding(dp(2),0,0,dp(10)) }
             container.addView(rankSubtitle)
-            nav.forEach { it.nextFocusDownId=boardRow.getChildAt(0)?.id ?: View.NO_ID }
 }

@@ -48,6 +48,8 @@ internal object TvMetric {
     const val RADIUS_PILL = 28
 
     /** 行高（dp）。设置行、列表行统一这两个值，不再逐处试数字。 */
+    const val RAIL_WIDE = 104
+    const val RAIL_NARROW = 96
     const val ROW_HEIGHT = 56
     const val ROW_HEIGHT_COMPACT = 44
 
