@@ -3,7 +3,6 @@ package com.hongguotv.nativeapp
 import com.hongguotv.core.CloudProgress
 import com.hongguotv.core.ContentType
 import com.hongguotv.core.Series
-import android.view.View
 import android.widget.TextView
 
 internal class HomeUiState {

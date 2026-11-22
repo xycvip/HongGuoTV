@@ -2,7 +2,6 @@
 package com.hongguotv.nativeapp
 
 import android.graphics.Color
-import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup

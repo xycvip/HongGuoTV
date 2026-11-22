@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
-import android.content.Context
-import android.graphics.Color
 import android.text.TextUtils
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.view.*
 import android.widget.*
 import androidx.media3.common.*

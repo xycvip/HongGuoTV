@@ -19,7 +19,6 @@ import android.widget.TextView
 import androidx.core.content.FileProvider
 import com.hongguotv.core.AppUpdate
 import com.hongguotv.core.AppUpdateRepository
-import com.hongguotv.core.UpdateFiles
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors

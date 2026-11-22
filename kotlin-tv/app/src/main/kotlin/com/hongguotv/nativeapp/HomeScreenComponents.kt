@@ -2,13 +2,8 @@
 package com.hongguotv.nativeapp
 
 import android.content.Context
-import android.graphics.Typeface
-import android.text.TextUtils
 import android.view.ViewConfiguration
 import android.widget.HorizontalScrollView
-import android.widget.LinearLayout
-import android.widget.TextView
-import com.hongguotv.core.Series
 
 // 首页横向手势容器与选中剧集预览控件。
 /** Lets the vertical page container arbitrate gestures; this view only handles horizontal drags. */

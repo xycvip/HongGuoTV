@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp
 
-import android.view.View
 import android.widget.LinearLayout
 import com.hongguotv.core.*
 

@@ -1,6 +1,5 @@
 package com.hongguotv.nativeapp
 
-import android.view.View
 import android.widget.TextView
 import java.io.File
 import java.util.concurrent.Executors

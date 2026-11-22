@@ -2,7 +2,6 @@ package com.hongguotv.nativeapp
 
 import android.animation.ValueAnimator
 import android.view.View
-import android.widget.FrameLayout
 import com.hongguotv.core.RequestScope
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Future

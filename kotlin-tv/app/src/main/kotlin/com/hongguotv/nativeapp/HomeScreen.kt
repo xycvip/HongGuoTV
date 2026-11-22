@@ -10,7 +10,6 @@ import android.text.TextUtils
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.widget.*
 import com.hongguotv.core.Series
 

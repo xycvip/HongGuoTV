@@ -3,7 +3,6 @@ package com.hongguotv.nativeapp
 
 import android.app.Activity
 import android.app.Dialog
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View

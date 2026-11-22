@@ -1,6 +1,5 @@
 package com.hongguotv.nativeapp
 
-import android.view.View
 import android.widget.TextView
 
 internal class FavoriteUiState {
