@@ -11,9 +11,12 @@ android {
         applicationId = System.getenv("HONGGUOTV_APPLICATION_ID") ?: "com.x.hongguotv"
         manifestPlaceholders["appLabel"] = System.getenv("HONGGUOTV_APP_LABEL") ?: "红果TV"
         minSdk = 26
-        targetSdk = 28
+        // targetSdk 34：兼容 Play 2024 起的最低要求。本项目没有 Service/通知，
+        // 主要适配点是 Scoped Storage（备份目录已迁到应用专属存储）与导出组件声明。
+        targetSdk = 34
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 12
         versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: appVersionProperties.getProperty("APP_VERSION", "1.0.0")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }
     signingConfigs {
@@ -28,7 +31,7 @@ android {
     buildTypes { getByName("release") { signingConfig = signingConfigs.getByName("delivery"); isMinifyEnabled = true; isShrinkResources = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
     kotlinOptions { jvmTarget = "17" }
-    // 本项目是侧载 TV 应用；为验证传统公共目录存储兼容性，暂时允许较低 targetSdk。
+    // 侧载 TV 应用；targetSdk 与 Play 商店要求保持一致。
     lint { disable += "ExpiredTargetSdkVersion" }
     // bcprov 只用到 SM3Digest，PQC/X509 的附属资源文件（约 1.2MB）用不到，打包时排除
     packaging { resources.excludes += setOf("META-INF/versions/**", "META-INF/*.kotlin_module", "org/bouncycastle/pqc/**", "org/bouncycastle/x509/**") }
@@ -52,4 +55,10 @@ dependencies {
     // 本地单测：CMS 解析跑在 JVM，需要真实 org.json 实现（Android 平台 stub 未 mock）
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+    // Robolectric：JVM 上运行真实 Android 框架代码（View 构建、焦点、drawable），
+    // 沙箱没有 KVM 起不了模拟器，用它替代仪器化测试做 UI 层验证。
+    testImplementation("org.robolectric:robolectric:4.16")
+    testImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }

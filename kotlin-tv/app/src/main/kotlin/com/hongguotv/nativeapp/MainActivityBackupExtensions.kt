@@ -2,7 +2,6 @@
 package com.hongguotv.nativeapp
 
 import android.app.Activity
-import android.os.Build
 import android.view.*
 import android.content.Intent
 import android.net.Uri
@@ -12,7 +11,20 @@ import com.hongguotv.core.*
 import java.util.Locale
 
 internal fun MainActivity.backupFolder(): java.io.File {
-    return java.io.File(android.os.Environment.getExternalStorageDirectory(), "HongGuoTV")
+    // targetSdk 30+ 起公共根目录不再可写（requestLegacyExternalStorage 也被忽略），
+    // 备份目录迁到应用专属外部存储；首次进入时把旧版留在 /storage/emulated/0/HongGuoTV
+    // 的备份搬过来，避免升级后「备份丢了」。
+    val dir=java.io.File(getExternalFilesDir(null) ?: filesDir,"backup").apply { mkdirs() }
+    runCatching {
+        val legacy=java.io.File(android.os.Environment.getExternalStorageDirectory(),"HongGuoTV")
+        if(legacy.isDirectory) {
+            legacy.listFiles()?.filter { it.isFile && it.extension.equals("json",true) }?.forEach { file ->
+                val target=java.io.File(dir,file.name)
+                if(!target.exists()) file.copyTo(target)
+            }
+        }
+    }
+    return dir
 }
 
 
@@ -75,34 +87,12 @@ internal fun MainActivity.backupFolder(): java.io.File {
         export.post { if(dialog.isShowing) export.requestFocus() }
     }
 
-    internal fun MainActivity.hasBackupStoragePermission(): Boolean {
-        val readGranted = Build.VERSION.SDK_INT < 23 ||
-            checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        val writeGranted = Build.VERSION.SDK_INT < 23 ||
-            checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        return readGranted && writeGranted
-    }
+    // 备份目录已迁到应用专属存储，读写不再需要任何运行时权限；
+    // 这两个入口保留是为了让调用方（备份对话框 / 调试日志 / 远程文件管理）不用改流程。
+    internal fun MainActivity.hasBackupStoragePermission(): Boolean = true
 
     internal fun MainActivity.ensureBackupStoragePermission() {
-        val readGranted = Build.VERSION.SDK_INT < 23 ||
-            checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        val writeGranted = Build.VERSION.SDK_INT < 23 ||
-            checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (readGranted && writeGranted) {
-            runPendingBackupAction()
-            return
-        }
-        if (Build.VERSION.SDK_INT >= 23) {
-            requestPermissions(
-                arrayOf(
-                    android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                ),
-                REQUEST_STORAGE_PERMISSION
-            )
-        } else {
-            runPendingBackupAction()
-        }
+        runPendingBackupAction()
     }
 
     internal fun MainActivity.runPendingBackupAction() {
@@ -153,7 +143,7 @@ internal fun MainActivity.backupFolder(): java.io.File {
             main.post {
                 if (isDestroyed || resettingAllData) return@post
                 result.onSuccess { path ->
-                    tvTools.info("备份已保存", "备份文件已保存到公共目录：\n${path}\n\n卸载红果 TV 通常不会删除此文件。", anchor)
+                    tvTools.info("备份已保存", "备份文件已保存到：\n${path}\n\n该目录随应用卸载一起删除，重要备份请用「远程文件管理」取出。", anchor)
                 }.onFailure { error ->
                     tvTools.info("备份失败", "无法保存备份文件：${error.message ?: "未知错误"}", anchor)
                 }
@@ -301,26 +291,6 @@ internal fun MainActivity.backupFolder(): java.io.File {
             }
         }
     }
-
-internal fun MainActivity.handleBackupPermissionResult(requestCode: Int, grantResults: IntArray) {
-    if (resettingAllData) return
-    if (requestCode != REQUEST_STORAGE_PERMISSION) return
-    val action = pendingBackupAction
-    val granted = grantResults.isNotEmpty() &&
-        grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }
-    if (granted) {
-        runPendingBackupAction()
-    } else {
-        tvTools.info(
-            "需要存储权限",
-            if (action == 2) "调试模式需要访问公共存储目录，才能将诊断日志保存到 HongGuoTV 文件夹。允许存储权限后可重新开启。"
-            else if (action == 3) "远程文件管理需要访问电视公共存储目录，允许存储权限后才能通过局域网浏览和传输文件。"
-            else "红果 TV 需要访问公共存储目录，才能在 HongGuoTV 文件夹中保存或读取备份。你可以在系统设置中允许存储权限后重试。",
-            pendingBackupAnchor
-        )
-        pendingBackupAction = -1
-    }
-}
 
 internal fun MainActivity.handleBackupActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
     if (resettingAllData) return

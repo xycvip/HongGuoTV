@@ -6,7 +6,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.graphics.Typeface
-import android.text.TextUtils
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -30,15 +29,11 @@ class HomeScreen(
     data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
     data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null)
     data class Position(val focus: String,val shelf: String?,val column: Int,val row: Int,val vertical: Int,val horizontal: Map<String,Int>)
-    private data class Card(val key: String,val view: LinearLayout,val image: ImageView?,val title: TextView,val label: TextView,val progress: ProgressBar?,var entry: Entry?,var pending: Boolean=false)
+    private data class Card(val key: String,val view: FrameLayout,val poster: PosterCard,var entry: Entry?,var pending: Boolean=false)
     private data class Row(val key: String,val block: LinearLayout,val horizontal: HorizontalScrollView,val cards: List<Card>)
     private val accent=TvStyle.accent
     private fun dp(n: Int)=(n*resources.displayMetrics.density).toInt()
     private fun shape(focus: Boolean)=TvStyle.card(context,focus)
-    /** 海报底部渐隐，供标题压图使用；终点用墨黑而非主题背景，浅色主题下也能压住浅色画面。 */
-    private fun posterScrim()=android.graphics.drawable.GradientDrawable(
-        android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(android.graphics.Color.TRANSPARENT,withAlpha(TvPalette.INK_950,.88f)))
     private fun label(value: String,size: Float,color: Int=TvStyle.text)=TextView(context).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
     private val scroll=ScrollView(context).apply {
         isVerticalScrollBarEnabled=false; clipToPadding=false; clipChildren=false
@@ -125,9 +120,11 @@ class HomeScreen(
     /** Update an existing card without replacing views or moving focus. Structural changes use updateShelves. */
     fun updateEntry(shelfKey: String,entry: Entry): Boolean {
         val card=cards["$shelfKey:${entry.series.id}"] ?: return false
-        if(card.entry?.series?.cover!=entry.series.cover) { card.image?.setImageDrawable(null) }
-        card.entry=entry; card.title.text=entry.series.title; card.label.text=entry.label
-        card.progress?.apply { progress=entry.progress ?: 0; visibility=if(entry.progress==null) INVISIBLE else VISIBLE }
+        if(card.entry?.series?.cover!=entry.series.cover) { card.poster.image?.setImageDrawable(null) }
+        card.entry=entry
+        card.poster.title?.text=entry.series.title
+        card.poster.badge?.text=entry.label
+        card.poster.setProgressRatio(entry.progress?.let { it/100f })
         card.view.contentDescription="${shelves.firstOrNull { it.key==shelfKey }?.title.orEmpty()}，${entry.series.title}，${entry.label}"
         shelves=shelves.map { shelf -> if(shelf.key==shelfKey) shelf.copy(entries=shelf.entries.map { if(it.series.id==entry.series.id) entry else it }) else shelf }
         loadNearbySelection()
@@ -190,75 +187,25 @@ class HomeScreen(
                 val width=if(shelf.key=="random") dp(320)
                     else ((available-dp(4)-dp(14)*columnCount)/columnCount).toInt().coerceAtLeast(dp(96))
                 val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
-                val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(4)); background=shape(false) }
-                val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.CENTER_CROP; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
-                val posterHeight=if(shelf.key=="random") dp(76) else ((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()
-                // 海报容器：圆角裁剪，标题稍后压进底部遮罩。原来图片是方角且 FIT_CENTER，
-                // 非 0.7 比例的封面会在卡里留黑边，标题又单独占一行，卡面显得零碎。
-                var artwork: FrameLayout? = null
-                if(image!=null) {
-                    artwork=FrameLayout(context).apply {
-                        background=TvStyle.shape(context,TvStyle.colors.surface,radius=12)
-                        clipToOutline=true
-                        addView(image,FrameLayout.LayoutParams(-1,-1))
-                        addView(View(context).apply { background=posterScrim() },FrameLayout.LayoutParams(-1,(posterHeight*.42f).toInt(),Gravity.BOTTOM))
-                    }
-                    view.addView(artwork,LayoutParams(-1,posterHeight))
-                } else {
-                    // “查看全部”使用完整的探索卡片，不再是空白海报框里孤零零的箭头。
-                    val moreTile=LinearLayout(context).apply {
-                        orientation=VERTICAL
-                        gravity=Gravity.CENTER
-                        setPadding(dp(8),dp(10),dp(8),dp(10))
-                        background=android.graphics.drawable.GradientDrawable(
-                            android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                            intArrayOf(TvStyle.surface,TvStyle.background)
-                        ).apply {
-                            cornerRadius=dp(8).toFloat()
-                            setStroke(dp(1),TvStyle.outline)
-                        }
-                    }
-                    if(shelf.key=="random") {
-                        moreTile.orientation=HORIZONTAL
-                        moreTile.gravity=Gravity.CENTER
-                        moreTile.addView(label("✦",25f,accent).apply {
-                            gravity=Gravity.CENTER
-                            setPadding(0,0,dp(14),0)
-                        })
-                        moreTile.addView(label("不知道看什么·点一下",16f,TvStyle.text).apply {
-                            gravity=Gravity.CENTER
-                            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                        })
-                        moreTile.addView(label("  ›",20f,accent).apply { gravity=Gravity.CENTER })
+                val isRandom=shelf.key=="random"
+                val mode=when { entry!=null -> PosterCard.Mode.POSTER; isRandom -> PosterCard.Mode.RANDOM; else -> PosterCard.Mode.MORE }
+                val posterHeight=if(isRandom) dp(98) else ((width-dp(6))/TvStyle.POSTER_ASPECT).toInt()
+                // 卡片视觉统一走 PosterCard：首页货架与剧场/榜单网格从此是同一套实现。
+                val poster=PosterCard.create(context,mode,if(entry!=null) null else width,if(entry!=null) null else posterHeight)
+                val view=poster.card
+                view.id=View.generateViewId(); view.tag=key
+                if(mode==PosterCard.Mode.POSTER) {
+                    poster.title?.text=entry?.series?.title
+                    if(isRandom) {
+                        // 随机推荐里的剧集卡是横条里的紧凑缩略图：副信息与进度都不展示。
+                        poster.badge?.visibility=View.GONE
+                        poster.artwork?.layoutParams?.height=dp(76)
                     } else {
-                        moreTile.addView(label("✦",30f,accent).apply {
-                            gravity=Gravity.CENTER
-                            setPadding(0,0,0,dp(8))
-                        })
-                        moreTile.addView(label("探索更多",14f,TvStyle.text).apply {
-                            gravity=Gravity.CENTER
-                            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                        })
-                        moreTile.addView(label("发现精彩剧集  ›",10f,TvStyle.muted).apply {
-                            gravity=Gravity.CENTER
-                            setPadding(0,dp(6),0,0)
-                        })
+                        poster.badge?.text=entry?.label ?: shelf.title
+                        poster.setProgressRatio(entry?.progress?.let { it/100f })
                     }
-                    view.addView(moreTile,LayoutParams(-1,if(shelf.key=="random") dp(96) else posterHeight))
                 }
-                // 标题压在海报底部遮罩上：字号提一档、只留一行，卡片下方只保留集数/进度。
-                val title=label(entry?.series?.title ?: "查看全部",15f,TvPalette.INK_100).apply {
-                    setLines(1); ellipsize=TextUtils.TruncateAt.END
-                    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                }
-                artwork?.addView(title,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM).apply { leftMargin=dp(11); rightMargin=dp(11); bottomMargin=dp(9) })
-                val badge=label(entry?.label ?: shelf.title,TvMetric.TEXT_CAPTION,TvStyle.colors.textTertiary).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) }
-                val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }
-                if(shelf.key!="random") {
-                    view.addView(badge)
-                    view.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(5) })
-                }
-                val card=Card(key,view,image,title,badge,progress,entry)
+                val card=Card(key,view,poster,entry)
                 view.contentDescription=entry?.let { "${shelf.title}，${it.series.title}，${it.label}" } ?: "查看全部${shelf.title}"
                 view.setOnClickListener { lastFocus=key; remember(key); card.entry?.let { open(it.series,it.resume) } ?: moreAction?.invoke() }
                 if(entry!=null) {
@@ -266,11 +213,7 @@ class HomeScreen(
                     view.setOnKeyListener { _,code,event -> if(code==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { lastFocus=key; remember(key); card.entry?.let { actions(it.series,view) } }; true } else false }
                 }
                 view.setOnFocusChangeListener { _,focused ->
-                    view.background=shape(focused)
-                    // 遥控器逐格移动时给一点位移反馈；缩放要靠上面几层容器 clipChildren=false 才不被裁掉。
-                    view.animate().scaleX(if(focused) 1.04f else 1f).scaleY(if(focused) 1.04f else 1f)
-                        .setDuration(if(focused) 150 else 110)
-                        .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                    poster.paintFocus(focused,1.04f)
                     if(focused) {
                         lastFocus=key; remember(key)
                         if(!restoring) {
@@ -280,7 +223,7 @@ class HomeScreen(
                         lastRow=shelf.key
                     }
                 }
-                line.addView(view,LayoutParams(width,if(shelf.key=="random") dp(104) else -1).apply {
+                line.addView(view,LinearLayout.LayoutParams(width,if(isRandom) dp(104) else -1).apply {
                     rightMargin=dp(14)
                 }); rowCards+=card; cards[key]=card
             }
@@ -366,7 +309,7 @@ class HomeScreen(
         rows.getOrNull(row+1)?.cards?.take(6)?.forEach(::requestCover)
     }
     private fun requestCover(card: Card) {
-        val image=card.image ?: return
+        val image=card.poster.image ?: return
         if(card.pending || card.entry?.series?.cover.isNullOrBlank()) return
         val ticket=revision
         fun start() {
@@ -395,13 +338,14 @@ class HomeScreen(
         rows.forEach { row ->
             // 随机推荐操作卡片使用独立固定尺寸，不参与海报高度自适应。
             if(row.key=="random") return@forEach
-            val textHeight=row.cards.maxOf { item -> item.view.paddingTop+item.view.paddingBottom+(1 until item.view.childCount).sumOf { child ->
-                val view=item.view.getChildAt(child); val params=view.layoutParams as LayoutParams
-                view.measuredHeight+params.topMargin+params.bottomMargin
-            } }
-            val desired=((row.cards.first().view.width-dp(8))/TvStyle.POSTER_ASPECT).toInt()
-            val imageHeight=minOf(desired,(height-row.block.getChildAt(0).measuredHeight-textHeight-dp(8)).coerceAtLeast(dp(48)))
-            row.cards.forEach { card -> card.view.getChildAt(0).let { artwork -> if(artwork.layoutParams.height!=imageHeight) artwork.layoutParams=artwork.layoutParams.apply { height=imageHeight } } }
+            // 卡片本体就是海报（标题已压进遮罩层），可用高度只剩货架标题行与上下留白。
+            val heading=row.block.getChildAt(0).measuredHeight
+            val desired=((row.cards.first().view.width-dp(6))/TvStyle.POSTER_ASPECT).toInt()
+            val imageHeight=minOf(desired,(height-heading-dp(10)).coerceAtLeast(dp(48)))
+            row.cards.forEach { card ->
+                val artwork=card.poster.artwork ?: return@forEach
+                if(artwork.layoutParams.height!=imageHeight) artwork.layoutParams=artwork.layoutParams.apply { height=imageHeight }
+            }
         }
     }
     fun firstId()=heroView?.id ?: rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id

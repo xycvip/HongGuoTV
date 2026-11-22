@@ -52,7 +52,7 @@ import java.util.Locale
                     debugLog("调试模式已开启，日志文件：${file.absolutePath}")
                     debugLog(debugEnvironmentSnapshot())
                     attachDebugOverlay()
-                    Toast.makeText(this,"调试模式已开启，日志保存在 HongGuoTV 文件夹",Toast.LENGTH_LONG).show()
+                    Toast.makeText(this,"调试模式已开启，日志文件路径见调试悬浮层",Toast.LENGTH_LONG).show()
                 }.onFailure { error ->
                     getSharedPreferences("debug-mode-v1",Context.MODE_PRIVATE).edit().putBoolean("enabled",false).apply()
                     updateDebugSettingLabel()

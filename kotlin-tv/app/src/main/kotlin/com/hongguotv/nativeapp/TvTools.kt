@@ -231,7 +231,7 @@ class TvTools(private val activity: Activity) {
             content.addView(placeholder,LinearLayout.LayoutParams(-2,-2).apply {
                 topMargin=dp(16); bottomMargin=dp(14)
             })
-            content.addView(label("目录：/storage/emulated/0/HongGuoTV/\n端口：${LibraryTransferServer.DEFAULT_PORT}\n获取到 IPv4 地址后，二维码会在重新打开本页时生成。",13f).apply {
+            content.addView(label("目录：${activity.getExternalFilesDir("HongGuoTV")?.absolutePath ?: "应用专属目录"}\n端口：${LibraryTransferServer.DEFAULT_PORT}\n获取到 IPv4 地址后，二维码会在重新打开本页时生成。",13f).apply {
                 gravity=Gravity.CENTER
                 setTextColor(TvStyle.muted)
                 setPadding(dp(8),dp(14),dp(8),dp(4))
@@ -241,7 +241,8 @@ class TvTools(private val activity: Activity) {
 
         worker.execute {
             try {
-                val folder=android.os.Environment.getExternalStorageDirectory()
+                // 应用专属外部存储：不需要存储权限，targetSdk 30+ 上公共根目录已不可写。
+                val folder=activity.getExternalFilesDir("HongGuoTV") ?: java.io.File(activity.filesDir,"HongGuoTV").apply { mkdirs() }
                 val session=LibraryTransferServer(address,folder,onExpired = {
                     main.post {
                         if(this@TvTools.dialog===dialog) {
@@ -298,7 +299,7 @@ class TvTools(private val activity: Activity) {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
                     })
-                    val details=label("目录：/storage/emulated/0/HongGuoTV/\n端口：${LibraryTransferServer.DEFAULT_PORT}\n可浏览、上传和下载任意文件；关闭此窗口即停止服务。公网地址能否从外部访问，取决于运营商及网络防火墙。",13f).apply {
+                    val details=label("目录：${activity.getExternalFilesDir("HongGuoTV")?.absolutePath ?: "应用专属目录"}\n端口：${LibraryTransferServer.DEFAULT_PORT}\n可浏览、上传和下载任意文件；关闭此窗口即停止服务。公网地址能否从外部访问，取决于运营商及网络防火墙。",13f).apply {
                         gravity=Gravity.CENTER
                         setTextColor(TvStyle.muted)
                         setPadding(dp(8),dp(14),dp(8),dp(4))

@@ -2,8 +2,6 @@
 package com.hongguotv.nativeapp
 
 import android.graphics.Color
-import android.graphics.Typeface
-import android.text.TextUtils
 import android.view.*
 import android.widget.*
 import androidx.recyclerview.widget.RecyclerView
@@ -43,81 +41,11 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             frame.layoutParams=RecyclerView.LayoutParams(-1,-2).apply { rightMargin=dp(14); bottomMargin=dp(10) }
             return object: RecyclerView.ViewHolder(frame) {}
         }
-        // 卡片本体：透明底 + 3dp 内缩，焦点环画在背景上，和海报之间留一道缝，环不会压住画面。
-        val card=FrameLayout(host).apply {
-            setPadding(dp(3),dp(3),dp(3),dp(3))
-            clipChildren=false
-            isFocusable=true
-            isFocusableInTouchMode=true
-        }
-        // 海报容器按自身实际测量宽度定高，回收复用、列宽变化都不会出现同屏高低不一
-        val artwork=object: FrameLayout(host) {
-            override fun onMeasure(widthMeasureSpec: Int,heightMeasureSpec: Int) {
-                val w=MeasureSpec.getSize(widthMeasureSpec)
-                super.onMeasure(widthMeasureSpec,MeasureSpec.makeMeasureSpec((w/TvStyle.POSTER_ASPECT).toInt(),MeasureSpec.EXACTLY))
-            }
-        }
-        val image=ImageView(host).apply { scaleType=ImageView.ScaleType.CENTER_CROP; importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }
-        // 海报本身裁成圆角：原来只有底板是圆角，方角图片压在上面，边缘会露出一圈直角
-        artwork.background=rounded(TvStyle.surface)
-        artwork.clipToOutline=true
-        artwork.addView(image,FrameLayout.LayoutParams(-1,-1))
-        // 底部压暗：剧照亮度不可控（白底、雪景、高光都常见），标题必须始终读得出来。
-        val scrim=View(host).apply {
-            background=posterScrim(.96f)
-            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-        artwork.addView(scrim,FrameLayout.LayoutParams(-1,dp(104),Gravity.BOTTOM))
+        // 卡片视觉统一由 PosterCard 构建（与首页货架同一实现），这里只负责网格间距。
+        val poster=PosterCard.create(host,PosterCard.Mode.POSTER)
+        poster.card.layoutParams=RecyclerView.LayoutParams(-1,-2).apply { rightMargin=dp(12); bottomMargin=dp(14) }
+        return CardHolder(poster)
 
-        val track=LinearLayout(host).apply { orientation=LinearLayout.HORIZONTAL }
-        val progressFill=View(host).apply { setBackgroundColor(TvStyle.colors.accent) }
-        val progressRest=View(host).apply { setBackgroundColor(withAlpha(TvPalette.INK_100,.20f)) }
-        track.addView(progressFill,LinearLayout.LayoutParams(0,dp(4),0f))
-        track.addView(progressRest,LinearLayout.LayoutParams(0,dp(4),1f))
-        artwork.addView(track,FrameLayout.LayoutParams(-1,dp(4),Gravity.BOTTOM))
-
-        val info=LinearLayout(host).apply {
-            orientation=LinearLayout.VERTICAL
-            setPadding(dp(11),0,dp(11),dp(9))
-        }
-        val title=text("",TvMetric.TEXT_LABEL).apply {
-            setLines(1); includeFontPadding=false
-            ellipsize=TextUtils.TruncateAt.END
-            setTextColor(withAlpha(TvPalette.INK_100,.97f))
-            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-        }
-        // 副信息一行封顶：回收复用时有无副信息都不会让标题上下跳。
-        val badge=text("",TvMetric.TEXT_CAPTION).apply {
-            maxLines=1; minLines=1
-            setPadding(0,dp(3),0,0)
-            includeFontPadding=false
-            ellipsize=TextUtils.TruncateAt.END
-            setTextColor(withAlpha(TvPalette.INK_300,.92f))
-        }
-        info.addView(title,lp(-1,-2))
-        info.addView(badge,lp(-1,-2))
-        artwork.addView(info,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM).apply { bottomMargin=dp(3) })
-
-        // 名次方牌：只放数字。左边距 9dp 与标题左边距对齐，视觉上压在一条竖线上。
-        val rank=TextView(host).apply {
-            textSize=TvMetric.TEXT_BODY
-            gravity=Gravity.CENTER
-            includeFontPadding=false
-            minWidth=dp(24); minHeight=dp(24)
-            setPadding(dp(7),dp(2),dp(7),dp(3))
-            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-            setTextColor(TvPalette.INK_100)
-            background=TvStyle.shape(host,withAlpha(TvPalette.INK_950,.66f),Color.TRANSPARENT,TvMetric.RADIUS_S)
-        }
-        artwork.addView(rank,FrameLayout.LayoutParams(-2,-2,Gravity.TOP or Gravity.START).apply {
-            leftMargin=dp(9); topMargin=dp(9)
-        })
-
-        // 高度由 artwork 自己按比例测量，这里用 wrap_content 交接，父容器不会把它拉成满高。
-        card.addView(artwork,FrameLayout.LayoutParams(-1,-2))
-        card.layoutParams=RecyclerView.LayoutParams(-1,-2).apply { rightMargin=dp(12); bottomMargin=dp(14) }
-        return CardHolder(card,artwork,image,rank,title,badge,progressFill,progressRest)
-    
     }
 }
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder,position: Int) {
@@ -207,11 +135,7 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
         card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP && !actorRanked) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
         // 焦点态：白色环画在卡片背景上（海报外侧 3dp），同时轻微放大并抬升。
         fun paintCard(focused: Boolean) {
-            card.background=if(focused) {
-                TvStyle.shape(host,Color.TRANSPARENT,TvStyle.colors.focusRing,TvMetric.RADIUS_M)
-            } else null
-            card.elevation=if(focused) dp(10).toFloat() else 0f
-            card.animateFocus(focused,1.045f)
+            holder.poster.paintFocus(focused)
         }
         paintCard(false)
         card.setOnFocusChangeListener { _,focused ->
@@ -268,16 +192,15 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
 }
 }
 
-internal class CardHolder(
-    val card: View,
-    val artwork: FrameLayout,
-    val image: ImageView,
-    val rank: TextView,
-    val title: TextView,
+internal class CardHolder(val poster: PosterCard) : RecyclerView.ViewHolder(poster.card) {
+    val card: View get()=poster.card
+    val artwork: FrameLayout get()=poster.artwork as FrameLayout
+    val image: ImageView get()=poster.image!!
+    val rank: TextView get()=poster.rank!!
+    val title: TextView get()=poster.title!!
     /** 副信息（集数 / 热度 / 人气 / 收藏进度）。收藏页会直接改写这里的文字。 */
-    val badge: TextView,
-    val progressFill: View,
-    val progressRest: View,
-) : RecyclerView.ViewHolder(card) {
+    val badge: TextView get()=poster.badge!!
+    val progressFill: View get()=poster.progressFill!!
+    val progressRest: View get()=poster.progressRest!!
     var boundId=""
 }

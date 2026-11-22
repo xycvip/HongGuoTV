@@ -611,7 +611,6 @@ class MainActivity: Activity() {
 
     internal var pendingBackupAction by backupUiState::pendingAction
     internal var pendingBackupAnchor by backupUiState::pendingAnchor
-    internal val REQUEST_STORAGE_PERMISSION = 7203
 
 
 
@@ -642,7 +641,6 @@ class MainActivity: Activity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        handleBackupPermissionResult(requestCode, grantResults)
     }
 
 
