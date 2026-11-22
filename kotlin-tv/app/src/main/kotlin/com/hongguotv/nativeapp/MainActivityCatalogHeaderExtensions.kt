@@ -197,39 +197,36 @@ internal fun MainActivity.renderCatalogHeader(container: LinearLayout, compactHe
 internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
 
             // 追剧页内部切换入口：收藏与最近观看共用同一内容页面，不创建独立页面栈。
+            // 原来两个"标签"自己画白底/深色字，和全站语气分级脱节；现在统一用胶囊。
             val sectionRow=row().apply {
                 gravity=Gravity.CENTER_VERTICAL
-                setPadding(0,dp(8),0,dp(4))
+                setPadding(0,dp(TvMetric.GAP_S),0,dp(TvMetric.GAP_XS))
             }
             val sectionButtons=listOf(
-                addButton(sectionRow,"最近观看",tab==4) { if(tab!=4) switchTab(4) },
-                addButton(sectionRow,"收藏",tab==3) { if(tab!=3) switchTab(3) }
+                addChip(sectionRow,"最近观看",tab==4) { if(tab!=4) switchTab(4) },
+                addChip(sectionRow,"收藏",tab==3) { if(tab!=3) switchTab(3) }
             )
             navForTab().nextFocusDownId=sectionButtons.first().id
             sectionButtons.forEachIndexed { index,button ->
                 button.tag=if(index==0) "watch:recent" else "watch:favorite"
-                button.minHeight=dp(38)
-                button.setPadding(dp(18),dp(7),dp(18),dp(7))
-                button.isFocusable=true
-                button.isClickable=true
-                fun paintSection(focused:Boolean) {
-                    val active=(index==0 && tab==4) || (index==1 && tab==3)
-                    button.setTextColor(if(focused) bg else if(active) accent else muted)
-                    button.background=rounded(if(focused) white else if(active) TvStyle.selectedSurface else Color.TRANSPARENT)
-                    button.typeface=Typeface.create(if(focused || active) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
-                    button.elevation=if(focused) dp(4).toFloat() else 0f
-                }
-                paintSection(false)
-                button.setOnFocusChangeListener { _,focused -> paintSection(focused) }
                 button.nextFocusUpId=navForTab().id
                 button.nextFocusLeftId=sectionButtons.getOrNull(index-1)?.id ?: button.id
                 button.nextFocusRightId=sectionButtons.getOrNull(index+1)?.id ?: button.id
             }
             container.addView(sectionRow)
-            val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
-            heading.addView(text(if(tab==3) "我的收藏" else "接着上次看",26f).apply { setTypeface(null,Typeface.BOLD); includeFontPadding=false },lp(0,-2).apply { weight=1f })
+            val heading=sectionHeader(
+                if(tab==3) "我的收藏" else "接着上次看",
+                if(tab==3) {
+                    val count=library.favorites().size
+                    if(count==0) "还没有收藏" else "共 $count 部"
+                } else {
+                    val count=library.history().size
+                    if(count==0) "还没有观看记录" else "共 $count 部"
+                },
+                TvMetric.TEXT_TITLE,
+            ).apply { setPadding(0,dp(TvMetric.GAP_S),0,dp(TvMetric.GAP_XS)) }
             if(tab==3) {
-                favoriteCheck=addButton(heading,"检查更新") {
+                favoriteCheck=addToneButton(heading,"检查更新",TvTone.Ghost) {
                     if(favoriteMonitor.running) Toast.makeText(this,"正在检查收藏更新…",Toast.LENGTH_SHORT).show()
                     else if(library.favorites().isEmpty()) Toast.makeText(this,"先收藏几部剧，再来检查更新",Toast.LENGTH_SHORT).show()
                     else { favoriteMonitor.check(force=true); Toast.makeText(this,"开始检查收藏更新…",Toast.LENGTH_SHORT).show() }
@@ -238,11 +235,11 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
             if(tab==4) {
                 historyManage=null
                 lateinit var stats:TextView
-                stats=addButton(heading,"观看统计") { showWatchStats(stats) }.apply {
+                stats=addToneButton(heading,"观看统计",TvTone.Ghost) { showWatchStats(stats) }.apply {
                     tag="recent:watch-stats"
                     nextFocusUpId=navForTab().id
                 }
-                if(library.history().isNotEmpty()) historyManage=addButton(heading,"管理记录") {
+                if(library.history().isNotEmpty()) historyManage=addToneButton(heading,"管理记录",TvTone.Ghost) {
                     val rows=library.history()
                     tvTools.choose("选择要管理的观看记录",rows.map { it.series.title },historyManage,{ index -> manageHistory(rows[index].series,historyManage) },"清空记录") {
                         tvTools.confirm("清空观看记录","将删除本机所有观看进度，收藏会保留。",historyManage) { library.clearHistory(); catalogFocus=""; showCatalog() }
@@ -264,11 +261,11 @@ internal fun MainActivity.renderCatalogLibraryHeader(container: LinearLayout) {
 internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav: List<View>,loading: Boolean) {
 
             // 排行榜页直接从榜单筛选栏开始，不再显示重复的「热播榜」标题及其占位空间。
-            val boardRow=row().apply { setPadding(0,0,0,dp(8)) }
+            val boardRow=row().apply { gravity=Gravity.CENTER_VERTICAL; setPadding(0,dp(2),0,dp(8)) }
             val boardFocusItems=mutableListOf<View>()
             listOf(RankBoard.TOTAL, RankBoard.REAL, RankBoard.AI, RankBoard.COMIC).forEachIndexed { index, board ->
                 val focusTag = "rank:board:${board.name}"
-                val boardButton=addButton(boardRow, board.buttonLabel, !actorRanking && rankBoard == board) {
+                val boardButton=addChip(boardRow, board.buttonLabel, !actorRanking && rankBoard == board) {
                     if (rankBoard != board || actorRanking) {
                         pendingRefreshFocus=focusTag
                         rankFocusTag=focusTag
@@ -287,7 +284,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                 boardFocusItems+=boardButton
                 if(index==0) rankSwitch=boardButton
             }
-            actorRankButton=addButton(boardRow,"演员榜",actorRanking) {
+            actorRankButton=addChip(boardRow,"演员榜",actorRanking) {
                 if(!actorRanking) {
                     pendingRefreshFocus="rank:actor"
                     rankFocusTag="rank:actor"
@@ -312,7 +309,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                     "ranklist_actor_fans" to "星光榜",
                 ).forEach { (subBoard,label) ->
                     val focusTag="rank:actor:$subBoard"
-                    val button=addButton(boardRow,label,actorRankSubBoard==subBoard) {
+                    val button=addChip(boardRow,label,actorRankSubBoard==subBoard) {
                         if(actorRankSubBoard!=subBoard) {
                             pendingRefreshFocus=focusTag
                             rankFocusTag=focusTag
@@ -334,7 +331,7 @@ internal fun MainActivity.renderRankingCatalogHeader(container: LinearLayout,nav
                     boardFocusItems+=button
                 }
             }
-            rankRefresh=addButton(boardRow,"刷新") {
+            rankRefresh=addChip(boardRow,"刷新") {
                 pendingRefreshFocus="rank:refresh"
                 rankFocusTag="rank:refresh"
                 page=1

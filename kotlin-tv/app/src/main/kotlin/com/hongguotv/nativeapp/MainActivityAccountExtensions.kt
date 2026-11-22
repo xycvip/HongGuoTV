@@ -138,13 +138,13 @@ import java.util.concurrent.atomic.AtomicLong
         }
         profileRow.addView(avatar, lp(avatarSize, avatarSize).apply { rightMargin = dp(12) })
         val identity = column()
-        identity.addView(text(cloudAccount.accountLabel, if (mobileLayout) 20f else 25f, white).apply {
+        identity.addView(text(cloudAccount.accountLabel, if (mobileLayout) TvMetric.TEXT_SUBTITLE else TvMetric.TEXT_TITLE, TvStyle.colors.textPrimary).apply {
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }, lp(-1, -2))
-        identity.addView(text("红果账户 · ${cloudAccount.historyStatus}", 12f, muted).apply {
-            setPadding(0, dp(5), 0, 0)
+        identity.addView(text("红果账户 · ${cloudAccount.historyStatus}", TvMetric.TEXT_CAPTION, TvStyle.colors.textSecondary).apply {
+            setPadding(0, dp(TvMetric.GAP_XS), 0, 0)
             maxLines = 2
         }, lp(-1, -2))
         profileRow.addView(identity, lp(0, -2).apply { weight = 1f })
@@ -165,13 +165,13 @@ import java.util.concurrent.atomic.AtomicLong
         }
 
         val actions = row().apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, dp(14)) }
-        addButton(actions, "刷新云端数据") {
+        addToneButton(actions, "刷新云端数据", TvTone.Secondary) {
             cloudAccount.refreshHistory()
             cloudAccount.refreshFavorites()
             cloudAccount.refreshReservations()
             Toast.makeText(this, "正在刷新云端数据…", Toast.LENGTH_SHORT).show()
         }.apply { tag = "account:refresh" }
-        addButton(actions, "退出登录") {
+        addToneButton(actions, "退出登录", TvTone.Ghost) {
             accountSection = 0
             accountQrAutoStarted = false
             cloudAccount.logoutInline()
@@ -184,24 +184,23 @@ import java.util.concurrent.atomic.AtomicLong
         }
         val sections = listOf("观看历史", "账户收藏", "预约·已上线", "预约·待上线")
         sections.forEachIndexed { index, label ->
-            val item = addButton(tabs, label, accountSection == index) {
+            val item = addChip(tabs, label, accountSection == index) {
                 accountSection = index
                 if (index == 2 || index == 3) cloudAccount.refreshReservations()
                 renderAccountContent(host)
             }
             item.tag = "account:tab:$index"
-            item.setTextColor(if (accountSection == index) accent else muted)
         }
         page.addView(tabs, lp(-1, -2))
-        page.addView(View(this).apply { setBackgroundColor(TvStyle.outline) }, lp(-1, dp(1)).apply { bottomMargin = dp(12) })
+        page.addView(hairline(), lp(-1, dp(1)).apply { bottomMargin = dp(TvMetric.GAP_M) })
         var firstAccountArtworkCard: View? = null
 
         fun sectionHeading(title: String, subtitle: String) {
-            page.addView(text(title, if (mobileLayout) 18f else 21f, white).apply {
-                typeface = Typeface.DEFAULT_BOLD
+            page.addView(text(title, if (mobileLayout) TvMetric.TEXT_SUBTITLE else TvMetric.TEXT_TITLE, TvStyle.colors.textPrimary).apply {
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             }, lp(-1, -2))
-            page.addView(text(subtitle, 12f, muted).apply {
-                setPadding(0, dp(5), 0, dp(10))
+            page.addView(text(subtitle, TvMetric.TEXT_CAPTION, TvStyle.colors.textTertiary).apply {
+                setPadding(0, dp(TvMetric.GAP_XS), 0, dp(TvMetric.GAP_M))
             }, lp(-1, -2))
         }
         val artworkShelfRenderer = AccountArtworkShelfRenderer(
@@ -228,9 +227,9 @@ import java.util.concurrent.atomic.AtomicLong
                 val history = cloudAccount.historyRows()
                 sectionHeading("观看历史", if (cloudAccount.historyLoading) "正在同步云端记录…" else "最近观看 · ${history.size} 部")
                 if (history.isEmpty()) {
-                    page.addView(text(if (cloudAccount.historyLoading) "正在读取观看记录…" else "暂无云端观看记录", 14f, muted).apply {
+                    page.addView(text(if (cloudAccount.historyLoading) "正在读取观看记录…" else "暂无云端观看记录", TvMetric.TEXT_BODY, TvStyle.colors.textTertiary).apply {
                         gravity = Gravity.CENTER
-                        setPadding(0, dp(30), 0, dp(30))
+                        setPadding(0, dp(TvMetric.GAP_XXL), 0, dp(TvMetric.GAP_XXL))
                     }, lp(-1, -2))
                 } else addArtworkShelf(history.map { item ->
                     // Keep the same compact episode + elapsed-time label as Home's
@@ -247,9 +246,9 @@ import java.util.concurrent.atomic.AtomicLong
                 sectionHeading("账户收藏", if (fav.loading) "正在读取收藏…" else "已同步 ${fav.rows.size} 部作品")
                 if (!fav.loaded && !fav.loading) cloudAccount.refreshFavorites()
                 if (fav.rows.isEmpty()) {
-                    page.addView(text(if (fav.loading) "正在读取账户收藏…" else fav.message, 14f, muted).apply {
+                    page.addView(text(if (fav.loading) "正在读取账户收藏…" else fav.message, TvMetric.TEXT_BODY, TvStyle.colors.textTertiary).apply {
                         gravity = Gravity.CENTER
-                        setPadding(0, dp(30), 0, dp(30))
+                        setPadding(0, dp(TvMetric.GAP_XXL), 0, dp(TvMetric.GAP_XXL))
                     }, lp(-1, -2))
                 } else addArtworkShelf(fav.rows.map { item ->
                     Triple(item.series, "红果账户收藏") { openDetail(item.series, true) }
@@ -262,9 +261,9 @@ import java.util.concurrent.atomic.AtomicLong
                 if (!state.loaded && !state.loading) cloudAccount.refreshReservations()
                 if (state.rows.isEmpty()) {
                     val emptyText = if (state.loading) "正在读取预约记录…" else if (state.loaded) "暂无${if (online) "预约·已上线" else "预约·待上线"}作品" else state.message
-                    page.addView(text(emptyText, 14f, muted).apply {
+                    page.addView(text(emptyText, TvMetric.TEXT_BODY, TvStyle.colors.textTertiary).apply {
                         gravity = Gravity.CENTER
-                        setPadding(0, dp(30), 0, dp(30))
+                        setPadding(0, dp(TvMetric.GAP_XXL), 0, dp(TvMetric.GAP_XXL))
                     }, lp(-1, -2))
                 } else addArtworkShelf(state.rows.map { item ->
                     val sub = when {

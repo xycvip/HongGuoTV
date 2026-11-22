@@ -590,90 +590,96 @@ private fun pushQr(url:String):Bitmap {
 private fun MainActivity.pushText(value:String,size:Float,color:Int=TvStyle.text)=TextView(this).apply {
     text=value;textSize=size;setTextColor(color);setLineSpacing(dp(6).toFloat(),1f)
 }
-private fun MainActivity.pushAction(parent:LinearLayout,title:String,action:()->Unit):TextView {
-    val view=TextView(this).apply {
-        text=title;textSize=15f;gravity=Gravity.CENTER;setTextColor(Color.WHITE)
-        isFocusable=true;isClickable=true;setPadding(dp(22),dp(13),dp(22),dp(13))
-        background=GradientDrawable().apply { setColor(TvStyle.accent);cornerRadius=dp(12).toFloat() }
-        setOnFocusChangeListener { v,focused -> v.scaleX=if(focused) 1.04f else 1f;v.scaleY=if(focused) 1.04f else 1f;v.elevation=if(focused) dp(6).toFloat() else 0f }
-        setOnClickListener { action() }
-    }
-    parent.addView(view,LinearLayout.LayoutParams(-2,-2).apply { topMargin=dp(12) })
-    return view
-}
 internal fun MainActivity.renderPushPlaybackPage(container:LinearLayout) {
     val scroll=ScrollView(this).apply { isFillViewport=true;isVerticalScrollBarEnabled=false }
     val page=LinearLayout(this).apply {
         orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER
-        setPadding(dp(28),dp(20),dp(28),dp(20))
+        setPadding(dp(TvMetric.GAP_XL),dp(TvMetric.GAP_L),dp(TvMetric.GAP_XL),dp(TvMetric.GAP_L))
     }
     scroll.addView(page,ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
     container.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
+
+    // 整页只有一张卡：左边扫码，右边说明。卡片用表面色 + 1dp 描边，
+    // 不再用圆角灰块堆叠，远看是一块干净的"操作面板"。
     val hero=LinearLayout(this).apply {
         orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
-        setPadding(dp(26),dp(20),dp(26),dp(20))
-        background=GradientDrawable().apply { setColor(TvStyle.surface);cornerRadius=dp(20).toFloat();setStroke(dp(1),TvStyle.outline) }    }
-    val cardTitle=pushText("手机扫码 · 粘贴分享 · 电视即刻播放",20f,TvStyle.text).apply {
-        gravity=Gravity.START
-        typeface=Typeface.DEFAULT_BOLD
-        setPadding(0,0,0,dp(38))
-        maxLines=1
+        setPadding(dp(TvMetric.GAP_XL),dp(TvMetric.GAP_XL),dp(TvMetric.GAP_XL),dp(TvMetric.GAP_XL))
+        background=TvStyle.shape(this@renderPushPlaybackPage,TvStyle.colors.surface,TvStyle.colors.strokeSubtle,TvMetric.RADIUS_XL)
     }
-    hero.addView(cardTitle,LinearLayout.LayoutParams(-1,-2))
-    val contentRow=LinearLayout(this).apply {
-        orientation=LinearLayout.HORIZONTAL;gravity=Gravity.TOP
+    val header=LinearLayout(this).apply {
+        orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
     }
+    header.addView(pushText("手机扫码 · 粘贴分享 · 电视即刻播放",TvMetric.TEXT_TITLE,TvStyle.colors.textPrimary).apply {
+        setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));maxLines=1
+    },LinearLayout.LayoutParams(0,-2,1f))
+    // 状态做成胶囊放在标题右侧：原来它和正文同字号，一整页里没有视觉落点。
+    val status=TextView(this).apply {
+        textSize=TvMetric.TEXT_CAPTION
+        gravity=Gravity.CENTER
+        includeFontPadding=false
+        setPadding(dp(TvMetric.GAP_M),dp(6),dp(TvMetric.GAP_M),dp(7))
+        background=TvStyle.shape(this@renderPushPlaybackPage,withAlpha(TvStyle.colors.accent,.14f),Color.TRANSPARENT,TvMetric.RADIUS_PILL)
+        setTextColor(TvStyle.colors.accent)
+        text="服务启动中…"
+    }
+    header.addView(status,LinearLayout.LayoutParams(-2,-2).apply { leftMargin=dp(TvMetric.GAP_M) })
+    hero.addView(header,LinearLayout.LayoutParams(-1,-2))
+
+    val contentRow=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL;gravity=Gravity.TOP }
+    // 二维码必须保持纯白底：扫码依赖白边静区，这里不跟随主题。
     val qrCard=LinearLayout(this).apply {
-        gravity=Gravity.CENTER;setPadding(dp(8),dp(8),dp(8),dp(8))
+        gravity=Gravity.CENTER
+        setPadding(dp(10),dp(10),dp(10),dp(10))
         isFocusable=true
         isFocusableInTouchMode=true
-        background=GradientDrawable().apply {
-            setColor(Color.WHITE);cornerRadius=dp(14).toFloat();setStroke(dp(1),TvStyle.outline)
-        }
+        background=TvStyle.shape(this@renderPushPlaybackPage,Color.WHITE,Color.TRANSPARENT,TvMetric.RADIUS_L)
         setOnFocusChangeListener { v,focused ->
-            v.background=GradientDrawable().apply {
-                setColor(Color.WHITE);cornerRadius=dp(14).toFloat()
-                setStroke(dp(if(focused) 3 else 1),if(focused) TvStyle.accent else TvStyle.outline)
-            }
+            v.background=TvStyle.shape(this@renderPushPlaybackPage,Color.WHITE,if(focused) TvStyle.colors.focusRing else Color.TRANSPARENT,TvMetric.RADIUS_L)
+            v.animateFocus(focused,1.02f)
         }
     }
     val qr=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="手机扫码打开推送播放网页" }
-    qrCard.addView(qr,LinearLayout.LayoutParams(dp(240),dp(240)))
+    qrCard.addView(qr,LinearLayout.LayoutParams(dp(232),dp(232)))
     contentRow.addView(qrCard,LinearLayout.LayoutParams(-2,-2))
-    val info=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(30),0,dp(4),0) }
-    fun oneLine(value:String,size:Float,color:Int)=pushText(value,size,color).apply {
-        setSingleLine(false);maxLines=4;ellipsize=null
+
+    val info=LinearLayout(this).apply {
+        orientation=LinearLayout.VERTICAL
+        setPadding(dp(TvMetric.GAP_XL),dp(TvMetric.GAP_XS),0,0)
     }
-    val status=oneLine("服务运行中 · 端口 3309",18f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD }
-    info.addView(status)
-    info.addView(oneLine("手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。",18f,TvStyle.text).apply { setPadding(0,dp(14),0,0) })
-    val divider=View(this).apply { setBackgroundColor(TvStyle.outline) }
-    info.addView(divider,LinearLayout.LayoutParams(-1,dp(1)).apply { topMargin=dp(17);bottomMargin=dp(16) })
-    info.addView(oneLine("手机操作步骤",18f,TvStyle.text).apply { typeface=Typeface.DEFAULT_BOLD })
+    info.addView(pushText("手机和电视连接同一 Wi-Fi，扫码后粘贴分享文案。",TvMetric.TEXT_BODY,TvStyle.colors.textSecondary))
+    info.addView(hairline(),LinearLayout.LayoutParams(-1,dp(1)).apply { topMargin=dp(TvMetric.GAP_L);bottomMargin=dp(TvMetric.GAP_L) })
+    info.addView(pushText("手机操作步骤",TvMetric.TEXT_LABEL,TvStyle.colors.textPrimary).apply {
+        setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL))
+    })
+    // 步骤用"序号 + 说明"两列对齐：序号用强调色小号字，说明用正文，
+    // 比把 "01  " 直接塞进字符串更容易对齐，也不会因为换行把序号挤到中间。
     listOf(
-        "01  手机与电视连接同一 Wi-Fi",
-        "02  扫码打开推送网页",
-        "03  复制红果 / 抖音分享文案并粘贴",
-        "04  点击发送，电视自动搜索并显示结果"
-    ).forEach { step ->
-        info.addView(oneLine(step,16f,TvStyle.muted).apply { setPadding(0,dp(9),0,0) })
+        "手机与电视连接同一 Wi-Fi",
+        "扫码打开推送网页",
+        "复制红果 / 抖音分享文案并粘贴",
+        "点击发送，电视自动搜索并显示结果"
+    ).forEachIndexed { index,step ->
+        val line=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+        line.addView(pushText((index+1).toString().padStart(2,'0'),TvMetric.TEXT_CAPTION,TvStyle.colors.accent).apply {
+            setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL))
+        },LinearLayout.LayoutParams(dp(26),-2))
+        line.addView(pushText(step,TvMetric.TEXT_BODY,TvStyle.colors.textSecondary),LinearLayout.LayoutParams(0,-2,1f))
+        info.addView(line,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(TvMetric.GAP_M) })
     }
-    val urlLabel=oneLine("访问地址：等待服务启动",16f,TvStyle.accent).apply {
-        gravity=Gravity.END
-        setSingleLine(true)
-        maxLines=1
+    contentRow.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+    hero.addView(contentRow,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(TvMetric.GAP_XL) })
+
+    val urlLabel=pushText("访问地址：等待服务启动",TvMetric.TEXT_CAPTION,TvStyle.colors.accent).apply {
+        gravity=Gravity.START
+        setSingleLine(true);maxLines=1
         ellipsize=android.text.TextUtils.TruncateAt.MARQUEE
         isSelected=true
         setHorizontallyScrolling(true)
-        setPadding(0,dp(14),0,0)
+        setPadding(0,dp(TvMetric.GAP_M),0,0)
     }
     pushPlaybackUrlView=urlLabel
-    // 右侧说明区域与二维码卡片等高；访问地址单独放在整个 hero 卡片底部。
-    contentRow.addView(info,LinearLayout.LayoutParams(0,-1,1f))
-    hero.addView(contentRow,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(15) })
-    // 访问地址独立放在卡片右下方，使用卡片内宽度换行，避免末尾字符越界。
-    hero.addView(urlLabel,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) })
-    hero.minimumHeight=dp(440)
+    hero.addView(urlLabel,LinearLayout.LayoutParams(-1,-2))
+    hero.minimumHeight=dp(400)
     page.addView(hero,LinearLayout.LayoutParams(-2,-2).apply { gravity=Gravity.CENTER })
     pushPlaybackStatusView=status
     pushPlaybackQrView=qr

@@ -90,7 +90,7 @@ internal fun MainActivity.toneButton(
     onClick: () -> Unit = {},
 ): TextView {
     val colors = TvStyle.colors
-    val view = text(label, if (tone == TvTone.Chip) TvMetric.TEXT_CAPTION else TvMetric.TEXT_LABEL)
+    val view = text(label, if (tone == TvTone.Chip) TvMetric.TEXT_BODY else TvMetric.TEXT_LABEL)
     view.apply {
         gravity = Gravity.CENTER
         includeFontPadding = false
@@ -101,8 +101,8 @@ internal fun MainActivity.toneButton(
         ellipsize = android.text.TextUtils.TruncateAt.END
         when (tone) {
             TvTone.Chip -> {
-                setPadding(dp(TvMetric.GAP_M), dp(7), dp(TvMetric.GAP_M), dp(7))
-                minHeight = dp(34)
+                setPadding(dp(TvMetric.GAP_M), dp(8), dp(TvMetric.GAP_M), dp(8))
+                minHeight = dp(36)
             }
             else -> {
                 setPadding(dp(TvMetric.GAP_L), dp(10), dp(TvMetric.GAP_L), dp(10))
@@ -164,6 +164,28 @@ internal fun MainActivity.toneButton(
     return view
 }
 
+/**
+ * 筛选条件胶囊。
+ *
+ * 剧场/排行榜/追剧里的筛选项原来和"开始播放"共用同一套灰底描边按钮：
+ * 一屏十几颗同等重量的按钮，用户分不清哪个是条件、哪个是动作。
+ * 胶囊用更小的体量和全圆角明确表示"可切换的标签"，选中态只改文字与浅底，
+ * 焦点态才填充强调色——和主按钮的实心强调色拉开距离。
+ */
+internal fun MainActivity.addChip(
+    parent: LinearLayout,
+    label: String,
+    selected: Boolean = false,
+    onClick: () -> Unit = {},
+): TextView {
+    val view = toneButton(label, TvTone.Chip, selected, onClick)
+    parent.addView(view, lp().apply {
+        width = LinearLayout.LayoutParams.WRAP_CONTENT
+        rightMargin = dp(TvMetric.GAP_S)
+    })
+    return view
+}
+
 /** 一整行分隔线。用 1dp 的 strokeSubtle，比一堆圆角卡片更安静。 */
 internal fun MainActivity.hairline(): View = View(this).apply {
     setBackgroundColor(TvStyle.colors.strokeSubtle)
@@ -171,10 +193,14 @@ internal fun MainActivity.hairline(): View = View(this).apply {
 }
 
 /** 区块标题：左侧标题，右侧补充说明。两者共用一条基线，避免"提示文字贴住标题"。 */
-internal fun MainActivity.sectionHeader(title: String, hint: String? = null): LinearLayout {
+internal fun MainActivity.sectionHeader(
+    title: String,
+    hint: String? = null,
+    size: Float = TvMetric.TEXT_SUBTITLE,
+): LinearLayout {
     val line = row()
     line.addView(
-        text(title, TvMetric.TEXT_SUBTITLE).apply {
+        text(title, size).apply {
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         },
         lp(0, -2).apply { weight = 1f },

@@ -11,7 +11,7 @@ import com.hongguotv.core.*
         // 重建前优先读取真正持有焦点的选项；仅有点击记录时才使用旧记录。
         host.removeAllViews()
         val types=row().apply { id=View.generateViewId(); setPadding(0,dp(6),0,dp(6)) }
-        addButton(types,"全部体裁",theaterContentType==null).apply {
+        addChip(types,"全部体裁",theaterContentType==null).apply {
             tag="theater-filter:type:all"
             setOnClickListener {
                 theaterFocusTag=tag.toString()
@@ -19,7 +19,7 @@ import com.hongguotv.core.*
             }
         }
         listOf(ContentType.SHORT to "真人剧",ContentType.COMIC to "漫剧",ContentType.AI to "AI剧").forEach { (type,label) ->
-            addButton(types,label,theaterContentType==type).apply {
+            addChip(types,label,theaterContentType==type).apply {
                 tag="theater-filter:type:${type.name}"
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
@@ -42,7 +42,7 @@ import com.hongguotv.core.*
                 host.addView(line)
                 return
             }
-            addButton(line,if(count==0) "筛选剧集" else "筛选剧集 · 已选 $count 项") {
+            addChip(line,if(count==0) "筛选剧集" else "筛选剧集 · 已选 $count 项") {
                 theaterExpanded=true
                 // 展开后把焦点送到第一个筛选项，否则会掉回顶部导航栏
                 theaterFocusTag=groups.firstOrNull()?.let { "theater-filter:${it.type}:all" } ?: "theater-filter:type:all"
@@ -66,7 +66,7 @@ import com.hongguotv.core.*
             val choices=row().apply { gravity=Gravity.CENTER_VERTICAL }
             val selected=theaterSelections[group.type]
             val allLabel=if(group.label.startsWith("全部")) group.label else "全部${group.label}"
-            addButton(choices,allLabel,selected.isNullOrBlank()).apply {
+            addChip(choices,allLabel,selected.isNullOrBlank()).apply {
                 tag="theater-filter:${group.type}:all"
                 setOnClickListener {
                     theaterFocusTag=tag.toString()
@@ -74,7 +74,7 @@ import com.hongguotv.core.*
                 }
             }
             group.options.forEach { option ->
-                addButton(choices,option.label,selected==option.id).apply {
+                addChip(choices,option.label,selected==option.id).apply {
                     tag="theater-filter:${group.type}:${option.id}"
                     setOnClickListener {
                         theaterFocusTag=tag.toString()
@@ -94,12 +94,12 @@ import com.hongguotv.core.*
 
         // 展开态的出口放在最下面：从上往下选完，顺手收起，不用再折回顶部。
         val foot=row().apply { setPadding(0,dp(6),0,dp(6)) }
-        addButton(foot,"收起筛选") {
+        addChip(foot,"收起筛选") {
             theaterExpanded=false
             theaterFocusTag="theater-filter:expand"
             showCatalog()
         }.apply { tag="theater-filter:collapse" }
-        if(theaterSelections.isNotEmpty()) addButton(foot,"清除筛选").apply {
+        if(theaterSelections.isNotEmpty()) addChip(foot,"清除筛选").apply {
             tag="theater-filter:clear"
             setOnClickListener {
                 theaterSelections.clear(); page=1; catalogFocus=""; tabState.remove(7)
