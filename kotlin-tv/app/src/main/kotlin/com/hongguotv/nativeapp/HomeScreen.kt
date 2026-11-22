@@ -25,6 +25,8 @@ class HomeScreen(
     private val contentWidthPx: (() -> Int)? = null,
     /** 一行放几张。跟随「外观 · 海报列数」设置，默认五列。 */
     private val columns: (() -> Int)? = null,
+    /** 左侧竖栏当前页签的 View id：最左列按左键统一回到导航栏。 */
+    private val navId: (() -> Int)? = null,
 ): LinearLayout(context) {
     data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
     data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null)
@@ -156,8 +158,12 @@ class HomeScreen(
             hero.bind(lead.entries.first())
             contents.addView(hero,LayoutParams(-1,-2))
         }
-        shelves.filter { it.entries.isNotEmpty() || it.more!=null }.forEachIndexed { shelfIndex,shelf ->
-            val block=LinearLayout(context).apply { orientation=VERTICAL }
+        // 主推位已展示"接着看"的第一条，整栏再铺一遍就是重复；只在高屏没有主推位时保留。
+        val heroConsumed=if(lead!=null) lead.key else null
+        shelves.filter { (it.entries.isNotEmpty() && it.key!=heroConsumed) || it.more!=null }.forEachIndexed { shelfIndex,shelf ->
+            // clipChildren=false：最左侧卡片获得焦点时向外放大 4.5% 并带 10dp 投影，
+            // 容器不放开裁剪的话第一列的焦点框左缘会被裁掉半条。
+            val block=LinearLayout(context).apply { orientation=VERTICAL; clipChildren=false }
             // 随机推荐区保留居中的操作卡片，不再额外显示重复的栏目标题。
             if(shelf.key!="random") {
                 val heading=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),dp(TvMetric.GAP_XS),dp(2),dp(TvMetric.GAP_S)) }
@@ -169,7 +175,8 @@ class HomeScreen(
             }
             val horizontal=VerticalFriendlyHorizontalScrollView(context).apply {
                 isHorizontalScrollBarEnabled=false; clipToPadding=false; clipChildren=false
-                setPadding(dp(2),dp(2),dp(2),dp(2)); isFillViewport=shelf.key=="random"
+                // 左右留 6dp：焦点外扩与投影需要的呼吸位，同时首列焦点框不再贴边被裁。
+                setPadding(dp(6),dp(2),dp(6),dp(2)); isFillViewport=shelf.key=="random"
                 setOnTouchListener { _,event ->
                     when(event.actionMasked) {
                         android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_MOVE,
@@ -185,7 +192,7 @@ class HomeScreen(
                 // 按列数等分内容区。宽度必须按「竖栏之后剩下的宽度」算，用屏幕宽会让最后一列被裁掉右半边。
                 val available = contentWidthPx?.invoke() ?: (resources.displayMetrics.widthPixels * .9f).toInt()
                 val width=if(shelf.key=="random") dp(320)
-                    else ((available-dp(4)-dp(14)*columnCount)/columnCount).toInt().coerceAtLeast(dp(96))
+                    else ((available-dp(12)-dp(14)*columnCount)/columnCount).toInt().coerceAtLeast(dp(96))
                 val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
                 val isRandom=shelf.key=="random"
                 val mode=when { entry!=null -> PosterCard.Mode.POSTER; isRandom -> PosterCard.Mode.RANDOM; else -> PosterCard.Mode.MORE }
@@ -236,14 +243,15 @@ class HomeScreen(
         // 刷新按钮由首页顶部快捷操作栏承载；底部不再重复放置“刷新热门/更多热门”。
         moreButton=null
         rows.forEachIndexed { i,row -> row.cards.forEachIndexed { j,card ->
-            // 最左一张按下左键回到竖栏，而不是把自己再选中一次（焦点"卡住"是最常见的抱怨）。
-            card.view.nextFocusLeftId=if(j==0) top.id else row.cards[j-1].view.id
+            // 最左一张按下左键回到左侧竖栏当前页签（统一规则），而不是把自己再选中一次。
+            card.view.nextFocusLeftId=if(j==0) (navId?.invoke() ?: top.id) else row.cards[j-1].view.id
             card.view.nextFocusRightId=row.cards[(j+1).coerceAtMost(row.cards.lastIndex)].view.id
             card.view.nextFocusUpId=if(i==0) (heroView?.id ?: top.id) else rows[i-1].cards[j.coerceAtMost(rows[i-1].cards.lastIndex)].view.id
             card.view.nextFocusDownId=if(i==rows.lastIndex) card.view.id else rows[i+1].cards[j.coerceAtMost(rows[i+1].cards.lastIndex)].view.id
         } }
         heroView?.let { hero ->
-            hero.nextFocusUpId=top.id
+            hero.nextFocusUpId=navId?.invoke() ?: top.id
+            hero.nextFocusLeftId=navId?.invoke() ?: top.id
             hero.nextFocusDownId=rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: hero.id
         }
         // 不要再把「导航项的下键」接到主推位：竖栏里下键必须继续换页，

@@ -109,6 +109,7 @@ internal fun MainActivity.renderAccountLoginCard(
             }
             loginHost.addView(card, FrameLayout.LayoutParams(cardWidth, -2, Gravity.CENTER))
             val loginScroll = ScrollView(this).apply {
+                clipChildren = false
                 isFillViewport = true
                 isVerticalScrollBarEnabled = false
                 clipToPadding = false

@@ -49,6 +49,7 @@ import com.hongguotv.core.*
         }
 
         val scroll = ScrollView(this).apply {
+            clipChildren = false
             isFillViewport = true
             clipToPadding = false
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS

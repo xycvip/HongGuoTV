@@ -112,7 +112,8 @@ internal class AccountArtworkShelfRenderer(
             val columnIndex = index % columns
             val rowEnd = minOf((rowIndex + 1) * columns, cards.size) - 1
             val nextRow = index + columns
-            card.nextFocusLeftId = if (columnIndex > 0) cards[index - 1].id else card.id
+            // 第一列按左键回到左侧竖栏「我的」页签：原来回指自己，焦点会被"卡"在海报上。
+            card.nextFocusLeftId = if (columnIndex > 0) cards[index - 1].id else (activity as? MainActivity)?.navForTab()?.id ?: card.id
             card.nextFocusRightId = if (index < rowEnd) cards[index + 1].id else card.id
             card.nextFocusUpId = if (rowIndex > 0) cards[index - columns].id
                 else tabs.findViewWithTag<View>("account:tab:$accountSection")?.id ?: View.NO_ID

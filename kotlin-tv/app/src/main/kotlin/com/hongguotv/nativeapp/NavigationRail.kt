@@ -38,10 +38,10 @@ import com.hongguotv.core.*
  * 720p 电视只有 640dp，104dp 会吃掉 16%。分档之后各分辨率都落在 9%~12% 这个区间里。
  */
 internal fun MainActivity.railWidthDp(): Int = when {
-    widthDp() >= 1500f -> 136
-    widthDp() >= 1100f -> 120
-    widthDp() >= 780f -> 104
-    else -> 88
+    widthDp() >= 1500f -> 152
+    widthDp() >= 1100f -> 136
+    widthDp() >= 780f -> 120
+    else -> 96
 }
 
 /** 有竖栏时内容区左右内边距之和。窄屏收窄，否则 640dp 屏只剩不到 460dp 可用。 */
@@ -89,57 +89,74 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
     var brandHeight = if (heightDp() >= 470f) (if (tall) 68 else 52) else 0
     var itemHeight = if (tall) 58 else 46
     var utilHeight = if (tall) 44 else 34
-    var randomHeight = if (tall) 40 else 32
-    fun totalHeight() = brandHeight + itemHeight * 6 + utilHeight * utilCount + randomHeight + 2 * 13 + 12
+    fun totalHeight() = brandHeight + itemHeight * 6 + utilHeight * utilCount + 2 * 13 + 12
     // 逐档收缩，直到一屏放得下（含上下内边距与两条分隔线）。
     while (totalHeight() > heightDp() - 12 && itemHeight > 26) {
         itemHeight -= 2
         utilHeight = (utilHeight - 2).coerceAtLeast(24)
-        randomHeight = (randomHeight - 2).coerceAtLeast(24)
         if (totalHeight() > heightDp() + 40 && brandHeight > 0) brandHeight = 0
     }
 
+    // 真机反馈字号偏小：整体上一档，主项 17sp、工具项 15sp 起步。
     val labelSize = when {
-        itemHeight >= 52 -> TvMetric.TEXT_SUBTITLE
-        itemHeight >= 44 -> TvMetric.TEXT_LABEL
-        itemHeight >= 34 -> 13.5f
-        else -> TvMetric.TEXT_CAPTION
+        itemHeight >= 44 -> TvMetric.TEXT_SUBTITLE
+        itemHeight >= 34 -> TvMetric.TEXT_LABEL
+        else -> 13.5f
     }
     val utilSize = when {
-        utilHeight >= 40 -> TvMetric.TEXT_LABEL
-        utilHeight >= 32 -> 13.5f
-        else -> TvMetric.TEXT_CAPTION
+        utilHeight >= 36 -> TvMetric.TEXT_LABEL
+        else -> 13.5f
     }
-    val horizontalPadding = if (railWidthDp() >= 104) 12 else 8
-    val labelPaddingStart = if (itemHeight >= 44) 17 else 14
+    val horizontalPadding = if (railWidthDp() >= 120) 12 else 9
+    val labelPaddingStart = if (itemHeight >= 44) 18 else 15
 
     val rail = column().apply {
         setPadding(dp(horizontalPadding), dp(if (brandHeight > 0) 18 else 8), dp(horizontalPadding), dp(10))
     }
     railHost.addView(rail, FrameLayout.LayoutParams(-1, -1))
 
+    // 悬停即切页：焦点停在某个入口上约 300ms 就直接切过去，不再要求按确认键。
+    // 快速扫过一串页签不会连环重建页面 —— 每次焦点变化都会取消上一个未触发的任务。
+    var hoverTask: Runnable? = null
+    var hoverItem: View? = null
+    fun cancelHover(item: View? = null) {
+        if (item == null || hoverItem === item) {
+            hoverTask?.let(main::removeCallbacks); hoverTask = null; hoverItem = null
+        }
+    }
+    fun scheduleHover(item: View, pick: () -> Unit) {
+        cancelHover()
+        val task = Runnable {
+            hoverTask = null; hoverItem = null
+            if (!item.isAttachedToWindow || !item.isFocused || isDestroyed) return@Runnable
+            pick()
+            // 切页会重建竖栏；焦点必须落回新栏的对应项，用户才能继续上下翻页签。
+            main.post {
+                if (!isDestroyed) navForTab().takeIf { it.isAttachedToWindow }?.requestFocus()
+            }
+        }
+        hoverTask = task; hoverItem = item; main.postDelayed(task, 300)
+    }
+
+    var brandItem: FrameLayout? = null
     if (brandHeight > 0) {
-        // 品牌行只放字标：竖栏净宽有限，再塞状态灯会把「红果TV」挤成三行。
-        val brand = row().apply { setPadding(dp(10), 0, dp(4), dp(brandHeight - 34)) }
-        brand.addView(
-            View(this).apply { background = TvStyle.shape(this@renderNavigationRail, TvStyle.colors.accent) },
-            lp(dp(6), dp(6)).apply { rightMargin = dp(8) },
-        )
-        // 「红果」用主字重、「TV」压小并降一级灰：一行塞四个字会换行。
-        val wordmark = row()
-        wordmark.addView(text("红果", TvMetric.TEXT_SUBTITLE, TvStyle.colors.textPrimary).apply {
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            includeFontPadding = false
-            maxLines = 1
-        }, lp(-2, -2))
-        wordmark.addView(text("TV", 10.5f, TvStyle.colors.textTertiary).apply {
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            includeFontPadding = false
-            maxLines = 1
-            setPadding(dp(4), 0, 0, dp(2))
-        }, lp(-2, -2).apply { gravity = Gravity.BOTTOM })
-        brand.addView(wordmark, lp(0, -2).apply { weight = 1f })
-        rail.addView(brand, lp(-1, dp(brandHeight)))
+        // 品牌位：放大版的四叶接口状态灯。原来缩在工具区 32dp 高的一格里看不清，
+        // 移到栏顶当徽标 —— 一眼能看到四项接口是否正常，按下确定键直接随便看一部，
+        // 也替掉了纯装饰的字标。
+        brandItem = FrameLayout(this).apply {
+            id = View.generateViewId()
+            isFocusable = true; isFocusableInTouchMode = true; isClickable = true
+            contentDescription = "接口状态与随便看看"
+            clipChildren = false
+            setOnFocusChangeListener { _, focused ->
+                background = if (focused) TvStyle.shape(this@renderNavigationRail, TvStyle.colors.surfaceRaised, TvStyle.colors.focusRing, TvMetric.RADIUS_M) else null
+            }
+            setOnClickListener { showRandomPicks() }
+        }
+        val flowerBrand = createApiStatusFlower()
+        val brandFlowerSize = dp(if (tall) 46 else 38)
+        brandItem.addView(flowerBrand, FrameLayout.LayoutParams(brandFlowerSize, brandFlowerSize, Gravity.CENTER))
+        rail.addView(brandItem, lp(-1, dp(brandHeight)))
     }
 
     val items = mutableListOf<View>()
@@ -190,8 +207,11 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
             )
         }
         paint(false)
-        item.setOnFocusChangeListener { _, focused -> paint(focused) }
-        item.setOnClickListener { onPick() }
+        item.setOnFocusChangeListener { _, focused ->
+            paint(focused)
+            if (focused && !active) scheduleHover(item, onPick) else cancelHover(item)
+        }
+        item.setOnClickListener { cancelHover(); onPick() }
         rail.addView(item, LinearLayout.LayoutParams(-1, dp(if (util) utilHeight else itemHeight)))
         items += item
         nav += item
@@ -231,28 +251,7 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
 
     rail.addView(View(this), lp(-1, 0).apply { weight = 1f })
     rail.addView(hairline(), lp(-1, dp(1)).apply { bottomMargin = dp(8) })
-    // 四叶接口状态灯 + 随机播放：顶栏时代它是右上角的一个小入口，竖栏里放在工具区顶部，
-    // 保持"看一眼接口是否正常"的能力，同时仍然可以按确定键直接随便看一部。
-    val randomItem = FrameLayout(this).apply {
-        id = View.generateViewId(); isFocusable = true; isFocusableInTouchMode = true; isClickable = true
-        contentDescription = "随便看看"
-    }
-    val flower = createApiStatusFlower()
-    val flowerSize = (randomHeight * .68f).toInt().coerceAtLeast(18)
-    randomItem.addView(flower, FrameLayout.LayoutParams(dp(flowerSize), dp(flowerSize), Gravity.CENTER))
-    fun paintRandom(focused: Boolean) {
-        randomItem.background = when {
-            focused -> TvStyle.shape(this, TvStyle.colors.surfaceRaised, TvStyle.colors.focusRing, TvMetric.RADIUS_M)
-            else -> null
-        }
-        flower.alpha = if (focused) 1f else .78f
-    }
-    paintRandom(false)
-    randomItem.setOnFocusChangeListener { _, focused -> paintRandom(focused) }
-    randomItem.setOnClickListener { showRandomPicks() }
-    rail.addView(randomItem, LinearLayout.LayoutParams(-1, dp(randomHeight)))
-    items += randomItem
-    nav += randomItem
+    // 随机播放入口已合并进顶部的四叶状态灯（点它直接随便看一部），工具区不再重复放一格。
     addItem("设置", activeOf(5), true, 5) { switchTab(5) }
     addItem("推送播放", activeOf(-1), true, -1) { showPushPlayback() }
     if (showThirdSource) {
@@ -262,6 +261,7 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
     }
 
     // 竖栏内部是一条连续的上下焦点链；左右交给系统的空间搜索，进内容区。
+    if (brandItem != null) items.add(0, brandItem!!)
     items.forEachIndexed { index, item ->
         item.nextFocusUpId = items.getOrNull(index - 1)?.id ?: item.id
         item.nextFocusDownId = items.getOrNull(index + 1)?.id ?: item.id

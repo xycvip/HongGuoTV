@@ -174,9 +174,9 @@ import java.util.Locale
             val view=text("",clockSize,TvStyle.colors.textSecondary).apply {
                 importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 isFocusable=false; isClickable=false
-                // 内容改成从页面顶部开始后，时钟会压在图片上；裸文字在亮画面上几乎看不见。
-                background=TvStyle.shape(this@applyClock,withAlpha(TvStyle.colors.background,.55f),Color.TRANSPARENT,TvMetric.RADIUS_PILL)
-                setPadding(dp(horizontalPadding+3),dp(verticalPadding+2),dp(horizontalPadding+3),dp(verticalPadding+2))
+                // 真机反馈不要背景块。压在亮画面上的可读性改用文字阴影解决：
+                // 1px 黑影 + 轻模糊，暗背景上隐形、亮画面上托住笔画。
+                setShadowLayer(dp(1).toFloat(),0f,0f,0xB4000000.toInt())
             }
             val topMargin=if(mobile) 8 else (screenHeight*0.025f).toInt().coerceIn(12,26)
             val rightMargin=if(mobile) 14 else (screenWidth*0.03f).toInt().coerceIn(18,36)

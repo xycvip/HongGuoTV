@@ -174,7 +174,8 @@ internal class SettingsSectionFactory(
         }
         heading.addView(headingTitle, LinearLayout.LayoutParams(0, -2, 1f))
         categoryHeadingCards += heading
-        categoryCard.addView(heading, LinearLayout.LayoutParams(-1, -2))
+        // 等分剩余高度：调试分类可隐藏，隐藏后其余分类自动重新均分。
+        categoryCard.addView(heading, LinearLayout.LayoutParams(-1, 0, 1f))
 
         // ── 右：分组标题 + 说明 + 行列表
         val panel = LinearLayout(activity).apply {

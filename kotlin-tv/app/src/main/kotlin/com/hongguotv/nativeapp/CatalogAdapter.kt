@@ -148,6 +148,9 @@ internal class CatalogAdapter(private val host: MainActivity,val displayed: Muta
             else if(tab==2 && actorRanking && collection!="actor-works") actorRankButton?.id ?: rankSwitch?.id ?: rankRefresh?.id ?: navForTab().id
             else suggestFirst?.id ?: historyFirst?.id ?: azLastRow.firstOrNull()?.id ?: searchInput?.id ?: collectionBack?.id ?: rankSwitch?.id ?: rankRefresh?.id ?: favoriteFilterFirst?.id ?: favoriteCheck?.id ?: historyManage?.id ?: navForTab().id
         } else View.NO_ID
+        // 第一列按左键统一回到左侧竖栏当前页签；交给系统空间搜索会"就近"落到
+        // 顶部某个输入框或按钮上，回错导航是最常见的抱怨。
+        if(position % cols==0) card.nextFocusLeftId=navForTab().id
         if(position>=displayed.size-12) catalogRecycler?.post { maybeLoadMore() }
     
     }

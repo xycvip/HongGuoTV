@@ -47,7 +47,9 @@ import java.util.Locale
             clipToPadding=false
             setPadding(0,dp(6),0,0)
         }
-        contentHost.addView(categoryCard,lp(dp(headingWidth),-2))
+        // 分类列撑满内容区高度，每个主分类等分：下方不再留一大块空白，
+        // 上下键移动的分类间距也更均匀、更像一列导航。
+        contentHost.addView(categoryCard,lp(dp(headingWidth),-1))
         contentHost.addView(Space(this),lp(dp(if(narrow) TvMetric.GAP_M else TvMetric.GAP_XL),1))
         val sectionsHost=column()
         contentHost.addView(sectionsHost,LinearLayout.LayoutParams(0,-2,1f))
@@ -487,6 +489,20 @@ import java.util.Locale
         categoryHeadingCards.getOrNull(6)?.visibility=if(revealDebug) View.VISIBLE else View.GONE
         debugSection.first.visibility=if(revealDebug) View.VISIBLE else View.GONE
         categoryItems.getOrNull(6)?.forEach { it.visibility=if(revealDebug) View.VISIBLE else View.GONE }
+
+        // 真机反馈：分类列下方留白太大。ScrollView 里 MATCH_PARENT 无效，
+        // 按可视高度给每个分类项算最小高度，让这一列竖着铺满一屏。
+        run {
+            val visibleCount=categoryHeadingCards.count { it.visibility==View.VISIBLE }
+            if(visibleCount>0) {
+                // 可视高度 ≈ 屏高 − 页面上下内边距 − 分类列顶部留白。
+                val viewport=(heightDp()-46f).coerceAtLeast(300f)
+                val itemMin=((viewport-40f)/visibleCount).toInt().coerceIn(48,84)
+                categoryHeadingCards.forEach { heading ->
+                    heading.findViewWithTag<View>("settings:cat-title")?.minimumHeight=dp(itemMin)
+                }
+            }
+        }
 
         rechainSettings={
             val visibleByCategory=categoryItems.map { items -> items.filter { it.visibility==View.VISIBLE } }

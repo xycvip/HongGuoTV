@@ -34,7 +34,7 @@ internal fun MainActivity.renderCatalogContent(
             // 设置页：内容可滚动，页脚固定在屏幕底部居中，始终可见；去掉容器下内边距让页脚真正贴底
             container.setPadding(container.paddingLeft,container.paddingTop,container.paddingRight,0)
             val page=column()
-            val scroll=ScrollView(this); val body=column(); scroll.addView(body); scroll.setOnScrollChangeListener { _,_,scrollY,_,oldY -> onCatalogContentScroll(scrollY>dp(1)) }; page.addView(scroll,lp(-1,0).apply { weight=1f })
+            val scroll=ScrollView(this).apply { clipChildren=false }; val body=column(); scroll.addView(body); scroll.setOnScrollChangeListener { _,_,scrollY,_,oldY -> onCatalogContentScroll(scrollY>dp(1)) }; page.addView(scroll,lp(-1,0).apply { weight=1f })
             val footerHost=column().apply { gravity=Gravity.CENTER_HORIZONTAL; setPadding(0,dp(12),0,0) }
             page.addView(footerHost,lp(-1,-2))
             container.addView(page,lp(-1,0).apply { weight=1f })
@@ -329,6 +329,7 @@ internal fun MainActivity.renderCatalogContent(
                 val pageScroll=ScrollView(this).apply {
                     isVerticalScrollBarEnabled=false
                     clipToPadding=false
+                    clipChildren=false
                     isFillViewport=true
                     overScrollMode=View.OVER_SCROLL_NEVER
                     descendantFocusability=android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS

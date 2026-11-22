@@ -132,6 +132,7 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
                 val leftColumn=row().apply { gravity=Gravity.TOP; setPadding(0,dp(2),dp(10),0) }
                 if(history.isNotEmpty()) {
                     val historyScroll=ScrollView(this).apply {
+                        clipChildren=false
                         isVerticalScrollBarEnabled=false; clipToPadding=false; isFillViewport=true
                     }
                     val block=column().apply { setPadding(0,0,dp(4),0) }
@@ -174,6 +175,7 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
                     historyFirst=null; historyClear=null; historyItems=emptyList()
                 }
                 val keyboardScroll=ScrollView(this).apply {
+                    clipChildren=false
                     isVerticalScrollBarEnabled=false; clipToPadding=false; isFillViewport=true
                     descendantFocusability=android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
                 }
@@ -182,6 +184,7 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
                 leftPane.addView(leftColumn,lp(-1,0).apply { weight=1f })
                 contentRow.addView(leftPane,lp(dp(leftWidth.toInt()),-1))
                 val midScroll=ScrollView(this).apply {
+                    clipChildren=false
                     isVerticalScrollBarEnabled=false
                     clipToPadding=false
                     isFillViewport=true

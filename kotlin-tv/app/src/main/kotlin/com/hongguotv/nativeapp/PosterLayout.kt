@@ -26,7 +26,7 @@ internal object PosterLayout {
     const val MAX_COLUMNS = 7
 
     /** 单张海报的目标宽度：低于 140dp，剧名开始被截成两三个字。 */
-    private const val TARGET_CARD_DP = 142f
+    private const val TARGET_CARD_DP = 136f
 
     /** 手动选高列数时，仍要保证单张不小于这个宽度。 */
     private const val MIN_CARD_DP = 112f
