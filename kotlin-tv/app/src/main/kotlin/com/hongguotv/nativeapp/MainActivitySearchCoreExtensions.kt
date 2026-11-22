@@ -102,11 +102,11 @@ import com.hongguotv.core.*
     }
 
     internal fun MainActivity.syncSuggestPanel(hasWords: Boolean) {
-        // 列数不再随联想显隐切换：真机上抓到 GridLayoutManager 在换列后给首张
-        // 结果卡残留旧列宽的测量尺寸（海报比同排高一半、还越界画进键盘）。
-        // 联想词已改为结果区顶部的横向词条，列数从页面建立起恒定不变。
+        // 联想中栏固定占位：无词时 INVISIBLE 而不是 GONE，几何一个像素都不动，
+        // 结果网格列数、列宽、每张卡的测量结果都保持不变——真机上首张卡
+        // 残留旧列宽尺寸（比同排高一半）的根因就是这里原来还会切列数。
         val scroll=suggestScrollRef ?: return
-        scroll.visibility=if(hasWords) View.VISIBLE else View.GONE
+        scroll.visibility=if(hasWords) View.VISIBLE else View.INVISIBLE
     }
 
     internal fun MainActivity.wireSearchPanel(recycler: View?) {

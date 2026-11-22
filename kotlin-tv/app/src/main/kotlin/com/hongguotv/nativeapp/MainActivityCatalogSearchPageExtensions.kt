@@ -27,8 +27,10 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
     val roomy=contentDp>=1150f
     val tall=heightDp()>=520
     val leftWidth=if(roomy) 400f else 340f
-    // 列数整页恒定：联想词条不再占用独立列，公式里没有中栏宽度。
-    searchColumns=(((contentDp-leftWidth-24f)+14f)/118f).toInt().coerceIn(2,gridColumns)
+    // 联想栏固定占位（宽度永不增减，空的时候只是不显示字），结果网格列数从
+    // 建立起一次都不变——列宽不重算，卡片宽度就不会失常。
+    val midWidth=if(roomy) 170f else 130f
+    searchColumns=(((contentDp-leftWidth-midWidth-24f)+14f)/118f).toInt().coerceIn(2,gridColumns)
     fullSearchColumns=searchColumns
     // 输入框原来没有任何底色，在深色背景上只剩一行白字，看不出"这里可以输入"。
     val searchRow=row(); val input=EditText(this).apply {
@@ -101,16 +103,16 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
     val lastLine=row().apply { setPadding(0,0,0,dp(3)); gravity=Gravity.CENTER_VERTICAL }
     val del=catalogAzKey("删除",keyHeight).also { lastLine.addView(it,lp(0,if(mode==0) -2 else -1).apply { weight=1f; rightMargin=dp(4) }); keyViews["删除"]=it }
     val clear=catalogAzKey("清空",keyHeight).also { lastLine.addView(it,lp(0,if(mode==0) -2 else -1).apply { weight=1f; rightMargin=dp(4) }); keyViews["清空"]=it }
-    val searchKey=catalogAzKey("搜索",keyHeight).also {
-        // 键盘上的「搜索」键与输入框旁的主按钮同一主色底，一眼可知这是提交键。
-        it.background=TvStyle.shape(this,TvStyle.colors.accent,android.graphics.Color.TRANSPARENT,TvMetric.RADIUS_M)
-        it.setTextColor(TvStyle.colors.onAccent)
-        it.setOnClickListener { submitCatalogSearch(input) }
+    // 键盘末行第三键是「搜索历史」：历史不再占左侧整栏，统一收进弹窗
+    // （列表 + 选中搜索 + 清空入口），键盘区给字母键让出更多宽度。
+    lateinit var historyKey: TextView
+    historyKey=catalogAzKey("搜索历史",keyHeight).also {
+        it.setOnClickListener { showSearchHistory(historyKey) }
         lastLine.addView(it,lp(0,if(mode==0) -2 else -1).apply { weight=1f })
-        keyViews["搜索"]=it
+        keyViews["搜索历史"]=it
     }
     keyboard.addView(lastLine,if(mode==0) lp(-1,keyHeight+dp(3)) else lp(-1,0).apply { weight=1f })
-    val lastViews=listOf(del,clear,searchKey)
+    val lastViews=listOf(del,clear,historyKey)
     keyLines+=lastViews
     keyLines.forEachIndexed { r,views ->
         views.forEachIndexed { c,key ->
@@ -130,77 +132,39 @@ internal fun MainActivity.renderCatalogSearchPage(container: LinearLayout) {
         val suggestLine=row(); suggestScroll.addView(suggestLine); suggestRow=suggestLine; suggestVertical=false
         container.addView(suggestScroll,lp(-1,-2).apply { bottomMargin=dp(4) })
     } else {
-        // 历史与键盘分开滚动，历史条数不会挤压键盘高度；焦点移动时各自滚入可视区。
+        // 三栏定式：左=搜索框+键盘，中=竖排联想词，右=结果网格。
+        // 中栏宽度固定占位（无联想词时只清空内容、不改几何），
+        // 结果网格的列数与列宽整页不变，卡片永远等大。
+        historyFirst=null; historyClear=null; historyItems=emptyList()
         val contentRow=row().apply { gravity=Gravity.TOP }
         val leftPane=column()
-        val history=library.searches()
-        // 搜索框位置固定：无论是否存在搜索历史，左边缘都保持在“无历史记录”时的位置，
-        // 不跟随左侧历史栏/屏幕键盘整体偏移；仅保持统一的左右安全边距。
         leftPane.addView(searchRow,lp(-1,-2).apply {
             leftMargin=dp(14)
             rightMargin=dp(14)
         })
-        val leftColumn=row().apply { gravity=Gravity.TOP; setPadding(0,dp(2),dp(10),0) }
-        if(history.isNotEmpty()) {
-            val historyScroll=ScrollView(this).apply {
-                clipChildren=false
-                isVerticalScrollBarEnabled=false; clipToPadding=false; isFillViewport=true
-            }
-            val block=column().apply { setPadding(0,0,dp(4),0) }
-            val head=row().apply { setPadding(0,dp(2),0,dp(6)) }
-            head.addView(text("搜索历史",14f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
-            lateinit var clearHistory: TextView
-            clearHistory=button("清空历史") { tvTools.confirm("清空搜索历史","清除本机保存的搜索词？",clearHistory) { library.clearSearches(); showCatalog(); main.post { searchInput?.requestFocus() } } }
-                .apply { textSize=TvMetric.TEXT_CAPTION; minHeight=dp(30); setPadding(dp(6),dp(4),dp(6),dp(4)) }
-            historyClear=clearHistory
-            head.addView(clearHistory,lp(-2,-2))
-            block.addView(head)
-            // 根据屏幕高度动态决定历史显示条数，剩余记录可从“全部历史”进入。
-            // 搜索页只保留少量最近记录；其余统一放进“全部历史”，避免历史栏挤占键盘空间。
-            val historyAvailable=(heightDp()-180f).coerceAtLeast(220f)
-            val historyItemHeight=((historyAvailable-70f)/10f).toInt().coerceIn(38,52)
-            val visibleHistoryCount=((historyAvailable-70f)/(historyItemHeight+8f)).toInt().coerceIn(2,10)
-            val items=history.take(visibleHistoryCount).map { entry ->
-                button("${entry.type.label} · ${entry.query}") { runSearch(entry.query,entry.type) }.apply {
-                    textSize=TvMetric.TEXT_CAPTION; minHeight=dp(historyItemHeight); setPadding(dp(8),dp(5),dp(8),dp(5)); gravity=Gravity.CENTER_VERTICAL
-                    maxLines=2; ellipsize=android.text.TextUtils.TruncateAt.END
-                }
-            }
-            items.forEachIndexed { index,item ->
-                block.addView(item,lp(-1,-2).apply { bottomMargin=dp(6) })
-                item.nextFocusUpId=if(index==0) clearHistory.id else items[index-1].id
-            }
-            historyItems=items
-            clearHistory.nextFocusDownId=items.firstOrNull()?.id ?: clearHistory.id
-            if(history.size>visibleHistoryCount) {
-                lateinit var all: TextView
-                all=button("全部历史（${history.size}）›") { showSearchHistory(all) }.apply { textSize=TvMetric.TEXT_CAPTION; minHeight=dp(34); setPadding(dp(8),dp(4),dp(8),dp(4)) }
-                block.addView(all,lp(-1,-2)); historyItems=items+all
-            }
-            historyScroll.addView(block)
-            leftColumn.addView(historyScroll,lp(dp(if(roomy) 160 else 145),-1))
-            historyFirst=items.firstOrNull() ?: clearHistory
-            clearHistory.nextFocusRightId=azFirst?.id ?: View.NO_ID
-            clearHistory.nextFocusUpId=(keyboardLastLabel?.let { keyViews[it] } ?: del).id
-        } else {
-            historyFirst=null; historyClear=null; historyItems=emptyList()
-        }
         val keyboardScroll=ScrollView(this).apply {
             clipChildren=false
             isVerticalScrollBarEnabled=false; clipToPadding=false; isFillViewport=true
             descendantFocusability=android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
         keyboardScroll.addView(keyboard,lp(-1,-1))
-        leftColumn.addView(keyboardScroll,lp(0,-1).apply { weight=1f; leftMargin=dp(14) })
-        leftPane.addView(leftColumn,lp(-1,0).apply { weight=1f })
+        leftPane.addView(keyboardScroll,lp(-1,0).apply { weight=1f; topMargin=dp(4) })
         contentRow.addView(leftPane,lp(dp(leftWidth.toInt()),-1))
+
+        val midScroll=ScrollView(this).apply {
+            clipChildren=false
+            isVerticalScrollBarEnabled=false
+            clipToPadding=false
+            isFillViewport=true
+        }
+        // 让联想列表的纵向容器占满实际可用高度，词条再按空间均分，避免栏内大块空白。
+        val midColumn=column().apply { setPadding(0,dp(2),dp(10),0) }
+        midScroll.addView(midColumn,ViewGroup.LayoutParams(-1,-1))
+        suggestRow=midColumn; suggestVertical=true; suggestScrollRef=midScroll
+        contentRow.addView(midScroll,lp(dp(midWidth.toInt()),-1))
+
         val rightColumn=SearchResultsColumn(this)
-        // 联想词条横排在结果区顶部：出现/消失只让网格整体挪一行，
-        // 结果列宽与列数从页面建立起一次都不变，同排卡片永远等大。
         contentRow.addView(rightColumn,lp(0,-1).apply { weight=1f })
-        val suggestScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; isFocusable=false }
-        val suggestLine=row(); suggestScroll.addView(suggestLine); suggestRow=suggestLine; suggestVertical=false
-        rightColumn.addView(suggestScroll,lp(-1,-2).apply { bottomMargin=dp(4) })
         container.addView(contentRow,lp(-1,0).apply { weight=1f })
         catalogBody=rightColumn
     }

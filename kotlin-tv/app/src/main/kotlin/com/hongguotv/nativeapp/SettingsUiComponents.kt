@@ -15,6 +15,11 @@ import android.widget.TextView
  * 改造前左侧是一列大卡片，焦点落到右侧某一项时，说明文字塞进左侧卡片里，
  * 于是分类卡的高度随说明长度变化，整列跟着上下跳。现在说明回到它所属分组的标题下，
  * 左侧只负责"我在哪一类"，位置稳定。
+ *
+ * 视觉分层（三种状态互不混淆）：
+ *  - 焦点：卡片提亮 + 白环描边，遥控器上永远看得见自己停在哪；
+ *  - 当前分类：浅强调色底 + 徽章反色，表示"右侧正在编辑的是它"；
+ *  - 其余：安静的资源色卡片，编号徽章只作引导。
  */
 internal class SettingsCategoryController(
     private val activity: MainActivity,
@@ -25,25 +30,54 @@ internal class SettingsCategoryController(
 ) {
     var focusedCategory: Int = -1
         private set
+    private var headingFocusIndex: Int = -1
 
     fun markFocusedCategory(category: Int) {
         if (category !in categoryHeadingCards.indices) return
         focusedCategory = category
+        repaint()
+    }
+
+    /** 左侧分类标题获得/失去遥控器焦点时整体重画，焦点与"当前分类"分层表达。 */
+    fun paintHeadingFocus(index: Int, focused: Boolean) {
+        headingFocusIndex = if (focused) index else -1
+        repaint()
+    }
+
+    private fun repaint() {
         categoryHeadingCards.forEachIndexed { index, card ->
-            val active = index == category
+            val active = index == focusedCategory
+            val headingFocused = index == headingFocusIndex
             card.background = when {
+                headingFocused -> TvStyle.shape(
+                    activity,
+                    TvStyle.colors.surfaceRaised,
+                    TvStyle.colors.focusRing,
+                    TvMetric.RADIUS_M,
+                )
                 active -> TvStyle.shape(
                     activity,
-                    withAlpha(TvStyle.colors.accent, 0.14f),
+                    withAlpha(TvStyle.colors.accent, 0.12f),
                     Color.TRANSPARENT,
-                    TvMetric.RADIUS_S,
+                    TvMetric.RADIUS_M,
                 )
-                else -> null
+                else -> TvStyle.shape(
+                    activity,
+                    TvStyle.colors.surface,
+                    TvStyle.colors.strokeSubtle,
+                    TvMetric.RADIUS_M,
+                )
             }
-            card.findViewWithTag<View>("settings:cat-bar")
-                ?.setBackgroundColor(if (active) TvStyle.colors.accent else Color.TRANSPARENT)
+            card.findViewWithTag<TextView>("settings:cat-chip")?.apply {
+                background = if (headingFocused || active) {
+                    TvStyle.shape(activity, TvStyle.colors.accent, Color.TRANSPARENT, TvMetric.RADIUS_S)
+                } else {
+                    TvStyle.shape(activity, TvStyle.colors.surfaceRaised, Color.TRANSPARENT, TvMetric.RADIUS_S)
+                }
+                setTextColor(if (headingFocused || active) TvStyle.colors.onAccent else TvStyle.colors.textTertiary)
+            }
             card.findViewWithTag<TextView>("settings:cat-title")?.apply {
-                setTextColor(if (active) TvStyle.colors.textPrimary else TvStyle.colors.textSecondary)
+                setTextColor(if (headingFocused || active) TvStyle.colors.textPrimary else TvStyle.colors.textSecondary)
                 typeface = Typeface.create(
                     if (active) "sans-serif-medium" else "sans-serif",
                     Typeface.NORMAL,
@@ -119,6 +153,9 @@ internal class SettingsItemFactory(
 
 /**
  * 设置分组：左侧一个分类入口，右侧「标题 + 说明 + 若干行」。
+ *
+ * 左侧入口是编号徽章卡片：两位编号 + 类别名，整列像一册目录，
+ * 不再是裸文字列表。卡片等分整列高度，间距由高度预算控制。
  */
 internal class SettingsSectionFactory(
     private val activity: MainActivity,
@@ -133,19 +170,26 @@ internal class SettingsSectionFactory(
     private val createText: (String, Float, Int) -> TextView,
 ) {
     fun section(title: String, subtitle: String): Pair<LinearLayout, LinearLayout> {
-        // ── 左：窄导航项。名称 + 选中竖条，不加卡片底，和右侧的宽行形成主次。
+        val index = categoryHeadingCards.size
+        // ── 左：编号徽章卡片。
         val heading = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
-            setPadding(0, dp(1), dp(6), dp(1))
+            setPadding(dp(11), dp(6), dp(9), dp(6))
             isFocusable = false
         }
-        val bar = View(activity).apply {
-            tag = "settings:cat-bar"
-            setBackgroundColor(Color.TRANSPARENT)
+        val chip = TextView(activity).apply {
+            tag = "settings:cat-chip"
+            text = String.format("%02d", index + 1)
+            textSize = TvMetric.TEXT_CAPTION
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            background = TvStyle.shape(activity, TvStyle.colors.surfaceRaised, Color.TRANSPARENT, TvMetric.RADIUS_S)
+            setTextColor(TvStyle.colors.textTertiary)
         }
-        heading.addView(bar, LinearLayout.LayoutParams(dp(3), dp(16)).apply { rightMargin = dp(11) })
+        heading.addView(chip, LinearLayout.LayoutParams(dp(30), dp(30)).apply { rightMargin = dp(12) })
 
         val headingTitle = createText(title, TvMetric.TEXT_LABEL, TvStyle.colors.textSecondary).apply {
             tag = "settings:cat-title"
@@ -157,16 +201,12 @@ internal class SettingsSectionFactory(
             ellipsize = TextUtils.TruncateAt.END
             isFocusable = true
             isFocusableInTouchMode = true
-            setPadding(0, dp(13), dp(8), dp(13))
+            setPadding(0, dp(11), dp(4), dp(11))
         }
         categoryIndicators += headingTitle
         headingTitle.setOnFocusChangeListener { _, focused ->
             val category = categoryIndicators.indexOf(headingTitle)
-            if (focused) categoryControllerRef?.markFocusedCategory(category)
-            // 左侧窄栏里的焦点也要看得见：加一层更亮的强调底色，和"当前分类"的浅底色区分开。
-            headingTitle.background = if (focused) {
-                TvStyle.shape(activity, withAlpha(TvStyle.colors.accent, 0.22f), Color.TRANSPARENT, TvMetric.RADIUS_S)
-            } else null
+            categoryControllerRef?.paintHeadingFocus(category, focused)
         }
         headingTitle.setOnClickListener {
             val category = categoryIndicators.indexOf(headingTitle)
@@ -175,7 +215,7 @@ internal class SettingsSectionFactory(
         heading.addView(headingTitle, LinearLayout.LayoutParams(0, -2, 1f))
         categoryHeadingCards += heading
         // 等分剩余高度：调试分类可隐藏，隐藏后其余分类自动重新均分。
-        categoryCard.addView(heading, LinearLayout.LayoutParams(-1, 0, 1f))
+        categoryCard.addView(heading, LinearLayout.LayoutParams(-1, 0, 1f).apply { rightMargin = dp(6) })
 
         // ── 右：分组标题 + 说明 + 行列表
         val panel = LinearLayout(activity).apply {

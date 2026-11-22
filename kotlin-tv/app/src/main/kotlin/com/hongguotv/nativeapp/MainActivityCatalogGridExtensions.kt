@@ -105,16 +105,9 @@ import com.hongguotv.core.*
             // 剧场与排行榜稍后会把筛选头与海报网格合并进同一个 RecyclerView。
             body.addView(recycler,lp(-1,-2))
         } else body.addView(recycler,lp(-1,0).apply { weight=1f })
-        nav.forEach {
-            it.nextFocusDownId=when {
-                tab==2 -> (if(collection=="actor-works") collectionBack else if(actorRanking) actorRankButton else root.findViewWithTag<View>("rank:board:${rankBoard.name}") ?: rankSwitch)?.id ?: recycler.id
-                tab==1 -> searchInput?.id ?: recycler.id
-                tab==0 -> collectionBack?.id ?: navForTab().id ?: recycler.id
-                tab==7 -> ((theaterFilterHost?.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: recycler.id)
-                tab==4 -> root.findViewWithTag<View>("recent:watch-stats")?.id ?: historyManage?.id ?: recycler.id
-                else -> favoriteCheck?.id ?: historyManage?.id ?: recycler.id
-            }
-        }
+        // 竖栏项的上下链由 FocusRules 在建栏时统一写死，页面渲染一律不改写
+        // （旧横排导航的"下键进内容"覆写会让竖栏下键跳进页面，已废除）。
+        // 从竖栏进内容走右键，由系统空间搜索就近落点。
         rankSwitch?.nextFocusDownId=recycler.id; rankRefresh?.nextFocusDownId=recycler.id; historyManage?.nextFocusDownId=recycler.id; favoriteCheck?.nextFocusDownId=favoriteFilterFirst?.id ?: recycler.id
         if(tab==2) RankBoard.entries.forEach { board -> root.findViewWithTag<View>("rank:board:${board.name}")?.nextFocusDownId=recycler.id }
         root.findViewWithTag<View>("recent:watch-stats")?.nextFocusDownId=recycler.id

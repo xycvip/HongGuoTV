@@ -144,6 +144,9 @@ import java.util.Locale
         nav.clear(); navByTab.clear(); searchNavShortcut=null
         stopApiStatusAnimations(); apiStatusViews.clear()
         renderNavigationRail(railHost,container)
+        // 焦点环画在 View 边界之外：页面建完统一放开整棵树的裁剪，
+        // 边缘海报/按钮的选项框不再缺一角（FocusRules 是唯一入口）。
+        main.post { if(!isDestroyed) FocusRules.unclipTree(root) }
         if(title!=null) {
             // 返回是次要操作，用纯文字语气；原来给它一块灰底，和页面标题抢了同一行的高度。
             val heading=row(); addToneButton(heading,"‹ 返回",TvTone.Ghost) { goBack() }

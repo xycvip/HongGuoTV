@@ -89,7 +89,7 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
     var brandHeight = if (heightDp() >= 470f) (if (tall) 68 else 52) else 0
     var itemHeight = if (tall) 58 else 46
     var utilHeight = if (tall) 44 else 34
-    fun totalHeight() = brandHeight + itemHeight * 6 + utilHeight * utilCount + 2 * 13 + 12
+    fun totalHeight() = brandHeight + 14 + itemHeight * 6 + utilHeight * utilCount + 2 * 13 + 12
     // 逐档收缩，直到一屏放得下（含上下内边距与两条分隔线）。
     while (totalHeight() > heightDp() - 12 && itemHeight > 26) {
         itemHeight -= 2
@@ -115,28 +115,9 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
     }
     railHost.addView(rail, FrameLayout.LayoutParams(-1, -1))
 
-    // 悬停即切页：焦点停在某个入口上约 300ms 就直接切过去，不再要求按确认键。
-    // 快速扫过一串页签不会连环重建页面 —— 每次焦点变化都会取消上一个未触发的任务。
-    var hoverTask: Runnable? = null
-    var hoverItem: View? = null
-    fun cancelHover(item: View? = null) {
-        if (item == null || hoverItem === item) {
-            hoverTask?.let(main::removeCallbacks); hoverTask = null; hoverItem = null
-        }
-    }
-    fun scheduleHover(item: View, pick: () -> Unit) {
-        cancelHover()
-        val task = Runnable {
-            hoverTask = null; hoverItem = null
-            if (!item.isAttachedToWindow || !item.isFocused || isDestroyed) return@Runnable
-            pick()
-            // 切页会重建竖栏；焦点必须落回新栏的对应项，用户才能继续上下翻页签。
-            main.post {
-                if (!isDestroyed) navForTab().takeIf { it.isAttachedToWindow }?.requestFocus()
-            }
-        }
-        hoverTask = task; hoverItem = item; main.postDelayed(task, 300)
-    }
+    // 切页只认确认键：焦点扫过页签不再自动切页。悬停切页会让"路过"和"想去"
+    // 两种意图混在一起，页面连环重建、焦点反复跳，真机反馈已确认撤销。
+    // 语义固定：上下=栏内换页签，右=就近进内容，确认=切页。
 
     var brandItem: FrameLayout? = null
     if (brandHeight > 0) {
@@ -156,7 +137,9 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
         val flowerBrand = createApiStatusFlower()
         val brandFlowerSize = dp(if (tall) 46 else 38)
         brandItem.addView(flowerBrand, FrameLayout.LayoutParams(brandFlowerSize, brandFlowerSize, Gravity.CENTER))
-        rail.addView(brandItem, lp(-1, dp(brandHeight)))
+        // 真机反馈：指示灯和「首页」贴得太近。灯是徽标、页签是功能，
+        // 中间留出一格呼吸位，两者从视觉上就分开了。
+        rail.addView(brandItem, lp(-1, dp(brandHeight)).apply { bottomMargin = dp(14) })
     }
 
     val items = mutableListOf<View>()
@@ -207,11 +190,9 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
             )
         }
         paint(false)
-        item.setOnFocusChangeListener { _, focused ->
-            paint(focused)
-            if (focused && !active) scheduleHover(item, onPick) else cancelHover(item)
-        }
-        item.setOnClickListener { cancelHover(); onPick() }
+        item.setOnFocusChangeListener { _, focused -> paint(focused) }
+        // 只按确认键才切页。
+        item.setOnClickListener { onPick() }
         rail.addView(item, LinearLayout.LayoutParams(-1, dp(if (util) utilHeight else itemHeight)))
         items += item
         nav += item
@@ -260,10 +241,8 @@ internal fun MainActivity.renderNavigationRail(railHost: FrameLayout, container:
         }
     }
 
-    // 竖栏内部是一条连续的上下焦点链；左右交给系统的空间搜索，进内容区。
+    // 焦点链统一写在 FocusRules：竖栏上下自链、左键原地不动；
+    // 页面渲染代码不得改写竖栏项的 nextFocusUp/Down（旧横排"下键进内容"已废除）。
     if (brandItem != null) items.add(0, brandItem!!)
-    items.forEachIndexed { index, item ->
-        item.nextFocusUpId = items.getOrNull(index - 1)?.id ?: item.id
-        item.nextFocusDownId = items.getOrNull(index + 1)?.id ?: item.id
-    }
+    FocusRules.applyRailChain(items)
 }
