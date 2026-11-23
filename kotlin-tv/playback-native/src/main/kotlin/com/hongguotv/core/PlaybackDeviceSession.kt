@@ -32,7 +32,11 @@ class PlaybackDeviceSession(
         val request = Request.Builder().url(DeviceRegister.url())
         DeviceRegister.headers().forEach { (key, value) -> request.header(key, value) }
         request.post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
-        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
+        val transport = http.newBuilder()
+            .cookieJar(CookieJar.NO_COOKIES)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
         return RequestScope.execute(transport.newCall(request.build())) { response ->
             DeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
         }
