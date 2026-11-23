@@ -122,9 +122,9 @@ class ContentRepositoryTest {
         assertNotNull(request.header("x-ss-req-ticket"))
         assertEquals("2", request.header("sdk-version"))
         assertEquals("0", request.header("x-xs-from-web"))
-        assertNull(request.header("x-gorgon"))
-        assertNull(request.header("x-ladon"))
-        assertNull(request.header("x-argus"))
+        assertNotNull(request.header("x-gorgon"))
+        assertNotNull(request.header("x-ladon"))
+        assertNotNull(request.header("x-argus"))
         assertNull(request.header("Cookie"))
 
         val buffer = okio.Buffer()
