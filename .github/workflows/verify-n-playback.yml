@@ -32,6 +32,7 @@ jobs:
           ./gradlew --no-daemon --stacktrace :playback-native:test :core:test \
             --tests 'com.hongguotv.core.ContentRepositoryTest.nativePlaybackUsesTHLRegisteredProfileAndMultiVideoModelEndpoint' \
             --tests 'com.hongguotv.core.ThlDeviceRegisterTest.*' \
+            --tests 'com.hongguotv.core.PlaybackDeviceSessionTest.*' \
             --tests 'com.hongguotv.core.MobilePlaybackTest.*' \
             --tests 'com.hongguotv.core.ContentRepositoryTest.compatibilityModeChoosesHighestResolutionH264' \
             --tests 'com.hongguotv.core.ContentRepositoryTest.manualQualityChoosesHighestAvailableResolutionAtOrBelowLimit' \
