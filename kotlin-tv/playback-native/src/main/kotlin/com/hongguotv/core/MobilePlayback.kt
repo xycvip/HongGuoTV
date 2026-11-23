@@ -78,13 +78,12 @@ internal object MobilePlayback {
             } catch (error: InterruptedIOException) {
                 throw error
             } catch (error: IOException) {
-                if (error is PlaybackSourceException &&
-                    error.reason == PlaybackSourceException.Reason.REJECTED
-                ) throw error
-                if (error is PlaybackSourceException &&
-                    error.reason == PlaybackSourceException.Reason.HTTP_REJECTED &&
-                    (error.upstreamCode == 401 || error.upstreamCode == 403)
-                ) throw error
+                if (error is PlaybackSourceException) {
+                    if (error.reason == PlaybackSourceException.Reason.REJECTED) throw error
+                    if (error.reason == PlaybackSourceException.Reason.HTTP_REJECTED &&
+                        error.upstreamCode !in setOf(404, 405, 408, 500, 502, 503, 504)
+                    ) throw error
+                }
                 lastError = error
             }
         }
@@ -112,7 +111,7 @@ internal object MobilePlayback {
             RequestScope.ensureActive()
             val remaining = deadline - System.nanoTime()
             if (remaining <= 0) throw InterruptedIOException("播放请求超时")
-            val timeout = minOf(remaining, TimeUnit.MILLISECONDS.toNanos(ROUTE_TIMEOUT_MS))
+            val timeout = minOf(remaining, TimeUnit.MILLISECONDS.toNanos(12_000))
             val transport = http.newBuilder()
                 .callTimeout(timeout, TimeUnit.NANOSECONDS)
                 .cookieJar(CookieJar.NO_COOKIES)
@@ -122,11 +121,10 @@ internal object MobilePlayback {
             val request = Request.Builder()
                 .url(currentUrl)
                 .header("User-Agent", USER_AGENT)
-                .header("Accept", "application/json; charset=utf-8")
                 .get()
                 .build()
             val redirect = RequestScope.execute(transport.newCall(request)) { response ->
-                if (response.code in 300..399) {
+                if (response.code in setOf(301, 302, 303, 307, 308)) {
                     if (redirectCount >= 3) {
                         throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
                     }
@@ -140,7 +138,7 @@ internal object MobilePlayback {
                     ) throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
                     return@execute target
                 }
-                if (!response.isSuccessful) {
+                if (response.code != 200) {
                     throw PlaybackSourceException(PlaybackSourceException.Reason.HTTP_REJECTED, response.code)
                 }
                 val body = response.body ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
@@ -231,10 +229,10 @@ internal object MobilePlayback {
         }.build()
 
         return RequestScope.execute(transport.newCall(request)) { response ->
-            if (response.code in 300..399) {
+            if (response.code in setOf(301, 302, 303, 307, 308)) {
                 throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
             }
-            if (!response.isSuccessful) {
+            if (response.code != 200) {
                 throw PlaybackSourceException(PlaybackSourceException.Reason.HTTP_REJECTED, response.code)
             }
             val body = response.body ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
