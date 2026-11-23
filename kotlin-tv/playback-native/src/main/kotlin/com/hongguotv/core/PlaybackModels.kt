@@ -40,11 +40,22 @@ internal object PlaybackModels {
             is JSONArray -> raw.optString(0)
             else -> objectValue(raw)?.str("fallback_api") ?: (raw as? String).orEmpty()
         }
-        return url(value)?.takeIf { it.startsWith("https://") }
+        return safeUrl(value, FALLBACK_HOSTS)
     }
-    private fun url(raw: String): String? = cleanUrl(raw).trim().toHttpUrlOrNull()?.takeIf {
-        it.username.isEmpty() && it.password.isEmpty()
-    }?.toString()
+    private fun url(raw: String): String? = safeUrl(raw, MEDIA_HOSTS)
+
+    private fun safeUrl(raw: String, allowedDomains: Set<String>): String? {
+        val parsed = cleanUrl(raw).trim().toHttpUrlOrNull() ?: return null
+        val host = parsed.host.lowercase()
+        if (parsed.scheme != "https" || parsed.port != 443 ||
+            parsed.username.isNotEmpty() || parsed.password.isNotEmpty() ||
+            allowedDomains.none { host == it || host.endsWith(".$it") }
+        ) return null
+        return parsed.toString()
+    }
+
+    private val MEDIA_HOSTS = setOf("qznovelvod.com", "fqnovelvod.com", "douyinvod.com")
+    private val FALLBACK_HOSTS = setOf("fqnovel.com", "snssdk.com")
 
     fun candidates(model: JSONObject): List<StreamInfo> = renditions(model).map {
         StreamInfo(it.url, it.key, it.quality.toString())
