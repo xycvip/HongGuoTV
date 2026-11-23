@@ -82,10 +82,11 @@ class MobilePlaybackTest {
     }
 
     @Test fun mobileV5PlaybackSigningKeepsTheFullTHLSignatureHeaderSet() {
-        val signed = MobilePlayback.signer.sign(
-            "https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/?aid=8662",
-            """{"biz_param":{"video_platform":1024}}""".toByteArray(),
+        val signed = Signer(mobileV5 = true, mobileV5QueryDeviceBrand = true).signPlayback(
+            "https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/",
             device,
+            """{"biz_param":{"video_platform":1024}}""".toByteArray(),
+            now = 1_000L,
         )
         for (header in listOf("x-gorgon", "x-khronos", "x-ladon", "x-argus", "x-helios", "x-medusa")) {
             assertTrue("missing THL signature header: $header", signed.headers.keys.any { it.equals(header, true) })
