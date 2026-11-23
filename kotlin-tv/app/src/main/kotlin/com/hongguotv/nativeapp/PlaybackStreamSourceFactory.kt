@@ -22,6 +22,7 @@ private const val PLAYBACK_API_REVISION_KEY = "revision"
 internal data class PlaybackRouteSnapshot(val api: String, val revision: Long)
 
 private fun Context.configureNativePlayerDeviceStore() {
+    ThlSigningRuntime.configure(applicationContext)
     val prefs = getSharedPreferences("n3urda-player-device-v1", Context.MODE_PRIVATE)
     PlayerDeviceSource.configureStore(object : PlayerDeviceStore {
         override fun load(): String? = prefs.getString("device", null)
@@ -217,7 +218,7 @@ internal fun Context.playbackStreamSource(
             }
         } else {
             PlaybackApiDebugState.recordActual(api, "选择 Native 播放接口")
-            val repository = ContentRepository(http)
+            val repository = ContentRepository(http, mobilePlaybackSigner = ThlSigningRuntime)
             object : StreamSource {
                 override val name: String = "native"
                 override fun stream(id: String, maxQuality: Int): StreamInfo {
