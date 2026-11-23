@@ -50,7 +50,10 @@ internal object MobilePlayback {
         now: Long,
     ): StreamLadder {
         require(id.matches(Regex("[0-9]{1,30}")))
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12)
+        val totalTimeout = TimeUnit.SECONDS.toNanos(12)
+        val configuredTimeout = http.callTimeoutMillis.takeIf { it > 0 }
+            ?.let { TimeUnit.MILLISECONDS.toNanos(it.toLong()) } ?: totalTimeout
+        val deadline = System.nanoTime() + minOf(totalTimeout, configuredTimeout)
         var lastError: IOException? = null
 
         for (route in routes) {
