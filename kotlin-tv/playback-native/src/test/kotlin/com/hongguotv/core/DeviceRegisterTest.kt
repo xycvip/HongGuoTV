@@ -10,9 +10,9 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 
-class DeviceRegisterTest {
+class ThlDeviceRegisterTest {
     @Test fun buildsTHLAnonymousRegistrationRequestWithoutLegacyEncryptionOrIds() {
-        val payload = JSONObject(String(DeviceRegister.payload("cdid-value", "openudid-value", 1234), Charsets.UTF_8))
+        val payload = JSONObject(String(ThlDeviceRegister.payload("cdid-value", "openudid-value", 1234), Charsets.UTF_8))
         val header = payload.getJSONObject("header")
 
         assertEquals("ss_app_log", payload.getString("magic_tag"))
@@ -35,15 +35,15 @@ class DeviceRegisterTest {
         assertFalse(header.has("install_id"))
         assertEquals(
             "https://log.snssdk.com/service/2/device_register/?aid=8662&app_name=novelread",
-            DeviceRegister.url(),
+            ThlDeviceRegister.url(),
         )
-        assertEquals("application/json; charset=utf-8", DeviceRegister.headers()["Content-Type"])
-        assertEquals(DeviceRegister.USER_AGENT, DeviceRegister.headers()["User-Agent"])
-        assertFalse(DeviceRegister.headers().keys.any { it.startsWith("x-gorgon") || it.startsWith("x-argus") })
+        assertEquals("application/json; charset=utf-8", ThlDeviceRegister.headers()["Content-Type"])
+        assertEquals(ThlDeviceRegister.USER_AGENT, ThlDeviceRegister.headers()["User-Agent"])
+        assertFalse(ThlDeviceRegister.headers().keys.any { it.startsWith("x-gorgon") || it.startsWith("x-argus") })
     }
 
     @Test fun parsesBothStringAndNumericRegistrationIdentityFields() {
-        val parsed = DeviceRegister.parse(
+        val parsed = ThlDeviceRegister.parse(
             """{"device_id_str":"7345678901234567100","install_id_str":"7345678901234567200","device_token":"token","new_user":1}""",
             listOf("install_id=7345678901234567200; Path=/"),
         )!!
@@ -53,7 +53,7 @@ class DeviceRegisterTest {
         assertTrue(parsed.newUser)
         assertEquals("7345678901234567200", parsed.cookies["install_id"])
 
-        val numeric = DeviceRegister.parse(
+        val numeric = ThlDeviceRegister.parse(
             """{"device_id":7345678901234567,"install_id":7345678901234568}""",
         )!!
         assertEquals("7345678901234567", numeric.deviceId)
@@ -76,8 +76,8 @@ class DeviceRegisterTest {
         val body = JSONObject(buffer.readUtf8())
         val header = body.getJSONObject("header")
 
-        assertEquals(DeviceRegister.url(), request.url.toString())
-        assertEquals(DeviceRegister.USER_AGENT, request.header("User-Agent"))
+        assertEquals(ThlDeviceRegister.url(), request.url.toString())
+        assertEquals(ThlDeviceRegister.USER_AGENT, request.header("User-Agent"))
         assertEquals("application/json; charset=utf-8", request.header("Content-Type"))
         assertEquals("com.phoenix.read", header.getString("package"))
         assertEquals(profile.values["cdid"], header.getString("cdid"))
@@ -90,8 +90,8 @@ class DeviceRegisterTest {
     }
 
     @Test fun rejectsMissingOrZeroRegistrationIdentity() {
-        assertNull(DeviceRegister.parse("""{"device_id_str":"0","install_id_str":"7345678901234567200"}"""))
-        assertNull(DeviceRegister.parse("""{"device_id_str":"7345678901234567100"}"""))
-        assertNull(DeviceRegister.parse("not-json"))
+        assertNull(ThlDeviceRegister.parse("""{"device_id_str":"0","install_id_str":"7345678901234567200"}"""))
+        assertNull(ThlDeviceRegister.parse("""{"device_id_str":"7345678901234567100"}"""))
+        assertNull(ThlDeviceRegister.parse("not-json"))
     }
 }
