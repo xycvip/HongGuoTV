@@ -549,7 +549,6 @@ class Signer(
                 "x-gorgon" to gorgon(query, body, ts, (random() * 65536).toInt()),
                 "x-helios" to helios(ts), "x-medusa" to medusa(url, body, ts, if (mobileV5) values else null),
             )
-            if (mobileV5) headers.keys.retainAll(setOf("x-khronos", "x-helios", "x-medusa"))
             if (body != null) {
                 headers["Content-Type"] = "application/json; charset=utf-8"
                 headers["x-ss-stub"] = digest("MD5", body).hex().uppercase()
