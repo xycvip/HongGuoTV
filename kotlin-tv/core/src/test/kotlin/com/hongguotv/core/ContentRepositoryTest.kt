@@ -93,10 +93,10 @@ class ContentRepositoryTest {
         var captured: Request? = null
         val repo = repository { request ->
             captured = request
-            v5Model(Triple(720, "h264", "https://cdn.example.com/thl-720.mp4"))
+            v5Model(Triple(720, "h264", "https://cdn.fqnovelvod.com/thl-720.mp4"))
         }
         val result = repo.stream("123", 720)
-        assertEquals("https://cdn.example.com/thl-720.mp4", result.url)
+        assertEquals("https://cdn.fqnovelvod.com/thl-720.mp4", result.url)
         assertEquals("720P", result.quality)
 
         val request = captured!!
@@ -138,47 +138,47 @@ class ContentRepositoryTest {
     @Test fun compatibilityModeChoosesHighestResolutionH264() {
         val repo = repository {
             v5Model(
-                Triple(720, "h264", "https://cdn.example.com/h264-720.mp4"),
-                Triple(1080, "h264", "https://cdn.example.com/h264-1080.mp4"),
-                Triple(1440, "bytevc1", "https://cdn.example.com/bytevc1-1440.mp4")
+                Triple(720, "h264", "https://cdn.fqnovelvod.com/h264-720.mp4"),
+                Triple(1080, "h264", "https://cdn.fqnovelvod.com/h264-1080.mp4"),
+                Triple(1440, "bytevc1", "https://cdn.fqnovelvod.com/bytevc1-1440.mp4")
             )
         }
         val result = repo.stream("123", PlaybackQualityMode.AUTO_COMPAT)
-        assertEquals("https://cdn.example.com/h264-1080.mp4", result.url)
+        assertEquals("https://cdn.fqnovelvod.com/h264-1080.mp4", result.url)
         assertEquals("1080P", result.quality)
     }
 
     @Test fun manualQualityChoosesHighestAvailableResolutionAtOrBelowLimit() {
         val repo = repository {
             v5Model(
-                Triple(480, "h264", "https://cdn.example.com/h264-480.mp4"),
-                Triple(720, "h264", "https://cdn.example.com/h264-720.mp4"),
-                Triple(1080, "h264", "https://cdn.example.com/h264-1080.mp4")
+                Triple(480, "h264", "https://cdn.fqnovelvod.com/h264-480.mp4"),
+                Triple(720, "h264", "https://cdn.fqnovelvod.com/h264-720.mp4"),
+                Triple(1080, "h264", "https://cdn.fqnovelvod.com/h264-1080.mp4")
             )
         }
         val result = repo.stream("123", 1080)
-        assertEquals("https://cdn.example.com/h264-1080.mp4", result.url)
+        assertEquals("https://cdn.fqnovelvod.com/h264-1080.mp4", result.url)
         assertEquals("1080P", result.quality)
     }
 
     @Test fun incompatibleByteVc2DoesNotBecomeAudioOnlyPlayback() {
         val repo = repository {
             v5Model(
-                Triple(720, "bytevc2", "https://cdn.example.com/unsupported.mp4"),
-                Triple(1080, "bytevc1", "https://cdn.example.com/compatible.mp4")
+                Triple(720, "bytevc2", "https://cdn.fqnovelvod.com/unsupported.mp4"),
+                Triple(1080, "bytevc1", "https://cdn.fqnovelvod.com/compatible.mp4")
             )
         }
         val result = repo.stream("123", 720)
-        assertEquals("https://cdn.example.com/compatible.mp4", result.url)
+        assertEquals("https://cdn.fqnovelvod.com/compatible.mp4", result.url)
         assertEquals("1080P（兼容资源）", result.quality)
     }
 
     @Test fun compatibleLowerQualityWinsBeforeHigherResolutionFallback() {
         val repo = repository {
             v5Model(
-                Triple(720, "bytevc2", "https://cdn.example.com/unsupported.mp4"),
-                Triple(480, "h264", "https://cdn.example.com/avc-480.mp4"),
-                Triple(1080, "bytevc1", "https://cdn.example.com/hevc-1080.mp4")
+                Triple(720, "bytevc2", "https://cdn.fqnovelvod.com/unsupported.mp4"),
+                Triple(480, "h264", "https://cdn.fqnovelvod.com/avc-480.mp4"),
+                Triple(1080, "bytevc1", "https://cdn.fqnovelvod.com/hevc-1080.mp4")
             )
         }
         assertEquals("480P", repo.stream("123", 720).quality)
@@ -187,8 +187,8 @@ class ContentRepositoryTest {
     @Test fun entirelyIncompatibleSourceFailsBeforeStartingAudio() {
         val repo = repository {
             v5Model(
-                Triple(720, "ByteVC2", "https://cdn.example.com/unsupported.mp4"),
-                Triple(480, "bvc2", "https://cdn.example.com/unsupported2.mp4")
+                Triple(720, "ByteVC2", "https://cdn.fqnovelvod.com/unsupported.mp4"),
+                Triple(480, "bvc2", "https://cdn.fqnovelvod.com/unsupported2.mp4")
             )
         }
         assertThrows(UnplayableVideoException::class.java) { repo.stream("123", 720) }
@@ -197,8 +197,8 @@ class ContentRepositoryTest {
     @Test fun missingCodecLabelKeepsManualQualityLimit() {
         val repo = repository {
             v5Model(
-                Triple(720, "", "https://cdn.example.com/legacy.mp4"),
-                Triple(1080, "bytevc1", "https://cdn.example.com/hevc.mp4")
+                Triple(720, "", "https://cdn.fqnovelvod.com/legacy.mp4"),
+                Triple(1080, "bytevc1", "https://cdn.fqnovelvod.com/hevc.mp4")
             )
         }
         assertEquals("720P", repo.stream("123", 720).quality)
