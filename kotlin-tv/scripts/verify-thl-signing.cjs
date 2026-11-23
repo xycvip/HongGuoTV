@@ -3,9 +3,41 @@
 
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
-require(path.join(__dirname, "../app/src/main/assets/thl_signing.js"));
+const assetPath = path.join(__dirname, "../app/src/main/assets/thl_signing.js");
+const source = fs.readFileSync(assetPath, "utf8");
+const cryptoShim = {
+  getRandomValues(view) {
+    const bytes = crypto.randomBytes(view.byteLength);
+    for (let i = 0; i < view.byteLength; i++) view[i] = bytes[i];
+    return view;
+  },
+};
+const sandbox = {
+  crypto: cryptoShim,
+  console,
+  URL,
+  URLSearchParams,
+  TextEncoder,
+  TextDecoder,
+  setTimeout,
+  clearTimeout,
+  setInterval,
+  clearInterval,
+  atob,
+  btoa,
+};
+sandbox.window = sandbox;
+sandbox.self = sandbox;
+sandbox.global = sandbox;
+sandbox.location = new URL("https://localhost/");
+vm.createContext(sandbox);
+
+// Run without Node's require/module/Buffer globals, matching the Android WebView host.
+vm.runInContext(source, sandbox, { timeout: 30000 });
 
 const device = {
   ac: "wifi",
@@ -33,12 +65,10 @@ const device = {
   need_personal_recommend: "1",
   player_so_load: "1",
   is_android_pad_screen: "0",
-  cdid: "a2d9e4c7-1c2b-4f66-8d1a-123456789abc",
-  openudid: "0011223344556677",
   iid: "6543210123456789012",
   device_id: "1234567890123456789",
+  cdid: "a2d9e4c7-1c2b-4f66-8d1a-123456789abc",
 };
-
 const body = Buffer.from(JSON.stringify({
   biz_param: {
     detail_page_version: 0,
@@ -53,7 +83,7 @@ const body = Buffer.from(JSON.stringify({
   mixed_video_id_map: { 1004: ["7701937936731737112"] },
 }));
 const now = 1795430400123;
-const signed = globalThis.__hongguoSignPlayback(
+const signed = sandbox.__hongguoSignPlayback(
   "https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/",
   body.toString("base64"),
   device,
@@ -77,4 +107,4 @@ assert.equal(signed.headers["x-khronos"], String(Math.floor(now / 1000)));
 assert.equal(signed.headers["x-ss-stub"], crypto.createHash("md5").update(body).digest("hex").toUpperCase());
 assert.ok(Buffer.from(signed.headers["x-medusa"], "base64").length > 40);
 assert.ok(Buffer.from(signed.headers["x-helios"], "base64").length > 20);
-console.log("THL N-line signing smoke test passed");
+console.log("THL N-line browser-host signing smoke test passed");
