@@ -16,7 +16,7 @@ class MobilePlaybackTest {
         linkedMapOf("iid" to "654321", "device_id" to "123456", "cdid" to "test-device")
 
     private fun model(id: String = "123", typed: Boolean = false, stringModel: Boolean = false): String {
-        val value = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"bytevc2","vwidth":720,"vheight":1280},"main_url":"https://example.org/unsupported"},{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://example.org/video"}]}""")
+        val value = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"bytevc2","vwidth":720,"vheight":1280},"main_url":"https://cdn.fqnovelvod.com/unsupported"},{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://cdn.fqnovelvod.com/video"}]}""")
         val entries = JSONObject().put(id, JSONObject().put("video_model", if (stringModel) value.toString() else value))
         return JSONObject().put("code", 0).put("data", if (typed) JSONObject().put("1004", entries) else entries).toString()
     }
@@ -43,7 +43,7 @@ class MobilePlaybackTest {
             val rows = MobilePlayback.ladder("123", device, http(model(typed=typed, stringModel=stringModel)), signer, 1000).renditions
             assertEquals(1, rows.size)
             assertEquals(720, rows.single().quality)
-            assertEquals("https://example.org/video", rows.single().url)
+            assertEquals("https://cdn.fqnovelvod.com/video", rows.single().url)
         }
         assertThrows(PlaybackSourceException::class.java) {
             MobilePlayback.ladder("123", device, http(model("456")), signer, 1000)
@@ -113,7 +113,7 @@ class MobilePlaybackTest {
                 .code(code).message("mock").body(body.toResponseBody()).build()
         }.build()
         val rows = MobilePlayback.ladder("123", device, client, signer, 1000).renditions
-        assertEquals("https://example.org/video", rows.single().url)
+        assertEquals("https://cdn.fqnovelvod.com/video", rows.single().url)
         assertEquals(2, calls.size)
         assertEquals("api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/", calls[0])
         assertEquals("reading.snssdk.com/novel/player/multi_video_model/v1/", calls[1])
@@ -121,7 +121,7 @@ class MobilePlaybackTest {
 
     @Test fun singleEpisodeFallbackAcceptsDirectVideoModelShape() {
         val calls = mutableListOf<String>()
-        val direct = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://example.org/single.mp4"}]}""")
+        val direct = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://cdn.fqnovelvod.com/single.mp4"}]}""")
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
             calls += request.url.host + request.url.encodedPath
@@ -132,13 +132,13 @@ class MobilePlaybackTest {
                 .body(body.toResponseBody()).build()
         }.build()
         val rows = MobilePlayback.ladder("123", device, client, signer, 1000).renditions
-        assertEquals("https://example.org/single.mp4", rows.single().url)
+        assertEquals("https://cdn.fqnovelvod.com/single.mp4", rows.single().url)
         assertTrue(calls[2].endsWith("/novel/player/video_model/v1/"))
     }
 
     @Test fun followsFallbackApiWhenModelHasNoDirectVideoUrls() {
         val calls = mutableListOf<String>()
-        val fallbackModel = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://example.org/fallback.mp4"}]}""")
+        val fallbackModel = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://cdn.fqnovelvod.com/fallback.mp4"}]}""")
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
             calls += request.url.toString()
@@ -157,14 +157,26 @@ class MobilePlaybackTest {
                 .code(200).message("OK").body(body.toResponseBody()).build()
         }.build()
         val rows = MobilePlayback.ladder("123", device, client, signer, 1000).renditions
-        assertEquals("https://example.org/fallback.mp4", rows.single().url)
+        assertEquals("https://cdn.fqnovelvod.com/fallback.mp4", rows.single().url)
         assertEquals(2, calls.size)
     }
 
     @Test fun readsBackupUrlListWhenPrimaryAddressIsMissing() {
-        val source = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"backup_url_list":["https://example.org/backup.mp4"]}]}""")
+        val source = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"backup_url_list":["https://cdn.fqnovelvod.com/backup.mp4"]}]}""")
         val rows = PlaybackModels.renditions(source)
-        assertEquals("https://example.org/backup.mp4", rows.single().url)
+        assertEquals("https://cdn.fqnovelvod.com/backup.mp4", rows.single().url)
+    }
+
+    @Test fun rejectsMediaUrlsOutsideTheTHLHostAllowlist() {
+        val source = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://example.org/video.mp4"}]}""")
+        assertTrue(PlaybackModels.renditions(source).isEmpty())
+        val insecure = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"http://cdn.fqnovelvod.com/video.mp4"}]}""")
+        assertTrue(PlaybackModels.renditions(insecure).isEmpty())
+    }
+
+    @Test fun rejectsFallbackUrlsOutsideTheTHLHostAllowlist() {
+        val source = JSONObject("""{"fallback_api":"https://evil.example.org/fallback"}""")
+        assertNull(PlaybackModels.fallback(source))
     }
 
     @Test fun rejectsBusinessErrorsAndOversizeResponse() {
