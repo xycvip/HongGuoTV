@@ -43,3 +43,10 @@ jobs:
         working-directory: kotlin-tv
         shell: bash
         run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
+      - name: 上传 N 接口验证 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: hongguotv-thl-n-debug
+          path: kotlin-tv/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
