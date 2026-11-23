@@ -71,7 +71,7 @@ internal object MobilePlayback {
                 ) throw error
                 if (error is PlaybackSourceException &&
                     error.reason == PlaybackSourceException.Reason.HTTP_REJECTED &&
-                    error.upstreamCode in setOf(401, 403)
+                    (error.upstreamCode == 401 || error.upstreamCode == 403)
                 ) throw error
                 lastError = error
             }
