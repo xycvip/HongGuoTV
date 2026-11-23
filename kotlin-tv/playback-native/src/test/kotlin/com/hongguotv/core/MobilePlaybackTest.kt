@@ -115,6 +115,37 @@ class MobilePlaybackTest {
         assertTrue(calls[2].endsWith("/novel/player/video_model/v1/"))
     }
 
+    @Test fun followsFallbackApiWhenModelHasNoDirectVideoUrls() {
+        val calls = mutableListOf<String>()
+        val fallbackModel = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://example.org/fallback.mp4"}]}""")
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            calls += request.url.toString()
+            val body = if (request.url.encodedPath == "/fallback/video") {
+                assertNull(request.url.queryParameter("force_fids"))
+                assertEquals("mp4", request.url.queryParameter("format_type"))
+                assertEquals("1", request.url.queryParameter("codec_type"))
+                JSONObject().put("code", 0)
+                    .put("video_info", JSONObject().put("code", 0).put("data", fallbackModel)).toString()
+            } else {
+                JSONObject().put("code", 0).put("data", JSONObject().put("123",
+                    JSONObject().put("video_model", JSONObject().put("fallback_api",
+                        "https://api5-normal.fqnovel.com/fallback/video?force_fids=1")))).toString()
+            }
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body(body.toResponseBody()).build()
+        }.build()
+        val rows = MobilePlayback.ladder("123", device, client, signer, 1000).renditions
+        assertEquals("https://example.org/fallback.mp4", rows.single().url)
+        assertEquals(2, calls.size)
+    }
+
+    @Test fun readsBackupUrlListWhenPrimaryAddressIsMissing() {
+        val source = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"backup_url_list":["https://example.org/backup.mp4"]}]}""")
+        val rows = PlaybackModels.renditions(source)
+        assertEquals("https://example.org/backup.mp4", rows.single().url)
+    }
+
     @Test fun rejectsBusinessErrorsAndOversizeResponse() {
         val error = assertThrows(PlaybackSourceException::class.java) {
             MobilePlayback.ladder("123", device, http("""{"code":110001}"""), signer, 1000)
