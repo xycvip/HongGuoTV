@@ -17,7 +17,7 @@ class ContentRepositoryTest {
         var registrations=0
         val session=PlaybackDeviceSession {
             registrations++
-            DeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
+            ThlDeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
         }
         val repo=ContentRepository(
             OkHttpClient.Builder().addInterceptor { chain ->
@@ -54,7 +54,7 @@ class ContentRepositoryTest {
         var requests=0
         val session=PlaybackDeviceSession {
             registrations++
-            DeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
+            ThlDeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
         }
         val repo=ContentRepository(
             OkHttpClient.Builder().addInterceptor {
@@ -89,35 +89,50 @@ class ContentRepositoryTest {
         return JSONObject().put("code", 0).put("data", JSONObject().put("1004", entries)).toString()
     }
 
-    @Test fun nativePlaybackUsesV5MultiVideoModelEndpointAndSignatureHeaders() {
+    @Test fun nativePlaybackUsesTHLRegisteredProfileAndMultiVideoModelEndpoint() {
         var captured: Request? = null
         val repo = repository { request ->
             captured = request
-            v5Model(Triple(720, "h264", "https://cdn.example.com/v5-720.mp4"))
+            v5Model(Triple(720, "h264", "https://cdn.example.com/thl-720.mp4"))
         }
         val result = repo.stream("123", 720)
-        assertEquals("https://cdn.example.com/v5-720.mp4", result.url)
+        assertEquals("https://cdn.example.com/thl-720.mp4", result.url)
         assertEquals("720P", result.quality)
 
         val request = captured!!
         assertEquals("POST", request.method)
-        assertEquals("/novel/player/multi_video_model/player/v1", request.url.encodedPath)
+        assertEquals("api5-normal-sinfonlineb.fqnovel.com", request.url.host)
+        assertEquals("/novel/player/multi_video_model/v1/", request.url.encodedPath)
         assertEquals("1905892595382586", request.url.queryParameter("device_id"))
         assertEquals("1905892595378490", request.url.queryParameter("iid"))
         assertFalse(request.url.queryParameter("cdid").isNullOrBlank())
-        assertEquals("gzip", request.header("Content-Encoding"))
+        assertEquals("25053RT47C", request.url.queryParameter("device_type"))
+        assertEquals("Redmi", request.url.queryParameter("device_brand"))
+        assertEquals("73932", request.url.queryParameter("version_code"))
+        assertEquals("7.3.9.32", request.url.queryParameter("version_name"))
+        assertEquals("16", request.url.queryParameter("os_version"))
+        assertEquals("update_64", request.url.queryParameter("channel"))
+        assertNotNull(request.url.queryParameter("ts"))
+        assertNull(request.header("Content-Encoding"))
+        assertEquals(ThlDeviceRegister.USER_AGENT, request.header("User-Agent"))
         assertNotNull(request.header("x-ss-stub"))
         assertNotNull(request.header("x-khronos"))
         assertNotNull(request.header("x-helios"))
         assertNotNull(request.header("x-medusa"))
+        assertNotNull(request.header("x-ss-req-ticket"))
+        assertEquals("2", request.header("sdk-version"))
+        assertEquals("0", request.header("x-xs-from-web"))
         assertNull(request.header("x-gorgon"))
         assertNull(request.header("x-ladon"))
         assertNull(request.header("x-argus"))
+        assertNull(request.header("Cookie"))
 
         val buffer = okio.Buffer()
         request.body!!.writeTo(buffer)
-        val body = JSONObject(java.util.zip.GZIPInputStream(buffer.inputStream()).reader().readText())
+        val body = JSONObject(buffer.readUtf8())
         assertEquals("123", body.getJSONObject("mixed_video_id_map").getJSONArray("1004").getString(0))
+        assertEquals(1024, body.getJSONObject("biz_param").getInt("video_platform"))
+        assertFalse(body.has("dr_scene"))
     }
 
     @Test fun compatibilityModeChoosesHighestResolutionH264() {
@@ -195,7 +210,7 @@ class ContentRepositoryTest {
                 .code(200).message("OK").body(respond(chain.request()).toResponseBody()).build()
         }.build(),clock,
         // 播放身份固定，测试不真的去注册设备。
-        PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586","1905892595378490") }
+        PlaybackDeviceSession { ThlDeviceRegister.Registered("1905892595382586","1905892595378490") }
     )
 
     private fun rankPayload(page: Int = 1, totalPages: Int = 2) = JSONObject()
@@ -416,7 +431,7 @@ class ContentRepositoryTest {
     @Test fun actorRankingUsesSignedCellChangeAndCarriesSessionAcrossPages() {
         val requests = mutableListOf<Request>()
         val session = PlaybackDeviceSession {
-            DeviceRegister.Registered("1905892595382586", "1905892595378490")
+            ThlDeviceRegister.Registered("1905892595382586", "1905892595378490")
         }
         val repo = ContentRepository(
             OkHttpClient.Builder().addInterceptor { chain ->
@@ -483,7 +498,7 @@ class ContentRepositoryTest {
                     .code(200).message("OK").body(body.toResponseBody()).build()
             }.build(),
             System::currentTimeMillis,
-            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586", "1905892595378490") }
+            PlaybackDeviceSession { ThlDeviceRegister.Registered("1905892595382586", "1905892595378490") }
         )
 
         val page = repo.actorRanking(0, "", "ranklist_actor_fans")
@@ -514,7 +529,7 @@ class ContentRepositoryTest {
                     .code(200).message("OK").body(body.toResponseBody()).build()
             }.build(),
             System::currentTimeMillis,
-            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586", "1905892595378490") }
+            PlaybackDeviceSession { ThlDeviceRegister.Registered("1905892595382586", "1905892595378490") }
         )
 
         val first = repo.actorWorks("7100000000001401", 0, 1)
@@ -537,7 +552,7 @@ class ContentRepositoryTest {
                     .code(200).message("OK").body(body.toResponseBody()).build()
             }.build(),
             System::currentTimeMillis,
-            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586", "1905892595378490") }
+            PlaybackDeviceSession { ThlDeviceRegister.Registered("1905892595382586", "1905892595378490") }
         )
 
         val page = repo.actorRanking(0, "", "ranklist_actor_fans")

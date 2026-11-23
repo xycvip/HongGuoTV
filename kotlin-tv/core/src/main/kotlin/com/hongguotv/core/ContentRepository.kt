@@ -188,7 +188,7 @@ open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().con
     fun sameNameSeasons(current: Series, related: List<Series>): List<Series> =
         detailRepository.sameNameSeasons(current,related)
 
-    /** Native N playback follows the V5 multi_video_model/player/v1 request path. */
+    /** Native N playback follows THLRedGuo's registered-device App model routes and V5 signing. */
     fun stream(id: String, maxQuality: Int = 1080): StreamInfo = playbackRepository.stream(id,maxQuality)
 
     companion object {

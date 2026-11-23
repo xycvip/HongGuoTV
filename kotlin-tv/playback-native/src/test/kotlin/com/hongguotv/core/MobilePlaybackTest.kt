@@ -2,7 +2,6 @@
 package com.hongguotv.core
 
 import java.io.IOException
-import java.util.zip.GZIPInputStream
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
@@ -13,7 +12,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MobilePlaybackTest {
-    private val device = mapOf("device_id" to "123456", "iid" to "654321", "cdid" to "test-device")
+    private val device = ThlDeviceRegister.profile("test-device", "test-openudid") +
+        mapOf("device_id" to "123456", "iid" to "654321")
 
     private fun model(id: String = "123", typed: Boolean = false, stringModel: Boolean = false): String {
         val value = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"bytevc2","vwidth":720,"vheight":1280},"main_url":"https://example.org/unsupported"},{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://example.org/video"}]}""")
@@ -42,32 +42,108 @@ class MobilePlaybackTest {
         }
     }
 
-    @Test fun signsAndSendsIdenticalCompressedBytesWithMatchingIdentityAndDigest() {
+    @Test fun sendsTHLRegisteredProfileAndPlainJsonModelRequest() {
         var signed: ByteArray? = null
         var signedUrl: String? = null
         val signing = MobilePlaybackSigner { target, bytes, identity ->
             assertEquals(device, identity)
             signed = bytes.copyOf()
             signedUrl = target
-            MobileSignedRequest(target, mapOf("X-Argus" to "test-signature"))
+            MobileSignedRequest(target, mapOf("X-Medusa" to "test-signature"))
         }
         MobilePlayback.ladder("123", device, http(model()) { request ->
             val bytes = Buffer().apply { request.body!!.writeTo(this) }.readByteArray()
             assertArrayEquals(signed!!, bytes)
             assertEquals(signedUrl, request.url.toString())
-            assertEquals("/novel/player/multi_video_model/player/v1", request.url.encodedPath)
+            assertEquals("api5-normal-sinfonlineb.fqnovel.com", request.url.host)
+            assertEquals("/novel/player/multi_video_model/v1/", request.url.encodedPath)
             assertEquals("123456", request.url.queryParameter("device_id"))
             assertEquals("654321", request.url.queryParameter("iid"))
-            assertEquals("gzip", request.header("Content-Encoding"))
-            assertEquals("test-signature", request.header("X-Argus"))
+            assertEquals("test-device", request.url.queryParameter("cdid"))
+            assertEquals("25053RT47C", request.url.queryParameter("device_type"))
+            assertEquals("Redmi", request.url.queryParameter("device_brand"))
+            assertEquals("73932", request.url.queryParameter("version_code"))
+            assertEquals("7.3.9.32", request.url.queryParameter("version_name"))
+            assertEquals("16", request.url.queryParameter("os_version"))
+            assertEquals("update_64", request.url.queryParameter("channel"))
+            assertEquals("1", request.url.queryParameter("ts"))
+            assertNull(request.header("Content-Encoding"))
+            assertEquals(ThlDeviceRegister.USER_AGENT, request.header("User-Agent"))
+            assertEquals("test-signature", request.header("X-Medusa"))
+            assertEquals("0", request.header("x-xs-from-web"))
+            assertEquals("2", request.header("sdk-version"))
             assertNull(request.header("Cookie"))
-            assertEquals(
-                digest("MD5", bytes).hex().uppercase(),
-                request.header("x-ss-stub")
-            )
-            val body = JSONObject(GZIPInputStream(bytes.inputStream()).reader().readText())
+            assertEquals(digest("MD5", bytes).hex().uppercase(), request.header("x-ss-stub"))
+            val body = JSONObject(bytes.toString(Charsets.UTF_8))
             assertEquals("123", body.getJSONObject("mixed_video_id_map").getJSONArray("1004").getString(0))
+            assertEquals(1024, body.getJSONObject("biz_param").getInt("video_platform"))
+            assertFalse(body.has("dr_scene"))
         }, signing, 1000)
+    }
+
+    @Test fun retriesNextTHLModelHostWhenPrimaryRouteHasNoModel() {
+        val calls = mutableListOf<String>()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            calls += request.url.host + request.url.encodedPath
+            val code = if (calls.size == 1) 404 else 200
+            val body = if (calls.size == 1) "" else model()
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                .code(code).message("mock").body(body.toResponseBody()).build()
+        }.build()
+        val rows = MobilePlayback.ladder("123", device, client, signer, 1000).renditions
+        assertEquals("https://example.org/video", rows.single().url)
+        assertEquals(2, calls.size)
+        assertEquals("api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/", calls[0])
+        assertEquals("reading.snssdk.com/novel/player/multi_video_model/v1/", calls[1])
+    }
+
+    @Test fun singleEpisodeFallbackAcceptsDirectVideoModelShape() {
+        val calls = mutableListOf<String>()
+        val direct = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://example.org/single.mp4"}]}""")
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            calls += request.url.host + request.url.encodedPath
+            val body = if (calls.size < 3) "" else JSONObject()
+                .put("code", 0).put("data", JSONObject().put("video_model", direct)).toString()
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                .code(if (calls.size < 3) 404 else 200).message("mock")
+                .body(body.toResponseBody()).build()
+        }.build()
+        val rows = MobilePlayback.ladder("123", device, client, signer, 1000).renditions
+        assertEquals("https://example.org/single.mp4", rows.single().url)
+        assertTrue(calls[2].endsWith("/novel/player/video_model/v1/"))
+    }
+
+    @Test fun followsFallbackApiWhenModelHasNoDirectVideoUrls() {
+        val calls = mutableListOf<String>()
+        val fallbackModel = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://example.org/fallback.mp4"}]}""")
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            calls += request.url.toString()
+            val body = if (request.url.encodedPath == "/fallback/video") {
+                assertNull(request.url.queryParameter("force_fids"))
+                assertEquals("mp4", request.url.queryParameter("format_type"))
+                assertEquals("1", request.url.queryParameter("codec_type"))
+                JSONObject().put("code", 0)
+                    .put("video_info", JSONObject().put("code", 0).put("data", fallbackModel)).toString()
+            } else {
+                JSONObject().put("code", 0).put("data", JSONObject().put("123",
+                    JSONObject().put("video_model", JSONObject().put("fallback_api",
+                        "https://api5-normal.fqnovel.com/fallback/video?force_fids=1")))).toString()
+            }
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body(body.toResponseBody()).build()
+        }.build()
+        val rows = MobilePlayback.ladder("123", device, client, signer, 1000).renditions
+        assertEquals("https://example.org/fallback.mp4", rows.single().url)
+        assertEquals(2, calls.size)
+    }
+
+    @Test fun readsBackupUrlListWhenPrimaryAddressIsMissing() {
+        val source = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"backup_url_list":["https://example.org/backup.mp4"]}]}""")
+        val rows = PlaybackModels.renditions(source)
+        assertEquals("https://example.org/backup.mp4", rows.single().url)
     }
 
     @Test fun rejectsBusinessErrorsAndOversizeResponse() {

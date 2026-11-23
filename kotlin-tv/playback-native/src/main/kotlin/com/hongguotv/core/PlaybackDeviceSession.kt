@@ -3,7 +3,6 @@ package com.hongguotv.core
 
 import java.io.IOException
 import java.io.InterruptedIOException
-import java.util.UUID
 import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -13,12 +12,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 class PlaybackDeviceRegistrationException(cause: Throwable? = null) :
     IOException("播放设备注册失败，请稍后重试", cause)
 
-/**
- * 匿名播放身份：注册一次后在整个进程内保持同一身份，所有 Repository 共用。
- * 平台按「注册过的 device_id + install_id」放行播放接口，未注册设备的播放请求只会拿到空响应。
- */
+/** One registered anonymous identity shared by the Native N content and playback requests. */
 class PlaybackDeviceSession(
-    private val register: ((OkHttpClient) -> DeviceRegister.Registered?)? = null
+    private val register: ((OkHttpClient) -> ThlDeviceRegister.Registered?)? = null
 ) {
     companion object {
         val shared = PlaybackDeviceSession()
@@ -26,23 +22,23 @@ class PlaybackDeviceSession(
 
     data class Profile(val values: Map<String, String>, val cookie: String)
 
-    private val cdid = UUID.randomUUID().toString()
-    private val openudid = UUID.randomUUID().toString().replace("-", "").take(16)
+    private var cdid = ThlDeviceRegister.newCdid()
+    private var openudid = ThlDeviceRegister.newOpenudid()
     private var ready: Profile? = null
 
-    private fun registerDevice(http: OkHttpClient): DeviceRegister.Registered? {
+    private fun registerDevice(http: OkHttpClient): ThlDeviceRegister.Registered? {
         register?.let { return it(http) }
-        val registrationDevice = VendorConstants.device + mapOf("cdid" to cdid, "openudid" to openudid)
-        val body = DeviceRegister.payload(registrationDevice)
-        val request = Request.Builder().url(DeviceRegister.url())
-        DeviceRegister.headers(body, VendorConstants.device).forEach { (key, value) ->
-            request.header(key, value)
-        }
-        request.post(body.toRequestBody("application/octet-stream".toMediaType()))
-        // 注册请求不带账号 Cookie；取消由调用方的工作域负责。
-        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
+        val body = ThlDeviceRegister.payload(cdid, openudid)
+        val request = Request.Builder().url(ThlDeviceRegister.url())
+        ThlDeviceRegister.headers().forEach { (key, value) -> request.header(key, value) }
+        request.post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+        val transport = http.newBuilder()
+            .cookieJar(CookieJar.NO_COOKIES)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
         return RequestScope.execute(transport.newCall(request.build())) { response ->
-            DeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
+            ThlDeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
         }
     }
 
@@ -58,37 +54,31 @@ class PlaybackDeviceSession(
             } catch (error: IOException) {
                 throw PlaybackDeviceRegistrationException(error)
             }
-        val validId = Regex("[1-9][0-9]{0,29}")
+        val validId = Regex("[1-9][0-9]{9,23}")
         if (!validId.matches(device.deviceId) || !validId.matches(device.installId))
             throw PlaybackDeviceRegistrationException()
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
+        val values = ThlDeviceRegister.profile(cdid, openudid) +
+            mapOf("device_id" to device.deviceId, "iid" to device.installId)
         return Profile(
-                VendorConstants.device +
-                    mapOf(
-                        "device_id" to device.deviceId,
-                        "iid" to device.installId,
-                        "cdid" to cdid,
-                        "openudid" to openudid,
-                    ),
-                device.cookies
-                    .filterKeys {
-                        it in setOf("install_id", "ttreq", "store-region", "store-region-src")
-                    }
-                    .entries
-                    .joinToString("; ") { (name, value) -> "$name=$value" },
-            )
-            .also { ready = it }
+            values,
+            device.cookies
+                .filterKeys { it in setOf("install_id", "ttreq", "store-region", "store-region-src") }
+                .entries
+                .joinToString("; ") { (name, value) -> "$name=$value" },
+        ).also { ready = it }
     }
 
-    /** 丢弃进程内匿名播放身份并重新注册；不读写账号登录凭证。 */
+    /** Drop the in-process anonymous identity and register a fresh one. */
     @Synchronized
     fun renew(http: OkHttpClient): Profile {
         ready = null
+        cdid = ThlDeviceRegister.newCdid()
+        openudid = ThlDeviceRegister.newOpenudid()
         return profile(http)
     }
 }
 
-/** 注册响应的有界读取；取消由调用方的工作域负责。 */
 private fun readRegisterBody(response: okhttp3.Response): String {
     if (!response.isSuccessful) throw IOException("播放设备注册失败（HTTP ${response.code}）")
     val body = response.body ?: throw IOException("播放设备注册响应为空")

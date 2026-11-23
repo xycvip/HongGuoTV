@@ -28,7 +28,9 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace :playback-native:test :core:test \
-            --tests 'com.hongguotv.core.ContentRepositoryTest.nativePlaybackUsesV5MultiVideoModelEndpointAndSignatureHeaders' \
+            --tests 'com.hongguotv.core.ContentRepositoryTest.nativePlaybackUsesTHLRegisteredProfileAndMultiVideoModelEndpoint' \
+            --tests 'com.hongguotv.core.ThlDeviceRegisterTest.*' \
+            --tests 'com.hongguotv.core.MobilePlaybackTest.*' \
             --tests 'com.hongguotv.core.ContentRepositoryTest.compatibilityModeChoosesHighestResolutionH264' \
             --tests 'com.hongguotv.core.ContentRepositoryTest.manualQualityChoosesHighestAvailableResolutionAtOrBelowLimit' \
             --tests 'com.hongguotv.core.ContentRepositoryTest.incompatibleByteVc2DoesNotBecomeAudioOnlyPlayback' \

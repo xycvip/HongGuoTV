@@ -67,10 +67,24 @@ internal object PlaybackModels {
                 val key = encryption?.str("spade_a").orEmpty().ifEmpty { entry.str("spade_a") }
                     .takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
                 if (encryption != null && key == null && encryption.opt("encrypt") !in listOf(false, 0, "0", "false")) return@runCatching null
-                val resolved = listOf("main_url", "play_url", "backup_url_1").firstNotNullOfOrNull { field ->
+                val rawUrls = buildList {
+                    listOf("main_url", "backup_url", "backup_url_1", "backup_url_2", "backup_url_3", "play_url")
+                        .forEach { field -> entry.str(field).takeIf { it.isNotBlank() }?.let(::add) }
+                    listOf("backup_url_list", "url_list").forEach { field ->
+                        entry.optJSONArray(field)?.let { values ->
+                            for (index in 0 until values.length()) {
+                                values.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                            }
+                        }
+                    }
+                }
+                val resolved = rawUrls.firstNotNullOfOrNull { value ->
                     runCatching {
-                        val raw = cleanUrl(entry.str(field))
-                        if(raw.isEmpty()) null else url(raw) ?: url(if(seed != null) MediaCrypto.decryptUrl(raw, seed) else String(decode64(raw), Charsets.UTF_8))
+                        val raw = cleanUrl(value)
+                        if (raw.isEmpty()) null else url(raw) ?: url(
+                            if (seed != null) MediaCrypto.decryptUrl(raw, seed)
+                            else String(decode64(raw), Charsets.UTF_8)
+                        )
                     }.getOrNull()
                 } ?: return@runCatching null
                 val meta=entry.optJSONObject("video_meta")
