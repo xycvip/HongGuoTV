@@ -36,7 +36,7 @@ internal object MobilePlayback {
 
     private val v5Signer = Signer(mobileV5 = true, mobileV5QueryDeviceBrand = true)
     val signer = MobilePlaybackSigner { baseUrl, body, device, now ->
-        val request = v5Signer.signPlayback(baseUrl, device, body, now)
+        val request = v5Signer.signPlayback(baseUrl, device + ("ts" to (now / 1000).toString()), body, now)
         MobileSignedRequest(request.url, request.headers)
     }
 
