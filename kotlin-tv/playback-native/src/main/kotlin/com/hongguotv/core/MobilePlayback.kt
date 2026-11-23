@@ -97,59 +97,82 @@ internal object MobilePlayback {
         deadline: Long,
     ): JSONObject? {
         val raw = PlaybackModels.fallback(model) ?: return null
-        val parsed = raw.toHttpUrl()
-        val host = parsed.host.lowercase()
-        if (!(host == "fqnovel.com" || host.endsWith(".fqnovel.com") ||
-                host == "snssdk.com" || host.endsWith(".snssdk.com"))
-        ) throw IOException("播放 fallback 地址不受支持")
-        val url = parsed.newBuilder()
+        var currentUrl = raw.toHttpUrl()
+        val original = currentUrl
+        currentUrl = currentUrl.newBuilder()
             .removeAllQueryParameters("force_fids")
             .setQueryParameter("format_type", "mp4")
             .setQueryParameter("codec_type", "1")
             .build()
-        val remaining = deadline - System.nanoTime()
-        if (remaining <= 0) throw InterruptedIOException("播放请求超时")
-        val timeout = minOf(remaining, TimeUnit.MILLISECONDS.toNanos(ROUTE_TIMEOUT_MS))
-        val transport = http.newBuilder()
-            .callTimeout(timeout, TimeUnit.NANOSECONDS)
-            .cookieJar(CookieJar.NO_COOKIES)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .build()
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "application/json; charset=utf-8")
-            .get()
-            .build()
-        return RequestScope.execute(transport.newCall(request)) { response ->
-            if (response.code in 300..399) {
-                throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
+        val initialHost = original.host.lowercase()
+        if (!isAllowedFallbackHost(initialHost)) throw IOException("播放 fallback 地址不受支持")
+
+        var parsedModel: JSONObject? = null
+        for (redirectCount in 0..3) {
+            RequestScope.ensureActive()
+            val remaining = deadline - System.nanoTime()
+            if (remaining <= 0) throw InterruptedIOException("播放请求超时")
+            val timeout = minOf(remaining, TimeUnit.MILLISECONDS.toNanos(ROUTE_TIMEOUT_MS))
+            val transport = http.newBuilder()
+                .callTimeout(timeout, TimeUnit.NANOSECONDS)
+                .cookieJar(CookieJar.NO_COOKIES)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .build()
+            val request = Request.Builder()
+                .url(currentUrl)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json; charset=utf-8")
+                .get()
+                .build()
+            val redirect = RequestScope.execute(transport.newCall(request)) { response ->
+                if (response.code in 300..399) {
+                    if (redirectCount >= 3) {
+                        throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
+                    }
+                    val location = response.header("Location")
+                        ?: throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
+                    val target = currentUrl.resolve(location)
+                        ?: throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
+                    if (target.scheme != "https" || target.port != 443 ||
+                        target.username.isNotEmpty() || target.password.isNotEmpty() ||
+                        !isAllowedFallbackHost(target.host.lowercase())
+                    ) throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
+                    return@execute target
+                }
+                if (!response.isSuccessful) {
+                    throw PlaybackSourceException(PlaybackSourceException.Reason.HTTP_REJECTED, response.code)
+                }
+                val body = response.body ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
+                if (body.contentLength() > RESPONSE_LIMIT) throw IOException("播放 fallback 响应过大")
+                val source = body.source()
+                source.request(RESPONSE_LIMIT + 1)
+                if (source.buffer.size > RESPONSE_LIMIT) throw IOException("播放 fallback 响应过大")
+                val text = source.readUtf8()
+                if (text.isBlank()) throw EmptyPlaybackResponseException("stage=mobile-fallback")
+                val root = try {
+                    JSONObject(text)
+                } catch (_: Exception) {
+                    throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
+                }
+                PlaybackModels.checkStatus(root)
+                val videoInfo = root.optJSONObject("video_info")
+                    ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
+                val code = videoInfo.optInt("Code", videoInfo.optInt("code", 0))
+                if (code != 0) throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, code)
+                parsedModel = PlaybackModels.objectValue(videoInfo.opt("data"))
+                    ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
+                null
             }
-            if (!response.isSuccessful) {
-                throw PlaybackSourceException(PlaybackSourceException.Reason.HTTP_REJECTED, response.code)
-            }
-            val body = response.body ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
-            if (body.contentLength() > RESPONSE_LIMIT) throw IOException("播放 fallback 响应过大")
-            val source = body.source()
-            source.request(RESPONSE_LIMIT + 1)
-            if (source.buffer.size > RESPONSE_LIMIT) throw IOException("播放 fallback 响应过大")
-            val text = source.readUtf8()
-            if (text.isBlank()) throw EmptyPlaybackResponseException("stage=mobile-fallback")
-            val root = try {
-                JSONObject(text)
-            } catch (_: Exception) {
-                throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
-            }
-            PlaybackModels.checkStatus(root)
-            val videoInfo = root.optJSONObject("video_info")
-                ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
-            val code = videoInfo.optInt("Code", videoInfo.optInt("code", 0))
-            if (code != 0) throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, code)
-            PlaybackModels.objectValue(videoInfo.opt("data"))
-                ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
+            if (redirect == null) return parsedModel
+            currentUrl = redirect
         }
+        throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, 310)
     }
+
+    private fun isAllowedFallbackHost(host: String): Boolean =
+        host == "fqnovel.com" || host.endsWith(".fqnovel.com") ||
+            host == "snssdk.com" || host.endsWith(".snssdk.com")
 
     private fun requestModel(
         id: String,
@@ -208,6 +231,9 @@ internal object MobilePlayback {
         }.build()
 
         return RequestScope.execute(transport.newCall(request)) { response ->
+            if (response.code in 300..399) {
+                throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
+            }
             if (!response.isSuccessful) {
                 throw PlaybackSourceException(PlaybackSourceException.Reason.HTTP_REJECTED, response.code)
             }
