@@ -67,7 +67,7 @@ class MainActivity: Activity() {
     internal val muted get() = TvStyle.muted
     internal val main=Handler(Looper.getMainLooper())
     internal val io=Executors.newFixedThreadPool(3)
-    internal val repository=ContentRepository(mobilePlaybackSigner=ThlSigningRuntime)
+    internal val repository=ContentRepository()
     internal val randomRecommender by lazy {
         val raw=getSharedPreferences("random_pool", MODE_PRIVATE).getString("pool", null)
         val items=raw?.let { RandomPoolSnapshot.decode(it, System.currentTimeMillis()) } ?: emptyList()
