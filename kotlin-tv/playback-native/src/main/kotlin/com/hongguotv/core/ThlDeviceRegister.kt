@@ -47,7 +47,6 @@ object ThlDeviceRegister {
         "player_so_load" to "1",
         "is_android_pad_screen" to "0",
         "cdid" to cdid,
-        "openudid" to openudid,
     )
 
     fun payload(cdid: String, openudid: String, now: Long = System.currentTimeMillis()): ByteArray {
