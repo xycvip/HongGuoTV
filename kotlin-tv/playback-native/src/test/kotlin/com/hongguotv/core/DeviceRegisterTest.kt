@@ -81,7 +81,7 @@ class ThlDeviceRegisterTest {
         assertEquals("application/json; charset=utf-8", request.header("Content-Type"))
         assertEquals("com.phoenix.read", header.getString("package"))
         assertEquals(profile.values["cdid"], header.getString("cdid"))
-        assertEquals(profile.values["openudid"], header.getString("openudid"))
+        assertEquals(profile.openudid, header.getString("openudid"))
         assertEquals("7345678901234567100", profile.values["device_id"])
         assertEquals("7345678901234567200", profile.values["iid"])
         assertEquals("25053RT47C", profile.values["device_type"])
