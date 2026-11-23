@@ -56,8 +56,9 @@ class MobilePlaybackTest {
         val signing = MobilePlaybackSigner { target, bytes, identity, now ->
             assertEquals(device, identity)
             signed = bytes.copyOf()
-            signedUrl = target
-            mockSigned(target, identity, now, mapOf("X-Medusa" to "test-signature"))
+            val result = mockSigned(target, identity, now, mapOf("X-Medusa" to "test-signature"))
+            signedUrl = result.url
+            result
         }
         MobilePlayback.ladder("123", device, http(model()) { request ->
             val bytes = Buffer().apply { request.body!!.writeTo(this) }.readByteArray()
