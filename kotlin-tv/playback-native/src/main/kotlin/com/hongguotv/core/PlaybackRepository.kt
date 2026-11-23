@@ -19,7 +19,7 @@ class PlaybackRepository(
 ) {
     fun stream(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8)
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12)
         fun clientWithinDeadline(): OkHttpClient {
             RequestScope.ensureActive()
             val remaining = deadline - System.nanoTime()
