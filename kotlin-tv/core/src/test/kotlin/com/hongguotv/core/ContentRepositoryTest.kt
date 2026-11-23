@@ -17,7 +17,7 @@ class ContentRepositoryTest {
         var registrations=0
         val session=PlaybackDeviceSession {
             registrations++
-            DeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
+            ThlDeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
         }
         val repo=ContentRepository(
             OkHttpClient.Builder().addInterceptor { chain ->
@@ -54,7 +54,7 @@ class ContentRepositoryTest {
         var requests=0
         val session=PlaybackDeviceSession {
             registrations++
-            DeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
+            ThlDeviceRegister.Registered("190589259538258$registrations","190589259537849$registrations")
         }
         val repo=ContentRepository(
             OkHttpClient.Builder().addInterceptor {
@@ -210,7 +210,7 @@ class ContentRepositoryTest {
                 .code(200).message("OK").body(respond(chain.request()).toResponseBody()).build()
         }.build(),clock,
         // 播放身份固定，测试不真的去注册设备。
-        PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586","1905892595378490") }
+        PlaybackDeviceSession { ThlDeviceRegister.Registered("1905892595382586","1905892595378490") }
     )
 
     private fun rankPayload(page: Int = 1, totalPages: Int = 2) = JSONObject()
@@ -431,7 +431,7 @@ class ContentRepositoryTest {
     @Test fun actorRankingUsesSignedCellChangeAndCarriesSessionAcrossPages() {
         val requests = mutableListOf<Request>()
         val session = PlaybackDeviceSession {
-            DeviceRegister.Registered("1905892595382586", "1905892595378490")
+            ThlDeviceRegister.Registered("1905892595382586", "1905892595378490")
         }
         val repo = ContentRepository(
             OkHttpClient.Builder().addInterceptor { chain ->
@@ -498,7 +498,7 @@ class ContentRepositoryTest {
                     .code(200).message("OK").body(body.toResponseBody()).build()
             }.build(),
             System::currentTimeMillis,
-            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586", "1905892595378490") }
+            PlaybackDeviceSession { ThlDeviceRegister.Registered("1905892595382586", "1905892595378490") }
         )
 
         val page = repo.actorRanking(0, "", "ranklist_actor_fans")
@@ -529,7 +529,7 @@ class ContentRepositoryTest {
                     .code(200).message("OK").body(body.toResponseBody()).build()
             }.build(),
             System::currentTimeMillis,
-            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586", "1905892595378490") }
+            PlaybackDeviceSession { ThlDeviceRegister.Registered("1905892595382586", "1905892595378490") }
         )
 
         val first = repo.actorWorks("7100000000001401", 0, 1)
@@ -552,7 +552,7 @@ class ContentRepositoryTest {
                     .code(200).message("OK").body(body.toResponseBody()).build()
             }.build(),
             System::currentTimeMillis,
-            PlaybackDeviceSession { DeviceRegister.Registered("1905892595382586", "1905892595378490") }
+            PlaybackDeviceSession { ThlDeviceRegister.Registered("1905892595382586", "1905892595378490") }
         )
 
         val page = repo.actorRanking(0, "", "ranklist_actor_fans")
