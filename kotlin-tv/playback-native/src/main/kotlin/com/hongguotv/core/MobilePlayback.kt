@@ -13,7 +13,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-/** Signing returns the final URL because v5 selects its digest branch through the request ticket. */
+/** Signing returns the final URL because THL selects its signature branch through the request ticket. */
 data class MobileSignedRequest(val url: String, val headers: Map<String, String>)
 
 fun interface MobilePlaybackSigner {
