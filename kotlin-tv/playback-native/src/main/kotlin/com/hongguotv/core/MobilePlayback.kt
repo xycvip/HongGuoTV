@@ -108,6 +108,8 @@ internal object MobilePlayback {
         val transport = http.newBuilder()
             .callTimeout(timeout, TimeUnit.NANOSECONDS)
             .cookieJar(CookieJar.NO_COOKIES)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
         val request = Request.Builder()
             .url(url)
