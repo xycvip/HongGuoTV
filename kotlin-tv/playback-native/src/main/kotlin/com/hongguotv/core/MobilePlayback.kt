@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.core
 
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.util.concurrent.TimeUnit
