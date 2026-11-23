@@ -30,7 +30,7 @@ class SignerV5Test {
         }
     }
 
-    @Test fun adjustsOnlyTicketAndBindsCompressedBytesAndCurrentIdentity() {
+    @Test fun signsTHLPlaybackWithCompleteSignatureHeadersAndCurrentIdentity() {
         val body = byteArrayOf(31, -117, 8, 0, 1, 2, 3, 4)
         val identity = mapOf(
             "device_id" to "123", "iid" to "456", "cdid" to "synthetic",
@@ -42,7 +42,8 @@ class SignerV5Test {
             { 1800000000000 },
             random = { 0.5 },
             processNonce = "synthetic",
-            mobileV5 = true
+            mobileV5 = true,
+            mobileV5QueryDeviceBrand = true
         )
         for (ts in 1800000000..1800000031) {
             val request = signer.signPlayback(
@@ -58,9 +59,9 @@ class SignerV5Test {
             assertEquals(digest("MD5", body).hex().uppercase(), request.headers["x-ss-stub"])
             assertArrayEquals(body, request.body!!)
             assertEquals(signer.medusa(request.url, body, ts, identity), request.headers["x-medusa"])
-            assertNull(request.headers["x-gorgon"])
-            assertNull(request.headers["x-ladon"])
-            assertNull(request.headers["x-argus"])
+            assertNotNull(request.headers["x-gorgon"])
+            assertNotNull(request.headers["x-ladon"])
+            assertNotNull(request.headers["x-argus"])
         }
     }
 }
