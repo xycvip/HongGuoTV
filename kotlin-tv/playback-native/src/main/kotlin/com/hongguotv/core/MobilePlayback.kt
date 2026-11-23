@@ -3,8 +3,8 @@ package com.hongguotv.core
 
 import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.security.MessageDigest
-import java.util.zip.GZIPOutputStream
+import java.io.InterruptedIOException
+import java.util.concurrent.TimeUnit
 import okhttp3.CookieJar
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -21,6 +21,19 @@ internal fun interface MobilePlaybackSigner {
 }
 
 internal object MobilePlayback {
+    private const val USER_AGENT = DeviceRegister.USER_AGENT
+    private const val ROUTE_TIMEOUT_MS = 3500L
+    private const val RESPONSE_LIMIT = 2L * 1024 * 1024
+
+    private data class ModelRoute(val url: String, val single: Boolean)
+
+    private val routes = listOf(
+        ModelRoute("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/", false),
+        ModelRoute("https://reading.snssdk.com/novel/player/multi_video_model/v1/", false),
+        ModelRoute("https://reading.snssdk.com/novel/player/video_model/v1/", true),
+        ModelRoute("https://api5-normal.fqnovel.com/novel/player/multi_video_model/v1/", false),
+    )
+
     private val v5Signer = Signer(mobileV5 = true)
     val signer = MobilePlaybackSigner { url, body, _ ->
         val parsed = url.toHttpUrl()
@@ -30,54 +43,134 @@ internal object MobilePlayback {
         MobileSignedRequest(request.url, request.headers)
     }
 
-    fun ladder(id: String, device: Map<String, String>, http: OkHttpClient,
-               signer: MobilePlaybackSigner, now: Long): StreamLadder {
+    fun ladder(
+        id: String,
+        device: Map<String, String>,
+        http: OkHttpClient,
+        signer: MobilePlaybackSigner,
+        now: Long,
+    ): StreamLadder {
         require(id.matches(Regex("[0-9]{1,30}")))
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12)
+        var lastError: IOException? = null
+
+        for (route in routes) {
+            RequestScope.ensureActive()
+            val remaining = deadline - System.nanoTime()
+            if (remaining <= 0) break
+            try {
+                val model = requestModel(id, device, http, signer, route, now, remaining)
+                val rows = PlaybackModels.renditions(model)
+                if (rows.isEmpty()) throw PlaybackSourceException(PlaybackSourceException.Reason.NO_PLAYABLE_SOURCE)
+                return StreamLadder(rows)
+            } catch (error: InterruptedIOException) {
+                throw error
+            } catch (error: IOException) {
+                if (error is PlaybackSourceException &&
+                    error.reason == PlaybackSourceException.Reason.REJECTED
+                ) throw error
+                if (error is PlaybackSourceException &&
+                    error.reason == PlaybackSourceException.Reason.HTTP_REJECTED &&
+                    error.upstreamCode in setOf(401, 403)
+                ) throw error
+                lastError = error
+            }
+        }
+        throw lastError ?: IOException("官方播放接口请求超时")
+    }
+
+    private fun requestModel(
+        id: String,
+        device: Map<String, String>,
+        http: OkHttpClient,
+        signer: MobilePlaybackSigner,
+        route: ModelRoute,
+        now: Long,
+        remainingNanos: Long,
+    ): JSONObject {
         RequestScope.ensureActive()
-        val query = linkedMapOf("aid" to "8662", "app_name" to "novelread",
-            "version_code" to "74332", "version_name" to "7.4.3.32",
-            "channel" to "vivo_8662_64", "device_platform" to "android",
-            "device_type" to "PGT-AN10", "os_version" to "12", "update_version_code" to "74332",
-            "iid" to device.getValue("iid"), "cdid" to device.getValue("cdid"),
-            "device_id" to device.getValue("device_id"), "_rticket" to now.toString())
-        val url = "https://api5-normal-sinfonlinea.fqnovel.com/novel/player/multi_video_model/player/v1"
-            .toHttpUrl().newBuilder().apply { query.forEach { (k,v) -> addQueryParameter(k,v) } }.build()
-        val payload = JSONObject("""{"biz_param":{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"disable_video_relate_book":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["$id"]},"dr_scene":"player"}""")
-        val output = ByteArrayOutputStream()
-        GZIPOutputStream(output).use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val bytes = output.toByteArray()
-        val request = Request.Builder().url(url)
-            .header("User-Agent", "com.phoenix.read/73932 (Linux; U; Android 12; zh_CN_#Hans; PGT-AN10; Build/V417IR;tt-ok/3.12.13.20)")
-            .header("Accept", "application/json").header("Content-Encoding", "gzip")
-            .header("x-ss-stub", MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02X".format(it) })
+        val queryKeys = listOf(
+            "ac", "channel", "aid", "app_name", "version_code", "version_name",
+            "device_platform", "os", "ssmix", "device_type", "device_brand",
+            "language", "os_api", "os_version", "manifest_version_code",
+            "resolution", "dpi", "update_version_code", "host_abi",
+            "dragon_device_type", "pv_player", "compliance_status",
+            "need_personal_recommend", "player_so_load", "is_android_pad_screen",
+            "cdid", "iid", "device_id",
+        )
+        val query = linkedMapOf<String, String>()
+        queryKeys.forEach { key -> device[key]?.let { query[key] = it } }
+        query["ts"] = (now / 1000).toString()
+        query["_rticket"] = now.toString()
+
+        val url = route.url.toHttpUrl().newBuilder()
+            .apply { query.forEach { (key, value) -> addQueryParameter(key, value) } }
+            .build()
+        val biz = JSONObject()
+            .put("detail_page_version", 0)
+            .put("device_level", 3)
+            .put("disable_digg_stat", false)
+            .put("need_all_video_definition", true)
+            .put("need_mp4_align", false)
+            .put("use_os_player", false)
+            .put("use_server_dns", false)
+            .put("video_platform", 1024)
+        val payload = if (route.single) {
+            JSONObject()
+                .put("video_id", id)
+                .put("content_type", 1)
+                .put("biz_param", biz)
+        } else {
+            JSONObject()
+                .put("biz_param", biz)
+                .put("mixed_video_id_map", JSONObject().put("1004", org.json.JSONArray().put(id)))
+        }
+        val bytes = payload.toString().toByteArray(Charsets.UTF_8)
         val signed = signer.sign(url.toString(), bytes, device)
-        request.url(signed.url)
-        signed.headers.forEach { (k,v) -> request.header(k,v) }
-        RequestScope.ensureActive()
-        request.post(bytes.toRequestBody("application/json; charset=utf-8".toMediaType()))
-        val transport = http.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
-        return RequestScope.execute(transport.newCall(request.build())) { response ->
-            if (!response.isSuccessful) throw PlaybackSourceException(PlaybackSourceException.Reason.HTTP_REJECTED, response.code)
+        val timeout = minOf(remainingNanos, TimeUnit.MILLISECONDS.toNanos(ROUTE_TIMEOUT_MS))
+        if (timeout <= 0) throw InterruptedIOException("播放请求超时")
+        val transport = http.newBuilder()
+            .callTimeout(timeout, TimeUnit.NANOSECONDS)
+            .cookieJar(CookieJar.NO_COOKIES)
+            .build()
+        val request = Request.Builder().url(signed.url).apply {
+            signed.headers.forEach { (key, value) -> header(key, value) }
+            header("User-Agent", USER_AGENT)
+            header("Accept", "application/json; charset=utf-8,application/x-protobuf")
+            header("Content-Type", "application/json; charset=UTF-8")
+            header("x-tt-request-tag", "t=0;n=0")
+            header("passport-sdk-version", "50561")
+            header("x-vc-bdturing-sdk-version", "3.7.2.cn")
+            header("x-tt-dt", "")
+            post(bytes.toRequestBody("application/json; charset=utf-8".toMediaType()))
+        }.build()
+
+        return RequestScope.execute(transport.newCall(request)) { response ->
+            if (!response.isSuccessful) {
+                throw PlaybackSourceException(PlaybackSourceException.Reason.HTTP_REJECTED, response.code)
+            }
             val body = response.body ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
-            val limit = 2 * 1024 * 1024L
-            if (body.contentLength() > limit) throw IOException("播放信息过大")
+            if (body.contentLength() > RESPONSE_LIMIT) throw IOException("播放信息过大")
             val source = body.source()
-            source.request(limit + 1)
-            if (source.buffer.size > limit) throw IOException("播放信息过大")
+            source.request(RESPONSE_LIMIT + 1)
+            if (source.buffer.size > RESPONSE_LIMIT) throw IOException("播放信息过大")
             val text = source.readUtf8()
             if (text.isBlank()) throw EmptyPlaybackResponseException("stage=mobile-model")
-            val root = try { JSONObject(text) } catch (_: Exception) {
+            val root = try {
+                JSONObject(text)
+            } catch (_: Exception) {
                 throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
             }
             PlaybackModels.checkStatus(root)
             val data = root.optJSONObject("data")
                 ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
-            val entries = data.optJSONObject("1004") ?: data
-            val model = PlaybackModels.objectValue(entries.optJSONObject(id)?.opt("video_model"))
+            val entry = if (route.single) {
+                data
+            } else {
+                data.optJSONObject("1004")?.optJSONObject(id) ?: data.optJSONObject(id)
+            }
+            PlaybackModels.objectValue(entry?.opt("video_model"))
                 ?: throw PlaybackSourceException(PlaybackSourceException.Reason.NO_PLAYABLE_SOURCE)
-            val rows = PlaybackModels.renditions(model)
-            if (rows.isEmpty()) throw PlaybackSourceException(PlaybackSourceException.Reason.NO_PLAYABLE_SOURCE)
-            StreamLadder(rows)
         }
     }
 }
