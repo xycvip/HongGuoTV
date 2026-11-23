@@ -12,7 +12,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MobilePlaybackTest {
-    private val device = ThlDeviceRegister.profile("test-device", "test-openudid") +
+    private val device = ThlDeviceRegister.profile("test-device") +
         mapOf("device_id" to "123456", "iid" to "654321")
 
     private fun model(id: String = "123", typed: Boolean = false, stringModel: Boolean = false): String {
