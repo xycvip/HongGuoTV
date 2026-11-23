@@ -5,6 +5,8 @@ import android.content.Context
 import com.hongguotv.core.ContentRepository
 import com.hongguotv.core.PlayerDeviceSource
 import com.hongguotv.core.PlayerDeviceStore
+import com.hongguotv.core.PlaybackDeviceSession
+import com.hongguotv.core.PlaybackDeviceProfileStore
 import com.hongguotv.core.PhoenixPlaybackSource
 import com.hongguotv.core.PhoenixPlaybackDeviceSession
 import com.hongguotv.core.StreamSource
@@ -23,6 +25,15 @@ internal data class PlaybackRouteSnapshot(val api: String, val revision: Long)
 
 private fun Context.configureNativePlayerDeviceStore() {
     ThlSigningRuntime.configure(applicationContext)
+    val thlPrefs = getSharedPreferences("thl-playback-device-v1", Context.MODE_PRIVATE)
+    PlaybackDeviceSession.shared.configureStore(object : PlaybackDeviceProfileStore {
+        override fun load(): String? = thlPrefs.getString("device", null)
+        override fun save(value: String?) {
+            thlPrefs.edit().apply {
+                if (value == null) remove("device") else putString("device", value)
+            }.apply()
+        }
+    })
     val prefs = getSharedPreferences("n3urda-player-device-v1", Context.MODE_PRIVATE)
     PlayerDeviceSource.configureStore(object : PlayerDeviceStore {
         override fun load(): String? = prefs.getString("device", null)
