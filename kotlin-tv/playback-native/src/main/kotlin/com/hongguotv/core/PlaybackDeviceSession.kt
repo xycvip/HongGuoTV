@@ -57,7 +57,7 @@ class PlaybackDeviceSession(
         cdid = savedCdid
         openudid = savedOpenudid
         ready = Profile(
-            ThlDeviceRegister.profile(cdid, openudid) + mapOf("device_id" to savedDeviceId, "iid" to savedInstallId),
+            ThlDeviceRegister.profile(cdid) + mapOf("device_id" to savedDeviceId, "iid" to savedInstallId),
             saved.optString("cookie"),
             savedOpenudid,
         )
