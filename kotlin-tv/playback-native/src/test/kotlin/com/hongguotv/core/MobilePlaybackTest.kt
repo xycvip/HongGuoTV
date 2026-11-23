@@ -28,7 +28,15 @@ class MobilePlaybackTest {
                 .code(200).message("OK").body(body.toResponseBody()).build()
         }.build()
 
-    private val signer = MobilePlaybackSigner { url, _, _ -> MobileSignedRequest(url, emptyMap()) }
+    private fun mockSigned(url: String, identity: Map<String, String>, now: Long, headers: Map<String, String> = emptyMap()): MobileSignedRequest {
+        val query = LinkedHashMap(identity).apply {
+            put("ts", (now / 1000).toString())
+            put("_rticket", now.toString())
+        }
+        return MobileSignedRequest("$url?${Signer.encode(query)}", headers)
+    }
+
+    private val signer = MobilePlaybackSigner { url, _, identity, now -> mockSigned(url, identity, now) }
 
     @Test fun supportsBothLiveResponseShapesWithoutSelectingOtherEpisodes() {
         for (typed in listOf(false, true)) for (stringModel in listOf(false, true)) {
@@ -45,11 +53,11 @@ class MobilePlaybackTest {
     @Test fun sendsTHLRegisteredProfileAndPlainJsonModelRequest() {
         var signed: ByteArray? = null
         var signedUrl: String? = null
-        val signing = MobilePlaybackSigner { target, bytes, identity ->
+        val signing = MobilePlaybackSigner { target, bytes, identity, now ->
             assertEquals(device, identity)
             signed = bytes.copyOf()
             signedUrl = target
-            MobileSignedRequest(target, mapOf("X-Medusa" to "test-signature"))
+            mockSigned(target, identity, now, mapOf("X-Medusa" to "test-signature"))
         }
         MobilePlayback.ladder("123", device, http(model()) { request ->
             val bytes = Buffer().apply { request.body!!.writeTo(this) }.readByteArray()
