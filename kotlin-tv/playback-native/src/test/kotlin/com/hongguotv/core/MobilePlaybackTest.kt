@@ -81,6 +81,17 @@ class MobilePlaybackTest {
         }, signing, 1000)
     }
 
+    @Test fun mobileV5PlaybackSigningKeepsTheFullTHLSignatureHeaderSet() {
+        val signed = MobilePlayback.signer.sign(
+            "https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/?aid=8662",
+            """{"biz_param":{"video_platform":1024}}""".toByteArray(),
+            device,
+        )
+        for (header in listOf("x-gorgon", "x-khronos", "x-ladon", "x-argus", "x-helios", "x-medusa")) {
+            assertTrue("missing THL signature header: $header", signed.headers.keys.any { it.equals(header, true) })
+        }
+    }
+
     @Test fun retriesNextTHLModelHostWhenPrimaryRouteHasNoModel() {
         val calls = mutableListOf<String>()
         val client = OkHttpClient.Builder().addInterceptor { chain ->
