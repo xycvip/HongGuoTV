@@ -34,7 +34,7 @@ internal object MobilePlayback {
         ModelRoute("https://api5-normal.fqnovel.com/novel/player/multi_video_model/v1/", false),
     )
 
-    private val v5Signer = Signer(mobileV5 = true)
+    private val v5Signer = Signer(mobileV5 = true, mobileV5QueryDeviceBrand = true)
     val signer = MobilePlaybackSigner { url, body, _ ->
         val parsed = url.toHttpUrl()
         val values = parsed.queryParameterNames.associateWith { parsed.queryParameter(it)!! }
@@ -64,9 +64,17 @@ internal object MobilePlayback {
             try {
                 val model = requestModel(id, device, http, signer, route, now, deadline)
                 var rows = PlaybackModels.renditions(model)
-                if (rows.isEmpty()) {
+                val videoList = model.opt("video_list")
+                val hasVideoList = when (videoList) {
+                    is org.json.JSONObject -> videoList.length() > 0
+                    is org.json.JSONArray -> videoList.length() > 0
+                    else -> false
+                }
+                // THL also calls fallback_api for dynamic models and models without a usable
+                // video_list, even when an initial rendition was parsed successfully.
+                if (rows.isEmpty() || !hasVideoList || model.optBoolean("dynamic_video")) {
                     val fallback = requestFallbackModel(model, http, deadline)
-                    if (fallback != null) rows = PlaybackModels.renditions(fallback)
+                    if (fallback != null) rows = (rows + PlaybackModels.renditions(fallback)).distinctBy { it.url }
                 }
                 if (rows.isEmpty()) throw PlaybackSourceException(PlaybackSourceException.Reason.NO_PLAYABLE_SOURCE)
                 return StreamLadder(rows)
