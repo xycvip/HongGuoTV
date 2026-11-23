@@ -179,6 +179,75 @@ class MobilePlaybackTest {
         assertNull(PlaybackModels.fallback(source))
     }
 
+    @Test fun followsFallbackGetRedirectsOnlyWithinTHLHosts() {
+        val fallbackModel = """{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://cdn.fqnovelvod.com/fallback.mp4"}]}"""
+        val calls = mutableListOf<String>()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            calls += request.url.toString()
+            val response = when {
+                request.method == "POST" -> """{"code":0,"data":{"123":{"video_model":{"fallback_api":"https://api5-normal.fqnovel.com/fallback/video?force_fids=1"}}}}"""
+                request.url.encodedPath == "/fallback/video" -> null
+                else -> """{"code":0,"video_info":{"code":0,"data":$fallbackModel}}"""
+            }
+            if (request.method == "GET" && request.url.encodedPath == "/fallback/video") {
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                    .code(302).message("Found")
+                    .header("Location", "https://edge.fqnovel.com/fallback/final")
+                    .body("".toResponseBody()).build()
+            } else {
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("OK").body((response ?: "{}").toResponseBody()).build()
+            }
+        }.build()
+        val rows = MobilePlayback.ladder("123", device, client, signer, 1000).renditions
+        assertEquals("https://cdn.fqnovelvod.com/fallback.mp4", rows.single().url)
+        assertEquals(3, calls.size)
+        assertTrue(calls[2].startsWith("https://edge.fqnovel.com/"))
+    }
+
+    @Test fun blocksFallbackRedirectsOutsideTHLHosts() {
+        val calls = mutableListOf<String>()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            calls += request.url.toString()
+            val response = if (request.method == "POST") {
+                """{"code":0,"data":{"123":{"video_model":{"fallback_api":"https://api5-normal.fqnovel.com/fallback/video"}}}}"""
+            } else ""
+            if (request.method == "GET") {
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                    .code(302).message("Found")
+                    .header("Location", "https://evil.example.org/fallback")
+                    .body("".toResponseBody()).build()
+            } else {
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("OK").body(response.toResponseBody()).build()
+            }
+        }.build()
+        val error = assertThrows(PlaybackSourceException::class.java) {
+            MobilePlayback.ladder("123", device, client, signer, 1000)
+        }
+        assertEquals(PlaybackSourceException.Reason.REJECTED, error.reason)
+        assertEquals(2, calls.size)
+    }
+
+    @Test fun rejectsSignedPostRedirectsWithoutFollowingThem() {
+        val calls = mutableListOf<String>()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            calls += request.url.toString()
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                .code(302).message("Found")
+                .header("Location", "https://api5-normal.fqnovel.com/redirect")
+                .body("".toResponseBody()).build()
+        }.build()
+        val error = assertThrows(PlaybackSourceException::class.java) {
+            MobilePlayback.ladder("123", device, client, signer, 1000)
+        }
+        assertEquals(PlaybackSourceException.Reason.REJECTED, error.reason)
+        assertEquals(1, calls.size)
+    }
+
     @Test fun rejectsBusinessErrorsAndOversizeResponse() {
         val error = assertThrows(PlaybackSourceException::class.java) {
             MobilePlayback.ladder("123", device, http("""{"code":110001}"""), signer, 1000)
