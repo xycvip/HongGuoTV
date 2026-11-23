@@ -8,9 +8,9 @@ import java.util.concurrent.TimeUnit
 /**
  * Native N playback adapter.
  *
- * The upstream request, V5 signing, registered identity and model parsing follow
- * N3urda/hongguoTV's active MobilePlayback path. App quality-mode and MP4
- * streaming behavior remain local adapter responsibilities.
+ * The registered identity, model routes and request fields follow
+ * never88gone/THLRedGuo's hongguo.js App playback path. Native V5 signing,
+ * app quality-mode and MP4 streaming behavior remain local adapter responsibilities.
  */
 class PlaybackRepository(
     private val http: OkHttpClient,
