@@ -248,6 +248,38 @@ class MobilePlaybackTest {
         assertEquals(1, calls.size)
     }
 
+    @Test fun retriesOnlyTHLRecoverableHttpStatuses() {
+        val success = """{"code":0,"data":{"123":{"video_model":{"video_list":[{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://cdn.fqnovelvod.com/episode.mp4"}]}}}}"""
+        var retryCalls = 0
+        val retryClient = OkHttpClient.Builder().addInterceptor { chain ->
+            retryCalls++
+            val request = chain.request()
+            if (retryCalls == 1) {
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                    .code(404).message("Not Found").body("".toResponseBody()).build()
+            } else {
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("OK").body(success.toResponseBody()).build()
+            }
+        }.build()
+        val recovered = MobilePlayback.ladder("123", device, retryClient, signer, 1000)
+        assertEquals("https://cdn.fqnovelvod.com/episode.mp4", recovered.renditions.single().url)
+        assertEquals(2, retryCalls)
+
+        var terminalCalls = 0
+        val terminalClient = OkHttpClient.Builder().addInterceptor { chain ->
+            terminalCalls++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(429).message("Too Many Requests").body("".toResponseBody()).build()
+        }.build()
+        val error = assertThrows(PlaybackSourceException::class.java) {
+            MobilePlayback.ladder("123", device, terminalClient, signer, 1000)
+        }
+        assertEquals(PlaybackSourceException.Reason.HTTP_REJECTED, error.reason)
+        assertEquals(429, error.upstreamCode)
+        assertEquals(1, terminalCalls)
+    }
+
     @Test fun rejectsBusinessErrorsAndOversizeResponse() {
         val error = assertThrows(PlaybackSourceException::class.java) {
             MobilePlayback.ladder("123", device, http("""{"code":110001}"""), signer, 1000)
