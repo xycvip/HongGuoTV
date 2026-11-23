@@ -21,7 +21,7 @@ internal fun interface MobilePlaybackSigner {
 }
 
 internal object MobilePlayback {
-    private const val USER_AGENT = DeviceRegister.USER_AGENT
+    private const val USER_AGENT = ThlDeviceRegister.USER_AGENT
     private const val ROUTE_TIMEOUT_MS = 3500L
     private const val RESPONSE_LIMIT = 2L * 1024 * 1024
 
