@@ -438,8 +438,9 @@ class Signer(
             b0 = x8
             b8 = words.removeAt(0)
         }
-        val license = if (mobileV5) V5Constants.license else "1588093228"
-        val text = "$ts-$license-8662".toByteArray()
+        // THL PublicProfileHelios binds the registered signing profile ID.
+        val identity = if (mobileV5) String(ThlSigningConfig.id, Charsets.US_ASCII) else "1588093228"
+        val text = "$ts-$identity-8662".toByteArray()
         val padding = 16 - text.size % 16
         val data = text + ByteArray(padding) { padding.toByte() }
         var output = le32(random)
