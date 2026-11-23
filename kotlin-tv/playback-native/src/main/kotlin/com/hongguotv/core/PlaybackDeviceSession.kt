@@ -9,6 +9,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
+interface PlaybackDeviceProfileStore {
+    fun load(): String?
+    fun save(value: String?)
+}
+
 class PlaybackDeviceRegistrationException(cause: Throwable? = null) :
     IOException("播放设备注册失败，请稍后重试", cause)
 
@@ -25,6 +30,47 @@ class PlaybackDeviceSession(
     private var cdid = ThlDeviceRegister.newCdid()
     private var openudid = ThlDeviceRegister.newOpenudid()
     private var ready: Profile? = null
+    private var store: PlaybackDeviceProfileStore? = null
+    private var restoreAttempted = false
+
+    /** Restore the same anonymous THL device identity across app launches, as upstream does. */
+    @Synchronized
+    fun configureStore(value: PlaybackDeviceProfileStore?) {
+        store = value
+        if (value == null) return
+        ready?.let { persist(it); return }
+        if (restoreAttempted) return
+        restoreAttempted = true
+        val saved = runCatching { value.load()?.let(::JSONObject) }.getOrNull() ?: return
+        val savedCdid = saved.optString("cdid")
+        val savedOpenudid = saved.optString("openudid")
+        val savedDeviceId = saved.optString("device_id")
+        val savedInstallId = saved.optString("iid")
+        val validId = Regex("[1-9][0-9]{9,23}")
+        if (savedCdid.isBlank() || savedOpenudid.isBlank() ||
+            !validId.matches(savedDeviceId) || !validId.matches(savedInstallId)
+        ) {
+            value.save(null)
+            return
+        }
+        cdid = savedCdid
+        openudid = savedOpenudid
+        ready = Profile(
+            ThlDeviceRegister.profile(cdid, openudid) + mapOf("device_id" to savedDeviceId, "iid" to savedInstallId),
+            saved.optString("cookie"),
+        )
+    }
+
+    private fun persist(profile: Profile) {
+        val values = profile.values
+        store?.save(JSONObject()
+            .put("cdid", values["cdid"])
+            .put("openudid", values["openudid"])
+            .put("device_id", values["device_id"])
+            .put("iid", values["iid"])
+            .put("cookie", profile.cookie)
+            .toString())
+    }
 
     private fun registerDevice(http: OkHttpClient): ThlDeviceRegister.Registered? {
         register?.let { return it(http) }
@@ -66,13 +112,14 @@ class PlaybackDeviceSession(
                 .filterKeys { it in setOf("install_id", "ttreq", "store-region", "store-region-src") }
                 .entries
                 .joinToString("; ") { (name, value) -> "$name=$value" },
-        ).also { ready = it }
+        ).also { ready = it; persist(it) }
     }
 
     /** Drop the in-process anonymous identity and register a fresh one. */
     @Synchronized
     fun renew(http: OkHttpClient): Profile {
         ready = null
+        store?.save(null)
         cdid = ThlDeviceRegister.newCdid()
         openudid = ThlDeviceRegister.newOpenudid()
         return profile(http)
