@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.core
 
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -53,6 +58,35 @@ class DeviceRegisterTest {
         )!!
         assertEquals("7345678901234567", numeric.deviceId)
         assertEquals("7345678901234568", numeric.installId)
+    }
+
+    @Test fun sessionUsesRegisteredIdentityAndTHLProfileForNRequests() {
+        var captured: okhttp3.Request? = null
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            captured = chain.request()
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK")
+                .body("""{"device_id_str":"7345678901234567100","install_id_str":"7345678901234567200"}""".toResponseBody())
+                .build()
+        }.build()
+        val profile = PlaybackDeviceSession().profile(client)
+        val request = captured!!
+        val buffer = Buffer()
+        request.body!!.writeTo(buffer)
+        val body = JSONObject(buffer.readUtf8())
+        val header = body.getJSONObject("header")
+
+        assertEquals(DeviceRegister.url(), request.url.toString())
+        assertEquals(DeviceRegister.USER_AGENT, request.header("User-Agent"))
+        assertEquals("application/json; charset=utf-8", request.header("Content-Type"))
+        assertEquals("com.phoenix.read", header.getString("package"))
+        assertEquals(profile.values["cdid"], header.getString("cdid"))
+        assertEquals(profile.values["openudid"], header.getString("openudid"))
+        assertEquals("7345678901234567100", profile.values["device_id"])
+        assertEquals("7345678901234567200", profile.values["iid"])
+        assertEquals("25053RT47C", profile.values["device_type"])
+        assertEquals("73932", profile.values["version_code"])
+        assertTrue(profile.cookie.isEmpty())
     }
 
     @Test fun rejectsMissingOrZeroRegistrationIdentity() {
