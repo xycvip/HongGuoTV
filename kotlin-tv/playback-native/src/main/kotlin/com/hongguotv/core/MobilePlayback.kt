@@ -59,8 +59,12 @@ internal object MobilePlayback {
             val remaining = deadline - System.nanoTime()
             if (remaining <= 0) break
             try {
-                val model = requestModel(id, device, http, signer, route, now, remaining)
-                val rows = PlaybackModels.renditions(model)
+                val model = requestModel(id, device, http, signer, route, now, deadline)
+                var rows = PlaybackModels.renditions(model)
+                if (rows.isEmpty()) {
+                    val fallback = requestFallbackModel(model, http, deadline)
+                    if (fallback != null) rows = PlaybackModels.renditions(fallback)
+                }
                 if (rows.isEmpty()) throw PlaybackSourceException(PlaybackSourceException.Reason.NO_PLAYABLE_SOURCE)
                 return StreamLadder(rows)
             } catch (error: InterruptedIOException) {
@@ -79,6 +83,61 @@ internal object MobilePlayback {
         throw lastError ?: IOException("官方播放接口请求超时")
     }
 
+    private fun requestFallbackModel(
+        model: JSONObject,
+        http: OkHttpClient,
+        deadline: Long,
+    ): JSONObject? {
+        val raw = PlaybackModels.fallback(model) ?: return null
+        val parsed = raw.toHttpUrl()
+        val host = parsed.host.lowercase()
+        if (!(host == "fqnovel.com" || host.endsWith(".fqnovel.com") ||
+                host == "snssdk.com" || host.endsWith(".snssdk.com"))
+        ) throw IOException("播放 fallback 地址不受支持")
+        val url = parsed.newBuilder()
+            .removeAllQueryParameters("force_fids")
+            .setQueryParameter("format_type", "mp4")
+            .setQueryParameter("codec_type", "1")
+            .build()
+        val remaining = deadline - System.nanoTime()
+        if (remaining <= 0) throw InterruptedIOException("播放请求超时")
+        val timeout = minOf(remaining, TimeUnit.MILLISECONDS.toNanos(ROUTE_TIMEOUT_MS))
+        val transport = http.newBuilder()
+            .callTimeout(timeout, TimeUnit.NANOSECONDS)
+            .cookieJar(CookieJar.NO_COOKIES)
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json; charset=utf-8")
+            .get()
+            .build()
+        return RequestScope.execute(transport.newCall(request)) { response ->
+            if (!response.isSuccessful) {
+                throw PlaybackSourceException(PlaybackSourceException.Reason.HTTP_REJECTED, response.code)
+            }
+            val body = response.body ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
+            if (body.contentLength() > RESPONSE_LIMIT) throw IOException("播放 fallback 响应过大")
+            val source = body.source()
+            source.request(RESPONSE_LIMIT + 1)
+            if (source.buffer.size > RESPONSE_LIMIT) throw IOException("播放 fallback 响应过大")
+            val text = source.readUtf8()
+            if (text.isBlank()) throw EmptyPlaybackResponseException("stage=mobile-fallback")
+            val root = try {
+                JSONObject(text)
+            } catch (_: Exception) {
+                throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
+            }
+            PlaybackModels.checkStatus(root)
+            val videoInfo = root.optJSONObject("video_info")
+                ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
+            val code = videoInfo.optInt("Code", videoInfo.optInt("code", 0))
+            if (code != 0) throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, code)
+            PlaybackModels.objectValue(videoInfo.opt("data"))
+                ?: throw PlaybackSourceException(PlaybackSourceException.Reason.INVALID_RESPONSE)
+        }
+    }
+
     private fun requestModel(
         id: String,
         device: Map<String, String>,
@@ -86,7 +145,7 @@ internal object MobilePlayback {
         signer: MobilePlaybackSigner,
         route: ModelRoute,
         now: Long,
-        remainingNanos: Long,
+        deadline: Long,
     ): JSONObject {
         RequestScope.ensureActive()
         val queryKeys = listOf(
@@ -127,6 +186,7 @@ internal object MobilePlayback {
         }
         val bytes = payload.toString().toByteArray(Charsets.UTF_8)
         val signed = signer.sign(url.toString(), bytes, device)
+        val remainingNanos = deadline - System.nanoTime()
         val timeout = minOf(remainingNanos, TimeUnit.MILLISECONDS.toNanos(ROUTE_TIMEOUT_MS))
         if (timeout <= 0) throw InterruptedIOException("播放请求超时")
         val transport = http.newBuilder()
