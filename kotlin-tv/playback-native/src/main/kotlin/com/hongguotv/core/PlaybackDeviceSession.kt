@@ -22,8 +22,8 @@ class PlaybackDeviceSession(
 
     data class Profile(val values: Map<String, String>, val cookie: String)
 
-    private val cdid = DeviceRegister.newCdid()
-    private val openudid = DeviceRegister.newOpenudid()
+    private var cdid = DeviceRegister.newCdid()
+    private var openudid = DeviceRegister.newOpenudid()
     private var ready: Profile? = null
 
     private fun registerDevice(http: OkHttpClient): DeviceRegister.Registered? {
@@ -69,6 +69,8 @@ class PlaybackDeviceSession(
     @Synchronized
     fun renew(http: OkHttpClient): Profile {
         ready = null
+        cdid = DeviceRegister.newCdid()
+        openudid = DeviceRegister.newOpenudid()
         return profile(http)
     }
 }
