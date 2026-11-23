@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 
 interface PlaybackDeviceProfileStore {
     fun load(): String?
@@ -41,7 +42,7 @@ class PlaybackDeviceSession(
         ready?.let { persist(it); return }
         if (restoreAttempted) return
         restoreAttempted = true
-        val saved = runCatching { value.load()?.let(::JSONObject) }.getOrNull() ?: return
+        val saved = runCatching { value.load()?.let { JSONObject(it) } }.getOrNull() ?: return
         val savedCdid = saved.optString("cdid")
         val savedOpenudid = saved.optString("openudid")
         val savedDeviceId = saved.optString("device_id")
