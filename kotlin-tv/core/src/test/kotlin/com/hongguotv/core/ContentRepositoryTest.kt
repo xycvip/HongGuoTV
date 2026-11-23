@@ -114,7 +114,7 @@ class ContentRepositoryTest {
         assertEquals("update_64", request.url.queryParameter("channel"))
         assertNotNull(request.url.queryParameter("ts"))
         assertNull(request.header("Content-Encoding"))
-        assertEquals(DeviceRegister.USER_AGENT, request.header("User-Agent"))
+        assertEquals(ThlDeviceRegister.USER_AGENT, request.header("User-Agent"))
         assertNotNull(request.header("x-ss-stub"))
         assertNotNull(request.header("x-khronos"))
         assertNotNull(request.header("x-helios"))
