@@ -123,6 +123,9 @@ internal object MobilePlayback {
             .get()
             .build()
         return RequestScope.execute(transport.newCall(request)) { response ->
+            if (response.code in 300..399) {
+                throw PlaybackSourceException(PlaybackSourceException.Reason.REJECTED, response.code)
+            }
             if (!response.isSuccessful) {
                 throw PlaybackSourceException(PlaybackSourceException.Reason.HTTP_REJECTED, response.code)
             }
@@ -185,6 +188,8 @@ internal object MobilePlayback {
         val transport = http.newBuilder()
             .callTimeout(timeout, TimeUnit.NANOSECONDS)
             .cookieJar(CookieJar.NO_COOKIES)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
         val request = Request.Builder().url(signed.url).apply {
             signed.headers.forEach { (key, value) -> header(key, value) }
