@@ -525,7 +525,7 @@ class Signer(
         error("无法生成请求签名")
     }
 
-    /** Playback uses the registered profile, no legacy ts query parameter, and branch 0.
+    /** THL App playback uses the registered device profile, ts/_rticket query pair and V5 branch 0.
      * Keep the existing branch-0 signing algorithm for deterministic compatibility.
      */
     fun signPlayback(
