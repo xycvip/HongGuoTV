@@ -130,7 +130,7 @@ class PlaybackDeviceSession(
 }
 
 private fun readRegisterBody(response: okhttp3.Response): String {
-    if (!response.isSuccessful) throw IOException("播放设备注册失败（HTTP ${response.code}）")
+    if (response.code != 200) throw IOException("播放设备注册失败（HTTP ${response.code}）")
     val body = response.body ?: throw IOException("播放设备注册响应为空")
     val limit = 2L * 1024 * 1024
     if (body.contentLength() > limit) throw IOException("播放设备注册响应过大")
