@@ -14,10 +14,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
 /** Signing returns the final URL because v5 selects its digest branch through the request ticket. */
-internal data class MobileSignedRequest(val url: String, val headers: Map<String, String>)
+data class MobileSignedRequest(val url: String, val headers: Map<String, String>)
 
-internal fun interface MobilePlaybackSigner {
-    fun sign(url: String, body: ByteArray, device: Map<String, String>): MobileSignedRequest
+fun interface MobilePlaybackSigner {
+    fun sign(baseUrl: String, body: ByteArray, device: Map<String, String>, now: Long): MobileSignedRequest
 }
 
 internal object MobilePlayback {
@@ -35,11 +35,8 @@ internal object MobilePlayback {
     )
 
     private val v5Signer = Signer(mobileV5 = true, mobileV5QueryDeviceBrand = true)
-    val signer = MobilePlaybackSigner { url, body, _ ->
-        val parsed = url.toHttpUrl()
-        val values = parsed.queryParameterNames.associateWith { parsed.queryParameter(it)!! }
-        val now = values.getValue("_rticket").toLong()
-        val request = v5Signer.signPlayback(parsed.newBuilder().query(null).build().toString(), values, body, now)
+    val signer = MobilePlaybackSigner { baseUrl, body, device, now ->
+        val request = v5Signer.signPlayback(baseUrl, device, body, now)
         MobileSignedRequest(request.url, request.headers)
     }
 
@@ -161,23 +158,6 @@ internal object MobilePlayback {
         deadline: Long,
     ): JSONObject {
         RequestScope.ensureActive()
-        val queryKeys = listOf(
-            "ac", "channel", "aid", "app_name", "version_code", "version_name",
-            "device_platform", "os", "ssmix", "device_type", "device_brand",
-            "language", "os_api", "os_version", "manifest_version_code",
-            "resolution", "dpi", "update_version_code", "host_abi",
-            "dragon_device_type", "pv_player", "compliance_status",
-            "need_personal_recommend", "player_so_load", "is_android_pad_screen",
-            "cdid", "iid", "device_id",
-        )
-        val query = linkedMapOf<String, String>()
-        queryKeys.forEach { key -> device[key]?.let { query[key] = it } }
-        query["ts"] = (now / 1000).toString()
-        query["_rticket"] = now.toString()
-
-        val url = route.url.toHttpUrl().newBuilder()
-            .apply { query.forEach { (key, value) -> addQueryParameter(key, value) } }
-            .build()
         val biz = JSONObject()
             .put("detail_page_version", 0)
             .put("device_level", 3)
@@ -198,7 +178,7 @@ internal object MobilePlayback {
                 .put("mixed_video_id_map", JSONObject().put("1004", org.json.JSONArray().put(id)))
         }
         val bytes = payload.toString().toByteArray(Charsets.UTF_8)
-        val signed = signer.sign(url.toString(), bytes, device)
+        val signed = signer.sign(route.url, bytes, device, now)
         val remainingNanos = deadline - System.nanoTime()
         val timeout = minOf(remainingNanos, TimeUnit.MILLISECONDS.toNanos(ROUTE_TIMEOUT_MS))
         if (timeout <= 0) throw InterruptedIOException("播放请求超时")
