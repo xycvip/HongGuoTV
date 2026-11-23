@@ -16,6 +16,7 @@ class PlaybackRepository(
     private val http: OkHttpClient,
     private val clock: () -> Long,
     private val playbackSession: PlaybackDeviceSession,
+    private val mobilePlaybackSigner: MobilePlaybackSigner? = null,
 ) {
     fun stream(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
@@ -31,7 +32,7 @@ class PlaybackRepository(
             id = id,
             device = identity.values,
             http = clientWithinDeadline(),
-            signer = MobilePlayback.signer,
+            signer = mobilePlaybackSigner ?: MobilePlayback.signer,
             now = clock(),
         )
             val portrait = ladder.renditions.firstNotNullOfOrNull { row ->
