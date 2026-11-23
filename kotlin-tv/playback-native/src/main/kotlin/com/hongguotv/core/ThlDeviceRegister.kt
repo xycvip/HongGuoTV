@@ -5,7 +5,7 @@ package com.hongguotv.core
 import org.json.JSONObject
 import java.util.UUID
 
-internal object ThlDeviceRegister {
+object ThlDeviceRegister {
     private const val URL =
         "https://log.snssdk.com/service/2/device_register/?aid=8662&app_name=novelread"
 
