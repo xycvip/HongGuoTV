@@ -9,8 +9,8 @@ import java.util.concurrent.TimeUnit
  * Native N playback adapter.
  *
  * The registered identity, model routes and request fields follow
- * never88gone/THLRedGuo's hongguo.js App playback path. Native V5 signing,
- * app quality-mode and MP4 streaming behavior remain local adapter responsibilities.
+ * never88gone/THLRedGuo's hongguo.js App playback path. THL portable signing is injected by the Android app; app quality-mode and MP4
+ * streaming behavior remain local adapter responsibilities.
  */
 class PlaybackRepository(
     private val http: OkHttpClient,
