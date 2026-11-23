@@ -11,10 +11,10 @@ import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).cookieJar(MemoryCookies()).build(), private val clock: () -> Long = System::currentTimeMillis, private val playbackSession: PlaybackDeviceSession = PlaybackDeviceSession.shared) {
+open class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).cookieJar(MemoryCookies()).build(), private val clock: () -> Long = System::currentTimeMillis, private val playbackSession: PlaybackDeviceSession = PlaybackDeviceSession.shared, private val mobilePlaybackSigner: MobilePlaybackSigner? = null) {
     private val signer = Signer()
     private val site = "https://hongguoduanju.com"
-    private val playbackRepository by lazy { PlaybackRepository(http,clock,playbackSession) }
+    private val playbackRepository by lazy { PlaybackRepository(http,clock,playbackSession,mobilePlaybackSigner) }
     private fun categoryPath(type: ContentType)=when(type) {
         ContentType.COMIC -> "comic-drama"
         ContentType.SHORT -> "real-drama"
