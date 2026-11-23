@@ -12,7 +12,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MobilePlaybackTest {
-    private val device = DeviceRegister.profile("test-device", "test-openudid") +
+    private val device = ThlDeviceRegister.profile("test-device", "test-openudid") +
         mapOf("device_id" to "123456", "iid" to "654321")
 
     private fun model(id: String = "123", typed: Boolean = false, stringModel: Boolean = false): String {
@@ -68,7 +68,7 @@ class MobilePlaybackTest {
             assertEquals("update_64", request.url.queryParameter("channel"))
             assertEquals("1", request.url.queryParameter("ts"))
             assertNull(request.header("Content-Encoding"))
-            assertEquals(DeviceRegister.USER_AGENT, request.header("User-Agent"))
+            assertEquals(ThlDeviceRegister.USER_AGENT, request.header("User-Agent"))
             assertEquals("test-signature", request.header("X-Medusa"))
             assertEquals("0", request.header("x-xs-from-web"))
             assertEquals("2", request.header("sdk-version"))
