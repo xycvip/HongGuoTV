@@ -12,8 +12,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MobilePlaybackTest {
-    private val device = ThlDeviceRegister.profile("test-device") +
-        mapOf("device_id" to "123456", "iid" to "654321")
+    private val device = ThlDeviceRegister.profile() +
+        linkedMapOf("iid" to "654321", "device_id" to "123456", "cdid" to "test-device")
 
     private fun model(id: String = "123", typed: Boolean = false, stringModel: Boolean = false): String {
         val value = JSONObject("""{"video_list":[{"video_meta":{"codec_type":"bytevc2","vwidth":720,"vheight":1280},"main_url":"https://example.org/unsupported"},{"video_meta":{"codec_type":"h264","vwidth":720,"vheight":1280},"main_url":"https://example.org/video"}]}""")
