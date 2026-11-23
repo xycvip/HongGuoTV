@@ -3,6 +3,7 @@ package com.hongguotv.core
 
 import java.io.IOException
 import java.io.InterruptedIOException
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import okhttp3.CookieJar
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -200,6 +201,7 @@ internal object MobilePlayback {
             header("User-Agent", USER_AGENT)
             header("Accept", "application/json; charset=utf-8,application/x-protobuf")
             header("Content-Type", "application/json; charset=UTF-8")
+            header("x-ss-stub", MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02X".format(it) })
             header("x-ss-req-ticket", signed.url.toHttpUrl().queryParameter("_rticket").orEmpty())
             header("sdk-version", "2")
             header("x-xs-from-web", "0")
