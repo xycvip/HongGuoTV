@@ -14,7 +14,7 @@ class PlaybackDeviceRegistrationException(cause: Throwable? = null) :
 
 /** One registered anonymous identity shared by the Native N content and playback requests. */
 class PlaybackDeviceSession(
-    private val register: ((OkHttpClient) -> DeviceRegister.Registered?)? = null
+    private val register: ((OkHttpClient) -> ThlDeviceRegister.Registered?)? = null
 ) {
     companion object {
         val shared = PlaybackDeviceSession()
@@ -22,15 +22,15 @@ class PlaybackDeviceSession(
 
     data class Profile(val values: Map<String, String>, val cookie: String)
 
-    private var cdid = DeviceRegister.newCdid()
-    private var openudid = DeviceRegister.newOpenudid()
+    private var cdid = ThlDeviceRegister.newCdid()
+    private var openudid = ThlDeviceRegister.newOpenudid()
     private var ready: Profile? = null
 
-    private fun registerDevice(http: OkHttpClient): DeviceRegister.Registered? {
+    private fun registerDevice(http: OkHttpClient): ThlDeviceRegister.Registered? {
         register?.let { return it(http) }
-        val body = DeviceRegister.payload(cdid, openudid)
-        val request = Request.Builder().url(DeviceRegister.url())
-        DeviceRegister.headers().forEach { (key, value) -> request.header(key, value) }
+        val body = ThlDeviceRegister.payload(cdid, openudid)
+        val request = Request.Builder().url(ThlDeviceRegister.url())
+        ThlDeviceRegister.headers().forEach { (key, value) -> request.header(key, value) }
         request.post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
         val transport = http.newBuilder()
             .cookieJar(CookieJar.NO_COOKIES)
@@ -38,7 +38,7 @@ class PlaybackDeviceSession(
             .followSslRedirects(false)
             .build()
         return RequestScope.execute(transport.newCall(request.build())) { response ->
-            DeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
+            ThlDeviceRegister.parse(readRegisterBody(response), response.headers("Set-Cookie"))
         }
     }
 
@@ -58,7 +58,7 @@ class PlaybackDeviceSession(
         if (!validId.matches(device.deviceId) || !validId.matches(device.installId))
             throw PlaybackDeviceRegistrationException()
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
-        val values = DeviceRegister.profile(cdid, openudid) +
+        val values = ThlDeviceRegister.profile(cdid, openudid) +
             mapOf("device_id" to device.deviceId, "iid" to device.installId)
         return Profile(
             values,
@@ -73,8 +73,8 @@ class PlaybackDeviceSession(
     @Synchronized
     fun renew(http: OkHttpClient): Profile {
         ready = null
-        cdid = DeviceRegister.newCdid()
-        openudid = DeviceRegister.newOpenudid()
+        cdid = ThlDeviceRegister.newCdid()
+        openudid = ThlDeviceRegister.newOpenudid()
         return profile(http)
     }
 }
