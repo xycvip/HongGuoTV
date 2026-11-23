@@ -124,6 +124,9 @@ object DeviceRegister {
 
     fun newCdid(): String = UUID.randomUUID().toString()
 
-    fun newOpenudid(): String = ByteArray(8).also(java.security.SecureRandom()::nextBytes)
-        .joinToString("") { "%02x".format(it) }
+    fun newOpenudid(): String {
+        val bytes = ByteArray(8)
+        java.security.SecureRandom().nextBytes(bytes)
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
 }
