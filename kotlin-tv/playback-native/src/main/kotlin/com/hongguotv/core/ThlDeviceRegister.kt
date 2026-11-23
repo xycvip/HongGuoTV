@@ -20,7 +20,7 @@ object ThlDeviceRegister {
         val cookies: Map<String, String> = emptyMap(),
     )
 
-    fun profile(cdid: String): Map<String, String> = linkedMapOf(
+    fun profile(): Map<String, String> = linkedMapOf(
         "ac" to "wifi",
         "channel" to "update_64",
         "aid" to "8662",
@@ -46,7 +46,6 @@ object ThlDeviceRegister {
         "need_personal_recommend" to "1",
         "player_so_load" to "1",
         "is_android_pad_screen" to "0",
-        "cdid" to cdid,
     )
 
     fun payload(cdid: String, openudid: String, now: Long = System.currentTimeMillis()): ByteArray {
