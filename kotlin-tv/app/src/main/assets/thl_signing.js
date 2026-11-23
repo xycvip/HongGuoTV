@@ -1005,7 +1005,2208 @@ globalThis.__hongguoLocalSign=function(url,body,epoch,device){
  if(!builtInProfile)throw Object.assign(new Error('数据源未配置独立签名参数，请在应用内运行内置数据源'),{code:'SOURCE_CONFIGURATION_MISSING'});
  return builtInProfile.sign({url,bodyBase64:body==null?null:body.toString('base64'),epoch,device});
 };})();
-function Ht(r,e=xn,t={},n){let i={...yn,...n||{iid:an(),device_id:an()}},o=Math.floor(Date.now()/1e3),a=r==null?null:S.from(r),c=Date.now(),s=c,u="",f="";for(let x=0;x<32;x+=1){s=c+x;let y={...i,...t,ts:String(o),_rticket:String(s)};if(u=Ni(y),f=`${e}?${u}`,to(f,a,o)!==1)break}let h=Math.floor(Math.random()*65536),local=globalThis.__hongguoLocalSign(f,a,o,i),d={"User-Agent":dt,Accept:"application/json; charset=utf-8,application/x-protobuf","Content-Type":"application/json; charset=UTF-8","x-xs-from-web":"0","x-ss-req-ticket":String(s),"x-tt-request-tag":"t=0;n=0","sdk-version":"2","passport-sdk-version":"50561","x-vc-bdturing-sdk-version":"3.7.2.cn","x-ss-stub":Ti(a||""),...(local||{"x-gorgon":Wi(u,a,o,h),"x-khronos":String(o),"x-ladon":gn(o).toString("base64"),"x-argus":Z(o).toString("base64"),"x-helios":eo(o),"x-medusa":Qi(f,a,o,i)}),"x-tt-dt":""};return a||delete d["x-ss-stub"],{url:f,headers:d,body:a}}
+function Ht(r,e=xn,t={},n){let i={...yn,...n||{iid:an(),device_id:an()}},o=Math.floor(Date.now()/1e3),a=r==null?null:S.from(r),c=Date.now(),s=c,u="",f="";for(let x=0;x<32;x+=1){s=c+x;let y={...i,...t,ts:String(o),_rticket:String(s)};if(u=Ni(y),f=`${e}?${u}`,to(f,a,o)!==1)break}let h=Math.floor(Math.random()*65536),local=globalThis.__hongguoLocalSign(f,a,o,i),d={"User-Agent":dt,Accept:"application/json; charset=utf-8,application/x-protobuf","Content-Type":"application/json; charset=UTF-8","x-xs-from-web":"0","x-ss-req-ticket":String(s),"x-tt-request-tag":"t=0;n=0","sdk-version":"2","passport-sdk-version":"50561","x-vc-bdturing-sdk-version":"3.7.2.cn","x-ss-stub":Ti(a||""),...(local||{"x-gorgon":Wi(u,a,o,h),"x-khronos":String(o),"x-ladon":gn(o).toString("base64"),"x-argus":Z(o).toString("base64"),"x-helios":eo(o),"x-medusa":Qi(f,a,o,i)}),"x-tt-dt":""};return a||delete d["x-ss-stub"],{url:f,headers:d,body:a}}function ro(r){return typeof r=="string"?Lt(r)?.fallback_api||r:Array.isArray(r)?fe(r[0]):fe(r?.fallback_api)}function no(r){let e=S.from(fe(r).replace(/-/g,"+").replace(/_/g,"/"),"base64");if(e.length<3)throw new Error("spade_a too short");let t=e.length-(e[0]^e[1]^e[2])+47;if(t=Math.min(t,e.length-1),t<33)throw new Error("spade_a key length invalid");let n=S.from(e.subarray(1,1+t)),i=85,o=246;for(let c=0;c<t;c+=1){let s=n[c],u=c&1?i:o;c&1?i=s:o=s;let f=c.toString(2).split("1").length-1;n[c]=-21-f+(u^s)&255}let a=n.subarray(1,33).toString("ascii");if(!/^[0-9a-f]{32}$/i.test(a))throw new Error("App \u89C6\u9891\u5BC6\u94A5\u683C\u5F0F\u65E0\u6548");return S.from(a,"hex")}function io(r,e){let t=fe(r);if(!t)return"";let n=S.from(t,"base64");if(n.length<5)throw new Error("spade URL ciphertext too short");if(n[0]!==168||n[2]!==1||n[3]!==0)throw new Error("spade URL header format error");let i=Math.floor((n.length-4)/16)*16;if(!i)throw new Error("spade URL ciphertext has no complete block");let o=S.from("4dd4c2e6b83162090e52b3c7a6733ba41cb2462b829ab58a196b39db57177524f49baf7f08e8d68d26a72e37c1a95a2f1f05a51892aef2949732b62a38aadd58","hex"),a=K.createHash("sha512").update(e).digest(),c=K.createHash("sha512").update(S.concat([a,o])).digest(),s=K.createDecipheriv("aes-128-cbc",c.subarray(0,16),c.subarray(16,32));s.setAutoPadding(!1);let u=S.concat([s.update(n.subarray(4,4+i)),s.final()]);if(u.length){let f=u[u.length-1];f>=1&&f<=16&&f<=u.length&&(u=u.subarray(0,u.length-f))}for(;u.length&&u[u.length-1]===0;)u=u.subarray(0,u.length-1);return u.toString("utf8")}function lt(r,e){let t;try{t=new dn(r)}catch{throw Object.assign(new Error("App \u7247\u6E90\u5730\u5740\u683C\u5F0F\u65E0\u6548"),{code:"INVALID_RESPONSE"})}if(t.protocol!=="https:"||t.username||t.password||t.port&&t.port!=="443"||!e.some(n=>t.hostname===n||t.hostname.endsWith(`.${n}`)))throw Object.assign(new Error("App \u7247\u6E90\u8FD4\u56DE\u4E86\u4E0D\u53D7\u652F\u6301\u7684\u670D\u52A1\u5730\u5740"),{code:"SECURITY_BLOCKED"});return t.href}async function Pe(r,e,t){let n=lt(r,["fqnovel.com","snssdk.com"]);for(let i=0;i<=3;i++){if(globalThis.__hongguoCancelled)throw Object.assign(new Error("\u5DF2\u53D6\u6D88\u53D6\u6D41"),{code:"CANCELLED"});let o=Math.min(12e3,t-Date.now());if(o<=0)throw Object.assign(new Error("App \u63A5\u53E3\u8D85\u65F6"),{code:"ETIMEDOUT"});let a=await fetch(n,{method:e.method||"GET",headers:e.headers,body:e.data?S.from(e.data).toString("utf8"):void 0,redirect:"manual",timeoutMs:o});if([301,302,303,307,308].includes(a.status)){let u=a.headers&&(typeof a.headers.get=="function"?a.headers.get("location"):a.headers.location);if(e.method==="POST"||!u)throw Object.assign(new Error("App \u63A5\u53E3\u8DF3\u8F6C\u5F02\u5E38"),{code:"SECURITY_BLOCKED"});n=lt(new dn(u,n).href,["fqnovel.com","snssdk.com"]);continue}if(a.status!==200)throw Object.assign(new Error("App \u63A5\u53E3\u8BF7\u6C42\u5931\u8D25"),{code:"HTTP_"+a.status});let c=await a.text();if(!c||!c.trim())throw Object.assign(new Error("App 接口返回空正文"),{code:"EMPTY_RESPONSE",category:"invalid_resp"});if(c.length>(/^https:\/\/reading\.snssdk\.com\/reading\/bookapi\/(search\/tab|bookmall\/(tab|cell\/change))\/v[?]/.test(n)||/^https:\/\/reading\.snssdk\.com\/novel\/player\/video_detail\/v1\/[?]/.test(n)?12:2)*1024*1024)throw Object.assign(new Error("App \u63A5\u53E3\u54CD\u5E94\u65E0\u6548"),{code:"INVALID_RESPONSE"});let s=Lt(c);if(!s||typeof s!="object")throw Object.assign(new Error("App \u63A5\u53E3\u54CD\u5E94\u65E0\u6548"),{code:"INVALID_RESPONSE"});return s}throw Object.assign(new Error("App \u63A5\u53E3\u8DF3\u8F6C\u8FC7\u591A"),{code:"SECURITY_BLOCKED"})}const appVideoModels = new Map();
+let preferredAppModelRoute = null;
+let preferredAppModelUntil = 0;
+const appModelRoutes = [
+  { url: xn, single: false },
+  { url: 'https://reading.snssdk.com/novel/player/multi_video_model/v1/', single: false },
+  { url: 'https://reading.snssdk.com/novel/player/video_model/v1/', single: true },
+  { url: 'https://api5-normal.fqnovel.com/novel/player/multi_video_model/v1/', single: false }
+];
+function appModelExpiry(model, entry = {}) {
+  const times = [entry.expire_time, model.__hongguoExpiresAt, model.url_expire].map(value => {
+    const number = Number(value);
+    if (!Number.isSafeInteger(number) || number < 1000000000) return 0;
+    return number < 1000000000000 ? number * 1000 : number;
+  }).filter(value => value > 0 && value <= 8640000000000000);
+  return times.length ? Math.min(...times) : 0;
+}
+async function requestAppVideoModel(videoId, device, deadline) {
+  const preferred = preferredAppModelUntil > Date.now() ? preferredAppModelRoute : null;
+  const routes = preferred ? [preferred, ...appModelRoutes.filter(route => route !== preferred)] : appModelRoutes;
+  let lastError;
+  const biz = { detail_page_version: 0, device_level: 3, disable_digg_stat: false, need_all_video_definition: true, need_mp4_align: false, use_os_player: false, use_server_dns: false, video_platform: 1024 };
+  for (const route of routes) {
+    if (globalThis.__hongguoCancelled) throw Object.assign(new Error('播放请求已取消'), { code: 'CANCELLED' });
+    if (Date.now() >= deadline) break;
+    try {
+      const body = route.single ? { video_id: videoId, content_type: 1, biz_param: biz } : { biz_param: biz, mixed_video_id_map: { 1004: [videoId] } };
+      const signed = Ht(JSON.stringify(body), route.url, {}, device);
+      const response = await Pe(signed.url, { method: 'POST', headers: signed.headers, data: signed.body }, Math.min(deadline, Date.now() + 3500));
+      if (Number(response.Code || response.code || 0) !== 0) throw Object.assign(new Error('官方接口暂未提供本集播放信息'), { code: 'BUSINESS_REJECTED' });
+      if (!response.data || typeof response.data !== 'object') throw Object.assign(new Error('官方播放响应缺少数据'), { code: 'INVALID_RESPONSE' });
+      const entry = route.single ? response.data : response.data[videoId];
+      const model = typeof entry?.video_model === 'string' ? Lt(entry.video_model) : entry?.video_model;
+      if (!model) throw Object.assign(new Error('官方接口未返回所选分集'), { code: entry?.video_model ? 'INVALID_RESPONSE' : 'MISSING_MODEL' });
+      model.__hongguoExpiresAt = appModelExpiry(model, entry);
+      preferredAppModelRoute = route;
+      preferredAppModelUntil = Date.now() + 5 * 60 * 1000;
+      return model;
+    } catch (error) {
+      lastError = error;
+      const recoverable = ['MISSING_MODEL', 'EMPTY_RESPONSE', 'RESPONSE_NOT_UTF8', 'INVALID_RESPONSE', 'HTTP_0', 'HTTP_404', 'HTTP_405', 'HTTP_408', 'HTTP_500', 'HTTP_502', 'HTTP_503', 'HTTP_504', 'ETIMEDOUT', 'DNS', 'TIMEOUT', 'CONNECTION'].includes(error.code)
+        || ['dns_error', 'network_timeout', 'conn_refused'].includes(error.category);
+      if (!recoverable || globalThis.__hongguoCancelled) throw error;
+      if (route === preferredAppModelRoute) { preferredAppModelRoute = null; preferredAppModelUntil = 0; }
+    }
+  }
+  throw Object.assign(lastError || new Error('官方播放接口请求超时'), { code: lastError?.code || 'ETIMEDOUT', routesExhausted: true });
+}
+async function oo(r, e = {}) {
+  const t = Ri(e.quality);
+  r = String(r || '');
+  if (!/^\d{1,30}$/.test(r)) throw new Error('分集编号无效');
+  const n = Math.min(Date.now() + 12000, e.deadline || Infinity);
+  const device = await Ot(n);
+  const cacheKey = JSON.stringify([device.iid, device.device_id, device.cdid, r]);
+  if (e.refreshModel) appVideoModels.delete(cacheKey);
+  const cached = appVideoModels.get(cacheKey);
+  const reusable = cached && cached.expiresAt > Date.now() + 5000;
+  const u = reusable ? cached.model : await requestAppVideoModel(r, device, n);
+  let f = [], h;
+  try {
+    f = ln(u, r, t);
+    if (f.length && !reusable) {
+      const expiresAt = Math.min(appModelExpiry(u) || Date.now() + 30000, Date.now() + 300000);
+      if (expiresAt > Date.now() + 5000) {
+        if (!appModelExpiry(u)) u.__hongguoExpiresAt = expiresAt;
+        appVideoModels.delete(cacheKey);
+        appVideoModels.set(cacheKey, { model: u, expiresAt });
+        while (appVideoModels.size > 8) appVideoModels.delete(appVideoModels.keys().next().value);
+        f = ln(u, r, t);
+      }
+    }
+  } catch (error) { h = error; }
+  if (f.length && !e.includeFallback) return { ...f[0], variants: f };
+  let d = ro(u.fallback_api);
+  if (d && (!f.length || e.includeFallback || !Object.keys(u.video_list || {}).length || u.dynamic_video)) {
+    d = lt(d, ["fqnovel.com", "snssdk.com"]);
+    d = d.replace(/([?&])force_fids=[^&]*(&?)/, (y, I, F) => F ? I : "");
+    d = /[?&]format_type=/.test(d) ? d.replace(/([?&]format_type=)[^&]*/, "$1mp4") : d + (d.includes("?") ? "&" : "?") + "format_type=mp4";
+    d = /[?&]codec_type=/.test(d) ? d.replace(/([?&]codec_type=)[^&]*/, "$11") : d + (d.includes("?") ? "&" : "?") + "codec_type=1";
+    try {
+      let y = await Pe(d, { headers: { "User-Agent": dt } }, n);
+      if ([y, y.video_info].some(F => Number(F?.Code || F?.code || 0) !== 0)) {
+        throw Object.assign(new Error("App \u63A5\u53E3\u6682\u672A\u63D0\u4F9B\u672C\u96C6\u64AD\u653E\u4FE1\u606F"), { code: "BUSINESS_REJECTED" });
+      }
+      let I = y?.video_info?.data;
+      if (!I) throw Object.assign(new Error("App \u63A5\u53E3\u672A\u8FD4\u56DE\u672C\u96C6\u7247\u6E90\u6A21\u578B"), { code: "MISSING_MODEL" });
+      f.push(...ln(I, r, t));
+    } catch (y) {
+      h = y;
+    }
+  }
+  let x = new Set;
+  if (f = f.filter(y => {
+    let I = y.url + ":" + (y.contentKey || "");
+    return x.has(I) ? false : (x.add(I), true);
+  }), f.length) return { ...f[0], variants: f };
+  throw h || Object.assign(new Error("App \u63A5\u53E3\u672A\u8FD4\u56DE\u672C\u96C6\u7247\u6E90\u5730\u5740"), { code: "MISSING_MODEL" });
+}
+function ln(model, videoId, downloadQuality) {
+  const entries = Object.values(model?.video_list || {}).filter(item => item && (item.main_url || item.backup_url || Array.isArray(item.backup_url_list))).map(item => {
+    const meta = item.video_meta || {};
+    const codec = fe(item.codec_type || meta.codec_type).toLowerCase();
+    const codecRank = ['h264', 'avc', 'avc1'].includes(codec) ? 0 : ['hevc', 'h265', 'hvc1', 'hev1', 'bytevc1'].includes(codec) ? 1 : !codec && ['mp4', 'mpeg'].includes(fe(item.vtype).toLowerCase()) ? 2 : 3;
+    const [width, height] = [[item.vwidth, item.vheight], [item.width, item.height], [meta.vwidth, meta.vheight], [meta.width, meta.height]].map(pair => pair.map(Number)).find(pair => pair.every(value => Number.isFinite(value) && value > 0)) || [0, 0];
+    const label = fe(item.quality_desc || item.definition || meta.definition);
+    const pixels = width > 0 && height > 0 ? Math.min(width, height) : Number(label.match(/\d+/)?.[0] || 0);
+    return { item, codec, codecRank, pixels, quality: pixels > 0 ? pixels + 'p' : '', width, height };
+  }).filter(value => value.codecRank < 3 && Di(value, downloadQuality)).sort((left, right) => downloadQuality === 'auto' ? right.pixels - left.pixels || left.codecRank - right.codecRank : Math.min(left.width, left.height) - Math.min(right.width, right.height) || left.codecRank - right.codecRank);
+  if (!entries.length) throw new Error(downloadQuality === 'auto' ? '本集暂未提供兼容的 H.264/HEVC 片源' : '本集暂未提供满足下载清晰度的片源');
+  const r = model, e = videoId, t = downloadQuality, n = entries;
+let i,o=[],a=new Set;for(let c of n)try{let s=c.item.spade_a||c.item.encrypt_info?.spade_a,u=s?no(s):null;for(let f of[c.item.main_url,c.item.backup_url,c.item.backup_url_1,c.item.backup_url_2,c.item.backup_url_3,...Array.isArray(c.item.backup_url_list)?c.item.backup_url_list:[]])if(!(typeof f!="string"||!f))try{let h=r.key_seed?io(f,S.from(r.key_seed,"base64")):/^https:\/\//i.test(cn(f))?cn(f):S.from(f,"base64").toString("utf8"),d=lt(h,["qznovelvod.com","fqnovelvod.com","douyinvod.com"]),x=u?u.toString("hex"):null,y=`${d}:${x||""}`;if(a.has(y))continue;a.add(y),o.push({url:d,contentKey:x,codec:c.codec==="bytevc1"?"hevc":c.codec||"auto",source:"app",vid:e,expiresAt:appModelExpiry(r),userAgent:dt,referer:"https://novelquickapp.com/",mediaBytes:Math.max(0,Number(c.item.size||c.item.video_meta?.size||0)),quality:c.quality,width:c.width,height:c.height})}catch(h){i=h}}catch(s){i=s}if(o.length)return o;throw i?.code==="SECURITY_BLOCKED"?i:Object.assign(new Error("\u672C\u96C6\u7247\u6E90\u5730\u5740\u6216\u5BC6\u94A5\u65E0\u6CD5\u89E3\u6790"),{code:"INVALID_RESPONSE"})}
+var he={...yn,version_code:"73932",version_name:"7.3.9.32",manifest_version_code:"73932",update_version_code:"73932",pv_player:"73932"},Ae;function ao(){let r=K.randomBytes(16);r[6]=r[6]&15|64,r[8]=r[8]&63|128;let e=r.toString("hex");return[e.slice(0,8),e.slice(8,12),e.slice(12,16),e.slice(16,20),e.slice(20)].join("-")}async function Ot(r=1/0){if(globalThis.__hongguoCachedDevice&&/^\d{10,24}$/.test(fe(globalThis.__hongguoCachedDevice.iid))&&/^\d{10,24}$/.test(fe(globalThis.__hongguoCachedDevice.device_id))){globalThis.__hongguoCachedDevice={...globalThis.__hongguoCachedDevice,...he,iid:fe(globalThis.__hongguoCachedDevice.iid),device_id:fe(globalThis.__hongguoCachedDevice.device_id),cdid:fe(globalThis.__hongguoCachedDevice.cdid)||ao()};return globalThis.__hongguoCachedDevice;}return Ae||(Ae=(async()=>{let e=ao(),t={aid:8662,app_name:"novelread",package:"com.phoenix.read",app_version:he.version_name,version_code:73932,update_version_code:73932,manifest_version_code:73932,sdk_version:"6.18.0",device_platform:"android",os:"Android",os_version:he.os_version,os_api:Number(he.os_api),device_model:he.device_type,device_brand:he.device_brand,device_manufacturer:"Xiaomi",density_dpi:Number(he.dpi),display_density:"mdpi",resolution:he.resolution.replace("*","x"),language:"zh",timezone:8,access:"wifi",channel:he.channel,cdid:e,openudid:K.randomBytes(8).toString("hex")},n=await Pe("https://log.snssdk.com/service/2/device_register/?aid=8662&app_name=novelread",{method:"POST",headers:{"Content-Type":"application/json; charset=utf-8","User-Agent":dt},data:JSON.stringify({magic_tag:"ss_app_log",header:t,_gen_time:Date.now()})},Math.min(Date.now()+12e3,r)),i=fe(n.install_id_str),o=fe(n.device_id_str);if(!/^\d{10,24}$/.test(i)||!/^\d{10,24}$/.test(o))throw Object.assign(new Error("\u65E0\u6CD5\u521D\u59CB\u5316\u5B98\u65B9\u4F1A\u8BDD"),{code:"GUEST_REGISTRATION_FAILED"});let dev={...he,iid:i,device_id:o,cdid:e};globalThis.__hongguoCachedDevice=dev;if(typeof __native_save_device==="function"){try{__native_save_device(JSON.stringify(dev));}catch(_){}}return dev;})().catch(e=>{throw Ae=null,e})),Ae}async function co(r,e={},t=!1){t&&!globalThis.__hongguoAccountActive&&(Ae=null,delete globalThis.__hongguoCachedDevice);let deadline=Math.min(Date.now()+12e3,e.deadline||1/0),n=await Ot(deadline),i={query:r,count:0,offset:e.offset||0,tab_type:e.fallbackToGeneral?11:29,tab_name:e.fallbackToGeneral?"":"feed",search_source:1,use_correct:!1,use_lynx:!1,user_is_login:globalThis.__hongguoAccountActive?1:0,bookshelf_search_plan:4,bookstore_tab:16,is_first_enter_search:!e.offset};e.passback&&(i.passback=e.passback),e.searchId&&(i.search_id=e.searchId);let o=Ht(null,"https://reading.snssdk.com/reading/bookapi/search/tab/v",i,n),a=await Pe(o.url,{headers:{...o.headers,lc:"101"}},deadline);if(Number(a.code)!==0||!Array.isArray(a.search_tabs))throw Object.assign(new Error("\u5B98\u65B9\u641C\u7D22\u672A\u8FD4\u56DE\u6709\u6548\u7ED3\u679C"),{code:"SEARCH_REJECTED",category:"business_reject"});return a}async function so({seriesId:r,videoId:e,startMs:t=0,durationMs:n,cursor:i=""}){if(!/^\d{10,30}$/.test(String(r))||!/^\d{10,30}$/.test(String(e)))throw new Error("\u5F39\u5E55\u5206\u96C6\u7F16\u53F7\u65E0\u6548");let o={comment_source:601,server_channel:1e3,group_id:String(e),group_type:30,comment_type:20,sort:1,business_param:{book_id:String(r),start_offset_time:t,playlet_item_duration:n},count:90,cursor:String(i),aid:8662,compliance_status:0},a=await Ot(),c=Ht(JSON.stringify(o),"https://reading.snssdk.com/novel/commentapi/comment/list/"+e+"/v1/",{},a);return Pe(c.url,{method:"POST",headers:{...c.headers,lc:"101"},data:c.body},Date.now()+5e3)}mn.exports={buildAccountRequest:async function(action="profile",payload={}) {
+  const routes={profile:"/reading/user/info/v1/",favorites:"/reading/bookapi/bookshelf/video/list/v1/",history:"/reading/bookapi/read_progress/list/v1/",libraryDetails:"/reading/bookapi/multi-detail/v1/",libraryDetail:"/novel/player/video_detail/v1/",favoriteUpdate:"/reading/bookapi/bookshelf/video/update/v1/",progressGet:"/reading/bookapi/read_progress/get/v1/",progressUpdate:"/reading/bookapi/read_progress/upload/v1/",socialDetail:"/novel/player/video_detail/v1/",creatorList:"/reading/user/celebrity/list/v1/",likeUpdate:"/reading/ugc/action/set/v1/",creatorFollow:"/novel/commentapi/comment/do_action/v1/",followingCreators:"/novel/commentapi/relation/list/",creatorWorks:"/novel/commentapi/user/profile/",likedVideos:"/reading/ugc/action/mget/v",creatorProfile:"/reading/user/profile/get/v",commentList:"/novel/commentapi/comment/list/",commentReplyList:"/novel/commentapi/reply/list/"};
+  if(!Object.prototype.hasOwnProperty.call(routes,action))throw new Error("不支持的账号操作");
+  const identity=value=>{const id=String(value||"");if(!/^[1-9]\d{0,29}$/.test(id))throw new Error("账号剧集编号无效");return id;};
+  const integer=value=>{const n=Number(value);if(!Number.isSafeInteger(n)||n<0)throw new Error("账号进度参数无效");return n;};
+  const params=action==="history"?{book_types:"2",limit:"50"}:{};
+  let body=null;
+  if(action==="libraryDetails") {
+    const ids=String(payload.ids||"").split(",");
+    if(!ids.length||ids.length>50)throw new Error("账号剧集编号无效");
+    params.book_id=ids.map(identity).join(",");params.book_type="2";
+  }
+  if(action==="favorites")params.target_user_id=identity(payload.userId);
+  if(action==="favoriteUpdate") {
+    if(!["0","1"].includes(String(payload.follow)))throw new Error("追剧状态无效");
+    const add=String(payload.follow)==="1";
+    const row={book_id:identity(payload.id),book_type:2,modify_time:Date.now(),video_shelf_operate_type:add?0:1};
+    if(!add)row.group_name="";
+    body={is_cancelled:false,update_bookshelf_video_list:[row]};
+  }
+  if(action==="progressGet")body={book_ids:{"2":[identity(payload.id)]}};
+  if(action==="progressUpdate") {
+    const duration=integer(payload.durationMs),position=Math.min(integer(payload.positionMs),duration),episode=integer(payload.episode),count=integer(payload.episodes);
+    if(!duration||!episode||count&&episode>count)throw new Error("账号进度参数无效");
+    body={books:[{book_id:identity(payload.id),item_id:identity(payload.itemId),vid_index:episode,current_play_time:position,current_total_time:duration,episode_count:count,read_timestamp_ms:integer(payload.updatedAt),book_type:2,progress_rate:String(position/duration)}],write_mode:1};
+  }
+  if(action==="socialDetail"||action==="libraryDetail")body={series_id:identity(payload.id)};
+  if(action==="creatorList")Object.assign(params,{series_id:identity(payload.id),list_type:3,count:50,offset:0});
+  if(action==="followingCreators") {
+    const count=integer(payload.count===undefined?20:payload.count);
+    if(count<1||count>50)throw new Error("账号列表分页大小无效");
+    const offset=integer(payload.offset===undefined?0:payload.offset);
+    const uid=identity(payload.userId);
+    const cursor=payload.cursor!==undefined&&payload.cursor!==null&&String(payload.cursor)!==""?String(payload.cursor):(offset>0?String(offset):"");
+    body={aid:integer(he.aid),comment_source:1507,count,cursor,target_user_id:uid};
+  }
+  if(action==="creatorWorks") {
+    const count=integer(payload.count===undefined?20:payload.count);
+    if(count<1||count>50)throw new Error("账号列表分页大小无效");
+    const offset=integer(payload.offset===undefined?0:payload.offset);
+    const uid=identity(payload.userId);
+    const cursor=payload.cursor!==undefined&&payload.cursor!==null&&String(payload.cursor)!==""?String(payload.cursor):(offset>0?String(offset):"");
+    const commentSource=payload.commentSource!==undefined&&payload.commentSource!==null&&String(payload.commentSource)!==""?integer(payload.commentSource):1506;
+    const tabType=payload.tabType!==undefined&&payload.tabType!==null&&String(payload.tabType)!==""?integer(payload.tabType):23;
+    body={aid:integer(he.aid),comment_source:commentSource,tab_type:tabType,count,cursor,target_user_id:uid};
+  }
+  if(action==="likedVideos") {
+    const count=integer(payload.count===undefined?20:payload.count);
+    if(count<1||count>50)throw new Error("账号列表分页大小无效");
+    Object.assign(params,{count,offset:integer(payload.offset===undefined?0:payload.offset),object_type_list:"6,15,10",action_type:3});
+  }
+  if(action==="creatorProfile")params.user_id=identity(payload.userId);
+  if(action==="likeUpdate") {
+    if(!["0","1"].includes(String(payload.like)))throw new Error("点赞状态无效");
+    body={object_id:identity(payload.itemId),object_type:6,action_type:String(payload.like)==="1"?3:4,action_category:1};
+  }
+  if(action==="creatorFollow") {
+    const type=integer(payload.relativeType);
+    if(![2,3].includes(type)||!["0","1"].includes(String(payload.follow)))throw new Error("关注参数无效");
+    body={object_id:identity(payload.userId),object_type:1,action_type:String(payload.follow)==="1"?25:26,aid:integer(he.aid),business_param:{shark_param:{}}};
+  }
+  if(action==="commentList") {
+    const count=integer(payload.count===undefined?20:payload.count);
+    if(count<1||count>50)throw new Error("账号列表分页大小无效");
+    const bookId=identity(payload.bookId||payload.id);
+    const cursor=payload.cursor!==undefined&&payload.cursor!==null&&String(payload.cursor)!==""?String(payload.cursor):"";
+    const sort=integer(payload.sort===undefined?1:payload.sort);
+    body={aid:integer(he.aid),comment_source:1,server_channel:34,group_id:bookId,group_type:1,comment_type:2,sort,count,cursor,compliance_status:0,business_param:{book_id:bookId}};
+  }
+  if(action==="commentReplyList") {
+    const count=integer(payload.count===undefined?20:payload.count);
+    if(count<1||count>50)throw new Error("账号列表分页大小无效");
+    const commentId=identity(payload.commentId);
+    const bookId=payload.bookId||payload.id?identity(payload.bookId||payload.id):"";
+    const cursor=payload.cursor!==undefined&&payload.cursor!==null&&String(payload.cursor)!==""?String(payload.cursor):"";
+    const commentSource=payload.commentSource!==undefined?integer(payload.commentSource):1011;
+    const serverChannel=payload.serverChannel!==undefined?integer(payload.serverChannel):34;
+    body={aid:integer(he.aid),comment_id:commentId,comment_source:commentSource,server_channel:serverChannel,group_id:bookId,group_type:1,comment_type:2,count,cursor,compliance_status:0,business_param:{book_id:bookId,real_level:2}};
+  }
+  let dev;
+  if(action==="profile"&&payload.device) {
+    let bound;try{bound=JSON.parse(payload.device);}catch(_){throw new Error("账号设备上下文无效");}
+    if(!bound||!/^\d{10,24}$/.test(String(bound.iid||""))||!/^\d{10,24}$/.test(String(bound.device_id||""))||typeof bound.cdid!=="string"||bound.cdid.length>80)throw new Error("账号设备上下文无效");
+    dev={...he,iid:String(bound.iid),device_id:String(bound.device_id),cdid:bound.cdid};
+  } else dev=await Ot();
+  const wireBody=body===null?null:action==="progressGet"?'{"book_ids":{"2":['+identity(payload.id)+']}}':JSON.stringify(body);
+  const origin=["followingCreators","creatorWorks","likedVideos","creatorProfile","commentList","commentReplyList"].includes(action)?"https://reading.snssdk.com":"https://api5-normal-sinfonlinea.fqnovel.com";
+  const path=action==="followingCreators"||action==="creatorWorks"?routes[action]+identity(payload.userId)+"/v1/":action==="commentList"?routes[action]+identity(payload.bookId||payload.id)+"/v1/":action==="commentReplyList"?routes[action]+identity(payload.commentId)+"/v1/":routes[action];
+  const signed=Ht(wireBody,origin+path,params,dev);
+  return {url:signed.url,method:body===null?"GET":"POST",headers:signed.headers,...(body===null?{}:{body:wireBody})};
+},resetGuestSession:function(){Ae=null;appVideoModels.clear();delete globalThis.__hongguoCachedDevice;},fetchAppDetailRaw:async function(id){const dev=await Ot();const signed=Ht(JSON.stringify({series_id:String(id)}),"https://reading.snssdk.com/novel/player/video_detail/v1/",{},dev);const result=await Pe(signed.url,{method:"POST",headers:{...signed.headers,lc:"101"},data:signed.body},Date.now()+12000);if(Number(result.code||0)!==0)throw Object.assign(new Error("官方详情接口暂不可用，请重试"),{code:"DETAIL_REJECTED"});return result.data?.video_data},fetchAppPlayUrl:oo,fetchAppSearchRaw:co,fetchAppDanmakuRaw:so,fetchAppDiscoveryRaw:async function(path,params){if(!["/reading/bookapi/search/cue/v","/reading/bookapi/search/suggest/v","/reading/bookapi/plan/v","/reading/bookapi/bookmall/tab/v","/reading/bookapi/bookmall/cell/change/v"].includes(path))throw Object.assign(new Error("不支持的官方接口"),{code:"SECURITY_BLOCKED"});const device=await Ot();const signed=Ht(null,"https://reading.snssdk.com"+path,params,device);const result=await Pe(signed.url,{headers:{...signed.headers,lc:"101"}},Date.now()+12000);if(!result||String(result.code??result.status_code)!=="0")throw Object.assign(new Error("官方发现接口暂不可用，请重试"),{code:"DISCOVERY_REJECTED"});return result}}});var wn=z((Do,vn)=>{var{fetchAppSearchRaw:bn}=pt();function fo(r){let e=[],t=new Set;let tabs=Array.isArray(r)?r:(r?[r]:[]);for(let m of tabs){for(let n of m.data||[]){let i=Array.isArray(n.video_data)?n.video_data:[];for(let o of i){let a=o.video_detail||{},c=String(a.series_id_str||o.series_id||a.series_id||"");if(!/^\d{10,30}$/.test(c)||t.has(c))continue;let s=String(a.series_title||o.title||"").trim();if(!s)continue;t.add(c);let u=Number(a.episode_cnt||o.episode_cnt||0);e.push({vod_id:c,vod_name:s,vod_pic:cleanCoverUrl(String(a.series_cover||o.cover||"")),vod_remarks:u>0?"全"+u+"集":"",vod_content:String(a.series_intro||""),vod_total:u,content_type:Number(a.content_type||o.content_type||0)})}}}return e}function pickTab(response, general) {
+  const tabs = response.search_tabs || [];
+  const type = general ? 11 : 29;
+  return tabs.find(tab => Number(tab.tab_type) === type)
+    || tabs.find(tab => general ? tab.title === '综合' : ['剧集', '短剧'].includes(tab.title))
+    || (general ? tabs.find(tab => fo(tab).length > 0) : undefined);
+}
+function toPage(response, tab, offset, general) {
+  const list = fo(tab);
+  const next = Number(tab?.next_offset || 0);
+  const more = tab?.has_more === true;
+  if (more && (!Number.isSafeInteger(next) || next <= offset)) {
+    throw Object.assign(new Error('官方搜索游标未推进，请重新搜索'), { code: 'INVALID_SEARCH_CURSOR' });
+  }
+  return { list, hasMore: more, cursor: {
+    offset: next, passback: String(tab?.passback || ''), searchId: String(tab?.search_id || ''), fallbackToGeneral: general
+  } };
+}
+async function uo(query, cursor = {}) {
+  const deadline = Date.now() + 45000;
+  async function request(value) {
+    value = { ...value, deadline };
+    try { return await bn(query, value); }
+    catch (error) {
+      if (globalThis.__hongguoCancelled) throw error;
+      const renew = ['INVALID_RESPONSE', 'SEARCH_REJECTED'].includes(error.code);
+      const transient = ['HTTP_0', 'HTTP_408', 'HTTP_500', 'HTTP_502', 'HTTP_503', 'HTTP_504', 'ETIMEDOUT', 'EMPTY_RESPONSE'].includes(error.code)
+        || ['dns_error', 'network_timeout', 'conn_refused'].includes(error.category);
+      if (!renew && !transient) throw error;
+      return await bn(query, value, renew);
+    }
+  }
+  const response = await request(cursor);
+  const offset = Number(cursor.offset || 0);
+  const general = cursor.fallbackToGeneral === true;
+  const tab = pickTab(response, general);
+  const result = toPage(response, tab, offset, general);
+  if (general || offset || result.list.length || globalThis.__hongguoCancelled) {
+    if (!tab) throw Object.assign(new Error('官方搜索未返回短剧数据分类，请导出诊断报告'), { code: 'SEARCH_TAB_MISSING' });
+    return result;
+  }
+  const fallback = await request({ fallbackToGeneral: true });
+  const fallbackTab = pickTab(fallback, true);
+  const fallbackResult = toPage(fallback, fallbackTab, 0, true);
+  if (fallbackResult.list.length) return fallbackResult;
+  if (!tab) throw Object.assign(new Error('官方搜索未返回短剧数据分类，请导出诊断报告'), { code: 'SEARCH_TAB_MISSING' });
+  return result;
+}
+vn.exports={fetchAppSearchPage:uo}});var En=z((No,_n)=>{var{fetchAppDanmakuRaw:ho}=pt();async function lo(r,e,t){let n=/^hongguo:(\d{10,30}):(\d{10,30})$/.exec(String(r));if(!n||!Number.isSafeInteger(e)||!Number.isSafeInteger(t)||e<0||e>=t||t>864e5)throw new Error("\u5F39\u5E55\u5206\u96C6\u6216\u65F6\u95F4\u8303\u56F4\u65E0\u6548");let i=Math.min(e+3e4,t),o=await ho({seriesId:n[1],videoId:n[2],startMs:e,durationMs:t});if(Number(o.code)!==0||!Array.isArray(o.data?.data_list))throw new Error("\u5B98\u65B9\u5F39\u5E55\u6682\u4E0D\u53EF\u7528");let a=String(o.data.common_list_info?.cursor||"");if(a){let u;try{u=JSON.parse(a)}catch{}if(u&&Number(u.start_offset_time)!==e)throw new Error("\u5B98\u65B9\u5F39\u5E55\u65F6\u95F4\u8303\u56F4\u4E0D\u7B26")}let c=new Set,s=[];for(let u of o.data.data_list){let f=u?.comment;if(String(f?.common?.group_id||"")!==n[2])continue;let h=String(f.comment_id||""),d=Number(f.expand?.offset_time),x=f.common.content?.text;if(!h||h.length>120||c.has(h)||!Number.isSafeInteger(d)||d<e||d>=i||typeof x!="string")continue;let y=Array.from(x.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g," ").trim()).slice(0,180).join("");if(y&&(c.add(h),s.push({id:h,timeMs:d,text:y,color:"#FFFFFF"}),s.length>=90))break}return s.sort((u,f)=>u.timeMs-f.timeMs),{episodeId:r,startMs:e,nextMs:i,items:s}}_n.exports={fetchAppDanmakuPage:lo}});var go=z((To,Bn)=>{var{fetchAppPlayUrl:po}=pt(),{fetchAppSearchPage:xo}=wn(),{fetchAppDanmakuPage:yo}=En();Bn.exports={buildAccountRequest:pt().buildAccountRequest,resetGuestSession:pt().resetGuestSession,fetchAppDetailRaw:pt().fetchAppDetailRaw,fetchAppPlayUrl:po,fetchAppSearchPage:xo,fetchAppDanmakuPage:yo,fetchAppDiscoveryRaw:pt().fetchAppDiscoveryRaw}});return go();})();
+
+/*! buffer
+The MIT License (MIT)
+
+Copyright (c) Feross Aboukhadijeh, and other contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*/
+/*! base64-js
+The MIT License (MIT)
+
+Copyright (c) 2014 Jameson Little
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*/
+/*! ieee754
+Copyright 2008 Fair Oaks Labs, Inc.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+*/
+/*! crypto-js
+# License
+
+[The MIT License (MIT)](http://opensource.org/licenses/MIT)
+
+Copyright (c) 2009-2013 Jeff Mott
+Copyright (c) 2013-2016 Evan Vosberg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*/
+/*! url-parse
+The MIT License (MIT)
+
+Copyright (c) 2015 Unshift.io, Arnout Kazemier,  the Contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+*/
+/*! querystringify
+The MIT License (MIT)
+
+Copyright (c) 2015 Unshift.io, Arnout Kazemier,  the Contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+*/
+/*! requires-port
+The MIT License (MIT)
+
+Copyright (c) 2015 Unshift.io, Arnout Kazemier,  the Contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+*/
+/*! GPL-3.0-only license text
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+                            Preamble
+
+  The GNU General Public License is a free, copyleft license for
+software and other kinds of works.
+
+  The licenses for most software and other practical works are designed
+to take away your freedom to share and change the works.  By contrast,
+the GNU General Public License is intended to guarantee your freedom to
+share and change all versions of a program--to make sure it remains free
+software for all its users.  We, the Free Software Foundation, use the
+GNU General Public License for most of our software; it applies also to
+any other work released this way by its authors.  You can apply it to
+your programs, too.
+
+  When we speak of free software, we are referring to freedom, not
+price.  Our General Public Licenses are designed to make sure that you
+have the freedom to distribute copies of free software (and charge for
+them if you wish), that you receive source code or can get it if you
+want it, that you can change the software or use pieces of it in new
+free programs, and that you know you can do these things.
+
+  To protect your rights, we need to prevent others from denying you
+these rights or asking you to surrender the rights.  Therefore, you have
+certain responsibilities if you distribute copies of the software, or if
+you modify it: responsibilities to respect the freedom of others.
+
+  For example, if you distribute copies of such a program, whether
+gratis or for a fee, you must pass on to the recipients the same
+freedoms that you received.  You must make sure that they, too, receive
+or can get the source code.  And you must show them these terms so they
+know their rights.
+
+  Developers that use the GNU GPL protect your rights with two steps:
+(1) assert copyright on the software, and (2) offer you this License
+giving you legal permission to copy, distribute and/or modify it.
+
+  For the developers' and authors' protection, the GPL clearly explains
+that there is no warranty for this free software.  For both users' and
+authors' sake, the GPL requires that modified versions be marked as
+changed, so that their problems will not be attributed erroneously to
+authors of previous versions.
+
+  Some devices are designed to deny users access to install or run
+modified versions of the software inside them, although the manufacturer
+can do so.  This is fundamentally incompatible with the aim of
+protecting users' freedom to change the software.  The systematic
+pattern of such abuse occurs in the area of products for individuals to
+use, which is precisely where it is most unacceptable.  Therefore, we
+have designed this version of the GPL to prohibit the practice for those
+products.  If such problems arise substantially in other domains, we
+stand ready to extend this provision to those domains in future versions
+of the GPL, as needed to protect the freedom of users.
+
+  Finally, every program is threatened constantly by software patents.
+States should not allow patents to restrict development and use of
+software on general-purpose computers, but in those that do, we wish to
+avoid the special danger that patents applied to a free program could
+make it effectively proprietary.  To prevent this, the GPL assures that
+patents cannot be used to render the program non-free.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.
+
+                       TERMS AND CONDITIONS
+
+  0. Definitions.
+
+  "This License" refers to version 3 of the GNU General Public License.
+
+  "Copyright" also means copyright-like laws that apply to other kinds of
+works, such as semiconductor masks.
+
+  "The Program" refers to any copyrightable work licensed under this
+License.  Each licensee is addressed as "you".  "Licensees" and
+"recipients" may be individuals or organizations.
+
+  To "modify" a work means to copy from or adapt all or part of the work
+in a fashion requiring copyright permission, other than the making of an
+exact copy.  The resulting work is called a "modified version" of the
+earlier work or a work "based on" the earlier work.
+
+  A "covered work" means either the unmodified Program or a work based
+on the Program.
+
+  To "propagate" a work means to do anything with it that, without
+permission, would make you directly or secondarily liable for
+infringement under applicable copyright law, except executing it on a
+computer or modifying a private copy.  Propagation includes copying,
+distribution (with or without modification), making available to the
+public, and in some countries other activities as well.
+
+  To "convey" a work means any kind of propagation that enables other
+parties to make or receive copies.  Mere interaction with a user through
+a computer network, with no transfer of a copy, is not conveying.
+
+  An interactive user interface displays "Appropriate Legal Notices"
+to the extent that it includes a convenient and prominently visible
+feature that (1) displays an appropriate copyright notice, and (2)
+tells the user that there is no warranty for the work (except to the
+extent that warranties are provided), that licensees may convey the
+work under this License, and how to view a copy of this License.  If
+the interface presents a list of user commands or options, such as a
+menu, a prominent item in the list meets this criterion.
+
+  1. Source Code.
+
+  The "source code" for a work means the preferred form of the work
+for making modifications to it.  "Object code" means any non-source
+form of a work.
+
+  A "Standard Interface" means an interface that either is an official
+standard defined by a recognized standards body, or, in the case of
+interfaces specified for a particular programming language, one that
+is widely used among developers working in that language.
+
+  The "System Libraries" of an executable work include anything, other
+than the work as a whole, that (a) is included in the normal form of
+packaging a Major Component, but which is not part of that Major
+Component, and (b) serves only to enable use of the work with that
+Major Component, or to implement a Standard Interface for which an
+implementation is available to the public in source code form.  A
+"Major Component", in this context, means a major essential component
+(kernel, window system, and so on) of the specific operating system
+(if any) on which the executable work runs, or a compiler used to
+produce the work, or an object code interpreter used to run it.
+
+  The "Corresponding Source" for a work in object code form means all
+the source code needed to generate, install, and (for an executable
+work) run the object code and to modify the work, including scripts to
+control those activities.  However, it does not include the work's
+System Libraries, or general-purpose tools or generally available free
+programs which are used unmodified in performing those activities but
+which are not part of the work.  For example, Corresponding Source
+includes interface definition files associated with source files for
+the work, and the source code for shared libraries and dynamically
+linked subprograms that the work is specifically designed to require,
+such as by intimate data communication or control flow between those
+subprograms and other parts of the work.
+
+  The Corresponding Source need not include anything that users
+can regenerate automatically from other parts of the Corresponding
+Source.
+
+  The Corresponding Source for a work in source code form is that
+same work.
+
+  2. Basic Permissions.
+
+  All rights granted under this License are granted for the term of
+copyright on the Program, and are irrevocable provided the stated
+conditions are met.  This License explicitly affirms your unlimited
+permission to run the unmodified Program.  The output from running a
+covered work is covered by this License only if the output, given its
+content, constitutes a covered work.  This License acknowledges your
+rights of fair use or other equivalent, as provided by copyright law.
+
+  You may make, run and propagate covered works that you do not
+convey, without conditions so long as your license otherwise remains
+in force.  You may convey covered works to others for the sole purpose
+of having them make modifications exclusively for you, or provide you
+with facilities for running those works, provided that you comply with
+the terms of this License in conveying all material for which you do
+not control copyright.  Those thus making or running the covered works
+for you must do so exclusively on your behalf, under your direction
+and control, on terms that prohibit them from making any copies of
+your copyrighted material outside their relationship with you.
+
+  Conveying under any other circumstances is permitted solely under
+the conditions stated below.  Sublicensing is not allowed; section 10
+makes it unnecessary.
+
+  3. Protecting Users' Legal Rights From Anti-Circumvention Law.
+
+  No covered work shall be deemed part of an effective technological
+measure under any applicable law fulfilling obligations under article
+11 of the WIPO copyright treaty adopted on 20 December 1996, or
+similar laws prohibiting or restricting circumvention of such
+measures.
+
+  When you convey a covered work, you waive any legal power to forbid
+circumvention of technological measures to the extent such circumvention
+is effected by exercising rights under this License with respect to
+the covered work, and you disclaim any intention to limit operation or
+modification of the work as a means of enforcing, against the work's
+users, your or third parties' legal rights to forbid circumvention of
+technological measures.
+
+  4. Conveying Verbatim Copies.
+
+  You may convey verbatim copies of the Program's source code as you
+receive it, in any medium, provided that you conspicuously and
+appropriately publish on each copy an appropriate copyright notice;
+keep intact all notices stating that this License and any
+non-permissive terms added in accord with section 7 apply to the code;
+keep intact all notices of the absence of any warranty; and give all
+recipients a copy of this License along with the Program.
+
+  You may charge any price or no price for each copy that you convey,
+and you may offer support or warranty protection for a fee.
+
+  5. Conveying Modified Source Versions.
+
+  You may convey a work based on the Program, or the modifications to
+produce it from the Program, in the form of source code under the
+terms of section 4, provided that you also meet all of these conditions:
+
+    a) The work must carry prominent notices stating that you modified
+    it, and giving a relevant date.
+
+    b) The work must carry prominent notices stating that it is
+    released under this License and any conditions added under section
+    7.  This requirement modifies the requirement in section 4 to
+    "keep intact all notices".
+
+    c) You must license the entire work, as a whole, under this
+    License to anyone who comes into possession of a copy.  This
+    License will therefore apply, along with any applicable section 7
+    additional terms, to the whole of the work, and all its parts,
+    regardless of how they are packaged.  This License gives no
+    permission to license the work in any other way, but it does not
+    invalidate such permission if you have separately received it.
+
+    d) If the work has interactive user interfaces, each must display
+    Appropriate Legal Notices; however, if the Program has interactive
+    interfaces that do not display Appropriate Legal Notices, your
+    work need not make them do so.
+
+  A compilation of a covered work with other separate and independent
+works, which are not by their nature extensions of the covered work,
+and which are not combined with it such as to form a larger program,
+in or on a volume of a storage or distribution medium, is called an
+"aggregate" if the compilation and its resulting copyright are not
+used to limit the access or legal rights of the compilation's users
+beyond what the individual works permit.  Inclusion of a covered work
+in an aggregate does not cause this License to apply to the other
+parts of the aggregate.
+
+  6. Conveying Non-Source Forms.
+
+  You may convey a covered work in object code form under the terms
+of sections 4 and 5, provided that you also convey the
+machine-readable Corresponding Source under the terms of this License,
+in one of these ways:
+
+    a) Convey the object code in, or embodied in, a physical product
+    (including a physical distribution medium), accompanied by the
+    Corresponding Source fixed on a durable physical medium
+    customarily used for software interchange.
+
+    b) Convey the object code in, or embodied in, a physical product
+    (including a physical distribution medium), accompanied by a
+    written offer, valid for at least three years and valid for as
+    long as you offer spare parts or customer support for that product
+    model, to give anyone who possesses the object code either (1) a
+    copy of the Corresponding Source for all the software in the
+    product that is covered by this License, on a durable physical
+    medium customarily used for software interchange, for a price no
+    more than your reasonable cost of physically performing this
+    conveying of source, or (2) access to copy the
+    Corresponding Source from a network server at no charge.
+
+    c) Convey individual copies of the object code with a copy of the
+    written offer to provide the Corresponding Source.  This
+    alternative is allowed only occasionally and noncommercially, and
+    only if you received the object code with such an offer, in accord
+    with subsection 6b.
+
+    d) Convey the object code by offering access from a designated
+    place (gratis or for a charge), and offer equivalent access to the
+    Corresponding Source in the same way through the same place at no
+    further charge.  You need not require recipients to copy the
+    Corresponding Source along with the object code.  If the place to
+    copy the object code is a network server, the Corresponding Source
+    may be on a different server (operated by you or a third party)
+    that supports equivalent copying facilities, provided you maintain
+    clear directions next to the object code saying where to find the
+    Corresponding Source.  Regardless of what server hosts the
+    Corresponding Source, you remain obligated to ensure that it is
+    available for as long as needed to satisfy these requirements.
+
+    e) Convey the object code using peer-to-peer transmission, provided
+    you inform other peers where the object code and Corresponding
+    Source of the work are being offered to the general public at no
+    charge under subsection 6d.
+
+  A separable portion of the object code, whose source code is excluded
+from the Corresponding Source as a System Library, need not be
+included in conveying the object code work.
+
+  A "User Product" is either (1) a "consumer product", which means any
+tangible personal property which is normally used for personal, family,
+or household purposes, or (2) anything designed or sold for incorporation
+into a dwelling.  In determining whether a product is a consumer product,
+doubtful cases shall be resolved in favor of coverage.  For a particular
+product received by a particular user, "normally used" refers to a
+typical or common use of that class of product, regardless of the status
+of the particular user or of the way in which the particular user
+actually uses, or expects or is expected to use, the product.  A product
+is a consumer product regardless of whether the product has substantial
+commercial, industrial or non-consumer uses, unless such uses represent
+the only significant mode of use of the product.
+
+  "Installation Information" for a User Product means any methods,
+procedures, authorization keys, or other information required to install
+and execute modified versions of a covered work in that User Product from
+a modified version of its Corresponding Source.  The information must
+suffice to ensure that the continued functioning of the modified object
+code is in no case prevented or interfered with solely because
+modification has been made.
+
+  If you convey an object code work under this section in, or with, or
+specifically for use in, a User Product, and the conveying occurs as
+part of a transaction in which the right of possession and use of the
+User Product is transferred to the recipient in perpetuity or for a
+fixed term (regardless of how the transaction is characterized), the
+Corresponding Source conveyed under this section must be accompanied
+by the Installation Information.  But this requirement does not apply
+if neither you nor any third party retains the ability to install
+modified object code on the User Product (for example, the work has
+been installed in ROM).
+
+  The requirement to provide Installation Information does not include a
+requirement to continue to provide support service, warranty, or updates
+for a work that has been modified or installed by the recipient, or for
+the User Product in which it has been modified or installed.  Access to a
+network may be denied when the modification itself materially and
+adversely affects the operation of the network or violates the rules and
+protocols for communication across the network.
+
+  Corresponding Source conveyed, and Installation Information provided,
+in accord with this section must be in a format that is publicly
+documented (and with an implementation available to the public in
+source code form), and must require no special password or key for
+unpacking, reading or copying.
+
+  7. Additional Terms.
+
+  "Additional permissions" are terms that supplement the terms of this
+License by making exceptions from one or more of its conditions.
+Additional permissions that are applicable to the entire Program shall
+be treated as though they were included in this License, to the extent
+that they are valid under applicable law.  If additional permissions
+apply only to part of the Program, that part may be used separately
+under those permissions, but the entire Program remains governed by
+this License without regard to the additional permissions.
+
+  When you convey a copy of a covered work, you may at your option
+remove any additional permissions from that copy, or from any part of
+it.  (Additional permissions may be written to require their own
+removal in certain cases when you modify the work.)  You may place
+additional permissions on material, added by you to a covered work,
+for which you have or can give appropriate copyright permission.
+
+  Notwithstanding any other provision of this License, for material you
+add to a covered work, you may (if authorized by the copyright holders of
+that material) supplement the terms of this License with terms:
+
+    a) Disclaiming warranty or limiting liability differently from the
+    terms of sections 15 and 16 of this License; or
+
+    b) Requiring preservation of specified reasonable legal notices or
+    author attributions in that material or in the Appropriate Legal
+    Notices displayed by works containing it; or
+
+    c) Prohibiting misrepresentation of the origin of that material, or
+    requiring that modified versions of such material be marked in
+    reasonable ways as different from the original version; or
+
+    d) Limiting the use for publicity purposes of names of licensors or
+    authors of the material; or
+
+    e) Declining to grant rights under trademark law for use of some
+    trade names, trademarks, or service marks; or
+
+    f) Requiring indemnification of licensors and authors of that
+    material by anyone who conveys the material (or modified versions of
+    it) with contractual assumptions of liability to the recipient, for
+    any liability that these contractual assumptions directly impose on
+    those licensors and authors.
+
+  All other non-permissive additional terms are considered "further
+restrictions" within the meaning of section 10.  If the Program as you
+received it, or any part of it, contains a notice stating that it is
+governed by this License along with a term that is a further
+restriction, you may remove that term.  If a license document contains
+a further restriction but permits relicensing or conveying under this
+License, you may add to a covered work material governed by the terms
+of that license document, provided that the further restriction does
+not survive such relicensing or conveying.
+
+  If you add terms to a covered work in accord with this section, you
+must place, in the relevant source files, a statement of the
+additional terms that apply to those files, or a notice indicating
+where to find the applicable terms.
+
+  Additional terms, permissive or non-permissive, may be stated in the
+form of a separately written license, or stated as exceptions;
+the above requirements apply either way.
+
+  8. Termination.
+
+  You may not propagate or modify a covered work except as expressly
+provided under this License.  Any attempt otherwise to propagate or
+modify it is void, and will automatically terminate your rights under
+this License (including any patent licenses granted under the third
+paragraph of section 11).
+
+  However, if you cease all violation of this License, then your
+license from a particular copyright holder is reinstated (a)
+provisionally, unless and until the copyright holder explicitly and
+finally terminates your license, and (b) permanently, if the copyright
+holder fails to notify you of the violation by some reasonable means
+prior to 60 days after the cessation.
+
+  Moreover, your license from a particular copyright holder is
+reinstated permanently if the copyright holder notifies you of the
+violation by some reasonable means, this is the first time you have
+received notice of violation of this License (for any work) from that
+copyright holder, and you cure the violation prior to 30 days after
+your receipt of the notice.
+
+  Termination of your rights under this section does not terminate the
+licenses of parties who have received copies or rights from you under
+this License.  If your rights have been terminated and not permanently
+reinstated, you do not qualify to receive new licenses for the same
+material under section 10.
+
+  9. Acceptance Not Required for Having Copies.
+
+  You are not required to accept this License in order to receive or
+run a copy of the Program.  Ancillary propagation of a covered work
+occurring solely as a consequence of using peer-to-peer transmission
+to receive a copy likewise does not require acceptance.  However,
+nothing other than this License grants you permission to propagate or
+modify any covered work.  These actions infringe copyright if you do
+not accept this License.  Therefore, by modifying or propagating a
+covered work, you indicate your acceptance of this License to do so.
+
+  10. Automatic Licensing of Downstream Recipients.
+
+  Each time you convey a covered work, the recipient automatically
+receives a license from the original licensors, to run, modify and
+propagate that work, subject to this License.  You are not responsible
+for enforcing compliance by third parties with this License.
+
+  An "entity transaction" is a transaction transferring control of an
+organization, or substantially all assets of one, or subdividing an
+organization, or merging organizations.  If propagation of a covered
+work results from an entity transaction, each party to that
+transaction who receives a copy of the work also receives whatever
+licenses to the work the party's predecessor in interest had or could
+give under the previous paragraph, plus a right to possession of the
+Corresponding Source of the work from the predecessor in interest, if
+the predecessor has it or can get it with reasonable efforts.
+
+  You may not impose any further restrictions on the exercise of the
+rights granted or affirmed under this License.  For example, you may
+not impose a license fee, royalty, or other charge for exercise of
+rights granted under this License, and you may not initiate litigation
+(including a cross-claim or counterclaim in a lawsuit) alleging that
+any patent claim is infringed by making, using, selling, offering for
+sale, or importing the Program or any portion of it.
+
+  11. Patents.
+
+  A "contributor" is a copyright holder who authorizes use under this
+License of the Program or a work on which the Program is based.  The
+work thus licensed is called the contributor's "contributor version".
+
+  A contributor's "essential patent claims" are all patent claims
+owned or controlled by the contributor, whether already acquired or
+hereafter acquired, that would be infringed by some manner, permitted
+by this License, of making, using, or selling its contributor version,
+but do not include claims that would be infringed only as a
+consequence of further modification of the contributor version.  For
+purposes of this definition, "control" includes the right to grant
+patent sublicenses in a manner consistent with the requirements of
+this License.
+
+  Each contributor grants you a non-exclusive, worldwide, royalty-free
+patent license under the contributor's essential patent claims, to
+make, use, sell, offer for sale, import and otherwise run, modify and
+propagate the contents of its contributor version.
+
+  In the following three paragraphs, a "patent license" is any express
+agreement or commitment, however denominated, not to enforce a patent
+(such as an express permission to practice a patent or covenant not to
+sue for patent infringement).  To "grant" such a patent license to a
+party means to make such an agreement or commitment not to enforce a
+patent against the party.
+
+  If you convey a covered work, knowingly relying on a patent license,
+and the Corresponding Source of the work is not available for anyone
+to copy, free of charge and under the terms of this License, through a
+publicly available network server or other readily accessible means,
+then you must either (1) cause the Corresponding Source to be so
+available, or (2) arrange to deprive yourself of the benefit of the
+patent license for this particular work, or (3) arrange, in a manner
+consistent with the requirements of this License, to extend the patent
+license to downstream recipients.  "Knowingly relying" means you have
+actual knowledge that, but for the patent license, your conveying the
+covered work in a country, or your recipient's use of the covered work
+in a country, would infringe one or more identifiable patents in that
+country that you have reason to believe are valid.
+
+  If, pursuant to or in connection with a single transaction or
+arrangement, you convey, or propagate by procuring conveyance of, a
+covered work, and grant a patent license to some of the parties
+receiving the covered work authorizing them to use, propagate, modify
+or convey a specific copy of the covered work, then the patent license
+you grant is automatically extended to all recipients of the covered
+work and works based on it.
+
+  A patent license is "discriminatory" if it does not include within
+the scope of its coverage, prohibits the exercise of, or is
+conditioned on the non-exercise of one or more of the rights that are
+specifically granted under this License.  You may not convey a covered
+work if you are a party to an arrangement with a third party that is
+in the business of distributing software, under which you make payment
+to the third party based on the extent of your activity of conveying
+the work, and under which the third party grants, to any of the
+parties who would receive the covered work from you, a discriminatory
+patent license (a) in connection with copies of the covered work
+conveyed by you (or copies made from those copies), or (b) primarily
+for and in connection with specific products or compilations that
+contain the covered work, unless you entered into that arrangement,
+or that patent license was granted, prior to 28 March 2007.
+
+  Nothing in this License shall be construed as excluding or limiting
+any implied license or other defenses to infringement that may
+otherwise be available to you under applicable patent law.
+
+  12. No Surrender of Others' Freedom.
+
+  If conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot convey a
+covered work so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you may
+not convey it at all.  For example, if you agree to terms that obligate you
+to collect a royalty for further conveying from those to whom you convey
+the Program, the only way you could satisfy both those terms and this
+License would be to refrain entirely from conveying the Program.
+
+  13. Use with the GNU Affero General Public License.
+
+  Notwithstanding any other provision of this License, you have
+permission to link or combine any covered work with a work licensed
+under version 3 of the GNU Affero General Public License into a single
+combined work, and to convey the resulting work.  The terms of this
+License will continue to apply to the part which is the covered work,
+but the special requirements of the GNU Affero General Public License,
+section 13, concerning interaction through a network will apply to the
+combination as such.
+
+  14. Revised Versions of this License.
+
+  The Free Software Foundation may publish revised and/or new versions of
+the GNU General Public License from time to time.  Such new versions will
+be similar in spirit to the present version, but may differ in detail to
+address new problems or concerns.
+
+  Each version is given a distinguishing version number.  If the
+Program specifies that a certain numbered version of the GNU General
+Public License "or any later version" applies to it, you have the
+option of following the terms and conditions either of that numbered
+version or of any later version published by the Free Software
+Foundation.  If the Program does not specify a version number of the
+GNU General Public License, you may choose any version ever published
+by the Free Software Foundation.
+
+  If the Program specifies that a proxy can decide which future
+versions of the GNU General Public License can be used, that proxy's
+public statement of acceptance of a version permanently authorizes you
+to choose that version for the Program.
+
+  Later license versions may give you additional or different
+permissions.  However, no additional obligations are imposed on any
+author or copyright holder as a result of your choosing to follow a
+later version.
+
+  15. Disclaimer of Warranty.
+
+  THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY
+APPLICABLE LAW.  EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT
+HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY
+OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM
+IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+  16. Limitation of Liability.
+
+  IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS
+THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY
+GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE
+USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF
+DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD
+PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS),
+EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGES.
+
+  17. Interpretation of Sections 15 and 16.
+
+  If the disclaimer of warranty and limitation of liability provided
+above cannot be given local legal effect according to their terms,
+reviewing courts shall apply local law that most closely approximates
+an absolute waiver of all civil liability in connection with the
+Program, unless a warranty or assumption of liability accompanies a
+copy of the Program in return for a fee.
+
+                     END OF TERMS AND CONDITIONS
+
+            How to Apply These Terms to Your New Programs
+
+  If you develop a new program, and you want it to be of the greatest
+possible use to the public, the best way to achieve this is to make it
+free software which everyone can redistribute and change under these terms.
+
+  To do so, attach the following notices to the program.  It is safest
+to attach them to the start of each source file to most effectively
+state the exclusion of warranty; and each file should have at least
+the "copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the program's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+Also add information on how to contact you by electronic and paper mail.
+
+  If the program does terminal interaction, make it output a short
+notice like this when it starts in an interactive mode:
+
+    <program>  Copyright (C) <year>  <name of author>
+    This program comes with ABSOLUTELY NO WARRANTY; for details type `show w'.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions; type `show c' for details.
+
+The hypothetical commands `show w' and `show c' should show the appropriate
+parts of the General Public License.  Of course, your program's commands
+might be different; for a GUI interface, you would use an "about box".
+
+  You should also get your employer (if you work as a programmer) or school,
+if any, to sign a "copyright disclaimer" for the program, if necessary.
+For more information on this, and how to apply and follow the GNU GPL, see
+<https://www.gnu.org/licenses/>.
+
+  The GNU General Public License does not permit incorporating your program
+into proprietary programs.  If your program is a subroutine library, you
+may consider it more useful to permit linking proprietary applications with
+the library.  If this is what you want to do, use the GNU Lesser General
+Public License instead of this License.  But first, please read
+<https://www.gnu.org/licenses/why-not-lgpl.html>.
+
+*/
+(function () {
+  const existingPlay = spider.play;
+  spider.play = async function (flag, id, flags) {
+    const target = String(id || '').replace(/^hongguo:/, '');
+    const flagValues = Array.isArray(flags) ? flags : [];
+    const seriesId = String(flagValues.find(value => value && typeof value === 'object' && value.seriesId)?.seriesId || '');
+    const publicMatch = /\/video\/public\/(\d{10,})\//.exec(target);
+    const match = /\/player\/([^/?#]+)\/(\d+)(?:[/?#]|$)/.exec(target) || /^(\d+)_(\d{10,})$/.exec(target)
+      || (publicMatch ? ['', /^\d{10,}$/.test(seriesId) ? seriesId : '', publicMatch[1]] : null);
+    if (!match) {
+      const indexed = /^(\d+)[/_](\d{1,5})$/.exec(target);
+      if (!indexed) return existingPlay(flag, id, flags);
+      let detail = await fetchAppDetail(indexed[1]);
+      let episode = detail && detail.video_list && detail.video_list[Number(indexed[2]) - 1];
+      let exactId = episode && String(episode.vid || episode.video_id || "");
+      if (!/^\d+$/.test(exactId || "")) {
+        try {
+          const fullDetail = await spider.detail(indexed[1]);
+          const vod = fullDetail && Array.isArray(fullDetail.list) && fullDetail.list[0];
+          const playUrl = (vod && vod.vod_play_url) || "";
+          if (playUrl) {
+            const epNum = Number(indexed[2]);
+            const entries = playUrl.split("#");
+            let resolvedUrl = "";
+            for (let i = 0; i < entries.length; i++) {
+              const item = entries[i];
+              const parts = item.split("$");
+              if (parts.length >= 2) {
+                const numMatch = parts[0].match(/(\d+)/);
+                if (numMatch && Number(numMatch[1]) === epNum) {
+                  resolvedUrl = parts[1];
+                  break;
+                }
+              }
+            }
+            if (!resolvedUrl && epNum > 0 && epNum <= entries.length) {
+              const parts = entries[epNum - 1].split("$");
+              if (parts.length >= 2) resolvedUrl = parts[1];
+            }
+            if (resolvedUrl && resolvedUrl !== target && !/^\d+[/_]\d{1,5}$/.test(resolvedUrl)) {
+              return spider.play(flag, resolvedUrl, flags);
+            }
+            const exactVidMatch = /\/player\/[^/?#]+\/(\d+)/.exec(resolvedUrl || "") || /^(\d{10,})$/.exec(resolvedUrl || "");
+            if (exactVidMatch) {
+              exactId = exactVidMatch[1];
+            }
+          }
+        } catch (_) {}
+        if (!/^\d+$/.test(exactId || "")) {
+          detail = await fetchAppDetail(indexed[1]);
+          episode = detail && detail.video_list && detail.video_list[Number(indexed[2]) - 1];
+          exactId = episode && String(episode.vid || episode.video_id || "");
+        }
+      }
+      if (!/^\d+$/.test(exactId || "")) return { parse: 0, url: "", header: {}, error: "MISSING_EPISODE" };
+      return spider.play(flag, BASE_URL + "/player/" + indexed[1] + "/" + exactId, flags);
+    }
+    const vid = match[2];
+    const danmakuId = match[1] ? 'hongguo:' + match[1] + ':' + vid : '';
+    const avoidedUrl = Array.isArray(flags) ? String(flags.find(value => value && typeof value === 'object' && value.avoidUrl)?.avoidUrl || '') : '';
+    const qualityValue = Array.isArray(flags) ? Number(flags.find(value => value && typeof value === 'object' && 'quality' in value)?.quality || 0) : 0;
+    const requestedQuality = Number.isFinite(qualityValue) && qualityValue > 0 ? Math.round(qualityValue) : 0;
+    const preferredQuality = requestedQuality || 1080;
+    function streamQuality(value) {
+      const width = Number(value.width), height = Number(value.height);
+      return width > 0 && height > 0 ? Math.round(Math.min(width, height)) : Number(String(value.quality || '').match(/\d+/)?.[0] || 0);
+    }
+    function qualityRank(value) {
+      const q = streamQuality(value);
+      if (!q) return [3, 0];
+      if (q === preferredQuality) return [0, 0];
+      const preferLower = requestedQuality > 0 && requestedQuality < 1080;
+      const preferredSide = preferLower ? q < preferredQuality : q > preferredQuality;
+      return [preferredSide ? 1 : 2, Math.abs(q - preferredQuality)];
+    }
+    let deadline = Date.now() + 30000;
+    function mediaHeaders(value) {
+      const headers = { ...(value.header || { 'User-Agent': value.userAgent }) };
+      for (const key of Object.keys(headers)) if (key.toLowerCase() === 'referer') delete headers[key];
+      return headers;
+    }
+    async function readable(value) {
+      if (globalThis.__hongguoCancelled || !value || !value.url || Date.now() >= deadline) return false;
+      const expiresAt = Number(value.expiresAt);
+      if (Number.isSafeInteger(expiresAt) && expiresAt > 0 && expiresAt <= Date.now() + 5000) { mediaFailure = 'MEDIA_URL_EXPIRED'; return false; }
+      try {
+        const response = await fetch(value.url, { method: 'HEAD', headers: mediaHeaders(value), timeoutMs: Math.min(5000, deadline - Date.now()) });
+        const contentType = response.headers && (typeof response.headers.get === 'function' ? response.headers.get('content-type') : response.headers['content-type']);
+        if (![200, 206].includes(response.status)) { mediaFailure = 'MEDIA_HTTP_' + response.status; return false; }
+        if (!/^video\//i.test(contentType || '')) { mediaFailure = 'MEDIA_TYPE_INVALID'; return false; }
+        return true;
+      } catch (error) { mediaFailure = error.code || 'MEDIA_NETWORK'; return false; }
+    }
+    let lastCode = 'NO_STREAM';
+    let mediaFailure = 'MEDIA_REJECTED';
+    for (let attempt = 0; attempt < 2 && !globalThis.__hongguoCancelled && Date.now() < deadline; attempt++) {
+      try {
+        const model = await HongguoApp.fetchAppPlayUrl(vid, { deadline, refreshModel: attempt > 0 || Boolean(avoidedUrl), includeFallback: lastCode === 'MEDIA_REJECTED' });
+        const variants = model.variants || [model];
+        const qualities = [...new Set(variants.map(streamQuality).filter(value => value > 0))].sort((a, b) => b - a);
+        const ordered = [...variants].sort((a, b) => {
+          const left = qualityRank(a), right = qualityRank(b);
+          return left[0] - right[0] || left[1] - right[1] || Number(a.url === avoidedUrl) - Number(b.url === avoidedUrl);
+        });
+        for (const candidates of [ordered]) {
+          for (let index = 0; index < candidates.length;) {
+            const group = [candidates[index++]];
+            if (index < candidates.length && String(candidates[index].quality) === String(group[0].quality) && (candidates[index].url === avoidedUrl) === (group[0].url === avoidedUrl)) group.push(candidates[index++]);
+            const candidate = await new Promise(resolve => {
+              let remaining = group.length;
+              for (const value of group) {
+                Promise.resolve(String(value.vid) === vid && readable(value)).then(ok => {
+                  if (ok) resolve(value);
+                  if (--remaining === 0) resolve(null);
+                }, () => { if (--remaining === 0) resolve(null); });
+              }
+            });
+            if (!candidate) continue;
+            const quality = streamQuality(candidate);
+            return { parse: 0, url: candidate.url, header: mediaHeaders(candidate), decryptionKey: candidate.contentKey || '', mediaBytes: candidate.mediaBytes || 0, quality, qualities, expiresAt: Number.isSafeInteger(candidate.expiresAt) && candidate.expiresAt > 0 ? Math.min(candidate.expiresAt, Date.now() + 300000) : Date.now() + 30000, episodeId: vid, danmakuId };
+          }
+        }
+        lastCode = 'MEDIA_REJECTED';
+      } catch (error) {
+        lastCode = error.code || 'MODEL_FAILED';
+        if (error.routesExhausted || ['BUSINESS_REJECTED', 'SECURITY_BLOCKED', 'MISSING_MODEL', 'EMPTY_RESPONSE', 'RESPONSE_NOT_UTF8', 'HTTP_403', 'HTTP_429'].includes(lastCode)) break;
+      }
+    }
+    return { parse: 0, url: '', header: {}, error: globalThis.__hongguoCancelled ? 'CANCELLED' : lastCode === 'MEDIA_REJECTED' ? mediaFailure : lastCode, episodeId: vid, danmakuId };
+  };
+})();
+
+(function () {
+  const searches = new Map();
+  spider.search = async function (word, quick, page) {
+    const query = String(word || '').trim().slice(0, 100);
+    const pg = Math.max(1, Number.parseInt(page, 10) || 1);
+    if (!query) return { page: pg, pagecount: pg, limit: 10, total: 0, list: [] };
+    let state = searches.get(query);
+    if (pg === 1 || !state || Date.now() - state.updated > 15 * 60 * 1000) {
+      state = { pages: new Map(), cursors: new Map([[1, {}]]), updated: Date.now(), end: null };
+      searches.delete(query);
+      searches.set(query, state);
+      while (searches.size > 8) searches.delete(searches.keys().next().value);
+    }
+    if (state.end !== null && pg > state.end) return { page: pg, pagecount: state.end, limit: 10, total: 0, list: [] };
+    if (!state.cursors.has(pg) && !state.pages.has(pg)) {
+      if (pg !== 2) throw new Error('搜索游标已过期，请从第一页重新搜索');
+      await spider.search(query, quick, 1);
+      state = searches.get(query);
+    }
+    if (!state.pages.has(pg)) {
+      if (!state.cursors.has(pg)) return { page: pg, pagecount: pg, limit: 10, total: 0, list: [] };
+      const result = await HongguoApp.fetchAppSearchPage(query, state.cursors.get(pg));
+      const seen = new Set();
+      for (const [number, previous] of state.pages) if (number < pg) for (const item of previous.list) seen.add(item.vod_id);
+      const list = result.list.filter(item => !seen.has(item.vod_id));
+      state.pages.set(pg, { page: pg, pagecount: result.hasMore ? pg + 1 : pg, limit: 10, total: 0, list });
+      if (result.hasMore) state.cursors.set(pg + 1, result.cursor);
+      if (!result.hasMore) state.end = pg;
+    }
+    state.updated = Date.now();
+    return state.pages.get(pg);
+  };
+})();
+
+spider.danmaku = function (id, startMs, durationMs) {
+  return HongguoApp.fetchAppDanmakuPage(id, startMs, durationMs);
+};
+
+(function () {
+  const states = new Map();
+  const ttl = 2 * 60 * 60 * 1000;
+  const api = HongguoApp.fetchAppDiscoveryRaw;
+  const text = value => value == null ? '' : String(value).trim();
+  const number = value => Math.max(0, Number.parseInt(value, 10) || 0);
+  const failure = (message, code) => Object.assign(new Error(message), { code });
+  const rankParams = (selected, sub) => ({
+    scene: 10, from: 'video_ranklist', bookstore_tab_type: 26,
+    selected_items: selected, sub_selected_items: sub,
+    panel_selected_items: '', background_selected_items: ''
+  });
+
+  function videos(cells) {
+    const found = [];
+    const seen = new Set();
+    function visit(cell) {
+      if (!cell || typeof cell !== 'object') return;
+      for (const video of cell.video_data || []) {
+        const id = text(video.series_id_str || video.series_id);
+        if (!/^\d{10,}$/.test(id) || !text(video.title) || video.disable_play === true || seen.has(id)) continue;
+        seen.add(id);
+        const metric = (video.secondary_info_list || []).map(item => text(item.content)).find(Boolean) || '';
+        let rank = 0;
+        try { rank = number(JSON.parse(video.recommend_info || '{}').rank); } catch (_) {}
+        found.push({
+          vod_id: id, vod_name: text(video.title), vod_pic: cleanCoverUrl(text(video.cover)),
+          vod_content: text(video.video_desc), vod_remarks: number(video.episode_cnt) ? number(video.episode_cnt) + '集' : '',
+          vod_episodes: number(video.episode_cnt), vod_metric: metric, vod_heat: metric,
+          vod_views: (typeof video.show_play_cnt === 'boolean' ? '' : text(video.show_play_cnt)) || (number(video.play_cnt) ? text(video.play_cnt) : ''),
+          vod_score: text(video.score), vod_rank: rank,
+          vod_tag: text(video.sub_title)
+        });
+      }
+      for (const child of cell.cell_data || []) visit(child);
+    }
+    for (const cell of cells || []) visit(cell);
+    return found;
+  }
+
+  function container(cells) {
+    return (cells || []).find(cell => cell && cell.cell_id_str && Array.isArray(cell.cell_data));
+  }
+
+  function selectedSubtitle(cell) {
+    const outer = cell?.cell_selector?.outer_row?.items || [];
+    const selected = outer.find(item => item.is_selected);
+    const sub = selected?.sub_cell_selector?.outer_row?.items || [];
+    return text(sub.find(item => item.is_selected)?.sub_title);
+  }
+
+  async function savePage(state, page, cell, data, params, minimum = 1) {
+    if (!cell) throw failure('官方接口未返回剧集列表，请重试', 'INVALID_RESPONSE');
+    const seen = new Set();
+    let previousCount = 0;
+    for (const [previous, value] of state.pages) {
+      if (previous < page) {
+        for (const row of value.list) seen.add(row.vod_id);
+        previousCount += value.list.length;
+      }
+    }
+    const previous = state.cursors.get(page);
+    const list = [];
+    let offset = number(data.next_offset ?? cell.next_offset);
+    let hasMore = data.has_more !== false && cell.has_more !== false && offset > number(previous?.offset);
+    let currentCell = cell;
+    let currentData = data;
+
+    function appendCell(c) {
+      for (const row of videos([c])) {
+        if (!seen.has(row.vod_id)) {
+          seen.add(row.vod_id);
+          const computedRank = state.isRanking
+            ? (previousCount + list.length + 1)
+            : (row.vod_rank || (number(previous?.offset) + list.length + 1));
+          list.push({
+            ...row, ...(state.category ? { vod_category: state.category } : {}),
+            vod_rank: computedRank
+          });
+        }
+      }
+    }
+    appendCell(cell);
+
+    let rounds = 0;
+    while (list.length < minimum && hasMore && rounds < 5) {
+      rounds++;
+      const nextParams = {
+        ...params,
+        cell_id: text(currentCell.cell_id_str || previous?.cell_id),
+        offset: offset,
+        session_id: text(currentData.session_id || currentCell.session_id),
+        rank_version: text(currentData.rank_version || currentCell.rank_version),
+        limit: 40,
+        change_type: 1
+      };
+      let nextRes;
+      try {
+        nextRes = await api('/reading/bookapi/bookmall/cell/change/v', nextParams);
+        if (!nextRes.data?.cell_view) throw failure('官方接口未返回剧集列表，请重试', 'INVALID_RESPONSE');
+      } catch (error) {
+        if (list.length) break;
+        throw error;
+      }
+      const nextCell = nextRes.data.cell_view;
+      const nextData = nextRes.data;
+      const prevOff = offset;
+      offset = number(nextData.next_offset ?? nextCell.next_offset);
+      hasMore = nextData.has_more !== false && nextCell.has_more !== false && offset > prevOff;
+      currentCell = nextCell;
+      currentData = nextData;
+      appendCell(nextCell);
+    }
+
+    hasMore = hasMore && list.length > 0;
+    const result = {
+      page, pagecount: hasMore ? page + 1 : page, hasMore, list,
+      updatedText: selectedSubtitle(cell) || state.updatedText || ''
+    };
+    state.pages.set(page, result);
+    state.updatedText = result.updatedText;
+    state.updated = Date.now();
+    if (hasMore) state.cursors.set(page + 1, {
+      ...params, cell_id: text(currentCell.cell_id_str || previous?.cell_id), offset,
+      session_id: text(currentData.session_id || currentCell.session_id), rank_version: text(currentData.rank_version || currentCell.rank_version)
+    });
+    return result;
+  }
+
+  async function paged(key, rawPage, first) {
+    const page = Math.max(1, number(rawPage));
+    let state = states.get(key);
+    if (page === 1) {
+      state = { pages: new Map(), cursors: new Map(), updated: Date.now() };
+      states.delete(key);
+      states.set(key, state);
+      while (states.size > 64) states.delete(states.keys().next().value);
+      const initial = await first();
+      state.category = initial.category;
+      state.isRanking = Boolean(initial.isRanking || key.startsWith('hongguo-app:'));
+      return await savePage(state, page, initial.cell, initial.data || {}, initial.params, initial.minimum);
+    }
+    if (state && state.pages.has(page)) return state.pages.get(page);
+
+    // 游标自愈保护：当状态缺失、超时或缺失对应页码游标时，自动重新初始化并建立前序游标
+    if (!state || Date.now() - state.updated > ttl || !state.cursors.has(page)) {
+      state = { pages: new Map(), cursors: new Map(), updated: Date.now() };
+      states.delete(key);
+      states.set(key, state);
+      while (states.size > 64) states.delete(states.keys().next().value);
+      const initial = await first();
+      state.category = initial.category;
+      state.isRanking = Boolean(initial.isRanking || key.startsWith('hongguo-app:'));
+      const firstResult = await savePage(state, 1, initial.cell, initial.data || {}, initial.params, initial.minimum);
+      if (page === 1) return firstResult;
+    }
+
+    const cursor = state.cursors.get(page);
+    if (!cursor) {
+      return { page, pagecount: page, hasMore: false, list: [], updatedText: state.updatedText || '' };
+    }
+
+    const response = await api('/reading/bookapi/bookmall/cell/change/v', { ...cursor, limit: 40, change_type: 1 });
+    return await savePage(state, page, response.data?.cell_view, response.data || {}, cursor);
+  }
+
+  const legacyHome = spider.home;
+  const legacyCategory = spider.category;
+  const discoveryGenres = ['all', 'playlet', 'motion_comic', 'ai_playlet'];
+
+  let cachedDiscoveryTab = null;
+  let cachedDiscoveryTabTime = 0;
+  async function discoveryTab() {
+    if (cachedDiscoveryTab && Date.now() - cachedDiscoveryTabTime < 30 * 60 * 1000) {
+      return cachedDiscoveryTab;
+    }
+    const response = await api('/reading/bookapi/bookmall/tab/v', { tab_type: 8, tab_index: 0, offset: 0 });
+    const tab = response.data?.tab_item?.find(item => number(item.tab_type) === 8);
+    const cell = container(tab?.cell_data);
+    const choices = cell?.cell_selector?.outer_row?.items || [];
+    if (!cell || !discoveryGenres.every(id => choices.some(item => item.selector_item_id === id && text(item.show_name)))) {
+      throw failure('官方找剧分类暂不可用，请重试', 'INVALID_RESPONSE');
+    }
+    cachedDiscoveryTab = { cell, choices };
+    cachedDiscoveryTabTime = Date.now();
+    return cachedDiscoveryTab;
+  }
+
+  spider.home = async function (filter) {
+    if (!filter) return legacyHome(false);
+    const { choices } = await discoveryTab();
+    return { class: choices.filter(item => discoveryGenres.includes(item.selector_item_id)).map(item => ({
+      type_id: 'app:discover:' + item.selector_item_id, type_name: text(item.show_name)
+    })), filters: {} };
+  };
+
+  spider.category = async function (tid, page, filter, extend) {
+    const aliases = { '': 'all', all: 'all', short_play: 'all', 'real-drama': 'playlet',
+      'comic-drama': 'motion_comic', comic: 'motion_comic', 'ai-drama': 'ai_playlet',
+      'app:theater:8': 'all', 'app:theater:38': 'playlet', 'app:theater:32': 'motion_comic' };
+    const genre = aliases[text(tid)] || text(tid).replace(/^app:discover:/, '');
+    if (!discoveryGenres.includes(genre)) {
+      if (typeof legacyCategory === 'function') return legacyCategory(tid, page, filter, extend);
+      throw failure('分类已更新，请重新选择分类', 'INVALID_CATEGORY');
+    }
+    return await paged('discover:' + genre, page, async () => {
+      const { cell, choices } = await discoveryTab();
+      const category = genre === 'all' ? '短剧' : text(choices.find(item => item.selector_item_id === genre).show_name);
+      const params = {
+        cell_id: text(cell.cell_id_str), tab_type: 8, selected_items: genre,
+        sub_selected_items: '', unlimited_selector_change_type: 1,
+        client_template: 2, client_req_type: 2
+      };
+      const minimum = Math.min(24, Math.max(1, number(extend?.initialBatch)));
+      if (genre === 'all' && choices.find(item => item.selector_item_id === genre).is_selected) {
+        return { cell, params, category, minimum };
+      }
+      const response = await api('/reading/bookapi/bookmall/cell/change/v', {
+        ...params, unlimited_selector_change_type: 2, change_type: 1, offset: 0, limit: 40
+      });
+      return { cell: response.data?.cell_view, data: response.data || {}, params, category, minimum };
+    });
+  };
+
+  spider.suggestions = async function (word) {
+    const query = text(word).slice(0, 100);
+    const common = { bookstore_tab: 16, tab_name: 'feed', search_source: 1, user_is_login: globalThis.__hongguoAccountActive ? 1 : 0 };
+    const response = await api(query ? '/reading/bookapi/search/suggest/v' : '/reading/bookapi/search/cue/v',
+      query ? { ...common, query, count: 10 } : { ...common, cue_type: 0, limit: 10 });
+    let words;
+    if (query) {
+      words = response.data?.query_result;
+      if (!Array.isArray(words) || !words.length) words = (response.data?.query_result_v2 || []).map(item => item.name);
+    } else {
+      words = (response.data_v1 || []).map(item => item.text || item.display_text);
+      if (!words.length && response.data?.text) words = [response.data.text];
+    }
+    if (!Array.isArray(words)) throw failure('官方搜索建议数据无效', 'INVALID_RESPONSE');
+    return { items: [...new Set(words.map(text).filter(value => value && value.length <= 100))].slice(0, 10) };
+  };
+
+  let cachedRankingBoards = null;
+  let cachedRankingBoardsTime = 0;
+  spider.rankingBoards = async function () {
+    if (cachedRankingBoards && Date.now() - cachedRankingBoardsTime < 15 * 60 * 1000) {
+      return cachedRankingBoards;
+    }
+    const response = await api('/reading/bookapi/plan/v', rankParams('all', 'ranklist_hot_sc'));
+    const cell = container(response.data);
+    const items = [];
+    for (const group of cell?.cell_selector?.outer_row?.items || []) {
+      if (!['all', 'human', 'comic_series_rank', 'ai_playlet'].includes(group.selector_item_id)) continue;
+      for (const board of group.sub_cell_selector?.outer_row?.items || []) {
+        if (!/^[a-z0-9_]{1,80}$/.test(board.selector_item_id || '')) continue;
+        items.push({
+          id: 'hongguo-app:' + group.selector_item_id + ':' + board.selector_item_id,
+          name: (group.selector_item_id === 'all' ? '' : text(group.show_name) + '·') + text(board.show_name),
+          description: text(board.sub_title), source: 'hongguo'
+        });
+      }
+    }
+    if (!items.length) throw failure('官方接口暂未返回短剧榜单，请重试', 'INVALID_RESPONSE');
+    cachedRankingBoards = { items };
+    cachedRankingBoardsTime = Date.now();
+    return cachedRankingBoards;
+  };
+
+  spider.rankings = function (board, page) {
+    const match = /^hongguo-app:(all|human|comic_series_rank|ai_playlet):([a-z0-9_]{1,80})$/.exec(text(board));
+    if (!match) throw failure('榜单已更新，请重新打开榜单列表', 'INVALID_BOARD');
+    return rankedPage(match[1], match[2], page, text(board));
+  };
+
+  function rankedPage(group, board, page, key) {
+    return paged(key, page, async () => {
+      const params = rankParams(group, board);
+      const response = await api('/reading/bookapi/plan/v', params);
+      const cell = container(response.data);
+      const selected = cell?.cell_selector?.outer_row?.items?.find(item => item.is_selected);
+      const sub = selected?.sub_cell_selector?.outer_row?.items?.find(item => item.is_selected);
+      if (selected?.selector_item_id !== group || sub?.selector_item_id !== board) throw failure('官方榜单配置已更新，请刷新榜单', 'INVALID_BOARD');
+      return { cell, params: { ...params, tab_type: 26 }, isRanking: true };
+    });
+  };
+
+  spider.recommendations = function (genre, page) {
+    const key = text(genre);
+    if (['ai_series', 'ai-drama', 'AI 剧', 'AI剧'].includes(key)) {
+      return rankedPage('ai_playlet', 'ai_playlet_hot_sc', page, 'recommendations:ai');
+    }
+    const comic = ['comic_series', 'comic-drama', 'comic', '漫剧'].includes(key);
+    const tabType = comic ? 32 : 38;
+    return paged('recommendations:' + tabType, page, async () => {
+      const response = await api('/reading/bookapi/bookmall/tab/v', { tab_type: tabType, tab_index: comic ? 2 : 1, offset: 0 });
+      const tab = response.data?.tab_item?.find(item => number(item.tab_type) === tabType);
+      if (!tab) throw failure('官方接口未返回此推荐分类，请重试', 'INVALID_RESPONSE');
+      const cell = container(tab.cell_data);
+      return { cell, params: { tab_type: tabType } };
+    });
+  };
+})();
+
+(function () {
+  const text = value => value == null ? '' : String(value).trim();
+  const integer = value => Math.max(0, Number.parseInt(value, 10) || 0);
+  const failure = code => Object.assign(new Error('官方系列剧列表暂不可用'), { code });
+  spider.seriesSeasons = async function (rawId) {
+    const id = text(rawId).replace(/^hongguo:/, '');
+    if (!/^[1-9]\d{9,29}$/.test(id)) throw failure('INVALID_SERIES_ID');
+    const api = HongguoApp.fetchAppDiscoveryRaw;
+    const response = await api('/reading/bookapi/plan/v', {
+      scene: 10, from: 'single_col_same_ip_series', book_id: id, filter_ids: id
+    });
+    if (Number(response.code) !== 0) throw failure('SERIES_REJECTED');
+    let cell = (response.data || []).find(value => Array.isArray(value.video_data) &&
+      value.video_data.some(video => integer(video.season_index) > 0));
+    if (!cell) return { list: [] };
+    const rows = new Map();
+    const cursors = new Set();
+    for (let page = 0; page < 10; page++) {
+      for (const video of cell.video_data || []) {
+        const raw = video.series_id_str || video.series_id;
+        const vid = typeof raw === 'string' ? raw : Number.isSafeInteger(raw) ? String(raw) : '';
+        const season = integer(video.season_index);
+        if (!/^[1-9]\d{9,29}$/.test(vid) || !season || season > 200 || !text(video.title)) continue;
+        const episodes = integer(video.episode_cnt);
+        const upcoming = !episodes && !!video.subscribe_item;
+        const playable = video.disable_play !== true && (!upcoming || episodes > 0);
+        const status = upcoming ? '待上线' : (video.disable_play === true ? '暂不可播放' : '');
+        rows.set(vid, {
+          vod_id: vid, vod_name: text(video.title), vod_pic: cleanCoverUrl(text(video.cover)),
+          vod_content: text(video.video_desc), vod_episodes: episodes,
+          vod_remarks: episodes ? episodes + '集' : status,
+          vod_release_status: upcoming ? 'upcoming' : '',
+          season, playable, status
+        });
+      }
+      if (cell.has_more !== true) return { list: [...rows.values()].sort((a, b) => a.season - b.season) };
+      const cursor = {
+        cell_id: text(cell.cell_id_str), offset: integer(cell.next_offset),
+        session_id: text(cell.session_id), filter_ids: id
+      };
+      const key = cursor.cell_id + ':' + cursor.offset;
+      if (!cursor.cell_id || !cursor.offset || cursors.has(key) || page === 9) throw failure('INVALID_SERIES_CURSOR');
+      cursors.add(key);
+      const next = await api('/reading/bookapi/bookmall/cell/change/v', cursor);
+      if (Number(next.code) !== 0 || !next.data?.cell_view) throw failure('INVALID_RESPONSE');
+      cell = next.data.cell_view;
+      if (globalThis.__hongguoCancelled) throw failure('cancelled');
+    }
+    return { list: [] };
+  };
+})();
+
+(function () {
+  const states = new Map();
+  const details = new Map();
+  globalThis.__hongguoFeedDetails = details;
+  const text = value => value == null ? '' : String(value).trim();
+  const number = value => Math.max(0, Number.parseInt(value, 10) || 0);
+  const identity = value => typeof value === 'string' && /^[1-9]\d{9,29}$/.test(value) ? value : '';
+  const failure = (message, code) => Object.assign(new Error(message), { code });
+  function videos(cells) {
+    const rows = [];
+    for (const cell of cells || []) {
+      rows.push(...(cell.video_data || []));
+      rows.push(...videos(cell.cell_data));
+    }
+    return rows;
+  }
+  spider.feed = async function (rawPage, rawScope) {
+    const page = Math.max(1, number(rawPage));
+    const scope = text(rawScope).slice(0, 160);
+    const initialOffset = Math.max(0, number((scope.match(/_(\d+)$/) || [])[1]));
+    let state = states.get(scope);
+    if (page === 1) {
+      state = { pages: new Map(), seen: new Set(), updated: Date.now(), cursor: null };
+      states.delete(scope);
+      states.set(scope, state);
+      while (states.size > 16) states.delete(states.keys().next().value);
+    }
+    if (state && state.pages.has(page)) return state.pages.get(page);
+    if (!state || Date.now() - state.updated > 2 * 60 * 60 * 1000) {
+      state = { pages: new Map(), seen: new Set(), updated: Date.now(), cursor: null };
+      states.delete(scope);
+      states.set(scope, state);
+      while (states.size > 16) states.delete(states.keys().next().value);
+    }
+    if (page > 1 && (!state.cursor || page !== state.pages.size + 1)) {
+      return { page, pagecount: page, limit: 10, total: 0, list: [] };
+    }
+    const api = HongguoApp.fetchAppDiscoveryRaw;
+    let cell, tab, data, params;
+    if (page === 1) {
+      const response = await api('/reading/bookapi/bookmall/tab/v', {
+        tab_type: 16, bottom_tab_type: 7, tab_index: 0, offset: 0, client_template: 7
+      });
+      tab = response.data?.tab_item?.find(item => Number(item.tab_type) === 16);
+      cell = tab?.cell_data?.find(item => item.cell_id_str && videos([item]).length);
+      data = tab;
+      if (initialOffset > 0 && cell?.cell_id_str) {
+        try {
+          const changeRes = await api('/reading/bookapi/bookmall/cell/change/v', {
+            tab_type: 16,
+            bottom_tab_type: 7,
+            client_template: 7,
+            client_req_type: 2,
+            change_type: 1,
+            cell_id: text(cell.cell_id_str),
+            offset: initialOffset,
+            session_id: text(tab.session_id)
+          });
+          if (changeRes.data?.cell_view && videos([changeRes.data.cell_view]).length) {
+            cell = changeRes.data.cell_view;
+            data = changeRes.data;
+            params = { offset: initialOffset };
+          }
+        } catch (_) {}
+      }
+    } else {
+      params = state.cursor;
+      const response = await api('/reading/bookapi/bookmall/cell/change/v', params);
+      cell = response.data?.cell_view;
+      data = response.data;
+    }
+    if (!cell || !data) throw failure('首页推荐暂不可用，请重试', 'INVALID_RESPONSE');
+
+    let cellId = text(cell.cell_id_str || state.cellId || params?.cell_id);
+    let sessionId = text(data.session_id || cell.session_id || tab?.session_id || state.sessionId);
+    state.cellId = cellId;
+    state.sessionId = sessionId;
+
+    let previous = number(params?.offset);
+    let offset = (page === 1 && !params) ? Math.max(number(tab.next_offset), videos([cell]).length) : number(data.next_offset);
+    let hasMore = (page === 1 && !params) ? tab.bottom_unlimited === true && videos([cell]).length > 0 :
+      data.has_more === true && offset > previous;
+
+    const list = [];
+    function appendVideos(targetCell) {
+      const raw = videos([targetCell]);
+      for (const video of raw) {
+        const detail = video.video_detail || {};
+        const id = identity(detail.series_id_str || detail.series_id || video.series_id);
+        const title = text(detail.series_title || video.title);
+        const episodes = number(detail.episode_cnt || video.episode_cnt);
+        if (!id || !title || !episodes || video.disable_play === true || state.seen.has(id)) continue;
+        const chapters = (detail.video_list || []).filter(item => identity(item.vid || item.video_id))
+          .sort((a, b) => number(a.vid_index) - number(b.vid_index));
+        if (chapters.length === episodes && chapters.every((item, index) => number(item.vid_index) === index + 1) &&
+            new Set(chapters.map(item => identity(item.vid || item.video_id))).size === episodes) {
+          details.delete(id);
+          details.set(id, { updated: Date.now(), data: {
+            series_id: id, series_title: title, series_intro: text(detail.series_intro),
+            series_cover: text(detail.series_cover || video.cover), episode_cnt: episodes,
+            video_list: chapters.map(item => ({ vid: identity(item.vid || item.video_id), vid_index: number(item.vid_index) }))
+          } });
+          while (details.size > 16) details.delete(details.keys().next().value);
+        }
+        const startId = identity(video.vid) || identity(video.highlight?.vid);
+        const start = chapters.find(item => item.vid === startId);
+        list.push({
+          vod_id: id, vod_name: title, vod_content: text(detail.series_intro || video.video_desc),
+          vod_pic: cleanCoverUrl(text(detail.series_cover || video.cover)), vod_episodes: episodes,
+          vod_remarks: episodes + '集', vod_start_episode: number(start?.vid_index) || 1,
+          vod_start_position: start && identity(video.highlight?.vid) === startId ? number(video.highlight.start_time_in_millisecond) / 1000 : 0
+        });
+        state.seen.add(id);
+      }
+    }
+
+    appendVideos(cell);
+
+    let rounds = 0;
+    while (!list.length && hasMore && rounds < 5) {
+      rounds++;
+      const nextRes = await api('/reading/bookapi/bookmall/cell/change/v', {
+        tab_type: 16, bottom_tab_type: 7, client_template: 7, client_req_type: 2,
+        change_type: 1, cell_id: cellId,
+        offset: offset, session_id: sessionId
+      });
+      const nextCell = nextRes.data?.cell_view;
+      const nextData = nextRes.data;
+      if (!nextCell || !nextData) throw failure('官方接口未返回剧集列表，请重试', 'INVALID_RESPONSE');
+      const prevOff = offset;
+      offset = number(nextData.next_offset);
+      hasMore = nextData.has_more === true && offset > prevOff;
+      cellId = text(nextCell.cell_id_str || cellId);
+      sessionId = text(nextData.session_id || nextCell.session_id || sessionId);
+      appendVideos(nextCell);
+    }
+
+    hasMore = hasMore && list.length > 0;
+    const result = { list, page, pagecount: hasMore ? page + 1 : page, hasMore };
+    state.pages.set(page, result);
+    state.updated = Date.now();
+    state.cellId = cellId;
+    state.sessionId = sessionId;
+    state.cursor = hasMore ? {
+      tab_type: 16, bottom_tab_type: 7, client_template: 7, client_req_type: 2,
+      change_type: 1, cell_id: cellId,
+      offset, session_id: sessionId
+    } : null;
+    return result;
+  };
+})();
+
+spider.accountRequest = async function (action, payload) {
+  payload = payload || {};
+  if (['profile', 'favorites', 'history', 'libraryDetails', 'libraryDetail', 'favoriteUpdate', 'progressGet', 'progressUpdate', 'socialDetail', 'creatorList', 'likeUpdate', 'creatorFollow', 'followingCreators', 'creatorWorks', 'likedVideos', 'creatorProfile', 'commentList', 'commentReplyList'].includes(action)) return HongguoApp.buildAccountRequest(action, payload);
+  const paths = { qr: '/passport/web/get_qrcode/', poll: '/passport/web/check_qrconnect/', webInfo: '/passport/account/info/v2/', phoneCode: '/passport/web/send_code/', phoneSms: '/passport/web/sms_login_only/' };
+  if (!Object.prototype.hasOwnProperty.call(paths, action)) throw new Error('不支持的账号操作');
+  const params = { aid: '513755', passport_jssdk_version: '3.4.10', passport_jssdk_type: 'normal',
+    account_sdk_source: 'web', is_from_ttaccountsdk: '1', language: 'zh' };
+  if (action === 'qr' || action === 'poll') params.next = BASE_URL + '/';
+  if (['phoneCode', 'phoneSms'].includes(action) && payload.fingerprint) {
+    if (typeof payload.fingerprint !== 'string' || !/^[A-Za-z0-9_-]{16,256}$/.test(payload.fingerprint)) throw new Error('安全验证结果无效');
+    params.fp = params.verifyFp = payload.fingerprint;
+  }
+  if (action === 'poll') {
+    if (typeof payload.token !== 'string' || !/^[A-Za-z0-9_.:-]{8,256}$/.test(payload.token)) throw new Error('扫码会话无效');
+    params.token = payload.token;
+  }
+  let form = null;
+  if (['phoneCode', 'phoneSms'].includes(action)) {
+    const country = String(payload.country || '86').replace(/^\+/, '');
+    const number = String(payload.number || '').replace(/[ ()-]/g, '').replace(country === '86' ? /^$/ : /^0/, '');
+    if (!/^[1-9]\d{0,2}$/.test(country) || !/^\d{4,14}$/.test(number) || country.length + number.length > 15 || country === '86' && !/^1\d{10}$/.test(number)) throw new Error('手机号格式无效');
+    const mix = value => { const text = String(value); const bytes = unescape(encodeURIComponent(text)); let result = ''; for (let i = 0; i < bytes.length; i++) result += (bytes.charCodeAt(i) ^ 5).toString(16); return result; };
+    const mobile = '+' + country + ' ' + number;
+    form = { mix_mode: '1', fixed_mix_mode: '1' };
+    if (action === 'phoneCode') Object.assign(form, { mobile: mix(mobile), type: mix('24') });
+    if (action === 'phoneSms') {
+      if (!/^\d{4,8}$/.test(String(payload.code || ''))) throw new Error('验证码格式无效');
+      Object.assign(form, { mobile: mix(mobile), code: mix(payload.code) });
+    }
+
+  }
+  const headers = { 'User-Agent': USER_AGENT, Referer: BASE_URL + '/', Origin: BASE_URL, Accept: 'application/json, text/javascript' };
+  if (form) headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+  return { url: BASE_URL + paths[action] + '?' + Object.keys(params).map(key =>
+    encodeURIComponent(key) + '=' + encodeURIComponent(params[key])).join('&'), method: form ? 'POST' : 'GET',
+    headers, ...(form ? { body: Object.keys(form).map(key => encodeURIComponent(key) + '=' + encodeURIComponent(form[key])).join('&') } : {}) };
+};
+
+spider.accountParse = function (action, text) {
+  const response = safeJsonParse(text);
+  if (!response || typeof response !== 'object') throw new Error('账号接口返回无效数据');
+  const data = response.data;
+  if (action === 'profile') {
+    const user = (data && (data.user_info || data.base_info || data.user_data || data.user || data.profile)) || data || {};
+    const code = Number(response.code ?? response.status_code ?? response.err_no ?? 0);
+    if (code !== 0) throw new Error('ACCOUNT_BUSINESS_' + code);
+    const pickNumericId = (...vals) => {
+      for (const v of vals) {
+        const s = String(v ?? '').trim();
+        if (/^[1-9]\d{0,29}$/.test(s)) return s;
+      }
+      return '';
+    };
+    const id = pickNumericId(
+      user.biz_user_id,
+      data && data.biz_user_id,
+      user.user_id,
+      user.id,
+      user.uid,
+      user.req_id,
+      data && data.user_id,
+      data && data.id,
+      data && data.uid,
+      data && data.req_id
+    );
+    if (!/^\d{1,30}$/.test(id)) throw new Error('账号资料验证失败，请重新扫码');
+    const rawUserId = String(user.user_id || (data && data.user_id) || '');
+    const encodeUserId = rawUserId && !/^\d+$/.test(rawUserId) ? rawUserId : '';
+    const rawAvatar = user.avatar_url || user.avatar || (data && data.avatar_url) || '';
+    const avatar = typeof rawAvatar === 'string' && /^https?:\/\//.test(rawAvatar) ? rawAvatar.replace(/^http:\/\//, 'https://') : '';
+    return {
+      id,
+      bizUserId: pickNumericId(user.biz_user_id, data && data.biz_user_id) || id,
+      encodeUserId,
+      nickname: String(user.user_name || user.nickname || user.name || (data && (data.user_name || data.nickname)) || '红果用户').slice(0, 80),
+      avatar
+    };
+  }
+  if (action === 'webInfo') {
+    if (response.message !== 'success' || !data) throw new Error('官方登录请求失败');
+    const user = (data && (data.user_info || data.base_info || data.user_data || data.user)) || data || {};
+    const id = String(user.user_id_str || user.user_id || user.biz_user_id || user.id || '');
+    return {
+      id: /^\d{1,30}$/.test(id) ? id : '',
+      nickname: String(user.name || user.user_name || user.screen_name || '红果用户').slice(0, 80),
+      avatar: typeof (user.avatar_url || user.avatar) === 'string' && /^https:\/\//.test(user.avatar_url || user.avatar) ? (user.avatar_url || user.avatar) : '',
+      valid: true
+    };
+  }
+  if (['favoriteUpdate', 'progressUpdate', 'likeUpdate', 'creatorFollow'].includes(action)) {
+    if (String(response.code) !== '0') throw new Error('ACCOUNT_BUSINESS_' + Number(response.code));
+    return { valid: true };
+  }
+  if (action === 'creatorWorks') {
+    if (String(response.code) !== '0') throw new Error('ACCOUNT_BUSINESS_' + Number(response.code));
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('账号列表返回无效数据');
+    const identity = value => /^[1-9]\d{0,29}$/.test(String(value || '')) ? String(value) : '';
+    const integer = value => value !== null && value !== undefined && value !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+    const plain = value => typeof value === 'string' ? value.trim() : '';
+    const rawList = Array.isArray(data.data_list) ? data.data_list : [];
+    const items = [];
+    const seen = new Set();
+    const pushVideo = v => {
+      if (!v || typeof v !== 'object') return;
+      const detail = v.video_detail_info || v.video_detail || v.series_info || v;
+      const id = identity(detail.series_id_str || detail.series_id || v.series_id_str || v.series_id || detail.book_id || v.book_id);
+      if (!id || seen.has(id)) return;
+      const title = plain(detail.series_title || detail.title || v.series_title || v.title || detail.book_name || v.book_name);
+      if (!title) return;
+      seen.add(id);
+      const rawCover = plain(detail.series_cover || detail.cover || v.series_cover || v.cover || detail.thumb_url || v.thumb_url);
+      const cover = cleanCoverUrl(rawCover).replace(/^http:\/\//, 'https://');
+      const description = plain(detail.series_intro || detail.intro || v.series_intro || v.intro || detail.abstract || detail.video_desc || v.video_desc);
+      const episodes = integer(detail.episode_cnt || v.episode_cnt || detail.serial_count || v.serial_count) ?? 0;
+      const subList = Array.isArray(detail.sub_title_list) ? detail.sub_title_list : (Array.isArray(v.sub_title_list) ? v.sub_title_list : []);
+      const tags = subList.map(t => plain(t && t.text)).filter(Boolean).slice(0, 6);
+      items.push({ id, title: title.slice(0, 120), cover, description: description.slice(0, 500), episodes, tags });
+    };
+    for (const row of rawList) {
+      if (!row || typeof row !== 'object') continue;
+      const containers = [
+        row.video && row.video.expand,
+        row.post && row.post.expand,
+        row.expand,
+        row
+      ];
+      for (const container of containers) {
+        if (!container || typeof container !== 'object') continue;
+        if (Array.isArray(container.videos)) {
+          for (const v of container.videos) pushVideo(v);
+        }
+        if (Array.isArray(container.video_data)) {
+          for (const v of container.video_data) pushVideo(v);
+        }
+        if (container.video_detail || container.series_info || container.series_id || container.series_id_str) {
+          pushVideo(container);
+        }
+      }
+    }
+    const common = data.common_list_info && typeof data.common_list_info === 'object' ? data.common_list_info : {};
+    const hasMore = Boolean(common.has_more === true || data.has_more === true);
+    const rawCursorVal = common.cursor !== undefined && common.cursor !== null ? common.cursor : data.next_offset;
+    const nextCursor = rawCursorVal !== undefined && rawCursorVal !== null ? String(rawCursorVal).trim() : '';
+    const nextOffset = integer(nextCursor);
+    const tabs = Array.isArray(data.tabs) ? data.tabs.map(t => integer(t && t.tab_type)).filter(v => v !== null) : [];
+    return { items, hasMore, nextCursor, nextOffset, tabs };
+  }
+  if (['followingCreators', 'likedVideos', 'creatorProfile'].includes(action)) {
+    if (String(response.code) !== '0') throw new Error('ACCOUNT_BUSINESS_' + Number(response.code));
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('账号列表返回无效数据');
+    const identity = value => /^[1-9]\d{0,29}$/.test(String(value || '')) ? String(value) : '';
+    const integer = value => value !== null && value !== undefined && value !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+    const plain = value => typeof value === 'string' ? value.trim() : '';
+    const creator = (row, relationType) => {
+      if (!row || typeof row !== 'object') throw new Error('主播资料格式已变化');
+      const base = row.base_info || row, relation = row.user_relation || {};
+      const id = identity(row.user_id) || identity(base.user_id) || identity(row.author_id) || identity(base.author_id) || identity(row.celebrity_id) || identity(base.celebrity_id);
+      if (!id) throw new Error('主播编号无效');
+      const rawState = relationType !== undefined && relationType !== null ? relationType : (relation.relation_type !== undefined ? relation.relation_type : (row.relation_type !== undefined ? row.relation_type : base.relation_type));
+      const state = rawState !== undefined && rawState !== null ? Number(rawState) : null;
+      const canFollowVal = row.can_follow !== undefined ? row.can_follow : (base.can_follow !== undefined ? base.can_follow : relation.can_follow);
+      const worksCount = integer(row.user_stat && row.user_stat.celebrity_work_cnt) ?? integer(row.author_book_num) ?? integer(row.creation_num) ?? integer(base.author_book_num);
+      const relType = integer(row.relative_type) ?? integer(base.relative_type) ?? ((row.is_author || row.author_type || base.is_author) ? 3 : 2);
+      return {
+        id,
+        businessId: identity(base.biz_user_id),
+        name: plain(base.user_name || base.author_name || base.celebrity_name || base.name).slice(0, 80),
+        avatar: cleanCoverUrl(plain(base.user_avatar || base.expand_user_avatar || base.author_avatar || base.avatar)).replace(/^http:\/\//, 'https://'),
+        description: plain(base.description || base.author_desc || base.desc),
+        following: state !== null && [1, 2, 3, 4].includes(state) ? (state === 2 || state === 4) : null,
+        canFollow: canFollowVal === true && base.is_cancelled !== true,
+        worksCount,
+        relativeType: relType
+      };
+    };
+    if (action === 'creatorProfile') return { creator: creator(data.ugc_user) };
+    const hasMore = typeof data.has_more === 'boolean' ? data.has_more : (data.common_list_info && typeof data.common_list_info.has_more === 'boolean' ? data.common_list_info.has_more : null);
+    if (hasMore === null) throw new Error('账号列表分页格式已变化');
+    const rawCursorVal = data.common_list_info && data.common_list_info.cursor;
+    const rawCursor = rawCursorVal !== undefined && rawCursorVal !== null ? String(rawCursorVal).trim() : '';
+    const nextOffset = integer(data.next_offset) ?? integer(rawCursor);
+    if (hasMore && nextOffset === null && !rawCursor) throw new Error('账号列表缺少下一页游标');
+    const paging = { hasMore, nextOffset, ...(rawCursor ? { nextCursor: rawCursor } : {}), total: integer(data.total) };
+    const list = (key, countKey) => {
+      if (Array.isArray(data[key])) return data[key];
+      const countVal = integer(data[countKey]);
+      if ((data[key] == null || !Object.prototype.hasOwnProperty.call(data, key)) && hasMore === false && (countVal === 0 || countVal === null)) return [];
+      throw new Error('账号列表格式已变化');
+    };
+    if (action === 'followingCreators') {
+      const seen = new Set();
+      const rawList = Array.isArray(data.ugc_user_list) ? data.ugc_user_list :
+                     (Array.isArray(data.relation_user_list) ? data.relation_user_list :
+                     (Array.isArray(data.user_list) ? data.user_list :
+                     (Array.isArray(data.author_list) ? data.author_list :
+                     (Array.isArray(data.relationUserList) ? data.relationUserList :
+                     (Object.prototype.hasOwnProperty.call(data, 'relation_user_list') ? list('relation_user_list', 'total') : list('ugc_user_list', 'total'))))));
+      const creators = [];
+      for (const raw of rawList) {
+        try {
+          const userObj = raw && (raw.user_info ? { ...raw.user_info, relative_type: raw.relative_type ?? raw.user_info.relative_type } : raw);
+          const item = creator(userObj, raw && (raw.user_relation_type !== undefined ? raw.user_relation_type : raw.relation_type));
+          if (item && item.id && !seen.has(item.id)) {
+            seen.add(item.id);
+            creators.push(item);
+          }
+        } catch (_) {}
+      }
+      return { creators, ...paging, followingDouyinNextOffset: integer(data.following_douyin_user_next_offset) };
+    }
+    const items = [], seen = new Set();
+    let unsupportedCount = 0;
+    for (const row of list('mixed_data_list','count')) {
+      if (!row || ![30,35].includes(Number(row.data_type))) { unsupportedCount++; continue; }
+      const series = Number(row.data_type) === 35;
+      const wrapper = series && row.video_detail_info;
+      const video = series ? wrapper && wrapper.video_detail_info : row.video_data;
+      if (!video || typeof video !== 'object') throw new Error('点赞视频格式已变化');
+      const seriesId = identity(video.series_id_str || video.series_id), itemId = series ? '' : identity(video.vid);
+      if (series ? !seriesId : !itemId) throw new Error('点赞视频编号无效');
+      const key = (series ? 'series:' : 'episode:') + (series ? seriesId : itemId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({ kind: series ? 'series' : 'episode', id: series ? seriesId : itemId, seriesId, itemId,
+        title: plain(series ? video.series_title : video.title),
+        cover: cleanCoverUrl(plain(series ? video.series_cover : video.cover)),
+        description: plain(series ? video.series_intro : video.video_desc),
+        episode: series ? null : integer(video.vid_index), episodes: integer(video.episode_total_cnt || video.episode_cnt),
+        likedAt: integer(series ? wrapper.user_digg_timestamp_ms : video.user_digg_timestamp_ms) });
+    }
+    return { items, ...paging, unsupportedCount };
+  }
+  if (action === 'socialDetail' || action === 'creatorList') {
+    if (String(response.code) !== '0') throw new Error('ACCOUNT_BUSINESS_' + Number(response.code));
+    const identity = value => /^[1-9]\d{0,29}$/.test(String(value || '')) ? String(value) : '';
+    if (action === 'socialDetail') {
+      const video = data && data.video_data;
+      if (!video || typeof video !== 'object' || !Array.isArray(video.video_list)) throw new Error('账号互动详情格式已变化');
+      const episodes = video.video_list.filter(item => item && identity(item.vid) && typeof item.user_digg === 'boolean').map(item => ({
+        id: identity(item.vid), number: Number(item.vid_index), liked: item.user_digg,
+        count: Math.max(0, Number(item.digged_count) || 0)
+      })).filter(item => Number.isSafeInteger(item.number) && item.number > 0);
+      const id = identity(video.series_id_str || video.series_id);
+      if (!id) throw new Error('账号互动剧集编号无效');
+      return { id, episodes };
+    }
+    if (!data || typeof data !== 'object' || !['main_creator_user_list','hot_celebrity_user_list','celebrity_map_list'].some(key => key in data)) throw new Error('创作者列表格式已变化');
+    const groups = Array.isArray(data.main_creator_user_list) ? data.main_creator_user_list : [];
+    const rows = [...groups.flatMap(group => Array.isArray(group && group.ugc_user_infos) ? group.ugc_user_infos : []), ...(Array.isArray(data.hot_celebrity_user_list) ? data.hot_celebrity_user_list : [])];
+    const seen = new Set();
+    return { creators: rows.flatMap(row => {
+      if (!row || typeof row !== 'object') return [];
+      const base = row.base_info || {}, relation = row.user_relation || {};
+      const id = identity(row.user_id) || identity(base.user_id), name = String(base.user_name || '').trim();
+      const state = Number(relation.relation_type), relativeType = row.user_tag && row.user_tag.is_author === true ? 3 : 2;
+      if (!id || !name || seen.has(id)) return [];
+      seen.add(id);
+      return [{ id, name: name.slice(0,80), relativeType,
+        following: [1,2,3,4].includes(state) ? state === 2 || state === 4 : null,
+        canFollow: relation.can_follow === true && base.is_cancelled !== true }];
+    }) };
+  }
+  if (['favorites', 'history', 'progressGet', 'libraryDetails', 'libraryDetail'].includes(action)) {
+    if (Number(response.code) !== 0) throw new Error('ACCOUNT_BUSINESS_' + Number(response.code));
+    const integer = value => Math.max(0, Math.floor(Number(value) || 0));
+    const stamp = value => { const n = integer(value); return n < 10000000000 ? n * 1000 : n; };
+    const validDigits = value => { const s = String(value || '').trim(); return /^\d{1,30}$/.test(s) ? s : ''; };
+    const pickStr = list => {
+      for (const value of list) {
+        if (typeof value === 'string' && value.trim()) return value.trim();
+      }
+      return '';
+    };
+    const series = row => {
+      const video = row.video_data && typeof row.video_data === 'object' ? row.video_data : row;
+      const detail = row.video_detail && typeof row.video_detail === 'object'
+        ? row.video_detail
+        : (video.video_detail && typeof video.video_detail === 'object' ? video.video_detail : {});
+      const bookInfo = row.book_info && typeof row.book_info === 'object' ? row.book_info : {};
+      const bookId = validDigits(row.book_id_str) || validDigits(row.book_id) || validDigits(video.book_id_str) || validDigits(video.book_id) || validDigits(bookInfo.book_id_str) || validDigits(bookInfo.book_id) || validDigits(detail.book_id_str) || validDigits(detail.book_id);
+      const seriesId = validDigits(video.series_id_str) || validDigits(video.series_id) || validDigits(detail.series_id_str) || validDigits(detail.series_id) || validDigits(bookInfo.series_id_str) || validDigits(bookInfo.series_id) || validDigits(row.series_id_str) || validDigits(row.series_id);
+      const id = bookId || seriesId;
+      if (!id) return null;
+      const epListCount = Array.isArray(video.video_list) ? video.video_list.length : (Array.isArray(row.video_list) ? row.video_list.length : 0);
+      return {
+        id,
+        book_id: bookId || undefined,
+        series_id: seriesId || undefined,
+        title: pickStr([row.series_title, video.series_title, video.series_name, detail.series_title, detail.series_name, bookInfo.series_title, bookInfo.book_name, bookInfo.title, video.title, row.title, row.book_name, detail.title, row.name]),
+        cover: cleanCoverUrl(pickStr([row.series_cover_url, row.series_cover, video.series_cover_url, video.series_cover, detail.series_cover_url, detail.series_cover, bookInfo.series_cover, bookInfo.cover_url, bookInfo.thumb_url, bookInfo.cover, video.cover, video.cover_url, video.thumb_url, detail.cover, detail.cover_url, row.thumb_url, row.cover, row.cover_url])),
+        description: pickStr([row.series_intro, video.series_intro, detail.series_intro, bookInfo.series_intro, video.video_desc, row.abstract, bookInfo.abstract, detail.intro]),
+        episodes: integer(video.episode_cnt || video.episode_count || video.episode_total_cnt || detail.episode_cnt || detail.episode_count || bookInfo.episode_cnt || bookInfo.episode_count || row.episode_cnt || row.episode_count || row.episode_total_cnt || epListCount),
+        updatedAt: stamp(row.collect_time)
+      };
+    };
+    let rows;
+    if (action === 'favorites') {
+      if (!data || !Object.prototype.hasOwnProperty.call(data, 'video_shelf_info')) throw new Error('账号追剧列表格式已变化');
+      rows = data.video_shelf_info === null ? [] : data.video_shelf_info;
+    } else if (action === 'history' || action === 'progressGet') {
+      rows = response.video_data || data && (data.video_data || data.data && data.data.video_data);
+    } else if (action === 'libraryDetail') {
+      const single = data && typeof data === 'object' ? (data.video_data || data.series_detail || data) : null;
+      rows = single && typeof single === 'object' ? [single] : [];
+    } else {
+      if (data === null || data === undefined) {
+        rows = [];
+      } else if (Array.isArray(data)) {
+        rows = data;
+      } else if (typeof data === 'object') {
+        const wrapped = data.detail_list || data.book_list || data.video_data || data.items || data.list;
+        if (Array.isArray(wrapped)) {
+          rows = wrapped;
+        } else if (data.book_info && typeof data.book_info === 'object') {
+          rows = Array.isArray(data.book_info) ? data.book_info : Object.values(data.book_info);
+        } else {
+          const values = Object.values(data).filter(v => v && typeof v === 'object');
+          rows = values.length && values.every(v => !Array.isArray(v)) ? values : [];
+        }
+      }
+    }
+    if (!Array.isArray(rows)) throw new Error('账号列表格式已变化');
+    const seen = new Set();
+    const items = rows.filter(row => row && typeof row === 'object').map(row => {
+      const item = series(row);
+      if (!item) return null;
+      if (action === 'history' || action === 'progressGet') {
+        if (!/^\d{1,30}$/.test(String(row.vid || ''))) return null;
+        Object.assign(item, { episode: Math.max(1, integer(row.vid_index)),
+          positionMs: integer(row.current_play_time), durationMs: integer(row.current_total_time),
+          episodes: integer(row.episode_count || row.episode_cnt || row.episode_total_cnt) || item.episodes,
+          updatedAt: stamp(row.last_watch_time) });
+      }
+      return item;
+    }).filter(item => item && !seen.has(item.id) && seen.add(item.id));
+    if (rows.length && !items.length && action !== 'libraryDetail') throw new Error('账号列表条目格式已变化');
+    if (action !== 'libraryDetails' && action !== 'libraryDetail') items.sort((a, b) => b.updatedAt - a.updatedAt);
+    return { items };
+  }
+  if (action === 'commentList') {
+    if (String(response.code) !== '0') throw new Error('ACCOUNT_BUSINESS_' + Number(response.code));
+    if (!data || typeof data !== 'object') throw new Error('评论列表返回无效数据');
+    const common = data.common_list_info && typeof data.common_list_info === 'object' ? data.common_list_info : {};
+    const rawList = Array.isArray(data.data_list) ? data.data_list : [];
+    const list = [];
+    for (const item of rawList) {
+      const c = item && item.comment;
+      if (!c) continue;
+      const cid = String(c.comment_id || '');
+      if (!cid) continue;
+      const userInfo = c.common && c.common.user_info && c.common.user_info.base_info || {};
+      const content = c.common && c.common.content || {};
+      const stat = c.stat || {};
+      const rawAvatar = userInfo.user_avatar || userInfo.avatar_url || '';
+      const avatar = typeof rawAvatar === 'string' && /^https?:\/\//.test(rawAvatar) ? rawAvatar.replace(/^http:\/\//, 'https://') : '';
+      list.push({
+        id: cid,
+        text: String(content.text || '').trim(),
+        userName: String(userInfo.user_name || userInfo.name || '红果用户').slice(0, 80),
+        userAvatar: avatar,
+        userId: String(userInfo.user_id || ''),
+        createTime: Number(c.common && c.common.create_timestamp || 0),
+        diggCount: Number(stat.digg_count || 0),
+        replyCount: Number(stat.reply_count || 0)
+      });
+    }
+    return {
+      total: Number(common.total || 0),
+      hasMore: Boolean(common.has_more),
+      cursor: String(common.cursor || ''),
+      list
+    };
+  }
+  if (action === 'commentReplyList') {
+    if (String(response.code) !== '0') throw new Error('ACCOUNT_BUSINESS_' + Number(response.code));
+    if (!data || typeof data !== 'object') throw new Error('回复列表返回无效数据');
+    const common = (data.comment_list_info && typeof data.comment_list_info === 'object' ? data.comment_list_info : (data.common_list_info && typeof data.common_list_info === 'object' ? data.common_list_info : {}));
+    const rawList = Array.isArray(data.reply_list) ? data.reply_list : [];
+    const list = [];
+    for (const item of rawList) {
+      const r = item && (item.reply || item);
+      if (!r) continue;
+      const rid = String(r.reply_id || r.comment_id || '');
+      if (!rid) continue;
+      const rCommon = r.Common || r.common || {};
+      const userInfo = rCommon.user_info && rCommon.user_info.base_info || {};
+      const replyToUser = r.reply_to_user_info && r.reply_to_user_info.base_info || {};
+      const content = rCommon.content || {};
+      const stat = r.stat || {};
+      const rawAvatar = userInfo.user_avatar || userInfo.avatar_url || userInfo.expand_user_avatar || '';
+      const avatar = typeof rawAvatar === 'string' && /^https?:\/\//.test(rawAvatar) ? rawAvatar.replace(/^http:\/\//, 'https://') : '';
+      list.push({
+        id: rid,
+        text: String(content.text || r.text || '').trim(),
+        userName: String(userInfo.user_name || userInfo.name || '红果用户').slice(0, 80),
+        userAvatar: avatar,
+        userId: String(userInfo.user_id || ''),
+        replyToUserName: String(replyToUser.user_name || replyToUser.name || '').slice(0, 80),
+        createTime: Number(rCommon.create_timestamp || 0),
+        diggCount: Number(stat.digg_count || 0)
+      });
+    }
+    return {
+      total: Number(common.total || 0),
+      hasMore: Boolean(common.has_more),
+      cursor: String(common.cursor || ''),
+      list
+    };
+  }
+  if (response.message === 'error' && data && data.verify_center_secondary_decision_conf) throw new Error('ACCOUNT_SECONDARY_VERIFICATION_REQUIRED');
+  if (response.message === 'error' && data && data.verify_center_decision_conf) {
+    if (!['phoneCode', 'phoneSms'].includes(action)) throw new Error('ACCOUNT_CHALLENGE_REQUIRED');
+    return { rejected: true, errorCode: Number(data.error_code), verification: {
+      kind: 'captcha', data: typeof data.verify_center_decision_conf === 'string' ? data.verify_center_decision_conf : JSON.stringify(data.verify_center_decision_conf),
+      origin: BASE_URL + '/', script: 'https://lf-rc1.yhgfb-cn-static.com/obj/rc-verifycenter/verifycenter/@latest/index.js',
+      aid: '513755', repoId: 579047, userAgent: USER_AGENT
+    } };
+  }
+  if (response.message !== 'success' || !data || Number(data.error_code || 0) !== 0) {
+    const code = data && Number(data.error_code);
+    throw new Error(Number.isFinite(code) ? 'ACCOUNT_BUSINESS_' + code : '官方登录请求失败');
+  }
+  if (action === 'qr') {
+    if (typeof data.token !== 'string' || typeof data.qrcode_index_url !== 'string') throw new Error('官方未返回扫码会话');
+    if (!/^https:\/\/reading\.snssdk\.com\/(reading_offline\/novelread\/page\/scan-code\.html|ucenter_web\/app\/sdk-next)\?/.test(data.qrcode_index_url)) throw new Error('扫码地址未通过校验');
+    return { token: data.token, qrUrl: data.qrcode_index_url, expiresAt: Number(data.expire_time) };
+  }
+  if (action === 'phoneCode') return { valid: true, retryAfter: Math.min(600, Math.max(1, Number(data.retry_time) || 60)) };
+  if (action === 'phoneSms') return { valid: true };
+  if (action === 'poll') return { status: String(data.status || ''), redirect: String(data.redirect_url || '') };
+  return { valid: true };
+};
+
 globalThis.__hongguoSignPlayback = function(baseUrl, bodyBase64, device, nowMs) {
   const previousNow = Date.now;
   Date.now = function() { return Number(nowMs); };
