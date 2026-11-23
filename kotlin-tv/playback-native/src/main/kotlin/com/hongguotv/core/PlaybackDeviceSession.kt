@@ -106,15 +106,16 @@ class PlaybackDeviceSession(
         if (!validId.matches(device.deviceId) || !validId.matches(device.installId))
             throw PlaybackDeviceRegistrationException()
         if (Thread.currentThread().isInterrupted) throw InterruptedIOException("播放请求已取消")
-        val values = ThlDeviceRegister.profile(cdid, openudid) +
-            mapOf("device_id" to device.deviceId, "iid" to device.installId)
+        val values = ThlDeviceRegister.profile() +
+            linkedMapOf("iid" to device.installId, "device_id" to device.deviceId, "cdid" to cdid)
         return Profile(
             values,
             device.cookies
                 .filterKeys { it in setOf("install_id", "ttreq", "store-region", "store-region-src") }
                 .entries
                 .joinToString("; ") { (name, value) -> "$name=$value" },
-        ).let { Profile(it.values, it.cookie, openudid) }.also { ready = it; persist(it) }
+            openudid,
+        ).also { ready = it; persist(it) }
     }
 
     /** Drop the in-process anonymous identity and register a fresh one. */
