@@ -20,7 +20,7 @@ object ThlDeviceRegister {
         val cookies: Map<String, String> = emptyMap(),
     )
 
-    fun profile(cdid: String, openudid: String): Map<String, String> = linkedMapOf(
+    fun profile(cdid: String): Map<String, String> = linkedMapOf(
         "ac" to "wifi",
         "channel" to "update_64",
         "aid" to "8662",
