@@ -26,7 +26,7 @@ class PlaybackDeviceSession(
         val shared = PlaybackDeviceSession()
     }
 
-    data class Profile(val values: Map<String, String>, val cookie: String)
+    data class Profile(val values: Map<String, String>, val cookie: String, val openudid: String = "")
 
     private var cdid = ThlDeviceRegister.newCdid()
     private var openudid = ThlDeviceRegister.newOpenudid()
@@ -59,6 +59,7 @@ class PlaybackDeviceSession(
         ready = Profile(
             ThlDeviceRegister.profile(cdid, openudid) + mapOf("device_id" to savedDeviceId, "iid" to savedInstallId),
             saved.optString("cookie"),
+            savedOpenudid,
         )
     }
 
@@ -66,7 +67,7 @@ class PlaybackDeviceSession(
         val values = profile.values
         store?.save(JSONObject()
             .put("cdid", values["cdid"])
-            .put("openudid", values["openudid"])
+            .put("openudid", profile.openudid)
             .put("device_id", values["device_id"])
             .put("iid", values["iid"])
             .put("cookie", profile.cookie)
@@ -113,7 +114,7 @@ class PlaybackDeviceSession(
                 .filterKeys { it in setOf("install_id", "ttreq", "store-region", "store-region-src") }
                 .entries
                 .joinToString("; ") { (name, value) -> "$name=$value" },
-        ).also { ready = it; persist(it) }
+        ).let { Profile(it.values, it.cookie, openudid) }.also { ready = it; persist(it) }
     }
 
     /** Drop the in-process anonymous identity and register a fresh one. */
