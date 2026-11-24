@@ -2,6 +2,7 @@
 package com.hongguotv.nativeapp.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,13 +26,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import com.hongguotv.nativeapp.ui.components.tryRequestFocus
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +55,8 @@ import com.hongguotv.nativeapp.ui.theme.Paper
 import com.hongguotv.nativeapp.ui.theme.Rouge
 import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 fun RankingScreen(
@@ -61,17 +67,36 @@ fun RankingScreen(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     entryFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     val listState = rememberLazyListState()
-    val loadMore by remember {
-        derivedStateOf {
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= listState.layoutInfo.totalItemsCount - 3
+    // 无限滚动：订阅布局信息而不是用 derivedStateOf 当 key——
+    // 之前列表长度不变时状态变化不会重启副作用，滚到底也不会再补页。
+    LaunchedEffect(listState, state.hasMore, state.items.size, state.page, state.board) {
+        if (!state.hasMore) return@LaunchedEffect
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: return@snapshotFlow false
+            state.items.isNotEmpty() && last >= info.totalItemsCount - 5
+        }.collect { nearEnd -> if (nearEnd) onLoadMore() }
+    }
+
+    // 换榜后整列 id 全换，焦点节点会被销毁；把落点钉在榜签上，遥控器不会掉回导航栏。
+    val boardFoci = remember(entryFocus) {
+        RankBoard.entries.associateWith { board ->
+            if (board == RankBoard.entries.first() && entryFocus != null) entryFocus else FocusRequester()
         }
     }
-    LaunchedEffect(loadMore, state.items.size) {
-        if (loadMore && state.items.isNotEmpty()) onLoadMore()
+    LaunchedEffect(state.board) {
+        repeat(6) {
+            val target = boardFoci[state.board]
+            if (target != null && target.tryRequestFocus()) return@LaunchedEffect
+            withFrameNanos { }
+        }
     }
+
+    // 换榜后回到顶部：旧榜的滚动位置留在这里会让人以为「榜单没切换」。
+    LaunchedEffect(state.board) { listState.scrollToItem(0) }
 
     Box(modifier.fillMaxSize()) {
         when {
@@ -79,7 +104,7 @@ fun RankingScreen(
             state.error != null && state.items.isEmpty() -> ErrorState(state.error, onRetry)
             else -> LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(),
                 contentPadding = PaddingValues(start = ui.gutter, end = ui.gutter, top = d(96), bottom = d(60)),
                 verticalArrangement = Arrangement.spacedBy(d(22)),
             ) {
@@ -98,13 +123,14 @@ fun RankingScreen(
                         }
                         Spacer(Modifier.height(d(18)))
                         Row(horizontalArrangement = Arrangement.spacedBy(d(10))) {
-                            RankBoard.entries.forEachIndexed { index, board ->
+                            RankBoard.entries.forEach { board ->
                                 SelectChip(
                                     text = board.buttonLabel,
                                     selected = state.board == board,
                                     onClick = { onBoard(board) },
                                     accent = if (board == RankBoard.TOTAL) Rouge.Core else Gold.Core,
-                                    focusRequester = if (index == 0) entryFocus else null,
+                                    focusRequester = boardFoci[board],
+                                    upFocus = upFocus,
                                 )
                             }
                         }
@@ -163,10 +189,14 @@ fun RankingScreen(
                         if (row.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
-                if (state.loadingMore) {
+                if (state.loadingMore || !state.hasMore) {
                     item {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text("正在加载更多…", style = MaterialTheme.typography.bodySmall, color = Paper.Tertiary)
+                        Box(Modifier.fillMaxWidth().padding(vertical = d(6)), contentAlignment = Alignment.Center) {
+                            Text(
+                                if (state.loadingMore) "正在加载更多…" else "已经到底了",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Paper.Tertiary,
+                            )
                         }
                     }
                 }

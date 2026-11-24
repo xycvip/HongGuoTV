@@ -28,6 +28,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -36,6 +38,7 @@ import androidx.media3.ui.PlayerView
 import com.hongguotv.core.ContentRepository
 import com.hongguotv.core.DanmakuLoader
 import com.hongguotv.core.RemoteVideo
+import com.hongguotv.core.PlaybackQuality
 import com.hongguotv.core.Series
 import com.hongguotv.core.VideoFrameMode
 import com.hongguotv.js.HongguoJsDanmaku
@@ -76,6 +79,8 @@ class PlayerSession(
     val series: Series,
     val episodes: List<String>,
     initialIndex: Int,
+    /** 进入播放器时的续播位置（详情页「继续第 N 集」带过来的毫秒数）。 */
+    initialPositionMs: Long = 0L,
 ) {
     var index by mutableIntStateOf(initialIndex.coerceIn(0, (episodes.size - 1).coerceAtLeast(0)))
         private set
@@ -130,6 +135,8 @@ class PlayerSession(
     private val danmakuSource = HongguoJsDanmaku(HongguoJsStore.get(context, repository.http))
     private var danmakuView: DanmakuView? = null
     private var danmakuLoader: DanmakuLoader? = null
+    /** 当前绑定的「集 + 时长」，避免同一集被 READY/接管/刷新重复重建 loader。 */
+    private var danmakuKey = ""
 
     /** 关闭无感连播时的单实例 playlist 预载：已经追加进队列的下一集。 */
     private var queuedIndex = -1
@@ -137,6 +144,50 @@ class PlayerSession(
     private var queueJob: Job? = null
 
     private data class PreparedStream(val video: RemoteVideo, val quality: String)
+
+    /**
+     * 解码器报「不支持该分辨率」时的一次性降档：不改用户的清晰度设置，
+     * 只对当前这一集生效，切集/用户手动改清晰度都会清掉。
+     */
+    private var qualityOverride: Int? = null
+    private var autoDowngraded = false
+
+    /**
+     * 硬解在某段码流上崩溃后的最后一档：换软解重建播放器。
+     * 有些电视盒子（尤其 Amlogic/老 MTK）的硬解驱动遇到非标 SPS/PPS 或大 B 帧会直接报
+     * DECODING_FAILED，降清晰度若拿到的还是同一路编码就完全无效，只有软解能过。
+     */
+    private var softwareDecoderForced = false
+
+    /**
+     * 本会话内不再创建第二解码器。
+     *
+     * 触发三选一：设备声明的并发实例数不够、第二实例申请就失败、或者已经因为两路硬解
+     * 抢资源挂过一次。置位后退回同实例 playlist 预载——切集、连播、画质全都不变，
+     * 只是少了「下一集首帧已渲染」那一点顺滑。宁可少一点顺滑，也不能让主画面被回收。
+     */
+    private var dualDecoderBlocked = false
+
+    /** 双播放器真正可用：用户开了开关，且没有因为设备解码能力被禁掉。 */
+    private val useDualDecoder: Boolean get() = extras.seamlessPlayback && !dualDecoderBlocked
+
+    /** 这一集里解码类错误已经重试过几次，用于避免「降档→同样的错→再降档」死循环。 */
+    private var decodeRetries = 0
+
+    /** 降档前那一档的档位名，用来判断降档到底有没有换到别的码流。 */
+    private var failedQualityLabel = ""
+
+    /** 最近一次双播放器接管的时刻，用于冷却期判定。 */
+    private var lastHandoffAt = 0L
+
+    /**
+     * 自愈令牌：每次 prepare 都会自增。
+     * 解码恢复要延迟几百毫秒才动手，这期间用户可能已经切集或退出——
+     * 令牌对不上就说明这次恢复已经过期，不能把用户刚切的集覆盖掉。
+     */
+    private var recoveryToken = 0
+
+    private val effectiveQuality: Int get() = qualityOverride ?: library.maxQuality
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -165,6 +216,10 @@ class PlayerSession(
     private var handoffInProgress = false
     private var handoffToken = 0
 
+    /** playlist 快进目标：同一次切集被连按两次时不重复重建数据源。 */
+    private var switchingTo = -1
+    private var switchingAt = 0L
+
     val currentEpisodeId: String get() = episodes.getOrNull(index).orEmpty()
 
     /** 遥控器左右键单次快进步长。 */
@@ -191,7 +246,7 @@ class PlayerSession(
                     }
                     startDanmaku()
                     // 原版时机：当前集真正可播后才启动预载，避免和主播放抢带宽。
-                    if (extras.seamlessPlayback) prepareStandby(index + 1) else queueNextEpisode(index)
+                    if (useDualDecoder) prepareStandby(index + 1) else queueNextEpisode(index)
                 }
                 Player.STATE_ENDED -> {
                     ready = false
@@ -206,7 +261,7 @@ class PlayerSession(
 
         /** 单实例 playlist 自动/手动过渡到下一集：状态、弹幕、进度都换到新集。 */
         override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
-            if (released || extras.seamlessPlayback) return
+            if (released || useDualDecoder) return
             val exo = player ?: return
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
                 reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
@@ -220,6 +275,9 @@ class PlayerSession(
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (released) return
             playing = isPlaying
+            // 弹幕跟着播放状态走：暂停时停帧，继续时从当前媒体时间接着滚。
+            // 之前没人通知弹幕层，暂停后再播弹幕会卡在暂停那一帧不动。
+            danmakuView?.setPlaybackActive(isPlaying)
         }
 
         override fun onPlayerError(playerError: PlaybackException) {
@@ -227,7 +285,99 @@ class PlayerSession(
             buffering = false
             suppressBuffering = false
             playing = false
+            val decodeIssue = isDecodeIssue(playerError)
+            PlayerLog.error(
+                "onPlayerError code=${playerError.errorCode}(${playerError.errorCodeName})" +
+                    " decode=$decodeIssue standby=${standbyPlayer != null}" +
+                    " blocked=$dualDecoderBlocked soft=$softwareDecoderForced" +
+                    " quality=$qualityLabel/${PlaybackQuality.label(effectiveQuality)}" +
+                    " at=$position size=${videoWidth}x$videoHeight" +
+                    " cause=${playerError.cause?.let { it::class.java.simpleName + ":" + (it.message ?: "") }?.take(200)}",
+            )
+            if (!decodeIssue) {
+                error = friendlyError(playerError)
+                return
+            }
+            decodeRetries += 1
+            // 第一优先：把第二解码器让出去，然后用同一条流原地重开。
+            // 电视盒子的 DECODING_FAILED 绝大多数不是这段码流解不了，而是两路硬解抢同一颗 codec，
+            // 系统为腾资源回收了正在播的那一路——证据就是「退出播放页再进来就好了」，
+            // 因为退出时两路实例一起销毁了。这种情况下降清晰度完全无效（实例数没变），
+            // 正确做法是撤掉备用实例，让主画面独占解码器。
+            if (standbyPlayer != null || standbyJob != null) {
+                val resumeAt = runCatching { player?.currentPosition ?: position }.getOrDefault(position)
+                val token = ++recoveryToken
+                switchToPlaylistPreload("主画面解码器被回收，退出双解码器")
+                error = null
+                buffering = true
+                loadingLabel = "正在恢复播放"
+                mainHandler.postDelayed({
+                    if (released || recoveryToken != token) return@postDelayed
+                    retrySameStream(resumeAt)
+                }, DECODER_RELEASE_DELAY_MS)
+                return
+            }
+            // 刚完成一次双播放器交接的几秒内报解码失败：旧实例的 codec 往往还没被系统回收，
+            // 新实例抢不到。原地重开一次就能过，没必要先降清晰度（降了也还是同一个解码器）。
+            if (lastHandoffAt > 0L &&
+                SystemClock.elapsedRealtime() - lastHandoffAt < HANDOFF_RECOVER_WINDOW_MS &&
+                decodeRetries <= 2
+            ) {
+                val resumeAt = runCatching { player?.currentPosition ?: position }.getOrDefault(position)
+                val token = ++recoveryToken
+                dualDecoderBlocked = true
+                error = null
+                buffering = true
+                loadingLabel = "正在恢复播放"
+                mainHandler.postDelayed({
+                    if (released || recoveryToken != token) return@postDelayed
+                    retrySameStream(resumeAt)
+                }, DECODER_RELEASE_DELAY_MS)
+                return
+            }
+            // 第二优先：只剩一路还在挂，才考虑降档。
+            val next = downgradeFor(playerError)
+            if (next != null) {
+                failedQualityLabel = qualityLabel
+                qualityOverride = next
+                autoDowngraded = true
+                error = null
+                loadingLabel = "设备不支持当前分辨率，正在切换到 ${PlaybackQuality.label(next)}"
+                prepare(index, position)
+                return
+            }
+            // 第三优先：硬解这条路过不去了（或降档拿回来的还是同一路编码），换软解重建。
+            if (!softwareDecoderForced) {
+                loadingLabel = "正在切换到兼容解码"
+                error = null
+                rebuildForDecoderIssue(softwareOnly = true)
+                return
+            }
+            // 全都试过了，如实报错，别让用户对着转圈干等。
             error = friendlyError(playerError)
+        }
+
+        /** 解码类错误返回降一档后的清晰度；已降过或没得降则返回 null。 */
+        private fun downgradeFor(playerError: PlaybackException): Int? {
+            if (autoDowngraded) return null
+            if (decodeRetries > MAX_DECODE_RETRIES) return null
+            if (!isDecodeIssue(playerError)) return null
+            return when (val current = effectiveQuality) {
+                PlaybackQuality.AUTO_HIGH, PlaybackQuality.AUTO_COMPAT -> 720
+                1080 -> 720
+                720 -> 480
+                else -> null
+            }
+        }
+
+        private fun isDecodeIssue(playerError: PlaybackException): Boolean {
+            val raw = (playerError.cause?.message ?: playerError.message).orEmpty()
+            return playerError.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
+                playerError.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ||
+                playerError.cause is androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.DecoderInitializationException ||
+                raw.contains("分辨率", true) ||
+                raw.contains("resolution", true) ||
+                raw.contains("not supported", true)
         }
 
         /** 接管后首帧出现：再等 350ms 稳定窗，避免"画面已出却闪一下转圈"。 */
@@ -260,16 +410,125 @@ class PlayerSession(
     init {
         buildPlayer()
         runCatching { context.registerComponentCallbacks(memoryCallback) }
-        prepare(index, 0L)
+        // 续播位置必须带进第一次 prepare：之前固定从 0 开始，
+        // 用户从详情页「继续观看」进来也是从头播，看起来就像进度没保存。
+        prepare(index, initialPositionMs.coerceAtLeast(0L))
     }
 
     private fun buildPlayer() {
-        val exo = ExoPlayer.Builder(context).setBandwidthMeter(bandwidthMeter).build()
+        val exo = ExoPlayer.Builder(context)
+            // 主播放器原来没开解码器回退：硬解初始化一失败就直接整集报废，
+            // 而备用播放器是开着的——同一台机器上「连播能播、单独点进去不能播」就是这么来的。
+            .setRenderersFactory(renderersFactory())
+            .setBandwidthMeter(bandwidthMeter)
+            .build()
         exo.setHandleAudioBecomingNoisy(true)
         exo.playWhenReady = true
         applyPlaylistPolicy(exo)
         exo.addListener(mainListener)
         player = exo
+    }
+
+    /** 软解兜底时把系统软解 codec 排到最前；平时保持系统默认优先级。 */
+    private fun renderersFactory(): DefaultRenderersFactory {
+        val factory = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
+        if (softwareDecoderForced) {
+            factory.setMediaCodecSelector(
+                MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+                    MediaCodecUtil.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+                        .sortedByDescending { it.softwareOnly }
+                },
+            )
+        }
+        return factory
+    }
+
+    /**
+     * 播到一半解码器挂掉：释放当前实例，按当前进度重建。
+     * 不重新解析用户的清晰度设置，只在当前这一集内自救。
+     */
+    private fun rebuildForDecoderIssue(softwareOnly: Boolean) {
+        if (released) return
+        val resumeAt = runCatching { player?.currentPosition ?: position }.getOrDefault(position)
+        val target = index
+        val token = ++recoveryToken
+        clearStandby("重建解码器")
+        queueJob?.cancel()
+        discardQueue()
+        softwareDecoderForced = softwareOnly
+        // 走到这一步说明硬解已经不稳了，本次会话不要再并发第二路解码器，
+        // 否则软解刚接上又会被抢占一次。
+        dualDecoderBlocked = true
+        // 先彻底释放：同一颗解码器在旧实例刚 release 时立刻被新实例申请，成功率很低，
+        // 尤其是设备本来就在资源紧张状态。这里让系统先回收，再建新实例。
+        runCatching { player?.release() }
+        player = null
+        error = null
+        buffering = true
+        loadingLabel = "正在切换到兼容解码"
+        PlayerLog.warn("rebuildForDecoderIssue soft=$softwareOnly at=$resumeAt episode=$target")
+        mainHandler.postDelayed({
+            if (released || recoveryToken != token) return@postDelayed
+            buildPlayer()
+            playerView?.player = player
+            prepare(target, resumeAt)
+        }, DECODER_RELEASE_DELAY_MS)
+    }
+
+    /**
+     * 解码器被系统回收后的原地重开：复用同一条流，不重新取播放地址。
+     *
+     * 重新取流要重新解析地址、可能换到别的线路，既慢又引入新变量；而解码失败跟链路无关。
+     * 复用现有 RemoteVideo 是这里最快、也最可控的一条路。
+     */
+    private fun retrySameStream(atMs: Long) {
+        if (released) return
+        val exo = player
+        val video = remote
+        if (exo == null || video == null) {
+            // 流已经不在了（可能用户刚切集），退回完整准备流程。
+            prepare(index, atMs)
+            return
+        }
+        val target = index
+        error = null
+        buffering = true
+        ready = false
+        position = atMs.coerceAtLeast(0L)
+        loadingLabel = "正在恢复播放"
+        runCatching {
+            exo.stop()
+            exo.clearMediaItems()
+            exo.setMediaSource(episodeSource(episodes[target], video))
+            if (atMs > 0L) exo.seekTo(atMs)
+            exo.prepare()
+            exo.playWhenReady = true
+            exo.setPlaybackSpeed(speed)
+        }.onFailure { problem ->
+            buffering = false
+            error = "恢复播放失败：${problem.message ?: "未知错误"}"
+        }.onSuccess {
+            // clearMediaItems 会把刚排好的下一集一起清掉，队列状态必须跟着重置，
+            // 否则用户按「下一集」会指向一个已经不存在的媒体项。
+            queuedIndex = -1
+            queuedStream = null
+            if (index + 1 < episodes.size) queueNextEpisode(index, force = true)
+        }
+        PlayerLog.warn("retrySameStream at=$atMs episode=$target")
+    }
+
+    /**
+     * 停用双解码器，退回同实例 playlist 预载。
+     * 切集、连播、画质全都不变，只是少了「下一集首帧已渲染」那点顺滑；
+     * 换来的是主画面不再被系统回收。
+     */
+    private fun switchToPlaylistPreload(reason: String) {
+        if (dualDecoderBlocked && standbyPlayer == null && standbyJob == null) return
+        PlayerLog.warn("双解码器停用：$reason")
+        dualDecoderBlocked = true
+        clearStandby(reason)
+        player?.let(::applyPlaylistPolicy)
+        if (index + 1 < episodes.size) queueNextEpisode(index, force = true)
     }
 
     // ------------------------------------------------------------ 界面挂载
@@ -278,9 +537,16 @@ class PlayerSession(
     fun attachPlayerView(view: PlayerView) {
         playerView = view
         if (view.player !== player) view.player = player
-        // 会话可能先于画面视图创建：视图加入后补一次备用准备，否则隐藏输出面没有挂载点。
+        // 会话可能先于画面视图创建：视图加入后补一次「下一集」准备。
+        // 双解码器要等隐藏输出面，单实例预载不需要，两条路都要补，否则先建会话的情况下
+        // 这一集播完就直接停了、没有预载。
         view.post {
-            if (!released && ready && extras.seamlessPlayback && standbyIndex == -1) prepareStandby(index + 1)
+            if (released || !ready) return@post
+            when {
+                useDualDecoder && standbyIndex == -1 -> prepareStandby(index + 1)
+                !useDualDecoder && extras.seamlessPlayback && queuedIndex == -1 ->
+                    queueNextEpisode(index, force = true)
+            }
         }
     }
 
@@ -291,10 +557,13 @@ class PlayerSession(
     private fun friendlyError(error: PlaybackException): String {
         val raw = (error.cause?.message ?: error.message).orEmpty()
         return when {
-            raw.contains("分段", true) || raw.contains("视频", true) -> raw
+            error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ->
+                "视频解码中断，已尝试自动恢复。请重试或换一集"
+            error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ->
+                "当前设备无法解码该视频，可尝试降低清晰度"
             error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> "网络连接中断，请检查网络后重试"
-            error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED -> "当前设备无法解码该视频，可尝试降低清晰度"
             error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> "视频服务器返回异常，请稍后重试"
+            raw.contains("分段", true) -> raw
             else -> "播放失败：${raw.take(80)}"
         }
     }
@@ -302,13 +571,23 @@ class PlayerSession(
     fun prepare(targetIndex: Int, startMs: Long) {
         if (released) return
         if (targetIndex !in episodes.indices) return
+        // 任何一次新的准备都让之前挂着的解码恢复作废，避免它把这次准备覆盖掉。
+        recoveryToken += 1
         // 无感连播：目标正是备用播放器准备好的那一集，且已渲染过首帧，直接接管。
         if (startMs == 0L && promoteStandby(targetIndex)) return
         // 关闭开关时：目标正是同一播放器 playlist 里预载好的下一集，直接前进，不重建。
         if (startMs == 0L && switchToQueued(targetIndex)) return
         // 接管没成功就别让半成品备用实例继续占着解码器，统一走普通流程。
         if (standbyIndex != -1) clearStandby("改用普通播放流程")
+        switchingTo = -1
         val episodeId = episodes[targetIndex]
+        if (index != targetIndex) {
+            // 换集重新给一次降档机会：上一集被降档不代表这一集也不行。
+            autoDowngraded = false
+            qualityOverride = null
+            failedQualityLabel = ""
+            decodeRetries = 0
+        }
         if (index != targetIndex || duration > 0 || position > 0) save(completed = false)
         index = targetIndex
         error = null
@@ -329,7 +608,7 @@ class PlayerSession(
         loadJob = scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val info = context.playbackStreamSource(repository.http).stream(episodeKey(episodeId), library.maxQuality)
+                    val info = context.playbackStreamSource(repository.http).stream(episodeKey(episodeId), effectiveQuality)
                     PreparedStream(RemoteVideo(repository.http, info).prepare(), info.quality)
                 }
             }
@@ -339,6 +618,16 @@ class PlayerSession(
             }
             result.onSuccess { preparedStream ->
                 qualityLabel = preparedStream.quality
+                // 降档后拿回来的还是同一档：说明这一集平台只产出了一路编码，
+                // 再重试只会「同样的错→再降一档→同样的错」。别白等它挂一次，直接换软解。
+                if (autoDowngraded && !softwareDecoderForced &&
+                    failedQualityLabel.isNotEmpty() && preparedStream.quality == failedQualityLabel
+                ) {
+                    PlayerLog.warn("降档未换流（${preparedStream.quality}），直接切软解")
+                    runCatching { preparedStream.video.close() }
+                    rebuildForDecoderIssue(softwareOnly = true)
+                    return@onSuccess
+                }
                 remote = preparedStream.video
                 attach(preparedStream.video, targetIndex, startMs)
             }.onFailure { failure ->
@@ -371,7 +660,7 @@ class PlayerSession(
      * 双播放器失败时也降级到这里（force = true 绕过开关判断）。
      */
     private fun queueNextEpisode(current: Int, force: Boolean = false) {
-        if (extras.seamlessPlayback && !force) return
+        if (useDualDecoder && !force) return
         if (released) return
         // 用户关掉「自动连播」时不应在播完后自动前进，这里就不排下一集。
         if (!library.autoNext) {
@@ -390,7 +679,7 @@ class PlayerSession(
         queueJob = scope.launch {
             val prepared = withContext(Dispatchers.IO) {
                 runCatching {
-                    val info = context.playbackStreamSource(repository.http).stream(episodeKey(targetId), library.maxQuality)
+                    val info = context.playbackStreamSource(repository.http).stream(episodeKey(targetId), effectiveQuality)
                     PreparedStream(RemoteVideo(repository.http, info).prepare(), info.quality)
                 }.getOrNull()
             }
@@ -399,7 +688,7 @@ class PlayerSession(
                 return@launch
             }
             // 预载期间用户已经切集 / 改清晰度 / 打开双播放器：这份流作废。
-            if (index != current || (extras.seamlessPlayback && !force)) {
+            if (index != current || (useDualDecoder && !force)) {
                 runCatching { prepared.video.close() }
                 return@launch
             }
@@ -419,19 +708,35 @@ class PlayerSession(
 
     /** 目标集已在队列里且就是下一项：直接前进，由 onMediaItemTransition 统一收尾。 */
     private fun switchToQueued(targetIndex: Int): Boolean {
-        if (extras.seamlessPlayback) return false
+        if (useDualDecoder) return false
         val exo = player ?: return false
+        // 连按「下一集」时第一次已经发起 seek，第二次不能因为 index 还没更新就重建数据源，
+        // 否则会把当前集重新准备一遍——用户看到的就是「下一集还是这一集」。
+        if (switchingTo == targetIndex && SystemClock.elapsedRealtime() - switchingAt < SWITCH_GUARD_MS) return true
         if (queuedIndex != targetIndex || queuedStream == null) return false
         val nextItem = exo.currentMediaItemIndex + 1
         if (nextItem >= exo.mediaItemCount) return false
         if (exo.getMediaItemAt(nextItem).mediaId != episodes[targetIndex]) return false
-        exo.seekToNextMediaItem()
+        switchingTo = targetIndex
+        switchingAt = SystemClock.elapsedRealtime()
+        if (!runCatching { exo.seekToNextMediaItem() }.isSuccess) {
+            switchingTo = -1
+            return false
+        }
+        // seek 没落到新集（播放器正好停在 IDLE 等边界状态）时兜底重建，避免看起来「按了没反应」。
+        mainHandler.postDelayed({
+            if (!released && switchingTo == targetIndex && index != targetIndex) {
+                switchingTo = -1
+                prepare(targetIndex, 0L)
+            }
+        }, SWITCH_FALLBACK_MS)
         return true
     }
 
     /** 队列过渡完成：把界面状态、进度、弹幕、数据源全部换到新集，并继续预载再下一集。 */
     private fun applyEpisodeTransition(newIndex: Int) {
         if (newIndex !in episodes.indices) return
+        switchingTo = -1
         val queued = queuedStream?.takeIf { queuedIndex == newIndex }
         save(completed = false)
         val previous = remote
@@ -498,11 +803,11 @@ class PlayerSession(
         }, 800L)
     }
 
-    /** 关闭开关时给同一实例开 playlist 预载；开启双播放器时收回，避免两个解码器抢带宽。 */
+    /** 双解码器可用时收回 playlist 预载；否则给同一实例开预载，切集照旧无缝、且只占一路解码器。 */
     private fun applyPlaylistPolicy(exo: ExoPlayer) {
         runCatching {
             exo.setPreloadConfiguration(
-                if (extras.seamlessPlayback) ExoPlayer.PreloadConfiguration.DEFAULT
+                if (useDualDecoder) ExoPlayer.PreloadConfiguration.DEFAULT
                 else ExoPlayer.PreloadConfiguration(PLAYLIST_PRELOAD_US)
             )
         }
@@ -524,11 +829,34 @@ class PlayerSession(
      * 任何一步失败都退回 [queueNextEpisode] 的单实例 playlist 预载，不影响正常播放。
      */
     private fun prepareStandby(nextIndex: Int) {
-        if (released || !extras.seamlessPlayback) return
+        if (released) return
+        // 已经判定不能并发（或用户自己关了开关）：直接走同实例预载。
+        // 用户开关还开着时也要补这一步，否则关了双播放器就真的没有下一集预载了。
+        if (!useDualDecoder) {
+            if (extras.seamlessPlayback) queueNextEpisode(index, force = true)
+            return
+        }
         // 没有画面容器就没有隐藏输出面，等 PlayerView 挂载后由 attachPlayerView 再触发。
         if (playerView == null) return
+        // 刚完成一次接管：旧实例的 codec 才释放、新实例还在爬坡。
+        // 这个窗口里再申请第二路解码器，就是把刚接上的画面往火坑里推。
+        if (lastHandoffAt > 0L && SystemClock.elapsedRealtime() - lastHandoffAt < HANDOFF_WARMUP_MS) return
         if (nextIndex !in episodes.indices) {
             clearStandby("已经是最后一集")
+            return
+        }
+        // 低内存设备（isLowRamDevice）：解码器和内存都紧张，默认就不并发。
+        // 这条比 maxSupportedInstances 更可靠——很多盒子那项虚标成 4，实际只有一路硬解。
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        if (activityManager?.isLowRamDevice == true) {
+            switchToPlaylistPreload("低内存设备，不启用双解码器")
+            return
+        }
+        // 接着问设备能不能同时跑两路：maxSupportedInstances 不够就根本不申请，
+        // 否则第二路一申请，系统会回收正在播的那一路（这正是「播到一半无法解码」的成因）。
+        val mime = player?.videoFormat?.sampleMimeType
+        if (!DecoderCapacity.canRunTwoDecoders(mime)) {
+            switchToPlaylistPreload("设备并发解码上限 ${DecoderCapacity.maxInstances(mime)} 路（${mime ?: "未知编码"}）")
             return
         }
         if (standbyIndex == nextIndex && (standbyPlayer != null || standbyJob?.isActive == true)) return
@@ -553,11 +881,11 @@ class PlayerSession(
             val prepared = withContext(Dispatchers.IO) {
                 runCatching {
                     // 备用链路独立取流：失败不切换全局线路，避免影响正在播放的这一集。
-                    val info = context.playbackStreamSource(http, notifyOnFallback = false).stream(episodeKey(targetId), library.maxQuality)
+                    val info = context.playbackStreamSource(http, notifyOnFallback = false).stream(episodeKey(targetId), effectiveQuality)
                     PreparedStream(RemoteVideo(http, info).prepare(), info.quality)
                 }.getOrNull()
             }
-            if (released || !extras.seamlessPlayback || standbyIndex != nextIndex) {
+            if (released || !useDualDecoder || standbyIndex != nextIndex) {
                 prepared?.video?.let { runCatching { it.close() } }
                 return@launch
             }
@@ -587,17 +915,19 @@ class PlayerSession(
                 )
                 .build()
         } catch (problem: Throwable) {
-            clearStandby("第二播放器创建失败：${problem.message}")
-            queueNextEpisode(index, force = true)
+            // 连实例都建不起来：这台设备的解码资源确实不够并发，本次会话不再尝试。
+            switchToPlaylistPreload("第二播放器创建失败：${problem.message}")
             return
         }
         standbyPlayer = secondary
+        // 备用实例不申请音频焦点：主实例一直持有，接管时也不需要重新走一遍焦点协商，
+        // 否则某些设备上会出现「画面接上了、声音没要回来」。
         secondary.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                 .build(),
-            true,
+            false,
         )
         secondary.volume = 0f
         secondary.playWhenReady = false
@@ -633,8 +963,12 @@ class PlayerSession(
 
             override fun onPlayerError(playerError: PlaybackException) {
                 if (standbyPlayer !== secondary || standbyIndex != target) return
-                clearStandby("备用播放器准备失败：${playerError.errorCodeName}")
-                queueNextEpisode(index, force = true)
+                PlayerLog.error(
+                    "standby onPlayerError ${playerError.errorCode}(${playerError.errorCodeName})" +
+                        " cause=${playerError.cause?.message?.take(160)}",
+                )
+                // 第二实例自己就挂：这台设备/这段编码扛不住并发，本次会话不再开第二解码器。
+                switchToPlaylistPreload("备用播放器准备失败：${playerError.errorCodeName}")
             }
         })
         val id = episodes[target]
@@ -654,7 +988,7 @@ class PlayerSession(
      * 返回 true 表示这次 prepare 已经被接管处理完。
      */
     private fun promoteStandby(targetIndex: Int): Boolean {
-        if (!extras.seamlessPlayback) return false
+        if (!useDualDecoder) return false
         if (standbyIndex != targetIndex) return false
         val standby = standbyPlayer ?: return false
         when {
@@ -676,6 +1010,7 @@ class PlayerSession(
         val previousRemote = remote
         // 必须在换播放器前保存旧集进度，不能从还没播放的备用实例读取位置。
         save(completed = false)
+        switchingTo = -1
         index = targetIndex
         error = null
         ready = false
@@ -704,8 +1039,12 @@ class PlayerSession(
         standbyJob = null
         standbyHttp?.let(::closeClient)
         standbyHttp = null
-        removeStandbyOutput()
+        // 隐藏输出面先留着：接管瞬间立刻 removeView 会让 PlayerView 重新布局，
+        // 某些设备上就是这一下导致「交接时黑一帧」。等画面稳定后再收。
         standby.addListener(mainListener)
+        // 预渲染阶段音量为 0（避免和第二实例抢声音），接管时必须恢复，
+        // 否则下一集只有画面没有声音。
+        standby.volume = 1f
         standby.playWhenReady = true
         standby.setPlaybackSpeed(speed)
         // 备用实例接管前已经 READY，不会再回调 STATE_READY：这里手动补齐时长、画面参数与弹幕。
@@ -739,8 +1078,16 @@ class PlayerSession(
         old?.removeListener(mainListener)
         runCatching { old?.release() }
         previousRemote?.let { runCatching { it.close() } }
-        // 接管成功后再准备下一集，形成连续的预渲染链。
-        prepareStandby(targetIndex + 1)
+        lastHandoffAt = SystemClock.elapsedRealtime()
+        PlayerLog.info("promoteStandby -> episode=$targetIndex quality=$standbyQuality")
+        // 接管后再准备下一集，形成连续的预渲染链。
+        // 但必须给交接留出冷却：这一瞬间旧实例刚 release、新实例的 codec 还在爬坡，
+        // 立刻再申请第三路解码器，正是「刚跳到下一集没多久就报无法解码」的触发点。
+        mainHandler.postDelayed({
+            if (!released && index == targetIndex && player === standby) {
+                prepareStandby(targetIndex + 1)
+            }
+        }, HANDOFF_WARMUP_MS + 120L)
         return true
     }
 
@@ -748,6 +1095,9 @@ class PlayerSession(
         // 必须挂进 PlayerView（FrameLayout）内部：Compose 容器不会给额外 addView 的子视图布局，
         // 放在外面会得到 0 尺寸的 surface，备用播放器永远渲染不出首帧。
         val host = playerView ?: return null
+        // 复用同一块隐藏输出面：每次准备下一集都 add/remove 会让 PlayerView 反复 requestLayout，
+        // 接管瞬间的那次重排就是「交接黑一帧」的来源。
+        standbyOutputView?.takeIf { it.parent === host }?.let { return it }
         val size = (16 * context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
         val view = SurfaceView(host.context).apply {
             alpha = 0f
@@ -756,6 +1106,7 @@ class PlayerSession(
         }
         return runCatching {
             host.addView(view, FrameLayout.LayoutParams(size, size, Gravity.END or Gravity.BOTTOM))
+            standbyOutputView = view
             view
         }.getOrNull()
     }
@@ -769,6 +1120,7 @@ class PlayerSession(
 
     /** 释放备用播放器及其独立网络会话；不触碰正在播放的主实例。 */
     private fun clearStandby(reason: String) {
+        if (standbyPlayer != null || standbyJob != null) PlayerLog.info("clearStandby: $reason")
         standbyJob?.cancel()
         standbyJob = null
         val secondary = standbyPlayer
@@ -779,7 +1131,7 @@ class PlayerSession(
             runCatching { secondary.clearMediaItems() }
             runCatching { secondary.release() }
         }
-        removeStandbyOutput()
+        // 隐藏输出面留着复用，只在会话结束时 remove（见 release）。
         standbyRemote?.let { runCatching { it.close() } }
         standbyRemote = null
         closeClient(standbyHttp)
@@ -829,14 +1181,22 @@ class PlayerSession(
 
     private fun startDanmaku() {
         val view = danmakuView ?: return
-        if (!danmakuEnabled || duration <= 0L || currentEpisodeId.isBlank()) {
+        if (!danmakuEnabled || currentEpisodeId.isBlank()) {
             runCatching { view.unbind() }
             danmakuLoader = null
+            danmakuKey = ""
             return
         }
+        // 有些片源（HLS / 直播切片）拿不到时长，duration 一直是 0。
+        // 原来这一条直接 return，整集弹幕永远不启动——这就是「时有时无」里最隐蔽的一类。
+        // 给一个足够长的兜底时长，让弹幕先跑起来。
+        val span = if (duration > 0L) duration else UNKNOWN_DURATION_MS
+        val key = "$currentEpisodeId@$span"
+        if (danmakuLoader != null && danmakuKey == key) return
         applyDanmakuPrefs()
-        val loader = DanmakuLoader(danmakuSource, series.id, currentEpisodeId, duration)
+        val loader = DanmakuLoader(danmakuSource, series.id, currentEpisodeId, span)
         danmakuLoader = loader
+        danmakuKey = key
         view.bind(
             loader,
             { position },
@@ -850,6 +1210,7 @@ class PlayerSession(
 
     private fun stopDanmaku() {
         danmakuLoader = null
+        danmakuKey = ""
         runCatching { danmakuView?.unbind() }
     }
 
@@ -861,6 +1222,13 @@ class PlayerSession(
             duration = exo.duration.coerceAtLeast(0L)
         }
         networkMbps = runCatching { bandwidthMeter.bitrateEstimate / 1_000_000f }.getOrDefault(0f)
+        // STATE_READY 只来一次：若那一刻时长/集号还没就绪，弹幕会整集静默。
+        // 每 400ms 的刷新顺带补一次启动，失败也能自愈。
+        if (danmakuEnabled && danmakuLoader == null && duration > 0L &&
+            currentEpisodeId.isNotBlank() && ready
+        ) {
+            startDanmaku()
+        }
         val now = System.currentTimeMillis()
         if (now - lastSavedAt > 5000 && position > 0 && duration > 0) {
             lastSavedAt = now
@@ -874,7 +1242,11 @@ class PlayerSession(
             prepare(index, position)
             return
         }
-        if (exo.isPlaying) exo.pause() else exo.play()
+        if (exo.isPlaying) {
+            exo.pause()
+            // 暂停就落一次盘：用户停在这里切走/息屏，记录也不会丢。
+            save(completed = false)
+        } else exo.play()
     }
 
     fun play() {
@@ -914,9 +1286,27 @@ class PlayerSession(
         standbyPlayer?.setPlaybackSpeed(value)
     }
 
+    /**
+     * 用户点「兼容模式重试」：本次会话停用第二解码器，按当前进度重开。
+     * 不改用户的「无感连播」设置——下次进来仍按他自己的偏好走。
+     */
+    fun retryWithoutDualDecoder() {
+        if (released) return
+        recoveryToken += 1
+        dualDecoderBlocked = true
+        clearStandby("用户选择兼容模式")
+        player?.let(::applyPlaylistPolicy)
+        retrySameStream(position)
+    }
+
     fun changeQuality(value: Int) {
         quality = value
         library.maxQuality = value
+        // 用户手动选清晰度后，之前那次自动降档就该失效。
+        qualityOverride = null
+        autoDowngraded = false
+        failedQualityLabel = ""
+        decodeRetries = 0
         clearStandby("清晰度变更")
         prepare(index, position)
     }
@@ -987,12 +1377,31 @@ class PlayerSession(
         player = null
         remote?.let { runCatching { it.close() } }
         remote = null
+        removeStandbyOutput()
         playerView = null
     }
 
     private companion object {
+        /** 片源不报时长时，弹幕窗口按这个跨度铺开（短剧远达不到 45 分钟）。 */
+        const val UNKNOWN_DURATION_MS = 45 * 60_000L
+
         /** 双播放器硬门槛：可用物理内存低于该值时只用单播放器预解析。 */
-        const val STANDBY_MEMORY_FLOOR_MB = 300L
+        const val STANDBY_MEMORY_FLOOR_MB = 512L
+
+        /**
+         * 释放解码器后等系统真正归还资源的时间。
+         * 立刻重建时同一颗 codec 经常还被旧实例占着，会再失败一次。
+         */
+        const val DECODER_RELEASE_DELAY_MS = 600L
+
+        /** 单集内解码类错误的最大自愈次数，超过就如实报错，避免无限重试。 */
+        const val MAX_DECODE_RETRIES = 4
+
+        /** 接管后隔多久再预载下一集：给旧实例的 codec 回收和新实例起步留出余量。 */
+        const val HANDOFF_WARMUP_MS = 1_500L
+
+        /** 交接后这段时间内的解码失败，优先按「codec 未回收」处理，直接原地重开。 */
+        const val HANDOFF_RECOVER_WINDOW_MS = 5_000L
 
         /** 接管后等可见首帧的兜底时限（原实现 3 秒，这里收紧到 1.5 秒）。 */
         const val HANDOFF_TIMEOUT_MS = 1_500L
@@ -1002,5 +1411,11 @@ class PlayerSession(
 
         /** playlist 预载深度：15 秒，足够覆盖一集尾巴加切集握手。 */
         const val PLAYLIST_PRELOAD_US = 15_000_000L
+
+        /** 同一次「下一集」请求在这个窗口内重复到达时视为连按，不重建数据源。 */
+        const val SWITCH_GUARD_MS = 3_000L
+
+        /** seek 到队列下一项后迟迟没有过渡回调时的兜底时限。 */
+        const val SWITCH_FALLBACK_MS = 1_200L
     }
 }

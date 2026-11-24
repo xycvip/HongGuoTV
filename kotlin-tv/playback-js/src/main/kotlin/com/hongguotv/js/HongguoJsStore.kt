@@ -19,8 +19,23 @@ object HongguoJsStore {
         }
     }
 
-    /** 热更新落地后调用：丢弃旧实例，下次取流时重新加载（新脚本或回退内置版）。 */
+    /**
+     * 本地没有可用脚本时返回 null，不抛异常。
+     * 首次安装（APK 已不带 main.js）用它判断是否需要先走引导下载。
+     */
+    fun getOrNull(context: Context, http: OkHttpClient): HongguoJs? {
+        instance?.let { return it }
+        return synchronized(this) {
+            instance ?: runCatching { HongguoJs.create(context.applicationContext, http) }
+                .getOrNull()
+                ?.also { instance = it }
+        }
+    }
+
+    /** 热更新落地后调用：丢弃旧实例，下次取流时重新加载（新脚本或上一版兜底）。 */
     fun reload() {
         synchronized(this) { instance = null }
+        // 旧脚本解析出的播放地址不再沿用，避免热更新后短暂播放到旧线路。
+        HongguoJsStreamSource.clearCache()
     }
 }

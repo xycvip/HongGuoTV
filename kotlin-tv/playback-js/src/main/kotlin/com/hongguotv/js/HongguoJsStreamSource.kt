@@ -26,6 +26,11 @@ class HongguoJsStreamSource(
     override val name: String = "hongguo-js"
 
     override fun stream(id: String, maxQuality: Int): StreamInfo {
+        val cacheKey = "$id|$maxQuality"
+        val now = System.currentTimeMillis()
+        cache[cacheKey]?.let { entry ->
+            if (now - entry.at < CACHE_TTL_MS) return entry.info
+        }
         val (seriesId, videoId) = parseEpisodeId(id)
         val task = JSONObject()
             .put("dramaId", seriesId)
@@ -38,13 +43,23 @@ class HongguoJsStreamSource(
         if (url.isEmpty()) throw IOException("脚本未返回播放地址")
         val key = data.optString("key").trim().takeIf { it.isNotEmpty() }?.let { decodeKey(it) }
         val quality = data.optInt("quality")
-        return StreamInfo(
+        val info = StreamInfo(
             url = url,
             key = key,
             quality = if (quality > 0) "${quality}P" else "",
             mimeType = data.optString("mimeType").ifBlank { "video/mp4" },
         )
+        if (cache.size > MAX_ENTRIES) cache.entries.removeIf { now - it.value.at >= CACHE_TTL_MS }
+        cache[cacheKey] = Cached(info, now)
+        return info
     }
+
+    /** 详情页打开时预取首集地址：用户点播放时直接命中缓存，省掉一次完整取流。 */
+    fun prefetch(id: String, maxQuality: Int) {
+        runCatching { stream(id, maxQuality) }
+    }
+
+    private class Cached(val info: StreamInfo, val at: Long)
 
     private fun mapScriptError(result: JsCallResult): IOException = when (result.code) {
         "PLAYBACK_UNRESOLVED" -> EmptyPlaybackResponseException(result.error)
@@ -54,6 +69,15 @@ class HongguoJsStreamSource(
 
     companion object {
         private val DIGITS = Regex("[0-9]{1,30}")
+
+        /** 取流结果缓存 90 秒：足够覆盖详情页预取到用户按下播放的时间，又不会拿到过期的签名地址。 */
+        private const val CACHE_TTL_MS = 90 * 1000L
+        private const val MAX_ENTRIES = 24
+
+        private val cache = java.util.concurrent.ConcurrentHashMap<String, Cached>()
+
+        /** 脚本热更新后清空，避免旧线路地址残留。 */
+        fun clearCache() = cache.clear()
 
         fun parseEpisodeId(id: String): Pair<String, String> {
             val cleaned = id.trim().removePrefix("hongguo:")

@@ -8,6 +8,11 @@ val signingProperties = Properties().apply { val config = rootProject.file("keys
 val appVersionProperties = Properties().apply { val config = rootProject.file("version.properties"); if (config.exists()) config.inputStream().use { load(it) } }
 fun signingValue(env: String, key: String): String? = System.getenv(env) ?: signingProperties.getProperty(key)
 
+// 侧载 TV 应用只有 arm 设备；libquickjs.so 的 x86/x86_64 副本（约 1.8MB）不打进包。
+// 开发机要用 x86 模拟器时：HONGGUOTV_ABIS=armeabi-v7a,arm64-v8a,x86,x86_64 ./gradlew assembleDebug
+val targetAbis: List<String> = (System.getenv("HONGGUOTV_ABIS") ?: "armeabi-v7a,arm64-v8a")
+    .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
 android {
     namespace = "com.hongguotv.nativeapp"
     compileSdk = 36
@@ -21,6 +26,8 @@ android {
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 20
         versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: appVersionProperties.getProperty("APP_VERSION", "1.1.8")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // 过滤 AAR 里携带的原生库（实测 0.0.101 发布包把 x86/x86_64 的 libquickjs.so 也打了进去）
+        ndk { abiFilters += targetAbis }
     }
     buildFeatures { buildConfig = true; compose = true }
     signingConfigs {

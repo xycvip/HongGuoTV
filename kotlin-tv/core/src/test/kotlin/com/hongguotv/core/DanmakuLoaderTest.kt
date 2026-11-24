@@ -66,15 +66,23 @@ class DanmakuLoaderTest {
         assertEquals(1, requested.size)
         loader.loadUpTo(0)
         assertEquals(1, requested.size)
-        now += 31_000
+        // 退避递增：8s → 16s → 32s → 60s 封顶，给 10 次机会后才彻底安静。
+        val backoffs = listOf(8_000L, 16_000L, 32_000L, 60_000L, 60_000L, 60_000L, 60_000L, 60_000L, 60_000L)
+        var expected = 1
+        for (backoff in backoffs) {
+            now += backoff - 1
+            loader.loadUpTo(0)
+            assertEquals("退避未到不该重试", expected, requested.size)
+            now += 1
+            loader.loadUpTo(0)
+            expected++
+            assertEquals("退避到期应重试", expected, requested.size)
+        }
+        assertEquals(10, requested.size)
+        // 连续失败 10 次后彻底安静，不再无休止地打接口。
+        now += 120_000
         loader.loadUpTo(0)
-        assertEquals(2, requested.size)
-        now += 31_000
-        loader.loadUpTo(0)
-        assertEquals(3, requested.size)
-        now += 31_000
-        loader.loadUpTo(0)
-        assertEquals(3, requested.size)
+        assertEquals(10, requested.size)
     }
 
     @Test fun betweenFiltersByOffsetRange() {

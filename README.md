@@ -1,172 +1,124 @@
-# 红果TV
+<div align="center">
 
-基于 Android 原生技术构建的红果短剧客户端项目。支持系统版本Android 8.0（API 26）及以上
-的ARM64（arm64-v8a）、ARMv7（armeabi-v7a）安卓设备，不区分安装包，安装包大小约2M。
-  有什么需求或问题，欢迎提出。
-- [当前功能说明与静态审计结果](功能说明.md)
-- [播放接口模块化与诊断说明](播放接口模块化与诊断说明.md)
-- [无感连播实现说明](无感连播实现说明.md)
+<h1>红果TV</h1>
 
-## 版本信息与下载
-### 本仓库测试版(测试版别下载，开发调试测试用)
+<p><b>在电视上，安静地看完一整部短剧。</b></p>
 
-<!-- TEST_RELEASE_INFO_START -->
-- **当前版本：0.0.102**（versionCode：102）
-- 应用包名：`com.x.hongguotv.bate`
-- [下载测试版 APK：HongguoTV-0.0.102.apk](https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.102/HongguoTV-0.0.102.apk)
-- [查看测试版 0.0.102 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/hongguotv-bate-v0.0.102)
-<!-- TEST_RELEASE_INFO_END -->
+<p><sub>Kotlin · Jetpack Compose · Media3 / ExoPlayer · QuickJS　｜　单包约 2 MB　｜　只用遥控器</sub></p>
+
+</div>
+
+---
+
+红果TV 是一个 Android TV 端的红果短剧客户端。界面用原生 Kotlin + Compose 从头写，播放走 ExoPlayer。
+**数据层不在安装包里**——目录、详情、播放地址、弹幕、账号，全部由一份云端下发的 `main.js` 在设备本地执行。
+
+改脚本不用重新发版。这是这个项目唯一重要的设计。
+
+## 下载
 
 ### 正式版
 
 <!-- OFFICIAL_RELEASE_INFO_START -->
 - **当前版本：1.1.49**（versionCode：2026112002）
 - 应用包名：`com.x.hongguotv`
-- [下载正式版 APK：HongguoTV-1.1.49.apk](https://github.com/xycvip/AppDownload/releases/download/hongguotv-v1.1.49/HongguoTV-1.1.49.apk)
+- [下载正式版 APK：HongGuoTV-1.1.49.apk](https://github.com/xycvip/AppDownload/releases/download/hongguotv-v1.1.49/HongGuoTV-1.1.49.apk)
 - [查看正式版 1.1.49 发布说明](https://github.com/xycvip/AppDownload/releases/tag/hongguotv-v1.1.49)
 <!-- OFFICIAL_RELEASE_INFO_END -->
 
-> 测试版与正式版使用不同的应用包名，可并行安装；两者版本号独立维护。
+### 测试版
 
-## 软件运行截图
+<!-- TEST_RELEASE_INFO_START -->
+- **当前版本：0.0.102**（versionCode：102）
+- 应用包名：`com.x.hongguotv.bate`
+- [下载测试版 APK：HongGuoTV-0.0.102.apk](https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.102/HongGuoTV-0.0.102.apk)
+- [查看测试版 0.0.102 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/hongguotv-bate-v0.0.102)
+<!-- TEST_RELEASE_INFO_END -->
 
-以下截图展示了红果TV不同导航栏页面的实际运行界面。
+> 两个包名不同，可以同时装，版本号各自独立。测试版是开发用的，随时会坏。
 
-### 首页 开启APP观看历史和推荐同时显示
+## 界面
 
-![首页](doc/首页.png)
+<table>
+<tr>
+<td width="50%"><img src="doc/首页.png" width="100%" alt="首页"><br>
+<b>首页</b><br><sub>接着看，再看热门。两个区一起滚，不打断</sub></td>
+<td width="50%"><img src="doc/剧场.png" width="100%" alt="剧场"><br>
+<b>剧场</b><br><sub>按题材分栏，竖排往下翻</sub></td>
+</tr>
+<tr>
+<td><img src="doc/排行榜.png" width="100%" alt="排行榜"><br>
+<b>排行榜</b><br><sub>总榜、真人剧、漫剧、AI 剧</sub></td>
+<td><img src="doc/搜索.png" width="100%" alt="搜索"><br>
+<b>搜索</b><br><sub>屏幕键盘，首拼全拼都能打，带联想和热搜</sub></td>
+</tr>
+<tr>
+<td><img src="doc/追剧.png" width="100%" alt="追剧"><br>
+<b>追剧</b><br><sub>观看历史与收藏，一处管理</sub></td>
+<td><img src="doc/设置.png" width="100%" alt="设置"><br>
+<b>设置</b><br><sub>无界设置，DNS、脚本、播放全在这里</sub></td>
+</tr>
+</table>
 
-### 剧场 多种题材分类展示
+## 四个关键决定
 
-![剧场](doc/剧场.png)
+| 决定 | 为什么 |
+| --- | --- |
+| **数据层放云端** | APK 里没有任何业务脚本。启动只做一件事：确认本地有一份能跑的 `main.js`。接口变了、解析改了、加了新页面，推脚本就行，用户不用升级 |
+| **失败也得能活** | 六条线路竞速取清单（GitHub 直连加几个加速镜像），逐项校验才落盘：长度、HTML 嗅探、尾部 `module.exports`、sha256、QuickJS 编译通过。旧版留一份 `main.js.prev`，坏了能退回去 |
+| **首屏不等网络** | 有缓存直接上屏，零请求。用户切到别的页面后，才静默补一次刷新；一直停在首页超过 45 秒再兜底。回首页超过 5 分钟才重拉 |
+| **只认遥控器** | 五向键走完全部流程：选剧、翻页、输手机号、敲验证码、调弹幕。登录页自带屏幕数字键盘，不依赖电视输入法 |
 
-### 排行榜 总播放榜、真人剧、漫剧、AI剧一目了然
+## 工程结构
 
-![排行榜](doc/排行榜.png)
+| 模块 | 职责 |
+| --- | --- |
+| `app` | Compose 界面、页面导航、播放器、遥控器焦点、账号与设置 |
+| `core` | 内容仓库、网络（DNS / 连接池 / 重试）、脚本清单与更新、书架历史、备份 |
+| `playback-js` | QuickJS 运行时、脚本落盘与校验、JS 门面（目录 / 详情 / 取流 / 账号 / 弹幕） |
+| `playback-media` | MP4 解析、加密样本处理、远程 seek、断点重试 |
+| `playback-api` | `StreamInfo` / `StreamSource` 抽象，播放器只认这一层 |
 
-### 搜索 屏幕键盘，首拼全拼皆可。搜索联想、大家都在搜，让看剧更简单
+## 构建
 
-![搜索](doc/搜索.png)
+需要 JDK 17、Android SDK 36，Gradle 8.14.3 由 wrapper 带下来。
 
-### 追剧 观看历史和收藏管理
+```bash
+cd kotlin-tv
+./gradlew :app:assembleDebug     # 测试包 com.x.hongguotv.bate
+./gradlew :app:assembleRelease   # 正式包 com.x.hongguotv
+```
 
-![追剧](doc/追剧.png)
+- `minSdk 26`（Android 8.0），产物 `armeabi-v7a` + `arm64-v8a`
+- 签名读 `kotlin-tv/keystore.properties`，这个文件不入库
+- 版本号在 `version.properties` 与 `test-version.properties`，发布工作流自动递增
 
-### 设置 无界设置，便捷操作
+## 脚本怎么发
 
-![设置](doc/设置.png)
+脚本的源和分发在另一个仓库：[xycvip/RedGuoAPI](https://github.com/xycvip/RedGuoAPI)。
 
-## 项目来源
+```
+RedGuoAPI
+├── script/main.js                    只改这里
+├── .github/workflows/发布客户端脚本.yml
+└── dist/                             工作流生成，不要手改
+    ├── index.json                    版本 / 大小 / sha256 / 路径
+    └── hongguoTV/HongGuoTV.js        客户端真正下载的文件
+```
 
-本应用派生于 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV)，并在 [jycao2/hongguoTV](https://github.com/jycao2/hongguoTV) 基础上改动。
+推一次 `script/main.js`，工作流生成带哈希的 `dist`，客户端最长 3 小时后自己换上新脚本。
 
-- **N3urda/hongguoTV**：提供原生 Kotlin / Android 工程基础，重点包括 Android 原生界面、内容访问及播放基础设施。
-- **jycao2/hongguoTV**：在原生工程基础上继续增加和调整功能；本项目中的账号、弹幕、第三方 CMS 片源、本地备份、设备注册及播放会话等实现，与该仓库存在继承或改写关系。
-- **本项目修改**：继续调整和扩展页面与控制器模块、网络请求管理、播放链路、状态管理、诊断及构建发布流程。具体以仓库当前代码为准。
+客户端这边的节奏：启动 1.5 秒后查清单 → 哈希一样就零下载 → 有更新后台拉、校验、原子落盘 →
+等首屏空闲再重建 JS 实例，立刻生效。**播放中不切换**，退出播放页时补上。
 
-## 技术架构与实现方式
+脚本能调用的宿主接口，见 [JS 接口消费清单](kotlin-tv/docs/JS接口消费清单.md)。
 
-### Android 原生应用
+## 来源与许可
 
-- 使用 **Kotlin** 编写 Android 原生应用，界面主要采用 Android View、Activity、RecyclerView 和自定义 View。
-- 工程按 `app` 与 `core` 分层：`app` 负责界面、交互、播放器及 Android 生命周期；`core` 承担内容请求、数据处理、签名、播放地址和媒体处理等逻辑。
-- 使用 Gradle Kotlin DSL 管理工程与依赖。
-- 当前应用标识为 `com.x.hongguotv`，Kotlin namespace 为 `com.hongguotv.nativeapp`；最低系统版本配置为 Android 8.0 / API 26。
+派生自 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV) 与 [jycao2/hongguoTV](https://github.com/jycao2/hongguoTV)：
+原生工程骨架、内容访问与播放基础设施来自前者，账号、弹幕、片源、备份等实现与后者有继承关系。
+本项目重写了界面层和网络层，把业务脚本整体移出了 APK。
 
-原生 Kotlin 工程基础来自 N3urda/hongguoTV 的 `kotlin-tv`，并结合 jycao2/hongguoTV 后续工程内容持续修改。
+`MediaCrypto` 等媒体处理与签名算法移植自 drpys，六头签名参考 fyworld/hongguoTV，原始著作权归各自权利人。
 
-### 视频播放
-
-- 使用 **AndroidX Media3 / ExoPlayer** 作为播放引擎，包含 ExoPlayer、HLS 和 PlayerView 组件。
-- 播放链路从内容接口解析播放资源，通过媒体源、数据源及播放会话组织请求。
-- 项目包含播放预加载、进度记录、播放状态管理、清晰度选择、播放失败恢复和第三方片源播放器等实现。
-- 加密 MP4 的索引、样本及子样本信息由媒体处理逻辑解析，并非简单地把加密地址直接交给播放器。
-- 实际解码由 Android 设备上的 MediaCodec / 系统解码能力及 Media3 播放链路完成，设备支持的编码格式会影响播放结果。
-
-Media3 原生播放基础来自 N3urda/hongguoTV 的 Kotlin 工程；后续播放会话、资源调度、加密媒体处理及第三方片源播放功能结合 jycao2/hongguoTV 的实现继续修改。Media3 本身来自 AndroidX Media 项目。
-
-### 红果内容接口与请求签名
-
-- 使用 **OkHttp** 发起 HTTP 请求，处理请求超时、响应读取、Cookie、请求取消及错误状态。
-- 使用 Kotlin 实现内容接口参数组织、设备参数、请求头和签名流程。
-- 核心算法涉及 MD5、SM3、字节序转换、Protobuf 风格字段编码及请求签名数据构造。
-- 播放接口包含匿名设备注册与进程内播放会话管理；注册信息和播放请求身份在会话中复用。
-- 播放地址解析包含多接口尝试、备用资源及异常恢复逻辑。
-
-红果请求、接口访问和原生业务基础继承自 N3urda/hongguoTV，并在 jycao2/hongguoTV 基础上继续修改。
-
-其中：
-- `Signer.kt` 文件注明为 drpys 项目指定提交的 Kotlin 移植，来源为 [woshishiq1/drpys](https://github.com/woshishiq1/drpys/tree/22261adfa31435e3b3ef5a730b8a2a75bcaf1715) 中的 `spider/js/红果果[短].js`。
-- `MediaCrypto.kt` 文件注明为 drpys 相关实现的 Kotlin 适配。具体算法来源和许可证信息应同时参照上游 `kotlin-tv/NOTICE.md` 及 GPL-3.0 许可。
-- 播放接口六头签名机制参考并移植自 [fyworld/hongguoTV](https://github.com/fyworld/hongguoTV)，对应上游提交为 [`add2dd8`](https://github.com/fyworld/hongguoTV/commit/add2dd8f248a17755f3a21c9c6a52bbddbefe5bd)。本项目将其签名实现适配到现有 `Signer.kt`，并在 `PlaybackRepository.kt` 的新版 GET 与旧版 POST 播放请求中接入；设备注册、播放会话及请求调度仍以本项目现有实现为基础，并非整套复制上游工程。上游仓库采用 GPL-3.0，本项目根目录亦提供 GPL-3.0 许可证。
-
-### 加密媒体处理
-
-- 通过字节与媒体容器解析逻辑读取 MP4 / ISO BMFF box 结构。
-- 处理 `moov`、轨道、样本大小、块偏移及辅助加密信息等索引。
-- 根据样本加密信息生成分段读取所需的数据，并保留原始视频编码标识。
-- 对输入长度、索引数量、偏移范围和样本重叠等情况进行边界检查。
-
-相关算法移植来源为 drpys；Kotlin 适配及 Android 播放链路整合沿袭上游原生工程，并在当前代码中继续调整。
-
-### 第三方 CMS 片源
-
-- 使用 CMS 接口约定解析分类、列表、详情、搜索建议和播放地址。
-- 通过独立的 `ThirdCmsClient` 访问第三方片源，不复用红果内容请求的签名和 Cookie 会话。
-- 对片源进行接口格式校验、探活、缓存、超时控制及请求取消。
-- 浏览、搜索、详情、导入、播放等流程由独立状态对象、请求协调器和渲染组件配合完成。
-
-第三方 CMS 和片源管理相关基础来自 jycao2/hongguoTV，并在当前项目中拆分、改写和扩展。
-
-### 账号、收藏、历史与弹幕
-
-- 账号功能包含二维码认证及账号数据协调逻辑。
-- 收藏、观看历史和进度分别由本地存储及相关协调器管理；云端同步按对应接口实现。
-- 弹幕使用独立的数据仓库、加载逻辑、设置状态及自定义绘制视图。
-- UI 状态与数据操作分离，减少页面组件直接承担全部业务逻辑。
-
-相关功能主要沿袭并改写自 jycao2/hongguoTV；底层原生工程结构继承自 N3urda/hongguoTV。
-
-### 网络任务与缓存
-
-- 使用 OkHttp 进行网络访问。
-- 使用线程池和异步任务协调网络请求、封面加载、测速、预加载及数据处理。
-- 对部分请求设置缓存有效期、响应体大小限制、超时和取消机制。
-- 使用内存 Cookie 管理及请求作用域控制请求生命周期。
-
-基础网络与内容访问结构来自 N3urda/hongguoTV；后续缓存、任务协调、取消和分模块实现结合 jycao2/hongguoTV 及本项目修改。
-
-### 电视遥控器与界面交互
-
-- 使用 Android 原生焦点系统处理遥控器方向键、确认、返回及长按操作。
-- 使用 RecyclerView 展示海报列表与网格。
-- 使用自定义 View 绘制弹幕、状态指示和部分播放交互。
-- 页面状态、导航状态、播放状态及第三方片源状态通过独立状态类管理。
-
-原生电视界面基础来自 N3urda/hongguoTV；当前界面布局、交互和模块拆分包含 jycao2/hongguoTV 的后续实现及本项目修改。
-
-## 主要第三方依赖
-
-| 依赖 | 用途 | 项目地址 |
-|---|---|---|
-| Kotlin | 应用及核心逻辑开发语言 | [JetBrains Kotlin](https://github.com/JetBrains/kotlin) |
-| AndroidX Core / RecyclerView | Android 基础能力及列表 | [AndroidX](https://github.com/androidx/androidx) |
-| AndroidX Media3 | 视频播放、HLS、播放器 UI | [AndroidX Media](https://github.com/androidx/media) |
-| OkHttp | HTTP 网络请求 | [Square OkHttp](https://github.com/square/okhttp) |
-| ZXing Core | 二维码生成与识别相关能力 | [ZXing](https://github.com/zxing/zxing) |
-| Bouncy Castle | SM3 等密码学算法 | [Bouncy Castle](https://github.com/bcgit/bc-java) |
-| jsoup | HTML 内容解析 | [jsoup](https://github.com/jhy/jsoup) |
-| org.json | JSON 数据处理及 JVM 测试 | [JSON-java](https://github.com/stleary/JSON-java) |
-| JUnit | 单元测试 | [JUnit 4](https://github.com/junit-team/junit4) |
-| desugar_jdk_libs | Java API 兼容支持 | [Android desugar](https://github.com/google/desugar_jdk_libs) |
-
-依赖版本和实际打包范围以 `kotlin-tv/app/build.gradle.kts`、`kotlin-tv/core/build.gradle.kts` 为准。
-
-## 许可证与使用说明
-
-- 本项目仓库采用 **GNU GPL v3.0**，许可证全文见仓库根目录 [LICENSE](LICENSE)。
-- 派生代码及修改部分应遵守 GPL-3.0 的适用要求。
-- 上游项目、drpys 及第三方依赖的原始著作权和许可证仍归各自权利人所有。
-- 本项目不是红果内容平台官方客户端；平台接口、账号服务和内容资源由相应服务提供方控制。
-
-**来源声明：本项目派生于 N3urda/hongguoTV，并在 jycao2/hongguoTV 基础上改动。** 本 README 按可核验的代码结构、文件内容和源码注释整理；对无法仅凭当前代码确定的细节，不作原创性或权属推断。
+以 **GPL-3.0** 发布，全文见 [LICENSE](LICENSE)。仅供学习与技术研究，内容版权归原平台所有。

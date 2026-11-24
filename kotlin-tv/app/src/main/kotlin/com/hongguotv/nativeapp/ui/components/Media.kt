@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,11 +78,17 @@ fun PosterCard(
     showTitle: Boolean = true,
     onLongClick: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused) 1.055f else 1f, spring(0.62f, 560f), label = "poster")
-    val lift by animateFloatAsState(if (focused) -2f else 0f, spring(0.7f, 500f), label = "poster-lift")
+    // 原来是 0.62 阻尼的弹簧 + 2dp 上移：过冲会把卡片顶到相邻卡片上，
+    // 连续移焦点时整行看着像在抖。改成短促缓出的纯缩放，只保留「亮起来、略放大」。
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.04f else 1f,
+        animationSpec = tween(150),
+        label = "poster",
+    )
 
     Column(
         modifier = modifier
@@ -89,12 +96,14 @@ fun PosterCard(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-                translationY = lift.dp.toPx()
             },
         verticalArrangement = Arrangement.spacedBy(d(9)),
     ) {
         Box(
             Modifier
+                // 焦点属性放在 clickable 之前（官方推荐顺序），方向定义与 requester 绑定更稳。
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .focusUpTo(upFocus)
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
                 .then(
@@ -114,10 +123,10 @@ fun PosterCard(
                     indication = null,
                     onClick = onClick,
                     onLongClick = onLongClick,
-                )
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+                ),
         ) {
-            SmartImage(series.cover, Modifier.fillMaxSize(), fallbackTitle = series.title)
+            // 列表里滚动/换焦点时不要每次淡入：260ms 交叉淡入叠在缩放上，看着就是画面在晃。
+            SmartImage(series.cover, Modifier.fillMaxSize(), fallbackTitle = series.title, crossfadeMillis = 0)
             // 底部压暗，保证角标与进度在任何海报上都可读
             Box(
                 Modifier
@@ -233,8 +242,16 @@ fun HeroBanner(
     isFavorite: Boolean,
     modifier: Modifier = Modifier,
     height: Dp = ui.dp(452),
+    /**
+     * 外层共享的缩放相位。轮播交叉淡入时新旧两张海报必须共用同一个缩放值，
+     * 否则一张在放大、一张在缩小，整幅画面会肉眼可见地抖。
+     */
+    imageScale: State<Float>? = null,
+    /** 为空表示沿用全局淡入时长；hero 传 0，避免和 Crossfade 叠成双重淡入。 */
+    imageCrossfadeMillis: Int? = null,
     downFocus: FocusRequester? = null,
     playFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     val breathe = rememberInfiniteTransition(label = "hero")
     val zoom by breathe.animateFloat(
@@ -244,8 +261,18 @@ fun HeroBanner(
         label = "hero-zoom",
     )
     Box(modifier.fillMaxWidth().height(height).clipToBounds()) {
-        Box(Modifier.fillMaxSize().graphicsLayer { scaleX = zoom; scaleY = zoom }) {
-            SmartImage(series.cover, Modifier.fillMaxSize(), fallbackTitle = series.title)
+        // 在 draw 阶段读缩放值：每帧只重绘这一层，不触发整块 hero 重组。
+        Box(Modifier.fillMaxSize().graphicsLayer {
+            val scale = imageScale?.value ?: zoom
+            scaleX = scale
+            scaleY = scale
+        }) {
+            SmartImage(
+                series.cover,
+                Modifier.fillMaxSize(),
+                fallbackTitle = series.title,
+                crossfadeMillis = imageCrossfadeMillis,
+            )
         }
         // 左→右压暗 + 底部融入页面底色，让文字区域绝对干净
         Box(
@@ -338,6 +365,7 @@ fun HeroBanner(
                     tone = ButtonTone.Primary,
                     focusRequester = playFocus,
                     downFocus = downFocus,
+                    upFocus = upFocus,
                 )
                 TvButton(
                     text = if (isFavorite) "已追剧" else "加入追剧",
@@ -345,8 +373,9 @@ fun HeroBanner(
                     icon = if (isFavorite) Icons.Rounded.Check else Icons.Rounded.Add,
                     tone = ButtonTone.Ghost,
                     downFocus = downFocus,
+                    upFocus = upFocus,
                 )
-                TvButton(text = "剧集详情", onClick = onDetail, tone = ButtonTone.Quiet, downFocus = downFocus)
+                TvButton(text = "剧集详情", onClick = onDetail, tone = ButtonTone.Quiet, downFocus = downFocus, upFocus = upFocus)
             }
         }
         // 右侧悬浮的评分徽标
@@ -382,7 +411,12 @@ fun ResumeCard(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused) 1.05f else 1f, spring(0.62f, 560f), label = "resume")
+    // 与海报卡片同一套节奏：不做弹簧过冲，避免一排卡片连续移焦点时整行发颤。
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.04f else 1f,
+        animationSpec = tween(150),
+        label = "resume",
+    )
     Column(
         modifier
             .width(width)
@@ -391,14 +425,14 @@ fun ResumeCard(
     ) {
         Box(
             Modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .then(if (focused) Modifier.shadow(d(20f), RoundedCornerShape(d(13)), ambientColor = Rouge.Core.copy(0.5f)) else Modifier)
                 .clip(RoundedCornerShape(d(13)))
                 .background(Ink.SurfaceHigh)
                 .border(d(2), if (focused) Rouge.Bright else Ink.LineSoft, RoundedCornerShape(d(13)))
-                .combinedClickable(interactionSource = interaction, indication = null, onClick = onClick)
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+                .combinedClickable(interactionSource = interaction, indication = null, onClick = onClick),
         ) {
             SmartImage(series.cover, Modifier.fillMaxSize(), fallbackTitle = series.title)
             Box(

@@ -12,11 +12,11 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,11 +31,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -44,6 +52,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hongguotv.nativeapp.ui.data.ApiStatusState
@@ -54,6 +63,7 @@ import com.hongguotv.nativeapp.ui.theme.Paper
 import com.hongguotv.nativeapp.ui.theme.Rouge
 import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
+import kotlinx.coroutines.launch
 
 /** 品牌标记：四叶接口状态灯。四片叶同时承载四项接口状态，不再使用文字 logo。 */
 @Composable
@@ -88,7 +98,29 @@ fun TopBar(
     onApiStatus: () -> Unit = {},
     /** 当前页面的第一个可聚焦元素：选中项按「下」时直接落到这里，不依赖几何搜索。 */
     contentEntry: FocusRequester? = null,
+    /** 每个导航项自己的 requester：切页/返回时把光标钉在下划线所在项上。 */
+    tabFocus: Map<Tab, FocusRequester> = emptyMap(),
+    /** 非当前项按「下」：先切到这一页，再把焦点交给它的内容区。 */
+    onEnterContent: (Tab) -> Unit = {},
 ) {
+    // logo 默认不参与焦点搜索：canFocus=false 时几何搜索命中不了它，
+    // 只有用户在最左侧的「首页」上再按一次左键，才临时打开入口并请求焦点。
+    // 这样做既满足「不自动跳 logo」，又保留了主动可达。
+    var logoReachable by remember { mutableStateOf(false) }
+    val logoFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    fun reachLogo() {
+        if (logoReachable) return
+        logoReachable = true
+        scope.launch {
+            // canFocus 变更要经过一次组合 + 布局才生效，多等几帧再请求，避免请求落空。
+            repeat(8) {
+                withFrameNanos { }
+                if (logoFocus.tryRequestFocus()) return@launch
+            }
+        }
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -99,28 +131,68 @@ fun TopBar(
             .padding(horizontal = ui.gutter, vertical = d(18)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BrandMark(status = apiStatus, onClick = onApiStatus)
+        // logo 外层单独兜一个「按下回导航栏」：万一焦点落在 logo 上，
+        // 下方是整幅主视觉图，默认几何搜索很可能找不到落点，看起来就是「卡住不动」。
+        Box(
+            Modifier.onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                    val target = tabFocus[Tab.entries.first { it.inTopBar }]
+                    target?.tryRequestFocus() ?: false
+                } else {
+                    false
+                }
+            },
+        ) {
+            BrandMark(
+                modifier = Modifier
+                    .focusRequester(logoFocus)
+                    .focusProperties { canFocus = logoReachable }
+                    .onFocusChanged { state ->
+                        // 光标离开后立刻收起入口，避免下一次几何搜索又落到 logo 上。
+                        if (!state.isFocused && logoReachable) logoReachable = false
+                    },
+                status = apiStatus,
+                onClick = onApiStatus,
+            )
+        }
         Spacer(Modifier.width(d(30)))
         Row(horizontalArrangement = Arrangement.spacedBy(d(6)), verticalAlignment = Alignment.CenterVertically) {
-            Tab.entries.filter { it.inTopBar }.forEach { tab ->
+            val visible = Tab.entries.filter { it.inTopBar }
+            visible.forEachIndexed { index, tab ->
                 NavItem(
                     tab = tab,
                     selected = tab == current,
                     onClick = { onSelect(tab) },
                     downEntry = if (tab == current) contentEntry else null,
+                    requester = tabFocus[tab],
+                    onLeftEdge = if (index == 0) ({ reachLogo() }) else null,
+                    onEnter = { onEnterContent(tab) },
                 )
             }
         }
         Spacer(Modifier.weight(1f))
-        if (clock.isNotBlank()) {
-            Text(clock, style = MaterialTheme.typography.labelMedium, color = Paper.Tertiary)
-            Spacer(Modifier.width(d(16)))
+        // 右侧工具位（时钟/投播/搜索/账号）按「下」统一交给当前页内容区。
+        // 不接管的话几何搜索会落到内容区某个不确定的位置，甚至跨到别页的落点上。
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown && contentEntry != null) {
+                    contentEntry.tryRequestFocus()
+                } else {
+                    false
+                }
+            },
+        ) {
+            if (clock.isNotBlank()) {
+                Text(clock, style = MaterialTheme.typography.labelMedium, color = Paper.Tertiary)
+                Spacer(Modifier.width(d(16)))
+            }
+            CastEntry(onCast)
+            Spacer(Modifier.width(d(10)))
+            RoundIconButton(Icons.Rounded.Search, onSearch, size = d(40), iconSize = d(18), contentDescription = "搜索")
+            Spacer(Modifier.width(d(14)))
+            AccountChip(accountName, onAccount)
         }
-        CastEntry(onCast)
-        Spacer(Modifier.width(d(10)))
-        RoundIconButton(Icons.Rounded.Search, onSearch, size = d(40), iconSize = d(18), contentDescription = "搜索")
-        Spacer(Modifier.width(d(14)))
-        AccountChip(accountName, onAccount)
     }
 }
 
@@ -130,9 +202,13 @@ private fun NavItem(
     selected: Boolean,
     onClick: () -> Unit,
     downEntry: FocusRequester? = null,
+    requester: FocusRequester? = null,
+    onLeftEdge: (() -> Unit)? = null,
+    onEnter: (() -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
+    val focusManager = LocalFocusManager.current
     val scale by animateFloatAsState(if (focused) 1.06f else 1f, spring(0.65f, 600f), label = "nav")
     val bg by animateColorAsState(if (focused) Color(0x1FFFFFFF) else Color.Transparent, tween(150), label = "nav-bg")
     val color by animateColorAsState(
@@ -146,32 +222,43 @@ private fun NavItem(
     )
     Box(
         Modifier
+            // 焦点属性与按键拦截都放在 clickable 之前（官方推荐顺序）。
+            .then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    // 选中项按「下」直接跳到页面首个可聚焦元素。默认几何搜索在 hero 这类
+                    // 大块内容前经常落空，表现就是「焦点卡在导航栏」。
+                    // 精确 requester 失败时再交给焦点管理器做几何搜索，双保险。
+                    Key.DirectionDown -> {
+                        // 光标停在下划线以外的导航项上：先把页面切过去，再进它的内容区。
+                        // 直接走几何搜索会掉进「当前页」的内容里，看起来像跳错导航区。
+                        if (!selected && onEnter != null) {
+                            onEnter()
+                            true
+                        } else {
+                            val moved = downEntry?.let { it.tryRequestFocus() } ?: false
+                            if (moved) true else focusManager.moveFocus(FocusDirection.Down)
+                        }
+                    }
+                    // 最左侧再按一次左键才进 logo（见 TopBar 里的 logoReachable）。
+                    Key.DirectionLeft -> if (onLeftEdge != null) { onLeftEdge(); true } else false
+                    else -> false
+                }
+            }
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(d(999)))
             .background(bg)
             .border(d(1f), if (focused) Color(0x33FFFFFF) else Color.Transparent, RoundedCornerShape(d(999)))
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            // 选中项按「下」直接跳到页面首个可聚焦元素。默认几何搜索在 hero 这类
-            // 大块内容前经常落空，表现就是「焦点卡在导航栏」。
-            .then(
-                if (downEntry != null) {
-                    Modifier.onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
-                            downEntry.tryRequestFocus()
-                        } else {
-                            false
-                        }
-                    }
-                } else {
-                    Modifier
-                },
-            ),
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
     ) {
-        // 结构与内边距分开：线不能跟着文字的 padding 一起被算进内容区，
-        // 否则指示条会压在字上（上一版就是这个问题）。
-        Column(
-            modifier = Modifier.padding(start = d(16), end = d(16), top = d(10), bottom = d(11)),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        // 文字在固定高度里绝对居中；指示条不占布局高度、只贴在底部。
+        // 原实现把线当成 Column 的一员，导致「没选中时文字偏上、下方空一截」。
+        Box(
+            modifier = Modifier
+                .height(d(50))
+                .padding(horizontal = d(16)),
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 tab.label,
@@ -179,9 +266,10 @@ private fun NavItem(
                 color = color,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             )
-            Spacer(Modifier.height(d(7)))
             Box(
                 Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(y = d(-9))
                     .width(d(16))
                     .height(d(2))
                     .clip(RoundedCornerShape(99.dp))

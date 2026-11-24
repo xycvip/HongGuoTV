@@ -2,7 +2,6 @@
 package com.hongguotv.core
 
 import okhttp3.OkHttpClient
-import java.util.concurrent.TimeUnit
 
 /**
  * 全应用唯一的数据入口。
@@ -12,11 +11,7 @@ import java.util.concurrent.TimeUnit
  */
 open class ContentRepository(
     /** 共享的 HTTP 客户端；传输层（局域网投送等）仍需要直接发请求，数据接口本身全部走 JS。 */
-    val http: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .callTimeout(45, TimeUnit.SECONDS)
-        .build(),
+    val http: OkHttpClient = NetworkTuning.client(),
 ) {
     // ---------------------------------------------------- 热更新 JS 门面 ----
     private val js: JsContentGateway get() = JsContent.required()
@@ -48,8 +43,12 @@ open class ContentRepository(
 
     fun detail(id: String): Detail = js.detail(id)
 
-    /** 同名义的其他季（官方多季数据），不含当前剧集。 */
-    fun seasons(sourceId: String): List<Series> = js.seasons(sourceId)
+    /** 同名义的其他季（官方多季数据），含当前季，按季序号升序。 */
+    fun seasons(sourceId: String): List<SeasonEntry> = js.seasons(sourceId)
+
+    /** 相关推荐：官方推荐位同类型剧集，剔除当前剧。 */
+    fun related(seriesId: String, genre: String = "short_play", limit: Int = 12): List<Series> =
+        js.related(seriesId, genre, limit)
 
     // ---------------------------------------------------------- 剧院 ----
     open fun theater(page:Int=1,type:ContentType?=null,selected:Map<String,String> = emptyMap()):TheaterCatalogPage =

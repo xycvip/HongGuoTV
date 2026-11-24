@@ -69,6 +69,19 @@ import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
 
 /**
+ * 把「上 / 下」方向钉在指定节点上。
+ *
+ * 电视端只有一个窗口级焦点搜索，几何最近的不一定是对的元素：内容区最上面一行
+ * 往上，最近往往是投播/搜索/账号这些工具位，看起来就是「跳到别的导航区」。
+ * 在最上行的控件上显式指定「上 = 本页导航项」，页面之间的边界就不会串。
+ */
+fun Modifier.focusUpTo(requester: FocusRequester?): Modifier =
+    if (requester == null) this else focusProperties { up = requester }
+
+fun Modifier.focusDownTo(requester: FocusRequester?): Modifier =
+    if (requester == null) this else focusProperties { down = requester }
+
+/**
  * 电视端最核心的交互原语：焦点即光标。
  * 聚焦时卡片放大、描边点亮、外发光；按压时轻微回弹。
  */
@@ -204,6 +217,7 @@ fun TvButton(
     tone: ButtonTone = ButtonTone.Primary,
     focusRequester: FocusRequester? = null,
     downFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
     enabled: Boolean = true,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -237,6 +251,12 @@ fun TvButton(
     )
     Row(
         modifier = modifier
+            // 焦点属性统一放在 clickable 之前（官方推荐顺序）：focusProperties 需要
+            // 作用于外层，才能稳定地给「这个按钮的下一跳」定方向。
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            // 显式下移目标：hero 下方紧挨着轮播指示条，靠默认搜索容易落空或掉进细线。
+            .then(if (downFocus != null) Modifier.focusProperties { down = downFocus } else Modifier)
+            .focusUpTo(upFocus)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .then(if (focused) Modifier.shadow(d(18f), shape, ambientColor = Rouge.Core.copy(0.5f), spotColor = Rouge.Core.copy(0.6f)) else Modifier)
             .clip(shape)
@@ -248,9 +268,6 @@ fun TvButton(
                 enabled = enabled,
                 onClick = onClick,
             )
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            // 显式下移目标：hero 下方紧挨着轮播指示条，靠默认搜索容易落空或掉进细线。
-            .then(if (downFocus != null) Modifier.focusProperties { down = downFocus } else Modifier)
             .padding(horizontal = d(26), vertical = d(13)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -290,13 +307,14 @@ fun RoundIconButton(
     }
     Box(
         modifier = modifier
+            // 同上：焦点属性放在 clickable 之前，方向定义才稳定。
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .size(size)
             .clip(CircleShape)
             .background(background)
             .border(d(1.4f), if (focused) Rouge.Bright else Ink.LineSoft, CircleShape)
-            .combinedClickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+            .combinedClickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription, tint = Paper.Primary, modifier = Modifier.size(iconSize))
@@ -330,6 +348,7 @@ fun SelectChip(
     modifier: Modifier = Modifier,
     accent: Color = Rouge.Core,
     focusRequester: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -354,6 +373,8 @@ fun SelectChip(
     )
     Box(
         modifier = modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusUpTo(upFocus)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(d(999)))
             .background(bg)
@@ -367,7 +388,6 @@ fun SelectChip(
                 RoundedCornerShape(d(999)),
             )
             .combinedClickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .padding(horizontal = d(18), vertical = d(8)),
         contentAlignment = Alignment.Center,
     ) {
@@ -387,12 +407,15 @@ fun SmartImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     fallbackTitle: String = "",
+    /** 单独覆盖交叉淡入时长；传 0 表示不做淡入，交给外层动画控制。 */
+    crossfadeMillis: Int? = null,
 ) {
     val context = LocalContext.current
+    val fadeMillis = crossfadeMillis ?: LocalImageCrossfadeMillis.current
     Box(modifier.background(Brush.verticalGradient(listOf(Ink.SurfaceHigh, Ink.Base)))) {
         if (!url.isNullOrBlank()) {
             AsyncImage(
-                model = ImageRequest.Builder(context).data(url).crossfade(LocalImageCrossfadeMillis.current).build(),
+                model = ImageRequest.Builder(context).data(url).crossfade(fadeMillis).build(),
                 contentDescription = fallbackTitle.ifBlank { null },
                 contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),

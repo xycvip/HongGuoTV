@@ -18,3 +18,21 @@ private fun chineseNumber(text: String): Int {
     val low=if(ten==text.lastIndex) 0 else digits[text.last()] ?: 0
     return high*10+low
 }
+
+/**
+ * 季序号的界面文案：1 → 第一季，12 → 第十二季。
+ * 系列剧卡片只留「第几季」，完整剧名放副标题，列表扫读更干净。
+ */
+fun seasonLabel(number: Int): String {
+    if (number <= 0) return "系列"
+    if (number > 99) return "第${number}季"
+    val digits = "零一二三四五六七八九"
+    val label = when {
+        number < 10 -> digits[number].toString()
+        number == 10 -> "十"
+        number < 20 -> "十" + digits[number % 10]
+        number % 10 == 0 -> digits[number / 10].toString() + "十"
+        else -> digits[number / 10].toString() + "十" + digits[number % 10]
+    }
+    return "第${label}季"
+}

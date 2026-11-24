@@ -30,8 +30,14 @@ interface JsContentGateway {
     /** 剧集详情：系列信息 + 分集 videoId 列表。 */
     fun detail(id: String): Detail
 
-    /** 同名义的其他季（官方多季数据），不含当前剧集。 */
-    fun seasons(sourceId: String): List<Series>
+    /** 同名义的其他季（官方多季数据），含当前季，按季序号升序。 */
+    fun seasons(sourceId: String): List<SeasonEntry>
+
+    /**
+     * 相关推荐：官方推荐位上与当前剧同类型的剧集，已剔除当前剧。
+     * [genre] 取脚本的推荐分类（short_play / comic_series / ai_series）。
+     */
+    fun related(seriesId: String, genre: String, limit: Int): List<Series>
 
     /** 官方榜单分页；[board] 决定榜单分组，数据来自官方榜单接口。 */
     fun rankingPage(board: RankBoard, page: Int): CatalogPage

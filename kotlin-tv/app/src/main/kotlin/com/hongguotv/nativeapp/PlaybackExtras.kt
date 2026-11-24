@@ -160,5 +160,46 @@ class PlaybackExtras(context: Context) {
         const val MENU_EPISODES = "episodes"
         const val MENU_DANMAKU = "danmaku"
         private val DEFAULT_BLOCKED = setOf("加群", "微信", "公众号", "QQ群")
+
+        /** 遥控器动作的标准文案：设置页的下拉项和播放器提示共用，避免两处对不上。 */
+        val REMOTE_ACTION_LABELS: List<Pair<String, String>> = listOf(
+            REMOTE_PREVIOUS to "上一集",
+            REMOTE_NEXT to "下一集",
+            REMOTE_PLAY_PAUSE to "播放 / 暂停",
+            REMOTE_EPISODES to "打开选集",
+            REMOTE_COMMENTS to "弹幕开关",
+            REMOTE_MENU to "打开播放设置",
+            REMOTE_SLEEP_TIMER to "定时关闭",
+            REMOTE_NONE to "无操作",
+        )
+
+        fun actionLabel(action: String): String =
+            REMOTE_ACTION_LABELS.firstOrNull { it.first == action }?.second ?: "无操作"
+
+        /**
+         * 播放器右下角的按键提示。完全由用户设置推导，设置一改这里就跟着变，
+         * 不再是一句写死的「左右快进 · 确定暂停 · 下键选集」。
+         */
+        fun remoteHintLines(
+            up: String,
+            down: String,
+            confirm: String,
+            menu: String,
+            seekSeconds: Int,
+        ): List<String> {
+            val first = buildList {
+                add("左右 ±${seekSeconds}s")
+                if (up != REMOTE_NONE) add("上 ${actionLabel(up)}")
+                if (down != REMOTE_NONE) add("下 ${actionLabel(down)}")
+            }
+            val second = buildList {
+                if (confirm != REMOTE_NONE) add("确定 ${actionLabel(confirm)}")
+                if (menu != REMOTE_NONE) add("菜单 ${actionLabel(menu)}")
+            }
+            return listOfNotNull(
+                first.takeIf { it.isNotEmpty() }?.joinToString(" · "),
+                second.takeIf { it.isNotEmpty() }?.joinToString(" · "),
+            )
+        }
     }
 }

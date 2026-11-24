@@ -35,6 +35,7 @@ import com.hongguotv.nativeapp.ui.components.UpdateDialog
 import com.hongguotv.nativeapp.ui.components.TopBar
 import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import com.hongguotv.nativeapp.ui.data.AppViewModel
+import com.hongguotv.nativeapp.ui.data.LoginMode
 import com.hongguotv.nativeapp.ui.nav.CollectionKind
 import com.hongguotv.nativeapp.ui.nav.Route
 import com.hongguotv.nativeapp.ui.nav.Tab
@@ -47,6 +48,7 @@ import com.hongguotv.nativeapp.ui.screens.HomeScreen
 import com.hongguotv.nativeapp.ui.screens.LibraryScreen
 import com.hongguotv.nativeapp.ui.screens.PlayerScreen
 import com.hongguotv.nativeapp.ui.screens.RankingScreen
+import com.hongguotv.nativeapp.ui.screens.ScriptBootstrapScreen
 import com.hongguotv.nativeapp.ui.screens.SearchScreen
 import com.hongguotv.nativeapp.ui.screens.SettingsScreen
 import com.hongguotv.nativeapp.ui.screens.TheaterScreen
@@ -69,6 +71,16 @@ fun HongguoApp(vm: AppViewModel) {
     val update by vm.update.collectAsStateWithLifecycle()
     val snapshot = remember(state.library.version, state.settingsRevision) { runCatching { vm.settingsSnapshot() }.getOrNull() }
 
+    // 全新安装没有内置脚本：先下载再进主界面，避免空门面渲染出一堆错误态。
+    if (state.scriptSetup.active) {
+        ScriptBootstrapScreen(
+            state = state.scriptSetup,
+            versionName = BuildConfig.VERSION_NAME,
+            onRetry = vm::retryScriptBootstrap,
+        )
+        return
+    }
+
     // 每个主页面第一个可聚焦元素的锚点：导航栏选中项按下、返回首页、冷启动都靠它定位光标。
     val homeEntry = remember { FocusRequester() }
     val theaterEntry = remember { FocusRequester() }
@@ -81,6 +93,19 @@ fun HongguoApp(vm: AppViewModel) {
         Tab.LIBRARY -> libraryEntry
         Tab.SETTINGS -> null
         Tab.ACCOUNT -> null
+    }
+    // 导航项各自的锚点。切页、返回首页时把光标钉在「下划线所在的那一项」上，
+    // 而不是散落在上一页残留的位置——这是「红线到首页、光标还在设置」的修法。
+    val tabAnchors = remember { Tab.entries.associateWith { FocusRequester() } }
+    // 内容区是否已经有可聚焦元素。没有时不要把导航项的「下」指过去，
+    // 否则会指向一个尚未 attach 的 requester，焦点移动直接抛异常。
+    val contentReady = when (tab) {
+        // 首页的落点是第一排海报，只有片单出来才算就绪（hero 单独有数据时落点还不存在）。
+        Tab.HOME -> state.home.visibleShelves.isNotEmpty()
+        Tab.THEATER -> state.theater.items.isNotEmpty()
+        Tab.RANK -> state.ranking.items.isNotEmpty()
+        Tab.LIBRARY -> state.library.favorites.isNotEmpty() || state.library.history.isNotEmpty() || state.library.later.isNotEmpty()
+        else -> false
     }
 
     LaunchedEffect(Unit) {
@@ -112,6 +137,21 @@ fun HongguoApp(vm: AppViewModel) {
         route = Route.Detail(first.id, first, autoplay = true)
     }
 
+    // 首页可见性：冷启动用缓存顶首屏，切走后静默补网络，回来就是新内容。
+    LaunchedEffect(tab, route, state.booted) {
+        vm.setHomeVisible(state.booted && tab == Tab.HOME && route == Route.Main)
+    }
+
+    // 脚本热更新：播放中不切换（换集会重新取流），退出播放页后立刻补上。
+    LaunchedEffect(route) {
+        vm.setPlayerVisible(route is Route.Player)
+    }
+
+    // 从播放器退回详情时，把播放器刚写进本地库的进度同步到详情页。
+    LaunchedEffect(route) {
+        if (route is Route.Detail) vm.refreshDetailResume()
+    }
+
     // 进入详情且请求了「自动播放」时，等详情就绪后直接进播放器。
     LaunchedEffect(route, state.detail.loading) {
         val current = route
@@ -135,26 +175,22 @@ fun HongguoApp(vm: AppViewModel) {
         route = Route.Detail(open.series.id, open.series, autoplay = true)
     }
 
-    // 冷启动、切换 Tab、从详情/搜索返回时，把光标带回当前页的首个可聚焦元素。
-    // 用「待办标记」而不是直接依赖数据变化，避免翻页加载时把焦点抢回顶部。
+    // 冷启动、切换 Tab、从详情/搜索返回时，把光标带回「下划线所在的导航项」。
+    // 之前这里请求的是内容区第一个元素，一旦数据没就绪/未 attach 就整段失败，
+    // 表现为下划线已经跳到首页、光标还赖在设置上，再按一次确定又回设置页。
     var pendingFocus by remember { mutableStateOf<Tab?>(null) }
+    // 非当前导航项按「下」：先切页，等这一页的内容落点 attach 后再把焦点交过去。
+    var pendingContent by remember { mutableStateOf<Tab?>(null) }
+    // 切季后希望光标落在新季的季签上，连按左右就能换季；详情页请求一次后回清。
+    var pendingSeasonFocus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(tab, route, state.booted) {
-        if (route == Route.Main && state.booted) pendingFocus = tab
+        // 从导航项按下进内容时由 pendingContent 接管光标，这里不要再把光标拉回导航项。
+        if (route == Route.Main && state.booted && pendingContent == null) pendingFocus = tab
     }
-    LaunchedEffect(
-        pendingFocus,
-        state.home.hero.size,
-        state.theater.items.size,
-        state.theater.loading,
-        state.ranking.items.size,
-        state.ranking.loading,
-    ) {
+    LaunchedEffect(pendingFocus, route, state.booted) {
         val target = pendingFocus ?: return@LaunchedEffect
-        if (route != Route.Main) return@LaunchedEffect
-        val requester = when (target) {
-            Tab.HOME -> homeEntry.takeIf { state.home.hero.isNotEmpty() }
-            else -> entryOf(target)
-        } ?: return@LaunchedEffect
+        if (route != Route.Main || !state.booted) return@LaunchedEffect
+        val requester = tabAnchors[target] ?: return@LaunchedEffect
         repeat(20) {
             if (requester.tryRequestFocus()) {
                 pendingFocus = null
@@ -162,6 +198,24 @@ fun HongguoApp(vm: AppViewModel) {
             }
             withFrameNanos { }
         }
+    }
+
+    // 非当前导航项按「下」：先切页，等这一页的内容落点 attach 后再把焦点交过去。
+    LaunchedEffect(pendingContent, tab, route, state.booted) {
+        val target = pendingContent ?: return@LaunchedEffect
+        if (route != Route.Main || !state.booted || tab != target) return@LaunchedEffect
+        val requester = entryOf(target)
+        var moved = false
+        var attempts = 0
+        while (!moved && attempts < 30) {
+            moved = requester?.tryRequestFocus() == true
+            if (!moved) withFrameNanos { }
+            attempts++
+        }
+        // 内容还没数据（或这一页本来就没有落点，如设置/账号）就停在导航项上，
+        // 绝不让焦点掉进别的页面。
+        if (!moved) tabAnchors[target]?.tryRequestFocus()
+        pendingContent = null
     }
 
     BackHandler(enabled = route != Route.Main) {
@@ -205,6 +259,7 @@ fun HongguoApp(vm: AppViewModel) {
                         theaterEntry = theaterEntry,
                         rankEntry = rankEntry,
                         libraryEntry = libraryEntry,
+                        upFocus = tabAnchors[tab],
                     )
                     TopBar(
                         current = tab,
@@ -216,11 +271,22 @@ fun HongguoApp(vm: AppViewModel) {
                         accountName = state.account.nickname.takeIf { state.account.signedIn },
                         onAccount = {
                             tab = Tab.ACCOUNT
-                            if (!state.account.signedIn && state.account.qrBitmap == null) vm.startQrLogin()
+                            if (!state.account.signedIn && state.account.mode == LoginMode.QR &&
+                                state.account.qrBitmap == null
+                            ) {
+                                vm.startQrLogin()
+                            }
                         },
                         apiStatus = apiStatus,
                         onApiStatus = { showApiStatus = true },
-                        contentEntry = entryOf(tab),
+                        contentEntry = entryOf(tab)?.takeIf { contentReady },
+                        tabFocus = tabAnchors,
+                        onEnterContent = { selected ->
+                            if (selected != tab) {
+                                tab = selected
+                                pendingContent = selected
+                            }
+                        },
                         modifier = Modifier.align(Alignment.TopCenter),
                     )
                 }
@@ -252,6 +318,8 @@ fun HongguoApp(vm: AppViewModel) {
                 is Route.Detail -> DetailScreen(
                     state = state.detail,
                     onBack = { route = Route.Main },
+                    focusSeasonId = pendingSeasonFocus,
+                    onSeasonFocusConsumed = { pendingSeasonFocus = null },
                     onPlay = { index, position ->
                         val detail = state.detail.detail
                         if (detail != null && detail.episodes.isNotEmpty()) {
@@ -261,7 +329,12 @@ fun HongguoApp(vm: AppViewModel) {
                     onNextEpisode = {},
                     onFavorite = { state.detail.series?.let { vm.toggleFavorite(it) } },
                     onLater = { state.detail.series?.let { vm.toggleLater(it) } },
-                    onSeries = { series -> vm.openDetail(series); route = Route.Detail(series.id, series) },
+                    onSeries = { series ->
+                        // 从季签切换时把光标留在新季上；从相关推荐进来则按常规落在播放键。
+                        pendingSeasonFocus = series.id
+                        vm.openDetail(series)
+                        route = Route.Detail(series.id, series)
+                    },
                     onExpandSynopsis = vm::toggleSynopsis,
                 )
 
@@ -331,10 +404,15 @@ private fun PlayerRoute(route: Route.Player, vm: AppViewModel, onBack: () -> Uni
             series = route.series,
             episodes = route.episodes,
             initialIndex = route.episodeIndex,
+            initialPositionMs = route.positionMs,
         )
     }
     androidx.compose.runtime.DisposableEffect(session) {
-        onDispose { session.release() }
+        onDispose {
+            // 先落盘再刷新首页：否则「接着看」要等下次启动才出现。
+            session.release()
+            vm.syncWatchHistory()
+        }
     }
     PlayerScreen(
         session = session,
@@ -359,6 +437,7 @@ private fun MainTabContent(
     theaterEntry: FocusRequester? = null,
     rankEntry: FocusRequester? = null,
     libraryEntry: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     val favoriteIds = remember(state.library.version) { state.library.favorites.map { it.id }.toSet() }
     val progressById = remember(state.library.version) { state.library.history.associateBy { it.series.id } }
@@ -369,7 +448,11 @@ private fun MainTabContent(
             Tab.THEATER -> if (state.theater.items.isEmpty() && !state.theater.loading) vm.loadTheater(state.theater.type)
             Tab.RANK -> if (state.ranking.items.isEmpty() && !state.ranking.loading) vm.loadRanking(state.ranking.board)
             Tab.LIBRARY -> vm.refreshLibraryState()
-            Tab.ACCOUNT -> if (!state.account.signedIn && state.account.qrBitmap == null) vm.startQrLogin()
+            Tab.ACCOUNT -> if (!state.account.signedIn && state.account.mode == LoginMode.QR &&
+                state.account.qrBitmap == null
+            ) {
+                vm.startQrLogin()
+            }
             else -> Unit
         }
     }
@@ -386,6 +469,7 @@ private fun MainTabContent(
             onRefresh = { vm.loadHome(refresh = true) },
             onHeroIndex = vm::setHeroIndex,
             entryFocus = homeEntry,
+            upFocus = upFocus,
         )
 
         Tab.THEATER -> TheaterScreen(
@@ -398,6 +482,7 @@ private fun MainTabContent(
             onDetail = onDetail,
             onRetry = { vm.loadTheater(state.theater.type) },
             entryFocus = theaterEntry,
+            upFocus = upFocus,
         )
 
         Tab.RANK -> RankingScreen(
@@ -407,6 +492,7 @@ private fun MainTabContent(
             onLoadMore = vm::loadMoreRanking,
             onRetry = { vm.loadRanking(state.ranking.board) },
             entryFocus = rankEntry,
+            upFocus = upFocus,
         )
 
         Tab.LIBRARY -> LibraryScreen(
@@ -420,6 +506,7 @@ private fun MainTabContent(
             onGoTheater = { onTab(Tab.THEATER) },
             version = state.library.version,
             entryFocus = libraryEntry,
+            upFocus = upFocus,
         )
 
         Tab.SETTINGS -> if (snapshot != null) {
@@ -435,6 +522,12 @@ private fun MainTabContent(
             state = state.account,
             onLogin = vm::startQrLogin,
             onSignOut = vm::signOut,
+            onSwitchMode = vm::switchLoginMode,
+            onPhone = vm::setLoginPhone,
+            onCode = vm::setLoginCode,
+            onSendCode = vm::sendLoginCode,
+            onVerify = vm::verifyLoginCode,
+            onResetPhone = vm::resetLoginPhone,
         )
     }
 }

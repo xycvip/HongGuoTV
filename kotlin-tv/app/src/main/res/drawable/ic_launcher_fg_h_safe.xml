@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标安全区：前景圆环原图内容直径约占画布 71.8%，直接铺满会被 launcher 的
+     圆形/方圆遮罩切掉边缘。这里统一收缩到 108dp 画布的 54%（约 58dp），
+     四个图标的视觉大小也随之对齐。 -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_launcher_fg_h"
+    android:insetLeft="13.6dp"
+    android:insetTop="13.6dp"
+    android:insetRight="13.6dp"
+    android:insetBottom="13.6dp" />

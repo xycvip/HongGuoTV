@@ -697,9 +697,30 @@ object MediaCrypto {
         return false
     }
 
+    /**
+     * 明文流在 [start]、[end) 这段里是否有必须改写的字节：
+     *  - 覆盖到 header 且 header 不是原文件开头那段（OOIUa 路径要清 pssh，headerStart != 0）；
+     *  - 覆盖到顶层 pssh 的 type 字段（要改成 "free"）。
+     * 都没有就说明这段数据原样可用，不必再拷一份（播放路径 512KB/次，省掉的是整块 memcpy）。
+     */
+    private fun needsRewrite(start: Long,end: Long,prepared: Prepared): Boolean {
+        val headerStart = prepared.headerStart
+        if (headerStart != 0L) {
+            val headerEnd = headerStart + prepared.header.size
+            if (maxOf(start, headerStart) < minOf(end, headerEnd)) return true
+        }
+        for (offset in prepared.topLevelPsshOffsets) {
+            if (maxOf(start, offset) < minOf(end, offset + 4)) return true
+        }
+        return false
+    }
+
     fun decrypt(data: ByteArray,start: Long,key: ByteArray?,prepared: Prepared): ByteArray {
         require(start>=0)
-        val result=data.copyOf(); val end=start+data.size
+        val end=start+data.size
+        // 明文且无需改写：直接返回调用方数组，不复制。data 由 RemoteVideo.read 新分配，可以安全复用。
+        if (key==null && !needsRewrite(start,end,prepared)) return data
+        val result=data.copyOf()
         val headerStart = prepared.headerStart
         val headerEnd = headerStart + prepared.header.size
         val copyStart = maxOf(start, headerStart)

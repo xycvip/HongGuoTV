@@ -253,9 +253,33 @@ class RemoteVideo(
         }
     }
     fun read(start: Long,length: Int): ByteArray {
+        val (size,end)=beginRead(start,length) ?: return byteArrayOf()
+        val raw=ByteArray(size)
+        copyInto(raw,0,start,end)
+        // 明文流没有任何字节需要改写：decrypt 会把 raw 原样返回，不再复制一份。
+        return MediaCrypto.decrypt(raw,start,info.key,prepared)
+    }
+
+    /**
+     * 把 [start, start+length) 直接填进调用方缓冲（从 [targetOffset] 起），返回写入字节数；已到 EOF 返回 0。
+     * 播放路径复用同一个缓冲，避免每次 512KB 都新分配一块再拷一遍（明文流全程只有「缓存块→目标缓冲」一次拷贝）。
+     */
+    fun readInto(target: ByteArray,targetOffset: Int,start: Long,length: Int): Int {
+        require(targetOffset>=0 && length>=0 && targetOffset<=target.size-length) { "视频读取缓冲区范围无效" }
+        val (size,end)=beginRead(start,length) ?: return 0
+        copyInto(target,targetOffset,start,end)
+        if(info.key==null && prepared.headerStart==0L && prepared.topLevelPsshOffsets.isEmpty()) return size
+        // 密文流 / 需要改写 header 的流：解密要一份独立缓冲，与 read() 等价。
+        val decrypted=MediaCrypto.decrypt(target.copyOfRange(targetOffset,targetOffset+size),start,info.key,prepared)
+        decrypted.copyInto(target,targetOffset)
+        return size
+    }
+
+    /** 校验读取范围、推进预读游标、把覆盖到的缓存块补齐。返回 (字节数, 结束偏移)；已到 EOF 返回 null。 */
+    private fun beginRead(start: Long,length: Int): Pair<Int,Long>? {
         require(length in 1..chunkBytes && start>=0)
         if(closed) throw IOException("播放请求已取消")
-        if(start>=total) return byteArrayOf()
+        if(start>=total) return null
         val requestedEnd=if(start>Long.MAX_VALUE-length.toLong()) Long.MAX_VALUE else start+length.toLong()
         val end=minOf(total,requestedEnd)
         synchronized(lock) {
@@ -272,7 +296,10 @@ class RemoteVideo(
             if(cached(k)) synchronized(lock) { hitChunks++ } else { synchronized(lock) { missChunks++ }; readChunk(k) }
             at=k+chunkBytes
         }
-        val raw=ByteArray((end-start).toInt())
+        return (end-start).toInt() to end
+    }
+
+    private fun copyInto(target: ByteArray,targetOffset: Int,start: Long,end: Long) {
         var pos=start; var written=0
         while(pos<end) {
             val k=pos-pos%chunkBytes
@@ -280,9 +307,8 @@ class RemoteVideo(
             val from=(pos-k).toInt()
             val count=minOf(chunk.size-from,(end-pos).toInt())
             if(count<=0) throw IOException("视频分段数据不完整")
-            System.arraycopy(chunk,from,raw,written,count); written+=count; pos+=count
+            System.arraycopy(chunk,from,target,targetOffset+written,count); written+=count; pos+=count
         }
-        return MediaCrypto.decrypt(raw,start,info.key,prepared)
     }
     override fun close() {
         synchronized(lock) { closed=true; lock.notifyAll() }

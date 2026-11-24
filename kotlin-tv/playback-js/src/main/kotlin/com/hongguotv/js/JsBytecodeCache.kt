@@ -33,14 +33,28 @@ class JsBytecodeCache(private val dir: File? = null) {
                 if (!temp.renameTo(File(target, fileName(key)))) {
                     temp.delete()
                 }
+                prune(target)
             }
         }
+    }
+
+    /**
+     * 热更新每换一版脚本就会产生一个新 key，磁盘上的 .qbc 会一直堆积（单份约 1MB）。
+     * 只保留最近 [MAX_DISK_ENTRIES] 份，旧的自然滚掉。
+     */
+    private fun prune(dir: File) {
+        val files = dir.listFiles { file -> file.isFile && file.name.endsWith(".qbc") } ?: return
+        if (files.size <= MAX_DISK_ENTRIES) return
+        files.sortedByDescending { it.lastModified() }
+            .drop(MAX_DISK_ENTRIES)
+            .forEach { file -> runCatching { file.delete() } }
     }
 
     private fun fileName(key: String): String = "main-$key.qbc"
 
     companion object {
         private const val MAX_MEMORY_ENTRIES = 4
+        private const val MAX_DISK_ENTRIES = 4
 
         fun memoryOnly(): JsBytecodeCache = JsBytecodeCache()
 

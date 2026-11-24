@@ -9,11 +9,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -42,17 +44,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -71,9 +77,14 @@ import com.hongguotv.nativeapp.ui.theme.Paper
 import com.hongguotv.nativeapp.ui.theme.Rouge
 import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** 剧场的三个主类型。剧场语境里「短剧」就是真人剧，用更明确的说法。 */
 private val theaterTypes = listOf(ContentType.SHORT, ContentType.COMIC, ContentType.AI)
+
+/** 距离末尾还有这么多项时就开始取下一页，避免用户真的滑到底才等网络。 */
+private const val PREFETCH_DISTANCE = 12
 
 private val ContentType.theaterLabel: String
     get() = when (this) {
@@ -93,18 +104,28 @@ fun TheaterScreen(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     entryFocus: FocusRequester? = null,
+    /** 控制带按「上」回本页导航项。 */
+    upFocus: FocusRequester? = null,
 ) {
     val gridState = rememberLazyGridState()
     // 筛选默认收起：主页面只留一条控制带，海报第一时间就能看到。
     var filtersOpen by rememberSaveable { mutableStateOf(false) }
-    val shouldLoadMore by remember {
-        derivedStateOf {
-            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= gridState.layoutInfo.totalItemsCount - 10
-        }
+    // 无限滚动：直接订阅布局信息，滚到末行就补一页。
+    // 不用 distinctUntilChanged：加载完一页后如果用户还在底部，状态仍是 nearEnd，
+    // 去重会把它当成「没变化」而不再触发，表现就是滚到底要手动再动一下才继续。
+    // 重复调用由 ViewModel 的 loading/loadingMore/hasMore 守卫拦掉。
+    LaunchedEffect(gridState, state.hasMore, state.items.size, state.page, state.type) {
+        if (!state.hasMore) return@LaunchedEffect
+        snapshotFlow {
+            val info = gridState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: return@snapshotFlow false
+            state.items.isNotEmpty() && last >= info.totalItemsCount - PREFETCH_DISTANCE
+        }.collect { nearEnd -> if (nearEnd) onLoadMore() }
     }
-    LaunchedEffect(shouldLoadMore, state.items.size) {
-        if (shouldLoadMore && state.items.isNotEmpty()) onLoadMore()
+
+    // 换类型/换筛选后回到顶部，否则旧列表的滚动位置会留在半截，看起来像「跳到了别的页」。
+    LaunchedEffect(state.type, state.selection) {
+        gridState.scrollToItem(0)
     }
 
     // 顶部已有主类型切换，筛选面板里不再重复「体裁」这一维。
@@ -116,16 +137,32 @@ fun TheaterScreen(
     }
     val selectedCount = state.selection.count { it.value.isNotBlank() }
 
+    val columns = if (posterColumns in 3..8) posterColumns else if (ui.compact) 5 else 6
+    // 类型 chip 的稳定落点：切类型后整屏海报全换 id，原焦点节点必然销毁，
+    // 与其赌 focusRestorer 能找到邻居，不如把焦点明确交回「刚点的那个类型」。
+    val typeFoci = remember(entryFocus) {
+        theaterTypes.associateWith { type ->
+            // 第一个类型的落点和导航栏「按下」的目标是同一个节点，复用同一个 requester，
+            // 避免一个节点挂两个 requester 时互相覆盖。
+            if (type == theaterTypes.first() && entryFocus != null) entryFocus else FocusRequester()
+        }
+    }
+    LaunchedEffect(state.type) {
+        repeat(6) {
+            val target = typeFoci[state.type]
+            if (target != null && target.tryRequestFocus()) return@LaunchedEffect
+            withFrameNanos { }
+        }
+    }
+
     Box(modifier.fillMaxSize()) {
         when {
             state.loading && state.items.isEmpty() -> LoadingState(label = "正在整理剧场")
             state.error != null && state.items.isEmpty() -> ErrorState(state.error, onRetry)
             else -> LazyVerticalGrid(
                 state = gridState,
-                columns = GridCells.Fixed(
-                    if (posterColumns in 3..8) posterColumns else if (ui.compact) 5 else 6,
-                ),
-                modifier = Modifier.fillMaxSize(),
+                columns = GridCells.Fixed(columns),
+                modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(),
                 contentPadding = PaddingValues(start = ui.gutter, end = ui.gutter, top = d(96), bottom = d(60)),
                 horizontalArrangement = Arrangement.spacedBy(d(16)),
                 verticalArrangement = Arrangement.spacedBy(d(26)),
@@ -159,6 +196,8 @@ fun TheaterScreen(
                             selectedCount = selectedCount,
                             onToggleFilters = { filtersOpen = !filtersOpen },
                             entryFocus = entryFocus,
+                            upFocus = upFocus,
+                            typeFoci = typeFoci,
                         )
                         if (state.loading && state.items.isNotEmpty()) {
                             Spacer(Modifier.height(d(10)))
@@ -207,10 +246,33 @@ fun TheaterScreen(
                         subtitle = series.tags.take(14).ifBlank { series.badge },
                     )
                 }
+                // 加载中的占位直接铺一行「灰海报」，比一行「正在加载更多…」更像内容、
+                // 也让等待有个明确的视觉预期；到底了才用文字收尾。
                 if (state.loadingMore) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = d(4)),
+                            horizontalArrangement = Arrangement.spacedBy(d(16)),
+                        ) {
+                            repeat(columns) {
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .aspectRatio(2f / 3f)
+                                        .clip(RoundedCornerShape(d(14)))
+                                        .background(Color(0x0FFFFFFF)),
+                                )
+                            }
+                        }
+                    }
+                } else if (!state.hasMore) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(Modifier.fillMaxWidth().padding(d(20)), contentAlignment = Alignment.Center) {
-                            Text("正在加载更多…", style = MaterialTheme.typography.bodySmall, color = Paper.Tertiary)
+                            Text(
+                                "已经到底了 · 换个筛选试试",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Paper.Tertiary,
+                            )
                         }
                     }
                 }
@@ -231,6 +293,8 @@ private fun TheaterControlBar(
     selectedCount: Int,
     onToggleFilters: () -> Unit,
     entryFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
+    typeFoci: Map<ContentType, FocusRequester> = emptyMap(),
 ) {
     Row(
         Modifier
@@ -243,14 +307,14 @@ private fun TheaterControlBar(
             .padding(d(6)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        theaterTypes.forEachIndexed { index, type ->
+        theaterTypes.forEach { type ->
             TypeTab(
                 text = type.theaterLabel,
                 selected = activeType == type,
                 onClick = { onType(type) },
-                modifier = Modifier.then(
-                    if (index == 0 && entryFocus != null) Modifier.focusRequester(entryFocus) else Modifier,
-                ),
+                modifier = Modifier
+                    .then(typeFoci[type]?.let { Modifier.focusRequester(it) } ?: Modifier)
+                    .then(if (upFocus != null) Modifier.focusProperties { up = upFocus } else Modifier),
             )
         }
         Spacer(Modifier.weight(1f))
@@ -266,6 +330,7 @@ private fun TheaterControlBar(
             expanded = filtersOpen,
             count = selectedCount,
             onClick = onToggleFilters,
+            upFocus = upFocus,
         )
     }
 }
@@ -314,12 +379,13 @@ private fun TypeTab(
 }
 
 @Composable
-private fun FilterEntry(expanded: Boolean, count: Int, onClick: () -> Unit) {
+private fun FilterEntry(expanded: Boolean, count: Int, onClick: () -> Unit, upFocus: FocusRequester? = null) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val icon = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore
     Row(
         Modifier
+            .then(if (upFocus != null) Modifier.focusProperties { up = upFocus } else Modifier)
             .clip(RoundedCornerShape(d(999)))
             .background(if (focused) Color(0x1FFFFFFF) else Color.Transparent)
             .border(d(1.2f), if (focused) Rouge.Bright else Color.Transparent, RoundedCornerShape(d(999)))

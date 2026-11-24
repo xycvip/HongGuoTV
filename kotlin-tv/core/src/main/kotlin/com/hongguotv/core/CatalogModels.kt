@@ -12,6 +12,13 @@ data class Series(val id: String, val title: String, val cover: String = "", val
 data class SeriesSocial(val rating: Double = 0.0, val ratingCount: String = "", val favoriteText: String = "", val heatText: String = "") {
     val isEmpty get() = rating<=0.0 && favoriteText.isBlank() && heatText.isBlank()
 }
+/**
+ * 系列剧的一条：官方多季接口给出的季序号 + 该季剧集。
+ * 标题里的「第二季」常带着完整剧名，列表里统一显示 [label]。
+ */
+data class SeasonEntry(val series: Series, val number: Int) {
+    val label: String get() = seasonLabel(number)
+}
 data class Detail(val series: Series, val episodes: List<String>, val related: List<Series> = emptyList(), val sameName: List<Series> = emptyList(), val social: SeriesSocial = SeriesSocial()) {
     /** Same-name entries with a finite season number beyond the current one (untitled season counts as 1). */
     val newerSeasons: List<Series> get() {

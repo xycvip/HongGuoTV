@@ -18,6 +18,7 @@ import com.hongguotv.core.Detail
 import com.hongguotv.core.RankBoard
 import com.hongguotv.core.RecentSearch
 import com.hongguotv.core.Series
+import com.hongguotv.core.SeasonEntry
 import com.hongguotv.core.SeriesSocial
 import com.hongguotv.core.TheaterFilterGroup
 import com.hongguotv.core.TheaterFilterOption
@@ -89,7 +90,7 @@ class RenderPreviewTest {
         render("01-home", chrome = Tab.HOME) {
             HomeScreen(
                 state = state,
-                favoriteIds = setOf(all[2].id),
+                favoriteIds = setOf(all[2 % all.size].id),
                 progressById = mapOf(
                     all[0].id to BackupProgress(all[0], "ep", 2, 30_000, 120_000, false, 0),
                 ),
@@ -149,6 +150,11 @@ class RenderPreviewTest {
             resumePosition = 30_000,
             resumeProgress = 0.35f,
             favorite = true,
+            seasons = listOf(
+                SeasonEntry(all[0].copy(id = "season-1", title = "测试剧集 第一季"), 1),
+                SeasonEntry(series, 2),
+                SeasonEntry(all[1].copy(id = "season-3", title = "测试剧集 第三季"), 3),
+            ),
         )
         render("04-detail") {
             DetailScreen(
@@ -313,8 +319,19 @@ object PreviewData {
         }.ifEmpty { fallback() }
     }
 
+    // 预览数据文件缺失时的兜底：条数要够 home/theater 的 take/drop 用，否则索引越界。
     private fun fallback() = listOf(
         Series("1", "测试剧集 A", "", "一场意外的重逢", "都市 爱情", "都市"),
         Series("2", "测试剧集 B", "", "悬疑", "悬疑 推理", "悬疑"),
+        Series("3", "测试剧集 C", "", "古装", "古装 权谋", "古装"),
+        Series("4", "测试剧集 D", "", "甜宠", "甜宠 逆袭", "甜宠"),
+        Series("5", "测试剧集 E", "", "萌宝", "萌宝 家庭", "萌宝"),
+        Series("6", "测试剧集 F", "", "逆袭", "逆袭 热血", "逆袭"),
+        Series("7", "测试剧集 G", "", "都市", "都市 职场", "都市"),
+        Series("8", "测试剧集 H", "", "悬疑", "悬疑 罪案", "悬疑"),
+        Series("9", "测试剧集 I", "", "古装", "古装 宫斗", "古装"),
+        Series("10", "测试剧集 J", "", "甜宠", "甜宠 校园", "甜宠"),
+        Series("11", "测试剧集 K", "", "萌宝", "萌宝 治愈", "萌宝"),
+        Series("12", "测试剧集 L", "", "逆袭", "逆袭 商战", "逆袭"),
     )
 }

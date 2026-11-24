@@ -51,7 +51,11 @@ class DanmakuLoader(
                 } catch (failed: Exception) {
                     synchronized(this) {
                         failures++
-                        retryAfter = clock() + RETRY_BACKOFF_MS
+                        // 退避递增（8s → 16s → 32s → 60s 封顶），把放弃前的窗口拉到十几分钟。
+                        // 原来固定 8 秒、6 次就永久 exhausted，一次长一点的网络抖动整集就再也没弹幕。
+                        val backoff = (RETRY_BACKOFF_MS shl (failures - 1).coerceAtMost(3))
+                            .coerceAtMost(MAX_BACKOFF_MS)
+                        retryAfter = clock() + backoff
                         if (failures >= MAX_FAILURES) exhausted = true
                     }
                     return
@@ -78,7 +82,24 @@ class DanmakuLoader(
     /** Comments anchored in [fromMs, [toMs]); the list is sorted by offset. UI-thread safe. */
     fun between(fromMs: Long, toMs: Long): List<Danmaku> = synchronized(this) {
         if (fromMs >= toMs || comments.isEmpty()) return@synchronized emptyList()
-        comments.filter { it.offsetMs >= fromMs && it.offsetMs < toMs }
+        // 每帧都会调用：二分定位起点的开销是 log(n)，比整表 filter 稳得多。
+        // 两小时电影缓存上万条时，原来的 O(n) 扫描 + 分配会直接顶到主线程预算。
+        var low = 0
+        var high = comments.size
+        while (low < high) {
+            val mid = (low + high) ushr 1
+            if (comments[mid].offsetMs < fromMs) low = mid + 1 else high = mid
+        }
+        if (low >= comments.size) return@synchronized emptyList()
+        val out = ArrayList<Danmaku>(4)
+        var index = low
+        while (index < comments.size) {
+            val comment = comments[index]
+            if (comment.offsetMs >= toMs) break
+            out.add(comment)
+            index++
+        }
+        out
     }
 
     /** Total distinct comments buffered so far; mainly for diagnostics and tests. */
@@ -86,7 +107,12 @@ class DanmakuLoader(
 
     companion object {
         const val WINDOW_MS = 30_000L
-        private const val MAX_FAILURES = 3
-        private const val RETRY_BACKOFF_MS = 30_000L
+        /**
+         * 网络抖一下就永久放弃整集弹幕，用户看到的就是「这集有时有弹幕、有时一条都没有」。
+         * 退避 8 秒起、逐次翻倍，给 10 次机会（约 8 分钟窗口），长时间断网恢复后还能自己接上。
+         */
+        private const val MAX_FAILURES = 10
+        private const val RETRY_BACKOFF_MS = 8_000L
+        private const val MAX_BACKOFF_MS = 60_000L
     }
 }

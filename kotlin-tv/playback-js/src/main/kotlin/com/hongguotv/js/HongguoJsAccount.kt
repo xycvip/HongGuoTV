@@ -54,17 +54,23 @@ class HongguoJsAccount(
     }
 
     override fun sendPhoneCode(number: String): JsAccountGateway.SentCode {
+        // 号码要留在会话里：verifyPhoneCode 只拿验证码，手机号由这里记住。
+        currentPhone = number
         val data = call("phoneCode", JSONObject().put("number", number))
         captureCredentials(data)
+        if (data.optBoolean("rejected")) throw IOException("该号码需要完成安全验证，请改用扫码登录")
         return JsAccountGateway.SentCode(
-            maskedMobile = data.optString("mobile").ifBlank { "你的手机" },
-            retrySeconds = data.optInt("retryAfter", 60),
+            maskedMobile = data.optString("mobile").ifBlank { maskMobile(number) },
+            retrySeconds = data.optInt("retryAfter", 60).coerceIn(30, 600),
         )
     }
 
     override fun verifyPhoneCode(code: String): AccountCredentials {
+        if (currentPhone.isBlank()) throw IOException("请先获取验证码")
         val data = call("phoneSms", JSONObject().put("code", code).put("number", currentPhone))
         captureCredentials(data)
+        if (data.optBoolean("rejected")) throw IOException("需要完成安全验证，请改用扫码登录")
+        if (!lastCredentials.cookie.contains("sessionid")) throw IOException("验证码不正确或已过期，请重试")
         return lastCredentials
     }
 
@@ -150,6 +156,11 @@ class HongguoJsAccount(
         data.optString("token").takeIf { it.isNotBlank() }?.let { currentToken = it }
     }
 
+    private fun maskMobile(number: String): String {
+        val digits = number.filter { it.isDigit() }
+        return if (digits.length >= 7) digits.take(3) + "****" + digits.takeLast(4) else "你的手机"
+    }
+
     // ---- 脚本调用与映射 ----
 
     private fun call(action: String, payload: JSONObject, credentials: AccountCredentials? = null): JSONObject {
@@ -159,8 +170,17 @@ class HongguoJsAccount(
         val device = credentials?.device
         if (!device.isNullOrEmpty()) options.put("device", JSONObject(device).toString())
         val result = runBlockingCall("accountCall", action, payload, options)
-        if (!result.ok) throw IOException(result.error ?: "账号接口调用失败（${result.code}）")
+        if (!result.ok) throw IOException(friendlyAccountError(result.error ?: "账号接口调用失败（${result.code}）"))
         return JSONObject(result.data ?: "{}")
+    }
+
+    /** 脚本抛的是官方错误码，直接展示给电视用户太生硬；这里换成能照着做的文案。 */
+    private fun friendlyAccountError(message: String): String = when {
+        message.startsWith("ACCOUNT_BUSINESS_") ->
+            "官方拒绝了这次请求（${message.removePrefix("ACCOUNT_BUSINESS_")}），请稍后再试或改用扫码登录"
+        message.contains("SECONDARY_VERIFICATION") || message.contains("ACCOUNT_CHALLENGE") ->
+            "该号码需要完成安全验证，请改用扫码登录"
+        else -> message
     }
 
     private fun runBlockingCall(function: String, vararg args: Any?): JsCallResult =

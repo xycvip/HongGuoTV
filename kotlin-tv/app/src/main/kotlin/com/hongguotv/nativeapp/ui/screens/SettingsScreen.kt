@@ -77,9 +77,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import com.hongguotv.core.DanmakuPrefs
+import com.hongguotv.core.DnsProvider
+import com.hongguotv.core.DnsSettings
 import com.hongguotv.nativeapp.R
 import com.hongguotv.core.PlaybackQuality
 import com.hongguotv.core.PlaybackSpeed
@@ -93,6 +96,7 @@ import com.hongguotv.nativeapp.ui.components.TvButton
 import com.hongguotv.nativeapp.ui.data.ApiStatusState
 import com.hongguotv.nativeapp.ui.data.AppViewModel
 import com.hongguotv.nativeapp.ui.data.RemoteKey
+import com.hongguotv.nativeapp.ui.data.ScriptUpdateState
 import com.hongguotv.nativeapp.ui.data.SettingsSnapshot
 import com.hongguotv.nativeapp.ui.data.videoInfoLabel
 import com.hongguotv.nativeapp.ui.theme.Gold
@@ -123,6 +127,7 @@ fun SettingsScreen(
 ) {
     var section by remember { mutableStateOf(SettingsSection.PLAYBACK) }
     val apiStatus by vm.apiStatus.collectAsStateWithLifecycle()
+    val scriptUpdate by vm.scriptUpdate.collectAsStateWithLifecycle()
     // 冷启动那次检测被系统打断时，进入网络栏补一次。
     LaunchedEffect(section) {
         if (section == SettingsSection.NETWORK && !apiStatus.running && apiStatus.okCount == 0 && apiStatus.failedCount == 0) {
@@ -133,6 +138,7 @@ fun SettingsScreen(
     var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
     var blockEditor by remember { mutableStateOf(false) }
     var iconPicker by remember { mutableStateOf(false) }
+    var customDns by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
     Row(modifier.fillMaxSize()) {
@@ -174,7 +180,15 @@ fun SettingsScreen(
                     SettingsSection.DANMAKU -> danmakuPanel(snapshot, vm, { choice = it }, { blockEditor = true }, { confirm = it })
                     SettingsSection.APPEARANCE -> appearancePanel(snapshot, vm, { iconPicker = true }) { choice = it }
                     SettingsSection.CONTROL -> controlPanel(snapshot, vm) { choice = it }
-                    SettingsSection.NETWORK -> networkPanel(apiStatus, vm, onApiStatus)
+                    SettingsSection.NETWORK -> networkPanel(
+                        apiStatus = apiStatus,
+                        script = scriptUpdate,
+                        snapshot = snapshot,
+                        vm = vm,
+                        onApiStatus = onApiStatus,
+                        onChoice = { choice = it },
+                        onCustomDns = { customDns = true },
+                    )
                     SettingsSection.DATA -> dataPanel(vm, { confirm = it }, { message = it })
                     SettingsSection.ABOUT -> aboutPanel(versionName, vm)
                 }
@@ -219,6 +233,13 @@ fun SettingsScreen(
             current = snapshot.appIconVariant,
             onPick = { vm.setAppIconVariant(it) },
             onDismiss = { iconPicker = false },
+        )
+    }
+    if (customDns) {
+        DnsCustomDialog(
+            current = snapshot.dnsCustom,
+            onSave = { vm.setDnsCustom(it) },
+            onDismiss = { customDns = false },
         )
     }
     message?.let { text ->
@@ -279,7 +300,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.playbackPanel(
     item {
         SettingRow(
             title = "无感连播",
-            description = "开启：第二个播放器预渲染下一集首帧，切换即出画；关闭：同一播放器预载下一集，播完自动接上",
+            description = "开启：第二个播放器预渲染下一集首帧，切换即出画；关闭：同一播放器预载下一集。部分电视盒子同时开两路硬解会中断播放，遇到可关闭此项",
             toggle = snapshot.seamlessPlayback,
             onToggle = { vm.setSeamlessPlayback(it) },
         )
@@ -530,19 +551,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.appearancePanel(
 
 // ------------------------------------------------------------------ 按键
 
-private val remoteActionChoices = listOf(
-    Choice(PlaybackExtras.REMOTE_PREVIOUS, "上一集"),
-    Choice(PlaybackExtras.REMOTE_NEXT, "下一集"),
-    Choice(PlaybackExtras.REMOTE_PLAY_PAUSE, "播放 / 暂停"),
-    Choice(PlaybackExtras.REMOTE_EPISODES, "打开选集"),
-    Choice(PlaybackExtras.REMOTE_COMMENTS, "弹幕开关"),
-    Choice(PlaybackExtras.REMOTE_MENU, "打开播放设置"),
-    Choice(PlaybackExtras.REMOTE_SLEEP_TIMER, "定时关闭"),
-    Choice(PlaybackExtras.REMOTE_NONE, "无操作"),
-)
+private val remoteActionChoices = PlaybackExtras.REMOTE_ACTION_LABELS.map { (key, label) -> Choice(key, label) }
 
-private fun remoteActionLabel(action: String): String =
-    remoteActionChoices.firstOrNull { it.key == action }?.label ?: "无操作"
+private fun remoteActionLabel(action: String): String = PlaybackExtras.actionLabel(action)
 
 private fun androidx.compose.foundation.lazy.LazyListScope.controlPanel(
     snapshot: SettingsSnapshot,
@@ -610,15 +621,50 @@ private fun androidx.compose.foundation.lazy.LazyListScope.controlPanel(
 // ------------------------------------------------------------------ 网络
 
 private fun androidx.compose.foundation.lazy.LazyListScope.networkPanel(
-    status: ApiStatusState,
+    apiStatus: ApiStatusState,
+    script: ScriptUpdateState,
+    snapshot: SettingsSnapshot,
     vm: AppViewModel,
     onApiStatus: () -> Unit,
+    onChoice: (ChoiceRequest) -> Unit,
+    onCustomDns: () -> Unit,
 ) {
+    item {
+        SettingRow(
+            title = "DNS 服务商",
+            description = "首页、搜索、播放地址的域名解析；切换后立即生效",
+            value = DnsProvider.of(snapshot.dnsProvider).label,
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        title = "DNS 服务商",
+                        choices = DnsProvider.entries.map { Choice(it.key, it.label, it.hint) },
+                        selected = snapshot.dnsProvider,
+                    ) { key ->
+                        vm.setDnsProvider(key)
+                        // 选到「自定义」时直接接着让用户填服务器，少一次往返操作。
+                        if (key == DnsProvider.CUSTOM.key) onCustomDns()
+                    },
+                )
+            },
+        )
+    }
+    if (snapshot.dnsProvider == DnsProvider.CUSTOM.key) {
+        item {
+            SettingRow(
+                title = "自定义 DNS 服务器",
+                description = "填 IPv4 地址，多个用逗号分隔",
+                value = snapshot.dnsCustom.ifBlank { "未设置" },
+                onClick = onCustomDns,
+            )
+        }
+    }
+    item { InfoRow("当前 DNS", DnsSettings.describe()) }
     item {
         SettingRow(
             title = "接口状态",
             description = "首页、搜索、播放与联想四项接口的连通性",
-            value = status.summary,
+            value = apiStatus.summary,
             onClick = onApiStatus,
         )
     }
@@ -626,15 +672,140 @@ private fun androidx.compose.foundation.lazy.LazyListScope.networkPanel(
         SettingRow(
             title = "重新检测",
             description = "立即对四项接口各发一次请求，只读公开数据",
-            value = if (status.running) "检测中…" else "检测",
-            onClick = { if (!status.running) vm.refreshApiStatus() },
+            value = if (apiStatus.running) "检测中…" else "检测",
+            onClick = { if (!apiStatus.running) vm.refreshApiStatus() },
         )
     }
     item {
         val context = LocalContext.current
         InfoRow("当前网络", remember(context) { networkLabel(context) })
     }
-    item { InfoRow("更新通道", "官方 GitHub 发布 + GitCode 镜像，自动择优") }
+    item {
+        InfoRow("数据脚本", scriptVersionLabel(script))
+    }
+    item {
+        InfoRow("脚本更新", scriptStatusLabel(script))
+    }
+    item { InfoRow("更新通道", "RedGuoAPI 发布通道 · 六条线路自动择优") }
+}
+
+/** 「2026-11-24 03:38 · 在线」这种一眼能看出跑的是哪一版。 */
+private fun scriptVersionLabel(state: ScriptUpdateState): String {
+    val version = state.version.ifBlank { "未知版本" }
+    val source = if (state.fromUpdate) "在线" else "本地"
+    val digest = state.digest.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+    return "$version · $source$digest"
+}
+
+/** 检查结果一句话：进行中 / 已下载待生效 / 失败原因 / 上次成功时间。 */
+private fun scriptStatusLabel(state: ScriptUpdateState): String = when {
+    state.checking -> "检查中…"
+    state.pendingVersion.isNotBlank() -> "已下载 ${state.pendingVersion}，稍后生效"
+    state.lastError != null -> "上次检查失败：${state.lastError}"
+    state.checkedAt > 0 -> "已是最新 · ${scriptClock(state.checkedAt)}"
+    else -> "启动后自动检查"
+}
+
+private fun scriptClock(at: Long): String =
+    java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(at))
+
+/** 自定义 DNS：常用地址一键填入，也可用系统输入法手输。 */
+@Composable
+private fun DnsCustomDialog(
+    current: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var draft by remember { mutableStateOf(current) }
+    val ime = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    fun closeKeyboard() {
+        focusManager.clearFocus()
+        ime?.hide()
+    }
+
+    AppDialog(
+        title = "自定义 DNS",
+        message = "填写 IPv4 服务器地址，多个用逗号分隔；留空则回退系统解析。",
+        confirmText = "保存",
+        onConfirm = {
+            closeKeyboard()
+            onSave(draft)
+            onDismiss()
+        },
+        onDismiss = {
+            closeKeyboard()
+            onDismiss()
+        },
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(d(12)))
+                    .background(Color(0x0FFFFFFF))
+                    .padding(horizontal = d(16), vertical = d(12)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    textStyle = TextStyle(color = Paper.Pure, fontSize = MaterialTheme.typography.titleSmall.fontSize),
+                    cursorBrush = SolidColor(Rouge.Bright),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { closeKeyboard() }),
+                    decorationBox = { inner ->
+                        Box {
+                            if (draft.isEmpty()) {
+                                Text(
+                                    "例如 119.29.29.29",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Paper.Disabled,
+                                )
+                            }
+                            inner()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(d(12)))
+            Text("常用地址", style = MaterialTheme.typography.labelSmall, color = Paper.Tertiary)
+            Spacer(Modifier.height(d(8)))
+            listOf(
+                listOf("119.29.29.29", "223.5.5.5"),
+                listOf("114.114.114.114", "8.8.8.8"),
+            ).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(d(8))) {
+                    row.forEach { ip ->
+                        DnsChip(ip) {
+                            draft = if (draft.isBlank()) ip else "${draft.trim().trimEnd(',')}, $ip"
+                        }
+                    }
+                }
+                Spacer(Modifier.height(d(8)))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DnsChip(text: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(999.dp)
+    Box(
+        Modifier
+            .clip(shape)
+            .background(if (focused) Rouge.Veil else Color(0x0AFFFFFF))
+            .border(d(1.2f), if (focused) Rouge.Bright else Color(0x14FFFFFF), shape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = d(14), vertical = d(8)),
+    ) {
+        Text(text, style = MaterialTheme.typography.labelMedium, color = if (focused) Paper.Pure else Paper.Secondary)
+    }
 }
 
 private fun networkLabel(context: Context): String = runCatching {
@@ -1024,11 +1195,12 @@ private fun AppIconDialog(
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // 用与桌面同一份「安全区」前景：预览里看到的就是 launcher 裁切后的真实大小。
     val fgRes = mapOf(
-        "h" to R.drawable.ic_launcher_fg_h,
-        "i" to R.drawable.ic_launcher_fg_i,
-        "j" to R.drawable.ic_launcher_fg_j,
-        "k" to R.drawable.ic_launcher_fg_k,
+        "h" to R.drawable.ic_launcher_fg_h_safe,
+        "i" to R.drawable.ic_launcher_fg_i_safe,
+        "j" to R.drawable.ic_launcher_fg_j_safe,
+        "k" to R.drawable.ic_launcher_fg_k_safe,
     )
     AppDialog(
         title = "应用图标",
@@ -1066,7 +1238,7 @@ private fun AppIconDialog(
                                 Image(
                                     painter = painterResource(fgRes.getValue(key)),
                                     contentDescription = name,
-                                    Modifier.fillMaxSize().padding(d(14)),
+                                    Modifier.fillMaxSize().padding(d(6)),
                                 )
                                 if (selected) {
                                     Icon(

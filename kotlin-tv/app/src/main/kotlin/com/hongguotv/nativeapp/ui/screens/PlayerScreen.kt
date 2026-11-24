@@ -57,6 +57,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,7 +66,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
@@ -84,6 +88,7 @@ import com.hongguotv.nativeapp.ui.components.Choice
 import com.hongguotv.nativeapp.ui.components.ChoiceDialog
 import com.hongguotv.nativeapp.ui.components.PulseDots
 import com.hongguotv.nativeapp.ui.components.TvButton
+import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import com.hongguotv.nativeapp.ui.player.PlayerSession
 import com.hongguotv.nativeapp.ui.theme.Ink
 import com.hongguotv.nativeapp.ui.theme.Paper
@@ -115,6 +120,8 @@ fun PlayerScreen(
     var frameDialog by remember { mutableStateOf(false) }
     val playFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
+    val episodeFocus = remember { FocusRequester() }
+    val episodeFirstFocus = remember { FocusRequester() }
 
     fun poke() {
         interaction++
@@ -125,29 +132,46 @@ fun PlayerScreen(
         session.seekBy(delta)
         seekHint = label
         hintToken++
-        poke()
+        // 只重置自动收起计时，不把控制层叫出来：它一出现就会抢走焦点，
+        // 第二次按左右变成移动光标，连续快进就此中断。
+        interaction++
     }
 
     /** 按用户配置分派遥控器动作。 */
     fun dispatch(action: String) {
+        var revealControls = false
         when (action) {
             PlaybackExtras.REMOTE_PREVIOUS -> session.previous()
             PlaybackExtras.REMOTE_NEXT -> session.next()
             PlaybackExtras.REMOTE_PLAY_PAUSE -> session.togglePlay()
-            PlaybackExtras.REMOTE_EPISODES -> episodesOpen = true
+            PlaybackExtras.REMOTE_EPISODES -> {
+                episodesOpen = true
+                revealControls = true
+            }
             PlaybackExtras.REMOTE_COMMENTS -> {
                 session.toggleDanmaku()
                 seekHint = if (session.danmakuEnabled) "弹幕已开启" else "弹幕已关闭"
                 hintToken++
             }
-            PlaybackExtras.REMOTE_MENU -> Unit
+            PlaybackExtras.REMOTE_MENU -> {
+                revealControls = true
+                when (settings.menuKeyAction) {
+                    PlaybackExtras.MENU_EPISODES -> episodesOpen = true
+                    PlaybackExtras.MENU_DANMAKU -> {
+                        session.toggleDanmaku()
+                        seekHint = if (session.danmakuEnabled) "弹幕已开启" else "弹幕已关闭"
+                        hintToken++
+                    }
+                    else -> Unit
+                }
+            }
             PlaybackExtras.REMOTE_SLEEP_TIMER -> {
                 seekHint = "暂不支持定时关闭"
                 hintToken++
             }
             else -> Unit
         }
-        poke()
+        if (revealControls) poke() else interaction++
     }
 
     // 5 秒无操作自动收起控制层；暂停、缓冲、选集时保持显示。
@@ -161,8 +185,21 @@ fun PlayerScreen(
         delay(900)
         seekHint = null
     }
-    LaunchedEffect(Unit) {
-        runCatching { rootFocus.requestFocus() }
+    // 焦点跟着画面状态走：控制层可见时落在主播放键上（一进来就能按方向键操作），
+    // 隐藏时收回根节点（方向键直接变成快进/快退），选集抽屉打开则进抽屉。
+    // 之前焦点永远停在根 Box 上，遥控器看着「完全没反应」，就是缺了这一步。
+    LaunchedEffect(controlsVisible, episodesOpen) {
+        // 选集抽屉里优先落在当前集；当前集不在首屏时退回第一集，保证一定有落点。
+        val targets = when {
+            episodesOpen -> listOf(episodeFocus, episodeFirstFocus)
+            controlsVisible -> listOf(playFocus)
+            else -> listOf(rootFocus)
+        }
+        // 控制层的进入动画和 LazyGrid 需要几帧才 attach，单次请求容易落空。
+        repeat(12) {
+            if (targets.any { it.tryRequestFocus() }) return@LaunchedEffect
+            withFrameNanos { }
+        }
     }
     LaunchedEffect(Unit) {
         while (true) {
@@ -171,14 +208,16 @@ fun PlayerScreen(
         }
     }
 
+    // 返回键分层：先关浮层，再收控制层，最后才退出播放。
+    // 之前控制层可见时直接 onBack()，用户只是想收起进度条，结果一脚踹回详情页。
     BackHandler {
         when {
             episodesOpen -> episodesOpen = false
             qualityDialog -> qualityDialog = false
             speedDialog -> speedDialog = false
             frameDialog -> frameDialog = false
-            controlsVisible -> onBack()
-            else -> poke()
+            controlsVisible -> controlsVisible = false
+            else -> onBack()
         }
     }
 
@@ -188,16 +227,21 @@ fun PlayerScreen(
             .background(Color.Black)
             .focusRequester(rootFocus)
             .focusable()
-            .onKeyEvent { event ->
-                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
+            // 用 preview 阶段拦截：控制层隐藏时方向键要立刻变成快进/快退，
+            // 不能被 focusable 的默认焦点移动先吃掉。
+            .onPreviewKeyEvent { event ->
+                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.nativeKeyEvent.keyCode) {
                     KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                        // 控制层可见时把「确定」让给焦点所在的控件（清晰度/选集/进度条…），
+                        // 否则 preview 会先把它当成「确认键行为」消费掉——用户点「清晰度」
+                        // 却触发播放/暂停，就是这里抢了事件。
                         if (!controlsVisible) {
                             poke()
+                            true
                         } else {
-                            dispatch(session.remoteAction(RemoteKey.CONFIRM))
+                            false
                         }
-                        true
                     }
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
                         if (!controlsVisible) {
@@ -224,10 +268,10 @@ fun PlayerScreen(
                         } else false
                     }
                     KeyEvent.KEYCODE_MENU -> {
-                        if (!controlsVisible) {
-                            dispatch(session.remoteAction(RemoteKey.MENU))
-                            true
-                        } else false
+                        // 菜单键任何时候都要能用：控制层可见时被焦点移动吃掉，
+                        // 用户会觉得「设置里配了菜单键却一点反应没有」。
+                        dispatch(session.remoteAction(RemoteKey.MENU))
+                        true
                     }
                     else -> false
                 }
@@ -238,6 +282,11 @@ fun PlayerScreen(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     useController = false
+                    // PlayerView 是原生 View，一旦参与 Android 层的焦点分配，
+                    // Compose 就收不到方向键了（表现：整页遥控器全失效）。
+                    isFocusable = false
+                    isFocusableInTouchMode = false
+                    descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
                     player = session.player
@@ -269,12 +318,15 @@ fun PlayerScreen(
                 },
         )
 
-        // 弹幕层：叠在画面之上、控制层之下
+        // 弹幕层：叠在画面之上、控制层之下。
+        // 只覆盖顶部弹幕带，不要 fillMaxSize：SurfaceView 的每个缓冲都是整块尺寸，
+        // 4K 下全屏 3 缓冲约 100MB，每帧提交的带宽就是掉帧的根源。
         val danmakuView = remember { DanmakuView(context) }
         AndroidView(
             factory = { danmakuView },
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .fillMaxHeight(0.46f)
                 .padding(top = d(26)),
         )
         DisposableEffect(danmakuView) {
@@ -361,6 +413,9 @@ fun PlayerScreen(
                     TvButton("重试", { session.prepare(session.index, session.position) }, tone = ButtonTone.Primary)
                     TvButton("返回详情", onBack, tone = ButtonTone.Ghost)
                 }
+                // 反复中断多半是这台设备扛不住两路硬解：一键用单解码器重开，不用用户去设置里翻。
+                Spacer(Modifier.height(d(12)))
+                TvButton("兼容模式重试", { session.retryWithoutDualDecoder() }, tone = ButtonTone.Quiet)
             }
         }
 
@@ -455,14 +510,35 @@ fun PlayerScreen(
                             CircleAction(Icons.Rounded.SkipNext, "下一集", d(46)) { session.next() }
                         }
                         Spacer(Modifier.weight(1f))
+                        // 提示文案由设置里的按键映射实时推导，改完设置回播放页就能看到新说明。
+                        val remoteHints = remember(
+                            settings.remoteUp,
+                            settings.remoteDown,
+                            settings.remoteConfirm,
+                            settings.remoteMenu,
+                            settings.seekStepSeconds,
+                        ) {
+                            PlaybackExtras.remoteHintLines(
+                                up = settings.remoteUp,
+                                down = settings.remoteDown,
+                                confirm = settings.remoteConfirm,
+                                menu = settings.remoteMenu,
+                                seekSeconds = settings.seekStepSeconds,
+                            )
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.PlaylistPlay, null, tint = Paper.Secondary, modifier = Modifier.size(d(18)))
                             Spacer(Modifier.width(d(8)))
-                            Text(
-                                "遥控器：左右快进 · 确定暂停 · 下键选集",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Paper.Tertiary,
-                            )
+                            Column(horizontalAlignment = Alignment.Start) {
+                                remoteHints.forEach { line ->
+                                    Text(
+                                        "遥控器：$line",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Paper.Tertiary,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -515,6 +591,11 @@ fun PlayerScreen(
                         EpisodeButton(
                             index = index,
                             active = index == session.index,
+                            focusRequester = when (index) {
+                                session.index -> episodeFocus
+                                0 -> episodeFirstFocus
+                                else -> null
+                            },
                             onClick = {
                                 session.selectEpisode(index)
                                 episodesOpen = false
@@ -682,11 +763,18 @@ private fun SeekBar(
 }
 
 @Composable
-private fun EpisodeButton(index: Int, active: Boolean, onClick: () -> Unit) {
+private fun EpisodeButton(
+    index: Int,
+    active: Boolean,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     Box(
         Modifier
+            // 焦点属性放在 clickable 之前（官方推荐顺序）。
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .height(d(42))
             .clip(RoundedCornerShape(d(9)))
             .background(

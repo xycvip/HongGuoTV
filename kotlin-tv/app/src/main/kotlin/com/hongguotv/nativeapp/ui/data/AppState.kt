@@ -6,6 +6,7 @@ import com.hongguotv.core.ContentType
 import com.hongguotv.core.Detail
 import com.hongguotv.core.RankBoard
 import com.hongguotv.core.RecentSearch
+import com.hongguotv.core.SeasonEntry
 import com.hongguotv.core.Series
 import com.hongguotv.core.TheaterFilterGroup
 import com.hongguotv.nativeapp.ui.nav.CollectionKind
@@ -106,7 +107,7 @@ data class DetailState(
     val resumeIndex: Int = 0,
     val resumePosition: Long = 0L,
     val resumeProgress: Float? = null,
-    val seasons: List<Series> = emptyList(),
+    val seasons: List<SeasonEntry> = emptyList(),
 )
 
 data class LibraryState(
@@ -149,10 +150,16 @@ data class SettingsSnapshot(
     val remoteConfirm: String = "play_pause",
     val remoteMenu: String = "menu",
     val menuKeyAction: String = "panel",
+    // ---- 网络 ----
+    val dnsProvider: String = "tencent",
+    val dnsCustom: String = "",
 ) {
     /** 0 表示跟随屏幕宽度自动计算。 */
     val effectivePosterColumns: Int get() = posterColumns.coerceIn(0, 8)
 }
+
+/** 账号页的两种登录方式。 */
+enum class LoginMode { QR, PHONE }
 
 data class AccountState(
     val signedIn: Boolean = false,
@@ -165,7 +172,24 @@ data class AccountState(
     val message: String? = null,
     val cloudFavorites: Int = 0,
     val cloudHistory: Int = 0,
-)
+    // ---- 手机验证码 ----
+    val mode: LoginMode = LoginMode.QR,
+    val phone: String = "",
+    val code: String = "",
+    val codeSent: Boolean = false,
+    val phoneMasked: String = "",
+    val sending: Boolean = false,
+    val verifying: Boolean = false,
+    val countdown: Int = 0,
+    val phoneError: String? = null,
+) {
+    val phoneValid: Boolean get() = PHONE_PATTERN.matches(phone)
+    val codeValid: Boolean get() = code.length in 4..6
+
+    companion object {
+        private val PHONE_PATTERN = Regex("1[3-9]\\d{9}")
+    }
+}
 
 /** 投播阶段。界面文案、状态灯与步骤高亮全部由它推导，不再散落布尔量。 */
 enum class CastPhase { OFF, STARTING, READY, RECEIVING, FAILED }
@@ -207,7 +231,40 @@ data class AppState(
     val library: LibraryState = LibraryState(),
     val account: AccountState = AccountState(),
     val cast: CastState = CastState(),
+    val script: ScriptUpdateState = ScriptUpdateState(),
+    /** 首次启动的脚本准备态：APK 不带 main.js，全新安装要先下载一次。 */
+    val scriptSetup: ScriptSetupState = ScriptSetupState(),
     val toast: String? = null,
     /** 设置项被改写时自增，让设置页快照重新计算。 */
     val settingsRevision: Int = 0,
+)
+
+/**
+ * 首次启动的脚本准备态。只有「本地没有任何可用脚本」时才会亮起：
+ * 全新安装、或当前版与上一版都损坏。下载成功后复位，主界面才开始渲染。
+ */
+data class ScriptSetupState(
+    val preparing: Boolean = false,
+    val error: String? = null,
+) {
+    val active: Boolean get() = preparing || error != null
+}
+
+/**
+ * 数据脚本（main.js）的热更新状态。全程自动：启动时检查、后台下载、
+ * 校验通过后立即生效（只有播放中会推迟到退出播放页），用户不需要做任何操作。
+ */
+data class ScriptUpdateState(
+    /** 运行中脚本的构建时间，如「2026-11-24 03:38」。 */
+    val version: String = "",
+    /** 运行中脚本 sha256 前 8 位，用于肉眼区分两版。 */
+    val digest: String = "",
+    /** true = 来自在线更新（含上一版兜底），false = APK 内置。 */
+    val fromUpdate: Boolean = false,
+    val checking: Boolean = false,
+    /** 已落盘、等待切换的版本号；切换完成后清空。 */
+    val pendingVersion: String = "",
+    val checkedAt: Long = 0L,
+    val installedAt: Long = 0L,
+    val lastError: String? = null,
 )

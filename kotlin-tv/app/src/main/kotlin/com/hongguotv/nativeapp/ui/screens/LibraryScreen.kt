@@ -2,6 +2,7 @@
 package com.hongguotv.nativeapp.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -55,7 +57,6 @@ import com.hongguotv.nativeapp.ui.theme.ui
 private enum class LibraryTab(val label: String) {
     FAVORITES("我的追剧"),
     HISTORY("观看历史"),
-    LATER("稍后看"),
 }
 
 @Composable
@@ -71,16 +72,17 @@ fun LibraryScreen(
     version: Int,
     modifier: Modifier = Modifier,
     entryFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     var tab by remember(version) { mutableIntStateOf(0) }
-    val current = LibraryTab.entries[tab.coerceIn(0, 2)]
+    val current = LibraryTab.entries[tab.coerceIn(0, LibraryTab.entries.lastIndex)]
     val favorites = state.favorites
     val history = state.history
 
     Box(modifier.fillMaxSize()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(if (ui.compact) 5 else 6),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(),
             contentPadding = PaddingValues(start = ui.gutter, end = ui.gutter, top = d(96), bottom = d(60)),
             horizontalArrangement = Arrangement.spacedBy(d(16)),
             verticalArrangement = Arrangement.spacedBy(d(24)),
@@ -92,7 +94,7 @@ fun LibraryScreen(
                             Text("追剧", style = MaterialTheme.typography.displaySmall, color = Paper.Pure, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(d(6)))
                             Text(
-                                "收藏 ${favorites.size} 部 · 看过 ${history.size} 部 · 稍后看 ${state.later.size} 部",
+                                "收藏 ${favorites.size} 部 · 看过 ${history.size} 部",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Paper.Tertiary,
                             )
@@ -106,10 +108,11 @@ fun LibraryScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(d(10))) {
                         LibraryTab.entries.forEachIndexed { index, item ->
                             SelectChip(
-                                text = "${item.label}  ${when (index) { 0 -> favorites.size; 1 -> history.size; else -> state.later.size }}",
+                                text = "${item.label}  ${if (index == 0) favorites.size else history.size}",
                                 selected = tab == index,
                                 onClick = { tab = index },
                                 focusRequester = if (index == 0) entryFocus else null,
+                                upFocus = upFocus,
                             )
                         }
                     }
@@ -156,28 +159,6 @@ fun LibraryScreen(
                                 progress = progress,
                                 onClick = { onResume(progress) },
                                 onRemove = { onRemoveHistory(progress.series.id) },
-                            )
-                        }
-                    }
-                }
-                LibraryTab.LATER -> {
-                    if (state.later.isEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            EmptyState(
-                                title = "稍后看是空的",
-                                subtitle = "看到感兴趣的剧，加入稍后看，晚上再慢慢挑。",
-                                modifier = Modifier.height(d(320)),
-                                action = { TvButton("去剧场逛逛", onGoTheater, tone = ButtonTone.Ghost) },
-                            )
-                        }
-                    } else {
-                        items(state.later, key = { it.id }) { series ->
-                            PosterCard(
-                                series = series,
-                                onClick = { onDetail(series) },
-                                onLongClick = { onToggleLater(series) },
-                                fillWidth = true,
-                                subtitle = series.tags.take(14).ifBlank { "稍后看" },
                             )
                         }
                     }

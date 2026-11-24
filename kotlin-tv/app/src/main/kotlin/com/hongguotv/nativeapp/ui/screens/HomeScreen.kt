@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp.ui.screens
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,12 +33,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -59,7 +69,10 @@ import com.hongguotv.nativeapp.ui.theme.Paper
 import com.hongguotv.nativeapp.ui.theme.Rouge
 import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
+import coil.imageLoader
+import coil.request.ImageRequest
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -75,15 +88,25 @@ fun HomeScreen(
     onHeroIndex: (Int) -> Unit,
     modifier: Modifier = Modifier,
     entryFocus: FocusRequester? = null,
+    /** 内容区最上行的「上」目标：本页导航项，避免几何搜索跑到别页/工具位。 */
+    upFocus: FocusRequester? = null,
 ) {
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     // hero 的「下移」必须落到第一张海报上：默认焦点搜索会先撞到轮播指示条，
     // 这里直接把目标钉死，遥控器不会掉进空隙。
-    val firstShelfFocus = remember { FocusRequester() }
+    //
+    // 导航栏「按下」也落到这里（而不是 hero 的播放按钮）：hero 在 AnimatedContent 里
+    // 每 7 秒轮播一次，过渡期间同一个 requester 会短暂挂到两份内容上，焦点容易指到
+    // 正在淡出的那一份。第一张海报是稳定节点，落点不会丢。
+    val firstShelfFocus = remember(entryFocus) { entryFocus ?: FocusRequester() }
     val hero = state.hero
+    // 光标停在主视觉（播放/详情/追剧按钮）时暂停轮播：换图会重建 AnimatedContent 子树，
+    // 正在聚焦的按钮被销毁，焦点就会掉到顶栏。
+    var heroFocused by remember { mutableStateOf(false) }
     // 主视觉自动轮播：7 秒换一张，用户从详情返回时仍停留在原来的位置。
-    LaunchedEffect(hero.map { it.id }) {
-        if (hero.size <= 1) return@LaunchedEffect
+    LaunchedEffect(hero.map { it.id }, heroFocused) {
+        if (hero.size <= 1 || heroFocused) return@LaunchedEffect
         while (true) {
             delay(7000)
             onHeroIndex((hero.indexOfFirst { it.id == hero.getOrNull(state.heroIndex)?.id }.coerceAtLeast(0) + 1) % hero.size)
@@ -96,20 +119,62 @@ fun HomeScreen(
             state.error != null && state.shelves.isEmpty() -> ErrorState(state.error, onRefresh)
             else -> LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
+                // 数据刷新时把焦点还给同一分组的邻居，避免焦点被顶栏抢走。
+                modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(),
                 verticalArrangement = Arrangement.spacedBy(d(34)),
                 contentPadding = PaddingValues(bottom = d(56)),
             ) {
                 item(key = "hero") {
                     val current = hero.getOrNull(state.heroIndex) ?: hero.firstOrNull()
                     if (current != null) {
-                        AnimatedContent(
+                      val context = LocalContext.current
+                      // 提前把下一张海报解到内存里：否则切换瞬间新图还没就绪，
+                      // 画面会先退回深色占位再亮起来，看起来就是「抖一下」。
+                      val density = LocalDensity.current
+                      val heroWidthPx = with(density) {
+                          LocalConfiguration.current.screenWidthDp.dp.roundToPx()
+                      }
+                      val heroHeightPx = with(density) { d(452).roundToPx() }
+                      LaunchedEffect(current.id, hero.size) {
+                          if (hero.size <= 1) return@LaunchedEffect
+                          val at = hero.indexOfFirst { it.id == current.id }
+                          val next = hero.getOrNull((at + 1) % hero.size) ?: return@LaunchedEffect
+                          if (next.cover.isBlank()) return@LaunchedEffect
+                          context.imageLoader.enqueue(
+                              ImageRequest.Builder(context)
+                                  .data(next.cover)
+                                  // 尺寸与 hero 实际约束一致，显示时才能命中内存缓存。
+                                  .size(heroWidthPx, heroHeightPx)
+                                  .build(),
+                          )
+                      }
+                      Box(
+                          Modifier
+                              .fillMaxWidth()
+                              // 高度写死：切换海报时容器尺寸不变，LazyColumn 不会重排，画面就不会上下跳。
+                              .height(d(452))
+                              .onFocusChanged { focus ->
+                                  heroFocused = focus.hasFocus
+                                  // 焦点从「接着看」回到主视觉时，列表往往还停在 hero 被顶出屏幕的位置，
+                                  // 聚焦元素只保证自身可见，hero 顶部仍在屏外。这里主动把首项拉回顶部。
+                                  if (focus.hasFocus && listState.firstVisibleItemIndex > 0) {
+                                      scope.launch { listState.animateScrollToItem(0) }
+                                  }
+                              },
+                      ) {
+                        // 缩放相位提到切换动画外面：新旧两张海报共用同一个缩放值，
+                        // 交叉淡入时才不会一张在放大、另一张在缩小——那看着就是整幅画面在抖。
+                        val heroZoom = rememberInfiniteTransition(label = "hero-zoom").animateFloat(
+                            initialValue = 1f,
+                            targetValue = 1.06f,
+                            animationSpec = infiniteRepeatable(tween(18000), RepeatMode.Reverse),
+                            label = "hero-zoom",
+                        )
+                        Crossfade(
                             targetState = current,
-                            transitionSpec = {
-                                (fadeIn(androidx.compose.animation.core.tween(650)) +
-                                    slideInHorizontally { it / 14 })
-                                    .togetherWith(fadeOut(androidx.compose.animation.core.tween(450)))
-                            },
+                            modifier = Modifier.fillMaxSize(),
+                            // 纯淡入淡出，不做水平位移：整块 452dp 海报横移比淡入更像「画面在抖」。
+                            animationSpec = tween(480),
                             label = "hero",
                         ) { series ->
                             val progress = progressById[series.id]
@@ -129,25 +194,40 @@ fun HomeScreen(
                                 onDetail = { onDetail(series) },
                                 onFavorite = { onFavorite(series) },
                                 isFavorite = series.id in favoriteIds,
+                                height = d(452),
+                                imageScale = heroZoom,
+                                // hero 自己有一次整幅淡入，图片再叠一层 260ms crossfade 会变成双重淡入，
+                                // 切换瞬间先暗一下再亮起来，看着像闪。这里交给 Crossfade 统一处理。
+                                imageCrossfadeMillis = 0,
                                 downFocus = firstShelfFocus,
-                                playFocus = entryFocus,
+                                playFocus = null,
+                                upFocus = upFocus,
                             )
                         }
-                        // 轮播指示条：当前项用一条会「走完」的细线
+                        // 轮播指示条：当前项用一条会「走完」的细线。
+                        // 必须钉在 hero 底部——它原先没有 align，Box 默认左上，整条跑到画面顶端，
+                        // 就是用户看到的「顶部若隐若现的红线」。
                         Row(
                             Modifier
+                                .align(Alignment.BottomStart)
                                 .fillMaxWidth()
-                                .padding(horizontal = ui.gutter),
+                                .padding(horizontal = ui.gutter)
+                                .padding(bottom = d(28)),
                             horizontalArrangement = Arrangement.spacedBy(d(8)),
                         ) {
                             hero.forEachIndexed { index, item ->
                                 val active = item.id == current.id
+                                val barWidth by animateDpAsState(
+                                    targetValue = if (active) d(40) else d(14),
+                                    animationSpec = androidx.compose.animation.core.tween(320),
+                                    label = "hero-bar",
+                                )
                                 Box(
                                     Modifier
                                         // 轮播指示条只是状态展示，不能参与遥控器焦点——
                                         // 否则从 hero 按钮按下会掉进这条 3dp 细线，看起来就是「下不去」。
                                         .focusProperties { canFocus = false }
-                                        .width(if (active) d(38) else d(14))
+                                        .width(barWidth)
                                         .height(d(3))
                                         .clip(RoundedCornerShape(99.dp))
                                         .background(if (active) Rouge.Bright else Color(0x33FFFFFF))
@@ -155,6 +235,7 @@ fun HomeScreen(
                                 )
                             }
                         }
+                      }
                     }
                 }
                 itemsIndexed(state.visibleShelves, key = { _, shelf -> shelf.key }) { index, shelf ->
