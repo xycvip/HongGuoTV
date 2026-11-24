@@ -52,11 +52,6 @@ class Library(context: Context) {
                 synchronized(retiredWrites) { retiredWrites.removeAll(retired.toSet()) }
                 val values = prefs.all
                 val loaded = LibraryDisk.decode(values)
-                // 0.19.7 片源入口默认隐藏：升级后首次加载放开一次，之后尊重用户在设置里的手动选择
-                if(!values.containsKey("sourceEntryShownV2")) {
-                    loaded.settings = loaded.settings.copy(sourceHidden = false)
-                    prefs.edit().putBoolean("sourceEntryShownV2", true).putBoolean("sourceHidden", false).apply()
-                }
                 val now = System.currentTimeMillis()
                 val cached = mutableMapOf<ContentType, CatalogPage>()
                 val stamps = mutableMapOf<ContentType, Long>()
@@ -183,9 +178,6 @@ class Library(context: Context) {
     var danmakuRows: Int
         get() = state().settings.danmakuRows
         set(value) { val next = DanmakuPrefs.rows(value); if (next != danmakuRows) { state().settings = state().settings.copy(danmakuRows = next); put("danmakuRows", next) } }
-    var contentType: ContentType
-        get() = state().settings.type
-        set(value) { if (value != contentType) { state().settings = state().settings.copy(type = value); put("contentType", value.storedValue) } }
     var playbackSpeed: Float
         get() = state().settings.speed
         set(value) { val next = PlaybackSpeed.normalize(value); if (next != playbackSpeed) { state().settings = state().settings.copy(speed = next); put("playbackSpeed", next) } }
@@ -205,10 +197,6 @@ class Library(context: Context) {
     var theme: String
         get() = prefs.getString("theme", null) ?: "NIGHT"
         set(value) { prefs.edit().putString("theme", value).apply() }
-    /** 导航栏「片源」入口是否隐藏：默认隐藏，用户可在设置中开启；随备份一起恢复。 */
-    var sourceHidden: Boolean
-        get() = state().settings.sourceHidden
-        set(value) { if (value != sourceHidden) { state().settings = state().settings.copy(sourceHidden = value); put("sourceHidden", value) } }
     // Per-series intro/outro skips are stored locally and included in exported backups.
     private var marksCache: LinkedHashMap<String, SkipMark>? = null
     private fun marks(): LinkedHashMap<String, SkipMark> =
@@ -225,19 +213,7 @@ class Library(context: Context) {
         marksCache = normalized
         prefs.edit().putString("skipMarks", SkipMarks.encode(normalized)).apply()
     }
-    fun snapshot() = state().snapshot(
-        // 三方源/观看历史/收藏来自独立存储，任何异常都退化为空列表，不能让备份整体失败
-        runCatching { thirdSourcesProvider?.invoke() ?: emptyList() }.getOrDefault(emptyList()),
-        runCatching { thirdHistoryProvider?.invoke() ?: emptyList() }.getOrDefault(emptyList()),
-        runCatching { thirdFavoritesProvider?.invoke() ?: emptyList() }.getOrDefault(emptyList()))
-
-    /** 由 MainActivity 注入：三方片源配置、观看历史与收藏随主备份一起写入与恢复。 */
-    var thirdSourcesProvider: (() -> List<BackupThirdSource>)? = null
-    var thirdSourcesRestore: ((List<BackupThirdSource>) -> Unit)? = null
-    var thirdHistoryProvider: (() -> List<BackupThirdHistory>)? = null
-    var thirdHistoryRestore: ((List<BackupThirdHistory>) -> Unit)? = null
-    var thirdFavoritesProvider: (() -> List<BackupThirdFavorite>)? = null
-    var thirdFavoritesRestore: ((List<BackupThirdFavorite>) -> Unit)? = null
+    fun snapshot() = state().snapshot()
 
     fun restore(incoming: BackupData, restoreSettings: Boolean) {
         // 文件恢复以备份为准覆盖本机记录；仅在用户选择保留时沿用当前播放/设备偏好。
@@ -259,16 +235,11 @@ class Library(context: Context) {
                 .apply()
         }
         persist("favorites", "later", "progress", "watched", "hidden", "searches", "favoriteUpdates", "favoriteGroups")
-        // 第三方片源、观看历史和收藏均按备份内容完整替换；空列表也会清空对应数据。
-        thirdSourcesRestore?.invoke(incoming.thirdSources)
-        thirdHistoryRestore?.invoke(incoming.thirdHistory)
-        thirdFavoritesRestore?.invoke(incoming.thirdFavorites)
         writes.submit(mapOf("quality" to { restored.settings.quality }, "playbackSpeed" to { restored.settings.speed },
-            "autoNext" to { restored.settings.autoNext }, "contentType" to { restored.settings.type.storedValue }, "frameMode" to { restored.settings.frame.name },
+            "autoNext" to { restored.settings.autoNext }, "frameMode" to { restored.settings.frame.name },
             "autoSeason" to { restored.settings.autoSeason }, "danmaku" to { restored.settings.danmaku },
             "danmakuOpacity" to { restored.settings.danmakuOpacity }, "danmakuFont" to { restored.settings.danmakuFont },
-            "danmakuSpeed" to { restored.settings.danmakuSpeed }, "danmakuRows" to { restored.settings.danmakuRows }, "showClock" to { restored.settings.showClock },
-            "sourceHidden" to { restored.settings.sourceHidden }))
+            "danmakuSpeed" to { restored.settings.danmakuSpeed }, "danmakuRows" to { restored.settings.danmakuRows }, "showClock" to { restored.settings.showClock }))
         flush()
     }
     /** Reset only playback preferences; preserve catalog filters and device/interface preferences. */
@@ -296,12 +267,11 @@ class Library(context: Context) {
         prefs.edit().remove("theme").remove("skipMarks").remove("videoInfoMode").remove("showNetworkSpeed").apply()
         writes.submit(mapOf(
             "quality" to { defaults.quality }, "playbackSpeed" to { defaults.speed },
-            "autoNext" to { defaults.autoNext }, "contentType" to { defaults.type.storedValue },
+            "autoNext" to { defaults.autoNext },
             "frameMode" to { defaults.frame.name }, "autoSeason" to { defaults.autoSeason },
             "danmaku" to { defaults.danmaku }, "danmakuOpacity" to { defaults.danmakuOpacity },
             "danmakuFont" to { defaults.danmakuFont }, "danmakuSpeed" to { defaults.danmakuSpeed },
-            "danmakuRows" to { defaults.danmakuRows }, "showClock" to { defaults.showClock },
-            "sourceHidden" to { defaults.sourceHidden }
+            "danmakuRows" to { defaults.danmakuRows }, "showClock" to { defaults.showClock }
         ))
     }
 

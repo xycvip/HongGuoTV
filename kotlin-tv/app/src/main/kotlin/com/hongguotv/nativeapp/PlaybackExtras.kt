@@ -19,6 +19,26 @@ class PlaybackExtras(context: Context) {
 
     fun blocks(text: String) = blockedWords.any { it.isNotEmpty() && text.contains(it, ignoreCase = true) }
 
+    /** 进入应用后直接播放首页推荐位第一部。 */
+    var startupAutoplay: Boolean
+        get() = prefs.getBoolean(KEY_STARTUP_AUTOPLAY, false)
+        set(value) { prefs.edit().putBoolean(KEY_STARTUP_AUTOPLAY, value).apply() }
+
+    /** 无感连播：开启时第二个播放器预渲染下一集首帧并接管；关闭时同一播放器用 playlist 预载下一集。 */
+    var seamlessPlayback: Boolean
+        get() = prefs.getBoolean(KEY_SEAMLESS, true)
+        set(value) { prefs.edit().putBoolean(KEY_SEAMLESS, value).apply() }
+
+    /** 首页/剧场每行海报数，0 表示按屏幕宽度自动。 */
+    var posterColumns: Int
+        get() = prefs.getInt(KEY_POSTER_COLUMNS, 0).coerceIn(0, 8)
+        set(value) { prefs.edit().putInt(KEY_POSTER_COLUMNS, value.coerceIn(0, 8)).apply() }
+
+    /** 弹幕颜色：0 默认、1 多彩、2..9 固定色。 */
+    var danmakuColorMode: Int
+        get() = prefs.getInt(KEY_DANMAKU_COLOR, 0).coerceIn(0, 9)
+        set(value) { prefs.edit().putInt(KEY_DANMAKU_COLOR, value.coerceIn(0, 9)).apply() }
+
     /** 导出全部本机播放增强设置，随主备份迁移。 */
     fun backupSnapshot(skipMarks: Map<String, SkipMark> = emptyMap()): BackupPlaybackExtras {
         val perSeries = prefs.all.entries.mapNotNull { (key, value) ->
@@ -118,6 +138,10 @@ class PlaybackExtras(context: Context) {
         private const val KEY_REMOTE_DOWN = "remoteDownAction"
         private const val KEY_REMOTE_CONFIRM = "remoteConfirmAction"
         private const val KEY_REMOTE_MENU = "remoteMenuAction"
+        private const val KEY_STARTUP_AUTOPLAY = "startupAutoplay"
+        private const val KEY_SEAMLESS = "seamlessPlayback"
+        private const val KEY_POSTER_COLUMNS = "posterColumns"
+        private const val KEY_DANMAKU_COLOR = "danmakuColorMode"
         const val REMOTE_PREVIOUS = "previous"
         const val REMOTE_NEXT = "next"
         const val REMOTE_MENU = "menu"

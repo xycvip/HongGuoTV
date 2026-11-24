@@ -24,8 +24,6 @@ data class Detail(val series: Series, val episodes: List<String>, val related: L
 data class RankPosition(val rank: Int?, val heat: String)
 data class ComicRanking(val positions: Map<String,RankPosition>, val totalPages: Int, val updatedText: String)
 data class CatalogPage(val items: List<Series>, val hasMore: Boolean, val ranking: ComicRanking? = null)
-/** One website genre selector entry; the slug selects the category path, ids echo back for validation. */
-data class Genre(val slug: String, val name: String, val ids: List<String>)
 data class TheaterFilterOption(val id: String, val label: String)
 data class TheaterFilterGroup(val type: String, val label: String, val options: List<TheaterFilterOption>)
 data class TheaterCatalogPage(val catalog: CatalogPage, val filters: List<TheaterFilterGroup>, val nextOffset: Int?, val sessionId: String)

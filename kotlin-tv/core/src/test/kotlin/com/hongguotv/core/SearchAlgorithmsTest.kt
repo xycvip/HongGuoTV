@@ -18,10 +18,4 @@ class SearchAlgorithmsTest {
         assertEquals("星河故事", baseName(" 星河故事 第2部 "))
         assertEquals("星河故事特别篇", baseName("星河故事特别篇"))
     }
-
-    @Test fun searchScoringKeepsExactAndPrefixAboveLooseMatches() {
-        assertTrue(titleMatchScore("星河故事", "星河故事") > titleMatchScore("星河故事特别篇", "星河故事"))
-        assertTrue(titleMatchScore("星河故事", "星河") > titleMatchScore("星河的故事", "星河"))
-        assertEquals(0, titleMatchScore("完全无关", "星河"))
-    }
 }

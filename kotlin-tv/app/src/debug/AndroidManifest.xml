@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- 仅用于 Robolectric 渲染校验的空壳 Activity，不设 MAIN/LAUNCHER，避免 debug 包出现多余桌面图标。
+             测试用 createAndroidComposeRule<PreviewActivity>() 直接按类名启动，不依赖 intent-filter。 -->
+        <activity
+            android:name="com.hongguotv.nativeapp.ui.PreviewActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+    </application>
+</manifest>

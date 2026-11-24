@@ -62,9 +62,7 @@ class RandomRecommender(
             // 热播榜深页可信度低，只取前 3 页。
             return repo.ranking(board, rand.nextInt(1, 4))
         }
-        val genres = runCatching { repo.genres(type) }.getOrDefault(emptyList())
-        val genre = if (genres.isNotEmpty() && rand.nextBoolean()) genres.random(rand) else null
         val page = rand.nextInt(1, maxPage + 1)
-        return repo.home(page, type, genre)
+        return repo.home(page, type)
     }
 }

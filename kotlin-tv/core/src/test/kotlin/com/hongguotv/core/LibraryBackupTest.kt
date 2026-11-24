@@ -10,7 +10,7 @@ class LibraryBackupTest {
     private fun progress(id: String,time: Long)=BackupProgress(series(id),"100$id",0,time,10000,false,time)
     private fun data()=BackupData(listOf(series("1")),listOf(progress("1",100)),setOf("1"),listOf(RecentSearch("你好",ContentType.COMIC)),BackupSettings())
     @Test fun `backup round trips records and settings with cover and text sanitization`() {
-        val original=data().copy(settings=BackupSettings(720,1.5f,false,ContentType.COMIC,VideoFrameMode.ZOOM))
+        val original=data().copy(settings=BackupSettings(720,1.5f,false,VideoFrameMode.ZOOM))
         assertEquals(original,LibraryBackup.decode(LibraryBackup.encode(original)))
         val sanitized=original.copy(favorites=listOf(series("1").copy(title="你\n好",cover="http://127.0.0.1/secret")))
         val result=LibraryBackup.decode(LibraryBackup.encode(sanitized))
@@ -47,57 +47,6 @@ class LibraryBackupTest {
         assertFalse(LibraryBackup.decode(legacy.toString()).settings.showClock)
         assertTrue(LibraryBackup.merge(data(),on,true).settings.showClock)
     }
-    @Test fun `source entry defaults to shown and hidden setting round trips`() {
-        assertFalse(BackupSettings().sourceHidden)
-        val hidden=data().copy(settings=BackupSettings().copy(sourceHidden=true))
-        assertEquals(hidden,LibraryBackup.decode(LibraryBackup.encode(hidden)))
-        val legacy=JSONObject(LibraryBackup.encode(data())); legacy.getJSONObject("settings").remove("sourceHidden")
-        assertFalse(LibraryBackup.decode(legacy.toString()).settings.sourceHidden)
-        assertTrue(LibraryBackup.merge(data(),hidden,true).settings.sourceHidden)
-    }
-    @Test fun `third history round trips and legacy backups default to empty`() {
-        val hit=BackupThirdHistory("https://a.com/api.php/provide/vod","示例源","42","测试影片","https://a.com/1.jpg",
-            2,"第3集",12000,60000,1792448000000,false)
-        val withHistory=data().copy(thirdHistory=listOf(hit))
-        assertEquals(withHistory.thirdHistory,LibraryBackup.decode(LibraryBackup.encode(withHistory)).thirdHistory)
-        val legacy=JSONObject(LibraryBackup.encode(data())); legacy.remove("thirdHistory")
-        assertTrue(LibraryBackup.decode(legacy.toString()).thirdHistory.isEmpty())
-    }
-    @Test fun `broken third history entries are skipped without failing the backup`() {
-        val base=JSONObject(LibraryBackup.encode(data()))
-        base.put("thirdHistory",JSONArray().put(JSONObject().put("videoId","1")).put(JSONObject().put("sourceApi","https://a.com/api").put("videoId","7")).put("broken"))
-        val decoded=LibraryBackup.decode(base.toString())
-        assertEquals(1,decoded.thirdHistory.size)
-        val wrongType=JSONObject(LibraryBackup.encode(data())).put("thirdHistory","broken")
-        assertTrue(LibraryBackup.decode(wrongType.toString()).thirdHistory.isEmpty())
-    }
-    @Test fun `third history merge keeps the newest progress per video`() {
-        val old=BackupThirdHistory("https://a.com/api","A","1","剧","",0,"第1集",1000,60000,100,false)
-        val fresh=old.copy(episodeIndex=1,positionMs=2000,updatedAt=200)
-        val merged=LibraryBackup.merge(data().copy(thirdHistory=listOf(fresh)),data().copy(thirdHistory=listOf(old)),true).thirdHistory
-        assertEquals(1,merged.size); assertEquals(2000L,merged.first().positionMs)
-    }
-    @Test fun `third favorites round trip and legacy backups default to empty`() {
-        val hit=BackupThirdFavorite("https://a.com/api","A","42","测试影片","https://a.com/1.jpg",2,"第3集",12000,1792448000000)
-        val withFavorites=data().copy(thirdFavorites=listOf(hit))
-        assertEquals(withFavorites.thirdFavorites,LibraryBackup.decode(LibraryBackup.encode(withFavorites)).thirdFavorites)
-        val legacy=JSONObject(LibraryBackup.encode(data())); legacy.remove("thirdFavorites")
-        assertTrue(LibraryBackup.decode(legacy.toString()).thirdFavorites.isEmpty())
-        val wrongType=JSONObject(LibraryBackup.encode(data())).put("thirdFavorites","broken")
-        assertTrue(LibraryBackup.decode(wrongType.toString()).thirdFavorites.isEmpty())
-    }
-    @Test fun `third favorites merge keeps the newest per source and video`() {
-        val old=BackupThirdFavorite("https://a.com/api","A","1","剧","",0,"第1集",1000,100)
-        val fresh=old.copy(episodeIndex=1,positionMs=2000,updatedAt=200)
-        val merged=LibraryBackup.merge(data().copy(thirdFavorites=listOf(fresh)),data().copy(thirdFavorites=listOf(old)),true).thirdFavorites
-        assertEquals(1,merged.size); assertEquals(2000L,merged.first().positionMs)
-    }
-    @Test fun `broken third favorites are skipped without failing the backup`() {
-        val base=JSONObject(LibraryBackup.encode(data()))
-        base.put("thirdFavorites",JSONArray().put(JSONObject().put("videoId","1"))
-            .put(JSONObject().put("sourceApi","https://a.com/api").put("videoId","7")).put("broken"))
-        assertEquals(1,LibraryBackup.decode(base.toString()).thirdFavorites.size)
-    }
     @Test fun `danmaku prefs round trip and out of range values normalize`() {
         val custom=data().copy(settings=BackupSettings().copy(danmakuOpacity=60,danmakuFont=0,danmakuSpeed=4,danmakuRows=5))
         assertEquals(custom,LibraryBackup.decode(LibraryBackup.encode(custom)))
@@ -131,35 +80,6 @@ class LibraryBackupTest {
         reject { it.getJSONObject("favoriteGroups").put("notAnId","a") }
         reject { it.getJSONObject("favoriteGroups").put("1","") }
         reject { it.getJSONObject("favoriteGroups").put("1",1) }
-    }
-    @Test fun `third sources round trip merge keeps local and legacy backups stay empty`() {
-        val original=data().copy(thirdSources=listOf(BackupThirdSource("量子","https://a.example.com/api.php/provide/vod")))
-        assertEquals(original,LibraryBackup.decode(LibraryBackup.encode(original)))
-        val legacy=JSONObject(LibraryBackup.encode(data())); legacy.remove("thirdSources")
-        assertTrue(LibraryBackup.decode(legacy.toString()).thirdSources.isEmpty())
-        val broken=JSONObject(LibraryBackup.encode(data()))
-        broken.put("thirdSources",JSONArray().put(JSONObject().put("name","坏源").put("api","ftp://x"))
-            .put(JSONObject().put("api","https://b.example.com/vod")))
-        val decoded=LibraryBackup.decode(broken.toString()).thirdSources
-        assertEquals(listOf("https://b.example.com/vod"),decoded.map { it.api })
-        assertEquals("b.example.com",decoded.single().name)
-        val local=data().copy(thirdSources=listOf(BackupThirdSource("本地","https://a.example.com/vod")))
-        val incoming=data().copy(thirdSources=listOf(BackupThirdSource("备份名","https://a.example.com/vod"),BackupThirdSource("新源","https://b.example.com/vod")))
-        val merged=LibraryBackup.merge(local,incoming,false).thirdSources
-        assertEquals(listOf("https://a.example.com/vod","https://b.example.com/vod"),merged.map { it.api })
-        assertEquals("本地",merged.first().name)
-    }
-    @Test fun `source config encode decode caps entries and rejects invalid ones`() {
-        val list=(1..3).map { BackupThirdSource("源$it","https://s$it.example.com/api.php/provide/vod") }
-        assertEquals(list,ThirdSourceConfig.decode(ThirdSourceConfig.encode(list)))
-        assertEquals(ThirdSourceConfig.MAX,ThirdSourceConfig.decode(ThirdSourceConfig.encode((1..40).map { BackupThirdSource("源$it","https://s$it.example.com/vod") })).size)
-        assertTrue(ThirdSourceConfig.decode("not json").isEmpty())
-        assertTrue(ThirdSourceConfig.decode("""{"format":"other","sources":[]}""").isEmpty())
-        assertTrue(ThirdSourceConfig.decode("x".repeat(ThirdSourceConfig.MAX_BYTES+1)).isEmpty())
-        val raw="""{"format":"hongguotv.third-sources","version":1,"sources":[{"name":"A","api":"ftp://x"},{"name":"B","api":"https://a.example.com/vod"},{"name":"C","api":"https://a.example.com/vod"},{"name":"","api":"https://b.example.com/vod"}]}"""
-        val decoded=ThirdSourceConfig.decode(raw)
-        assertEquals(listOf("https://a.example.com/vod","https://b.example.com/vod"),decoded.map { it.api })
-        assertEquals("b.example.com",decoded[1].name)
     }
 
     @Test fun `playback extras and skip marks round trip while legacy backup stays compatible`() {

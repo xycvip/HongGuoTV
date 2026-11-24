@@ -1,0 +1,712 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package com.hongguotv.nativeapp.ui.screens
+
+import android.view.KeyEvent
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBackIosNew
+import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.HighQuality
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.PlayerView
+import com.hongguotv.core.PlaybackQuality
+import com.hongguotv.core.PlaybackSpeed
+import com.hongguotv.core.VideoFrameMode
+import com.hongguotv.nativeapp.ui.components.ButtonTone
+import com.hongguotv.nativeapp.ui.components.Choice
+import com.hongguotv.nativeapp.ui.components.ChoiceDialog
+import com.hongguotv.nativeapp.ui.components.PulseDots
+import com.hongguotv.nativeapp.ui.components.TvButton
+import com.hongguotv.nativeapp.ui.player.PlayerSession
+import com.hongguotv.nativeapp.ui.theme.Ink
+import com.hongguotv.nativeapp.ui.theme.Paper
+import com.hongguotv.nativeapp.ui.theme.Rouge
+import com.hongguotv.nativeapp.DanmakuView
+import com.hongguotv.nativeapp.PlaybackExtras
+import com.hongguotv.nativeapp.ui.data.RemoteKey
+import com.hongguotv.nativeapp.ui.data.SettingsSnapshot
+import com.hongguotv.nativeapp.ui.theme.d
+import com.hongguotv.nativeapp.ui.theme.ui
+import kotlinx.coroutines.delay
+
+@UnstableApi
+@Composable
+fun PlayerScreen(
+    session: PlayerSession,
+    settings: SettingsSnapshot,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    var controlsVisible by remember { mutableStateOf(true) }
+    var episodesOpen by remember { mutableStateOf(false) }
+    var seekHint by remember { mutableStateOf<String?>(null) }
+    var hintToken by remember { mutableIntStateOf(0) }
+    var interaction by remember { mutableIntStateOf(0) }
+    var qualityDialog by remember { mutableStateOf(false) }
+    var speedDialog by remember { mutableStateOf(false) }
+    var frameDialog by remember { mutableStateOf(false) }
+    val playFocus = remember { FocusRequester() }
+    val rootFocus = remember { FocusRequester() }
+
+    fun poke() {
+        interaction++
+        controlsVisible = true
+    }
+
+    fun seek(delta: Long, label: String) {
+        session.seekBy(delta)
+        seekHint = label
+        hintToken++
+        poke()
+    }
+
+    /** 按用户配置分派遥控器动作。 */
+    fun dispatch(action: String) {
+        when (action) {
+            PlaybackExtras.REMOTE_PREVIOUS -> session.previous()
+            PlaybackExtras.REMOTE_NEXT -> session.next()
+            PlaybackExtras.REMOTE_PLAY_PAUSE -> session.togglePlay()
+            PlaybackExtras.REMOTE_EPISODES -> episodesOpen = true
+            PlaybackExtras.REMOTE_COMMENTS -> {
+                session.toggleDanmaku()
+                seekHint = if (session.danmakuEnabled) "弹幕已开启" else "弹幕已关闭"
+                hintToken++
+            }
+            PlaybackExtras.REMOTE_MENU -> Unit
+            PlaybackExtras.REMOTE_SLEEP_TIMER -> {
+                seekHint = "暂不支持定时关闭"
+                hintToken++
+            }
+            else -> Unit
+        }
+        poke()
+    }
+
+    // 5 秒无操作自动收起控制层；暂停、缓冲、选集时保持显示。
+    LaunchedEffect(interaction, session.playing, session.buffering, episodesOpen) {
+        if (!controlsVisible) return@LaunchedEffect
+        delay(5000)
+        if (session.playing && !session.buffering && !episodesOpen) controlsVisible = false
+    }
+    LaunchedEffect(hintToken) {
+        if (hintToken == 0) return@LaunchedEffect
+        delay(900)
+        seekHint = null
+    }
+    LaunchedEffect(Unit) {
+        runCatching { rootFocus.requestFocus() }
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            session.refreshPosition()
+            delay(400)
+        }
+    }
+
+    BackHandler {
+        when {
+            episodesOpen -> episodesOpen = false
+            qualityDialog -> qualityDialog = false
+            speedDialog -> speedDialog = false
+            frameDialog -> frameDialog = false
+            controlsVisible -> onBack()
+            else -> poke()
+        }
+    }
+
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(rootFocus)
+            .focusable()
+            .onKeyEvent { event ->
+                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.nativeKeyEvent.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                        if (!controlsVisible) {
+                            poke()
+                        } else {
+                            dispatch(session.remoteAction(RemoteKey.CONFIRM))
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        if (!controlsVisible) {
+                            seek(-session.seekStepMillis, "快退 ${session.seekStepMillis / 1000} 秒")
+                            true
+                        } else false
+                    }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        if (!controlsVisible) {
+                            seek(session.seekStepMillis, "快进 ${session.seekStepMillis / 1000} 秒")
+                            true
+                        } else false
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (!controlsVisible) {
+                            dispatch(session.remoteAction(RemoteKey.UP))
+                            true
+                        } else false
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (!controlsVisible) {
+                            dispatch(session.remoteAction(RemoteKey.DOWN))
+                            true
+                        } else false
+                    }
+                    KeyEvent.KEYCODE_MENU -> {
+                        if (!controlsVisible) {
+                            dispatch(session.remoteAction(RemoteKey.MENU))
+                            true
+                        } else false
+                    }
+                    else -> false
+                }
+            },
+    ) {
+        // 视频画面
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    useController = false
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                    setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    player = session.player
+                    // 接管备用播放器时要用同一个 PlayerView 换实例，隐藏输出面也挂在它内部。
+                    session.attachPlayerView(this)
+                }
+            },
+            update = { view ->
+                if (view.player !== session.player) view.player = session.player
+                view.resizeMode = session.frameResizeMode
+            },
+            onRelease = { view -> session.detachPlayerView(view) },
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { poke() },
+                        onDoubleTap = {
+                            if (session.playing) {
+                                session.pause()
+                                seekHint = "暂停"
+                            } else {
+                                session.play()
+                                seekHint = "播放"
+                            }
+                            hintToken++
+                        },
+                    )
+                },
+        )
+
+        // 弹幕层：叠在画面之上、控制层之下
+        val danmakuView = remember { DanmakuView(context) }
+        AndroidView(
+            factory = { danmakuView },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = d(26)),
+        )
+        DisposableEffect(danmakuView) {
+            session.attachDanmaku(danmakuView)
+            onDispose { session.detachDanmaku(danmakuView) }
+        }
+
+        // 播放信息与实时网速
+        val showInfo = settings.videoInfoMode > 0 && session.ready
+        if (showInfo || settings.showNetworkSpeed) {
+            Column(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = ui.gutter, top = d(64)),
+                horizontalAlignment = Alignment.End,
+            ) {
+                if (showInfo) {
+                    Text(
+                        buildString {
+                            if (session.videoWidth > 0) append("${session.videoWidth}×${session.videoHeight}")
+                            if (session.qualityLabel.isNotBlank()) {
+                                if (isNotEmpty()) append("  ·  ")
+                                append(session.qualityLabel)
+                            }
+                            if (settings.videoInfoMode >= 2) {
+                                if (session.videoBitrate > 0) append("  ·  ${"%.1f".format(session.videoBitrate / 1_000_000f)} Mbps")
+                                if (session.videoFrameRate > 0f) append("  ·  ${"%.0f".format(session.videoFrameRate)} fps")
+                            }
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xCCFFFFFF),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(d(6)))
+                            .background(Color(0x66000000))
+                            .padding(horizontal = d(8), vertical = d(4)),
+                    )
+                }
+                if (settings.showNetworkSpeed) {
+                    Spacer(Modifier.height(d(6)))
+                    Text(
+                        "↓ ${"%.1f".format(session.networkMbps)} Mbps",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xB3FFFFFF),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(d(6)))
+                            .background(Color(0x66000000))
+                            .padding(horizontal = d(8), vertical = d(4)),
+                    )
+                }
+            }
+        }
+
+        if (session.buffering && session.error == null) {
+            Column(
+                Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                PulseDots(Color.White)
+                Spacer(Modifier.height(d(14)))
+                Text(
+                    session.loadingLabel.ifBlank { "正在缓冲…" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Paper.Secondary,
+                )
+            }
+        }
+
+        session.error?.let { message ->
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .width(d(420))
+                    .clip(RoundedCornerShape(d(20)))
+                    .background(Color(0xE610131A))
+                    .border(d(1f), Color(0x1FFFFFFF), RoundedCornerShape(d(20)))
+                    .padding(d(26)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("播放遇到问题", style = MaterialTheme.typography.titleLarge, color = Paper.Pure)
+                Spacer(Modifier.height(d(10)))
+                Text(message, style = MaterialTheme.typography.bodySmall, color = Paper.Secondary)
+                Spacer(Modifier.height(d(20)))
+                Row(horizontalArrangement = Arrangement.spacedBy(d(12))) {
+                    TvButton("重试", { session.prepare(session.index, session.position) }, tone = ButtonTone.Primary)
+                    TvButton("返回详情", onBack, tone = ButtonTone.Ghost)
+                }
+            }
+        }
+
+        // 顶部信息与控制
+        AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut()) {
+            Box(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(d(150))
+                        .background(Brush.verticalGradient(listOf(Color(0xE6000000), Color.Transparent))),
+                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ui.gutter, vertical = d(22)),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircleAction(Icons.Rounded.ArrowBackIosNew, "返回", d(44)) { onBack() }
+                    Spacer(Modifier.width(d(18)))
+                    Column {
+                        Text(
+                            session.series.title,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Paper.Pure,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(d(3)))
+                        Text(
+                            "第 ${session.index + 1} 集 / 共 ${session.episodes.size} 集",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Paper.Secondary,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    ControlChip(if (session.qualityLabel.isBlank()) "清晰度" else session.qualityLabel, Icons.Rounded.HighQuality) {
+                        qualityDialog = true
+                    }
+                    Spacer(Modifier.width(d(10)))
+                    ControlChip(PlaybackSpeed.label(session.speed), Icons.Rounded.Speed) { speedDialog = true }
+                    Spacer(Modifier.width(d(10)))
+                    ControlChip(session.frameMode.label, Icons.Rounded.AspectRatio) {
+                        frameDialog = true
+                    }
+                    Spacer(Modifier.width(d(10)))
+                    ControlChip("选集", Icons.Rounded.PlaylistPlay) { episodesOpen = true }
+                }
+
+                // 底部控制区
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to Color(0x99000000), 1f to Color(0xE6000000)))
+                        .padding(horizontal = ui.gutter, vertical = d(24)),
+                ) {
+                    SeekBar(
+                        position = session.position,
+                        duration = session.duration,
+                        onSeek = { session.seekTo(it) },
+                        onSeekBy = { seek(it, if (it > 0) "快进 10 秒" else "快退 10 秒") },
+                        onInteract = { poke() },
+                    )
+                    Spacer(Modifier.height(d(14)))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(Modifier.weight(1f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(d(18)), verticalAlignment = Alignment.CenterVertically) {
+                            CircleAction(Icons.Rounded.SkipPrevious, "上一集", d(46)) { session.previous() }
+                            CircleAction(Icons.Rounded.FastRewind, "快退 10 秒", d(50)) { seek(-10_000, "快退 10 秒") }
+                            Box(
+                                Modifier
+                                    .size(d(68))
+                                    .clip(CircleShape)
+                                    .background(Brush.linearGradient(listOf(Rouge.Bright, Rouge.Deep)))
+                                    .border(d(1.6f), Color.White.copy(0.5f), CircleShape)
+                                    .focusRequester(playFocus)
+                                    .clickable {
+                                        session.togglePlay()
+                                        poke()
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    if (session.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    if (session.playing) "暂停" else "播放",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(d(34)),
+                                )
+                            }
+                            CircleAction(Icons.Rounded.FastForward, "快进 10 秒", d(50)) { seek(10_000, "快进 10 秒") }
+                            CircleAction(Icons.Rounded.SkipNext, "下一集", d(46)) { session.next() }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.PlaylistPlay, null, tint = Paper.Secondary, modifier = Modifier.size(d(18)))
+                            Spacer(Modifier.width(d(8)))
+                            Text(
+                                "遥控器：左右快进 · 确定暂停 · 下键选集",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Paper.Tertiary,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        seekHint?.let { hint ->
+            Row(
+                Modifier
+                    .align(Alignment.Center)
+                    .clip(RoundedCornerShape(d(999)))
+                    .background(Color(0xCC0A0C12))
+                    .border(d(1f), Color(0x22FFFFFF), RoundedCornerShape(d(999)))
+                    .padding(horizontal = d(22), vertical = d(12)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(hint, style = MaterialTheme.typography.titleSmall, color = Paper.Pure)
+            }
+        }
+
+        // 选集抽屉
+        AnimatedVisibility(
+            visible = episodesOpen,
+            enter = slideInHorizontally { it } + fadeIn(),
+            exit = slideOutHorizontally { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            Column(
+                Modifier
+                    .width(d(470))
+                    .fillMaxHeight()
+                    .background(Color(0xF20B0E14))
+                    .border(d(1f), Color(0x14FFFFFF), RoundedCornerShape(topStart = d(24), bottomStart = d(24)))
+                    .padding(d(24)),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("选集", style = MaterialTheme.typography.headlineSmall, color = Paper.Pure, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(d(10)))
+                    Text("${session.episodes.size} 集", style = MaterialTheme.typography.labelSmall, color = Paper.Tertiary)
+                    Spacer(Modifier.weight(1f))
+                    CircleAction(Icons.Rounded.Close, "关闭", d(38)) { episodesOpen = false }
+                }
+                Spacer(Modifier.height(d(16)))
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(6),
+                    horizontalArrangement = Arrangement.spacedBy(d(8)),
+                    verticalArrangement = Arrangement.spacedBy(d(8)),
+                ) {
+                    itemsIndexed(session.episodes) { index, _ ->
+                        EpisodeButton(
+                            index = index,
+                            active = index == session.index,
+                            onClick = {
+                                session.selectEpisode(index)
+                                episodesOpen = false
+                                poke()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (qualityDialog) {
+        ChoiceDialog(
+            title = "清晰度",
+            choices = PlaybackQuality.options.map { Choice(it.toString(), PlaybackQuality.label(it)) },
+            selected = session.quality.toString(),
+            onSelect = { key ->
+                key.toIntOrNull()?.let(session::changeQuality)
+                qualityDialog = false
+            },
+            onDismiss = { qualityDialog = false },
+        )
+    }
+    if (speedDialog) {
+        ChoiceDialog(
+            title = "播放速度",
+            choices = PlaybackSpeed.options.map { Choice(it.toString(), PlaybackSpeed.label(it)) },
+            selected = session.speed.toString(),
+            onSelect = { key ->
+                key.toFloatOrNull()?.let(session::changeSpeed)
+                speedDialog = false
+            },
+            onDismiss = { speedDialog = false },
+        )
+    }
+    if (frameDialog) {
+        ChoiceDialog(
+            title = "画面模式",
+            choices = VideoFrameMode.entries.map { Choice(it.name, it.label) },
+            selected = session.frameMode.name,
+            onSelect = { key ->
+                session.changeFrameMode(VideoFrameMode.fromStored(key))
+                frameDialog = false
+            },
+            onDismiss = { frameDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun CircleAction(icon: ImageVector, description: String, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Box(
+        Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(if (focused) Color(0x33FFFFFF) else Color(0x1A000000))
+            .border(d(1.2f), if (focused) Rouge.Bright else Color(0x22FFFFFF), CircleShape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, tint = if (focused) Color.White else Paper.Secondary, modifier = Modifier.size(size * 0.42f))
+    }
+}
+
+@Composable
+private fun ControlChip(label: String, icon: ImageVector, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(d(999)))
+            .background(if (focused) Color(0x2EFFFFFF) else Color(0x14FFFFFF))
+            .border(d(1.2f), if (focused) Rouge.Bright else Color(0x22FFFFFF), RoundedCornerShape(d(999)))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = d(14), vertical = d(9)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = if (focused) Color.White else Paper.Secondary, modifier = Modifier.size(d(16)))
+        Spacer(Modifier.width(d(7)))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = if (focused) Color.White else Paper.Secondary, maxLines = 1)
+    }
+}
+
+@Composable
+private fun SeekBar(
+    position: Long,
+    duration: Long,
+    onSeek: (Long) -> Unit,
+    onSeekBy: (Long) -> Unit,
+    onInteract: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    val density = LocalDensity.current
+    val barHeightFocused = with(density) { d(6).toPx() }
+    val barHeightIdle = with(density) { d(4).toPx() }
+    val thumbFocused = with(density) { d(7).toPx() }
+    val thumbIdle = with(density) { d(4).toPx() }
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(formatSeconds(position), style = MaterialTheme.typography.labelSmall, color = Paper.Secondary)
+        Spacer(Modifier.width(d(14)))
+        Box(
+            Modifier
+                .weight(1f)
+                .height(d(26))
+                .clip(RoundedCornerShape(99.dp))
+                .border(d(1.2f), if (focused) Rouge.Bright.copy(0.7f) else Color.Transparent, RoundedCornerShape(99.dp))
+                .clickable(interactionSource = interaction, indication = null) { onInteract() }
+                .onKeyEvent { event ->
+                    if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
+                    when (event.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            onSeekBy(-10_000)
+                            true
+                        }
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            onSeekBy(10_000)
+                            true
+                        }
+                        else -> false
+                    }
+                }
+                .pointerInput(duration) {
+                    detectTapGestures { offset ->
+                        if (duration > 0 && size.width > 0) {
+                            onSeek((duration * (offset.x / size.width)).toLong())
+                        }
+                    }
+                },
+        ) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                val barHeight = if (focused) barHeightFocused else barHeightIdle
+                val centerY = size.height / 2f
+                drawRoundRect(
+                    color = Color(0x33FFFFFF),
+                    topLeft = androidx.compose.ui.geometry.Offset(0f, centerY - barHeight / 2f),
+                    size = androidx.compose.ui.geometry.Size(size.width, barHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barHeight / 2f),
+                )
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(listOf(Rouge.Bright, Rouge.Core)),
+                    topLeft = androidx.compose.ui.geometry.Offset(0f, centerY - barHeight / 2f),
+                    size = androidx.compose.ui.geometry.Size(size.width * progress, barHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barHeight / 2f),
+                )
+                if (focused || progress > 0f) {
+                    drawCircle(
+                        color = Color.White,
+                        radius = if (focused) thumbFocused else thumbIdle,
+                        center = androidx.compose.ui.geometry.Offset((size.width * progress).coerceIn(0f, size.width), centerY),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(d(14)))
+        Text(formatSeconds(duration), style = MaterialTheme.typography.labelSmall, color = Paper.Tertiary)
+    }
+}
+
+@Composable
+private fun EpisodeButton(index: Int, active: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Box(
+        Modifier
+            .height(d(42))
+            .clip(RoundedCornerShape(d(9)))
+            .background(
+                when {
+                    active -> Rouge.Core.copy(0.85f)
+                    focused -> Color(0x33FFFFFF)
+                    else -> Color(0x0FFFFFFF)
+                },
+            )
+            .border(d(1.2f), if (focused) Rouge.Bright else Color(0x14FFFFFF), RoundedCornerShape(d(9)))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            (index + 1).toString(),
+            style = MaterialTheme.typography.labelLarge,
+            color = if (active || focused) Color.White else Paper.Secondary,
+        )
+    }
+}
+
+@Composable
+private fun EpisodeButtonPlaceholder() = Unit

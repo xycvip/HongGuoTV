@@ -76,10 +76,9 @@ internal object LibraryBackupDecoder {
         val watchedIds=(0 until watched.length()).map { id(watched.getString(it)) }.toSet()
         val searches=o.rows("searches",20).map { row -> RecentSearch(row.string("query",80).also { require(it.isNotBlank()) },ContentType.entries.firstOrNull { it.storedValue==row.getString("type") } ?: error("搜索类型无效")) }
         val settings=o.getJSONObject("settings")
-        val quality=settings.number("quality",PlaybackQuality.AUTO_COMPAT.toLong()).toInt(); require(quality in PlaybackQuality.options)
+        val quality=(settings.get("quality") as? Number ?: error("数值范围无效")).toInt(); require(quality in PlaybackQuality.options) { "清晰度设置无效" }
         val speed=settings.get("speed"); require(speed is Number && speed.toFloat() in PlaybackSpeed.options)
         val autoNext=settings.get("autoNext"); require(autoNext is Boolean)
-        val type=ContentType.entries.firstOrNull { it.storedValue==settings.getString("type") } ?: error("内容类型无效")
         val frame=VideoFrameMode.entries.firstOrNull { it.name==settings.getString("frame") } ?: error("画面模式无效")
         val autoSeason=settings.optBoolean("autoSeason",true)
         val danmaku=settings.optBoolean("danmaku",true)
@@ -88,54 +87,11 @@ internal object LibraryBackupDecoder {
         val danmakuSpeed=DanmakuPrefs.speed(settings.optInt("danmakuSpeed",DanmakuPrefs.SPEED_DEFAULT))
         val danmakuRows=DanmakuPrefs.rows(settings.optInt("danmakuRows",DanmakuPrefs.ROWS_DEFAULT))
         val showClock=settings.optBoolean("showClock",false)
-        // 旧备份没有该字段时按默认「显示」处理
-        val sourceHidden=settings.optBoolean("sourceHidden",false)
         val startupAutoplay=settings.optBoolean("startupAutoplay",true)
         val sleepActionMode=settings.optInt("sleepActionMode",0).also { require(it in 0..1) { "定时关闭方式无效" } }
         val theme=settings.optString("theme","NIGHT").also { require(it in listOf("NIGHT","PORCELAIN")) { "系统风格无效" } }
         val videoInfoMode=settings.optInt("videoInfoMode",0).also { require(it in 0..2) { "播放信息显示模式无效" } }
         val showNetworkSpeed=settings.optBoolean("showNetworkSpeed",false)
-        // 三方源：旧备份没有该字段时静默为空；非法接口直接跳过，不影响整体恢复
-        val thirdSources=if(o.has("thirdSources")) o.rows("thirdSources",ThirdSourceConfig.MAX).mapNotNull { row ->
-            val api=runCatching { row.string("api",500) }.getOrNull() ?: return@mapNotNull null
-            if(!ThirdSourceConfig.validApi(api)) return@mapNotNull null
-            val name=runCatching { row.string("name",40) }.getOrDefault("")
-                .ifBlank { api.removePrefix("https://").removePrefix("http://").substringBefore('/') }
-            BackupThirdSource(name,api)
-        }.distinctBy { it.api } else emptyList()
-        // 三方观看历史：缺字段、类型异常或单条损坏都只影响这一段，绝不拖垮整份备份
-        val thirdHistory: List<BackupThirdHistory> = if(o.has("thirdHistory")) runCatching {
-            val rows=o.optJSONArray("thirdHistory") ?: return@runCatching emptyList<BackupThirdHistory>()
-            (0 until minOf(rows.length(),LibraryBackup.MAX_THIRD_HISTORY)).mapNotNull { index ->
-                runCatching {
-                    val row=rows.optJSONObject(index) ?: return@runCatching null
-                    val api=row.optString("sourceApi").take(500)
-                    val videoId=row.optString("videoId").take(80)
-                    if(!ThirdSourceConfig.validApi(api) || videoId.isBlank()) null else BackupThirdHistory(
-                        api,row.optString("sourceName").take(40),videoId,row.optString("title").take(200),
-                        row.optString("cover").take(2048),
-                        row.optInt("episodeIndex",0).coerceIn(0,100_000),row.optString("episodeLabel").take(60),
-                        row.optLong("positionMs",0).coerceIn(0,604_800_000),row.optLong("durationMs",0).coerceIn(0,604_800_000),
-                        row.optLong("updatedAt",0).coerceIn(0,4_102_444_800_000),row.optBoolean("completed",false))
-                }.getOrNull()
-            }
-        }.getOrDefault(emptyList()) else emptyList()
-        // 三方收藏：缺字段、类型异常或单条损坏都只影响这一段，绝不拖垮整份备份
-        val thirdFavorites: List<BackupThirdFavorite> = if(o.has("thirdFavorites")) runCatching {
-            val rows=o.optJSONArray("thirdFavorites") ?: return@runCatching emptyList<BackupThirdFavorite>()
-            (0 until minOf(rows.length(),LibraryBackup.MAX_THIRD_FAVORITES)).mapNotNull { index ->
-                runCatching {
-                    val row=rows.optJSONObject(index) ?: return@runCatching null
-                    val api=row.optString("sourceApi").take(500)
-                    val videoId=row.optString("videoId").take(80)
-                    if(!ThirdSourceConfig.validApi(api) || videoId.isBlank()) null else BackupThirdFavorite(
-                        api,row.optString("sourceName").take(40),videoId,row.optString("title").take(200),
-                        row.optString("cover").take(2048),
-                        row.optInt("episodeIndex",0).coerceIn(0,100_000),row.optString("episodeLabel").take(60),
-                        row.optLong("positionMs",0).coerceIn(0,604_800_000),row.optLong("updatedAt",0).coerceIn(0,4_102_444_800_000))
-                }.getOrNull()
-            }
-        }.getOrDefault(emptyList()) else emptyList()
         val accountState = if (o.has("accountState") && !o.isNull("accountState")) {
             val account = o.getJSONObject("accountState")
             require(account.toString().length <= 20_000) { "账户备份信息过大" }
@@ -193,6 +149,6 @@ internal object LibraryBackupDecoder {
                 remoteConfirmAction, remoteMenuAction, skipMarks
             )
         } else null
-        return BackupData(favorites,history,watchedIds,searches,BackupSettings(quality,speed.toFloat(),autoNext,type,frame,autoSeason,danmaku,danmakuOpacity,danmakuFont,danmakuSpeed,danmakuRows,showClock,sourceHidden,startupAutoplay,sleepActionMode,theme,videoInfoMode,showNetworkSpeed),later,hiddenIds,favoriteGroups,thirdSources,thirdHistory,thirdFavorites,accountState,playbackExtras)
+        return BackupData(favorites,history,watchedIds,searches,BackupSettings(quality,speed.toFloat(),autoNext,frame,autoSeason,danmaku,danmakuOpacity,danmakuFont,danmakuSpeed,danmakuRows,showClock,startupAutoplay,sleepActionMode,theme,videoInfoMode,showNetworkSpeed),later,hiddenIds,favoriteGroups,accountState,playbackExtras)
     }
 }

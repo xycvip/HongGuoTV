@@ -8,9 +8,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * from a background thread as playback advances (it is cheap and re-entrant); read visible
  * comments with [between] from the UI thread. Failures back off silently — comments are a
  * decoration and must never interrupt playback.
+ *
+ * 窗口数据来自 [DanmakuWindowSource]（热更新 JS 门面）；本类只保留缓冲/去重/退避逻辑。
  */
 class DanmakuLoader(
-    private val repository: DanmakuRepository,
+    private val source: DanmakuWindowSource,
     private val seriesId: String,
     private val vid: String,
     @Volatile var durationMs: Long,
@@ -36,7 +38,7 @@ class DanmakuLoader(
                         frontier >= durationMs -> { exhausted = true; return }
                         positionMs > frontier -> {
                             // A forward seek skips windows that will never be watched.
-                            frontier = positionMs / DanmakuRepository.WINDOW_MS * DanmakuRepository.WINDOW_MS
+                            frontier = positionMs / WINDOW_MS * WINDOW_MS
                             if (frontier > positionMs + leadMs) return
                             frontier
                         }
@@ -45,7 +47,7 @@ class DanmakuLoader(
                     }
                 }
                 val window = try {
-                    repository.window(seriesId, vid, durationMs, start)
+                    source.window(seriesId, vid, durationMs, start)
                 } catch (failed: Exception) {
                     synchronized(this) {
                         failures++
@@ -64,7 +66,7 @@ class DanmakuLoader(
                     if (comments.size > 1 && comments[comments.size - 2].offsetMs > comments[comments.size - 1].offsetMs) {
                         comments.sortBy { it.offsetMs }
                     }
-                    frontier = if (window.nextStartMs > start) window.nextStartMs else start + DanmakuRepository.WINDOW_MS
+                    frontier = if (window.nextStartMs > start) window.nextStartMs else start + WINDOW_MS
                     if (frontier >= durationMs) exhausted = true
                 }
             }
@@ -83,6 +85,7 @@ class DanmakuLoader(
     val buffered: Int get() = synchronized(this) { comments.size }
 
     companion object {
+        const val WINDOW_MS = 30_000L
         private const val MAX_FAILURES = 3
         private const val RETRY_BACKOFF_MS = 30_000L
     }

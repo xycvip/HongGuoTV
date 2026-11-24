@@ -9,12 +9,11 @@ class RandomRecommenderTest {
     private fun series(id: Int, title: String = "剧$id") = Series(id.toString(), title)
 
     private inner class FakeRepo(
-        private val genreList: List<Genre> = listOf(Genre("g1", "爱情", listOf("1"))),
         private val pagesPerGenre: Int = 5,
         private val itemsPerPage: Int = 6
     ) : ContentRepository() {
         // Override the public methods used by RandomRecommender via reflection-free subclassing
-        override fun home(page: Int, type: ContentType, genre: Genre?): CatalogPage {
+        override fun home(page: Int, type: ContentType): CatalogPage {
             val items = (0 until itemsPerPage).map { series((page - 1) * itemsPerPage + it + 1) }
             return CatalogPage(items, page < pagesPerGenre)
         }
@@ -22,7 +21,6 @@ class RandomRecommenderTest {
             val items = (0 until itemsPerPage).map { series(1000 + (page - 1) * itemsPerPage + it + 1) }
             return CatalogPage(items, page < 3)
         }
-        override fun genres(type: ContentType): List<Genre> = genreList
     }
 
     @Test

@@ -158,7 +158,7 @@ class PhoneInputServer(
         return values
     }
     private fun formPage(): String = buildString {
-        append("<main class=\"panel\"><div class=\"eyebrow\">HONGGUO TV · PUSH PLAY</div><h1>").append(escapeHtml(form.heading)).append("</h1>")
+        append("<div class=\"eyebrow\">HONGGUO TV · 手机直连</div><h1>").append(escapeHtml(form.heading)).append("</h1>")
         append("<p>").append(escapeHtml(form.description)).append("</p>")
         append("<form method=\"post\" action=\"").append(submitPath).append("\">")
         form.fields.forEachIndexed { index, field ->
@@ -180,22 +180,28 @@ class PhoneInputServer(
             if(index==0) append("<script>document.getElementById('field0').focus()</script>")
         }
         append("<button>").append(escapeHtml(form.submitLabel)).append("</button></form>")
-        append("<p class=\"foot\">请确认手机与电视连接同一 Wi-Fi。提交后电视会立即识别并显示匹配结果。</p></main>")
+        append("<p class=\"foot\">请确认手机与电视连接同一 Wi-Fi。提交后电视会立即识别并显示匹配结果。</p>")
     }
     private fun respond(socket: Socket, code: Int, message: String) {
-        val body="""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#10131b"><title>红果 TV · 推送播放</title><style>
-:root{color-scheme:dark;--bg:#0c1018;--line:#2b3547;--text:#f6f7fb;--muted:#aab4c5;--accent:#ff654f}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:28px 18px calc(28px + env(safe-area-inset-bottom));font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--text);background:radial-gradient(ellipse at 85% 0%,#45251f 0,transparent 42%),linear-gradient(160deg,#111927 0%,var(--bg) 62%)}
-main{width:100%;max-width:620px;margin:0 auto}.panel{padding:clamp(22px,6vw,38px);border:1px solid rgba(255,255,255,.09);border-radius:26px;background:linear-gradient(145deg,rgba(29,39,55,.96),rgba(19,25,36,.96));box-shadow:0 22px 70px rgba(0,0,0,.34)}
-.eyebrow{font-size:11px;letter-spacing:2.6px;font-weight:800;color:var(--accent);margin-bottom:12px}h1{font-size:clamp(28px,7vw,36px);letter-spacing:.5px;margin:0 0 10px;font-weight:800}p{font-size:15px;line-height:1.75;color:var(--muted);margin:0 0 22px}
-label{display:block;font-size:15px;font-weight:700;color:#e8edf6;margin:22px 0 10px}
-textarea{display:block;width:100%;min-height:280px;resize:vertical;border:1px solid #3b485d;border-radius:17px;padding:18px;background:#0d1420;color:var(--text);font:16px/1.8 system-ui,-apple-system,"PingFang SC",sans-serif;outline:none;box-shadow:inset 0 2px 8px rgba(0,0,0,.18)}
-input{display:block;width:100%;min-height:56px;border:1px solid #3b485d;border-radius:14px;padding:14px;background:#0d1420;color:var(--text);font:16px system-ui,-apple-system,"PingFang SC",sans-serif;outline:none}
-textarea:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,101,79,.15)}textarea::placeholder,input::placeholder{color:#738198}
-button{width:100%;min-height:58px;margin-top:20px;border:0;border-radius:16px;background:linear-gradient(105deg,#ff795d,#f04e43);color:white;font-size:18px;font-weight:800;letter-spacing:1px;box-shadow:0 10px 28px rgba(240,78,67,.22);cursor:pointer}
-button:active{transform:scale(.99)}.foot{margin:20px 0 0;padding-top:17px;border-top:1px solid var(--line);font-size:13px}
+        val body="""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0a0c12"><title>红果 TV · 手机直连</title><style>
+:root{color-scheme:dark;--bg:#0a0c12;--text:#f7f5f0;--muted:#a7adbb;--accent:#f2415a;--gold:#e7be7c}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:28px 18px calc(28px + env(safe-area-inset-bottom));font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--text);background:radial-gradient(ellipse at 88% -6%,rgba(242,65,90,.22) 0,transparent 46%),radial-gradient(ellipse at 4% 108%,rgba(231,190,124,.10) 0,transparent 44%),linear-gradient(165deg,#12151f 0%,var(--bg) 58%)}
+main{width:100%;max-width:620px;margin:0 auto}
+.panel{position:relative;overflow:hidden;padding:clamp(22px,6vw,38px);border:1px solid rgba(231,190,124,.18);border-radius:26px;background:linear-gradient(150deg,rgba(28,33,45,.94),rgba(15,18,26,.96));box-shadow:0 28px 80px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05)}
+.panel::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,var(--gold),var(--accent) 42%,transparent 80%);opacity:.9}
+.eyebrow{display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:2.8px;font-weight:700;color:var(--gold);margin-bottom:14px}
+.eyebrow::before{content:"";width:26px;height:1px;background:linear-gradient(90deg,var(--gold),transparent)}
+h1{font-size:clamp(27px,7vw,34px);letter-spacing:.4px;margin:0 0 12px;font-weight:800;line-height:1.25}
+p{font-size:15px;line-height:1.75;color:var(--muted);margin:0 0 6px}
+label{display:block;font-size:14px;font-weight:700;color:#e9edf5;margin:24px 0 10px;letter-spacing:.4px}
+textarea{display:block;width:100%;min-height:270px;resize:vertical;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:18px;background:rgba(8,10,16,.72);color:var(--text);font:16px/1.8 system-ui,-apple-system,"PingFang SC",sans-serif;outline:none;box-shadow:inset 0 2px 10px rgba(0,0,0,.28)}
+input{display:block;width:100%;min-height:56px;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:14px;background:rgba(8,10,16,.72);color:var(--text);font:16px system-ui,-apple-system,"PingFang SC",sans-serif;outline:none}
+textarea:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(242,65,90,.16)}textarea::placeholder,input::placeholder{color:#6f7789}
+button{width:100%;min-height:58px;margin-top:22px;border:0;border-radius:16px;background:linear-gradient(105deg,#ff6b7e,#f2415a 52%,#b3162f);color:#fff;font-size:17px;font-weight:800;letter-spacing:1.6px;box-shadow:0 14px 34px rgba(242,65,90,.26);cursor:pointer}
+button:active{transform:scale(.99)}
+.foot{margin:20px 0 0;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);font-size:13px;line-height:1.7}
 @media(min-width:520px){body{padding-top:7vh}textarea{min-height:320px}}
-</style></head><body>$message</body></html>""".toByteArray(Charsets.UTF_8)
+</style></head><body><main class="panel">$message</main></body></html>""".toByteArray(Charsets.UTF_8)
         val header="HTTP/1.1 $code Response\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'\r\n\r\n"
         socket.getOutputStream().apply { write(header.toByteArray(Charsets.US_ASCII)); write(body); flush() }
     }

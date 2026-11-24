@@ -1,0 +1,1095 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package com.hongguotv.nativeapp.ui.screens
+
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Gamepad
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.Subtitles
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import com.hongguotv.nativeapp.ui.components.tryRequestFocus
+import com.hongguotv.core.DanmakuPrefs
+import com.hongguotv.nativeapp.R
+import com.hongguotv.core.PlaybackQuality
+import com.hongguotv.core.PlaybackSpeed
+import com.hongguotv.core.VideoFrameMode
+import com.hongguotv.nativeapp.PlaybackExtras
+import com.hongguotv.nativeapp.ui.components.AppDialog
+import com.hongguotv.nativeapp.ui.components.ButtonTone
+import com.hongguotv.nativeapp.ui.components.Choice
+import com.hongguotv.nativeapp.ui.components.ChoiceDialog
+import com.hongguotv.nativeapp.ui.components.TvButton
+import com.hongguotv.nativeapp.ui.data.ApiStatusState
+import com.hongguotv.nativeapp.ui.data.AppViewModel
+import com.hongguotv.nativeapp.ui.data.RemoteKey
+import com.hongguotv.nativeapp.ui.data.SettingsSnapshot
+import com.hongguotv.nativeapp.ui.data.videoInfoLabel
+import com.hongguotv.nativeapp.ui.theme.Gold
+import com.hongguotv.nativeapp.ui.theme.Ink
+import com.hongguotv.nativeapp.ui.theme.Paper
+import com.hongguotv.nativeapp.ui.theme.Rouge
+import com.hongguotv.nativeapp.ui.theme.d
+import com.hongguotv.nativeapp.ui.theme.ui
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
+private enum class SettingsSection(val label: String, val icon: ImageVector) {
+    PLAYBACK("播放", Icons.Rounded.PlayCircle),
+    DANMAKU("弹幕", Icons.Rounded.Subtitles),
+    APPEARANCE("画面", Icons.Rounded.Palette),
+    CONTROL("按键", Icons.Rounded.Gamepad),
+    NETWORK("网络", Icons.Rounded.Wifi),
+    DATA("数据", Icons.Rounded.Storage),
+    ABOUT("关于", Icons.Rounded.Info),
+}
+
+@Composable
+fun SettingsScreen(
+    vm: AppViewModel,
+    snapshot: SettingsSnapshot,
+    versionName: String,
+    modifier: Modifier = Modifier,
+    onApiStatus: () -> Unit = {},
+) {
+    var section by remember { mutableStateOf(SettingsSection.PLAYBACK) }
+    val apiStatus by vm.apiStatus.collectAsStateWithLifecycle()
+    // 冷启动那次检测被系统打断时，进入网络栏补一次。
+    LaunchedEffect(section) {
+        if (section == SettingsSection.NETWORK && !apiStatus.running && apiStatus.okCount == 0 && apiStatus.failedCount == 0) {
+            vm.refreshApiStatus()
+        }
+    }
+    var choice by remember { mutableStateOf<ChoiceRequest?>(null) }
+    var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
+    var blockEditor by remember { mutableStateOf(false) }
+    var iconPicker by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    Row(modifier.fillMaxSize()) {
+        // 左侧分类导轨
+        Column(
+            Modifier
+                .width(d(240))
+                .fillMaxHeight()
+                .padding(start = ui.gutter, top = d(96), bottom = d(40)),
+            verticalArrangement = Arrangement.spacedBy(d(6)),
+        ) {
+            Text("设置", style = MaterialTheme.typography.displaySmall, color = Paper.Pure, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(d(4)))
+            Text("偏好会保存在本机", style = MaterialTheme.typography.bodySmall, color = Paper.Tertiary)
+            Spacer(Modifier.height(d(24)))
+            SettingsSection.entries.forEach { item ->
+                SectionTab(item, item == section) { section = item }
+            }
+            Spacer(Modifier.weight(1f))
+            Text("红果 TV · $versionName", style = MaterialTheme.typography.labelSmall, color = Paper.Disabled)
+        }
+
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(end = ui.gutter, top = d(96), bottom = d(30)),
+        ) {
+            Text(
+                section.label,
+                style = MaterialTheme.typography.headlineMedium,
+                color = Paper.Primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(d(16)))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(d(8))) {
+                when (section) {
+                    SettingsSection.PLAYBACK -> playbackPanel(snapshot, vm) { choice = it }
+                    SettingsSection.DANMAKU -> danmakuPanel(snapshot, vm, { choice = it }, { blockEditor = true }, { confirm = it })
+                    SettingsSection.APPEARANCE -> appearancePanel(snapshot, vm, { iconPicker = true }) { choice = it }
+                    SettingsSection.CONTROL -> controlPanel(snapshot, vm) { choice = it }
+                    SettingsSection.NETWORK -> networkPanel(apiStatus, vm, onApiStatus)
+                    SettingsSection.DATA -> dataPanel(vm, { confirm = it }, { message = it })
+                    SettingsSection.ABOUT -> aboutPanel(versionName, vm)
+                }
+            }
+        }
+    }
+
+    choice?.let { request ->
+        ChoiceDialog(
+            title = request.title,
+            choices = request.choices,
+            selected = request.selected,
+            onSelect = { key ->
+                request.onPick(key)
+                choice = null
+            },
+            onDismiss = { choice = null },
+        )
+    }
+    confirm?.let { request ->
+        AppDialog(
+            title = request.title,
+            message = request.message,
+            confirmText = "确定",
+            onConfirm = {
+                request.onConfirm()
+                confirm = null
+            },
+            onDismiss = { confirm = null },
+        )
+    }
+    if (blockEditor) {
+        BlockedWordsDialog(
+            words = snapshot.blockedWords,
+            onAdd = { vm.addBlockedWord(it) },
+            onRemove = { vm.removeBlockedWord(it) },
+            onDismiss = { blockEditor = false },
+        )
+    }
+    if (iconPicker) {
+        AppIconDialog(
+            current = snapshot.appIconVariant,
+            onPick = { vm.setAppIconVariant(it) },
+            onDismiss = { iconPicker = false },
+        )
+    }
+    message?.let { text ->
+        AppDialog(
+            title = "提示",
+            message = text,
+            confirmText = "知道了",
+            dismissText = null,
+            onConfirm = { message = null },
+            onDismiss = { message = null },
+        )
+    }
+}
+
+// ------------------------------------------------------------------ 播放
+
+private fun androidx.compose.foundation.lazy.LazyListScope.playbackPanel(
+    snapshot: SettingsSnapshot,
+    vm: AppViewModel,
+    onChoice: (ChoiceRequest) -> Unit,
+) {
+    item {
+        SettingRow(
+            title = "默认清晰度",
+            description = "进入播放时优先选择的清晰度",
+            value = PlaybackQuality.label(snapshot.quality),
+            onClick = {
+                onChoice(
+                    ChoiceRequest("默认清晰度", PlaybackQuality.options.map { Choice(it.toString(), PlaybackQuality.label(it)) }, snapshot.quality.toString()) {
+                        vm.setQuality(it.toIntOrNull() ?: snapshot.quality)
+                    },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "默认倍速",
+            description = "不影响已开始的播放",
+            value = PlaybackSpeed.label(snapshot.speed),
+            onClick = {
+                onChoice(
+                    ChoiceRequest("默认倍速", PlaybackSpeed.options.map { Choice(it.toString(), PlaybackSpeed.label(it)) }, snapshot.speed.toString()) {
+                        vm.setSpeed(it.toFloatOrNull() ?: 1f)
+                    },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "启动时播放推荐",
+            description = "打开应用后直接播放首页主推的第一部",
+            toggle = snapshot.startupAutoplay,
+            onToggle = { vm.setStartupAutoplay(it) },
+        )
+    }
+    item {
+        SettingRow(
+            title = "无感连播",
+            description = "开启：第二个播放器预渲染下一集首帧，切换即出画；关闭：同一播放器预载下一集，播完自动接上",
+            toggle = snapshot.seamlessPlayback,
+            onToggle = { vm.setSeamlessPlayback(it) },
+        )
+    }
+    item {
+        SettingRow(
+            title = "自动连播",
+            description = "一集结束后自动播放下一集",
+            toggle = snapshot.autoNext,
+            onToggle = { vm.setAutoNext(it) },
+        )
+    }
+    item {
+        SettingRow(
+            title = "跨季连播",
+            description = "本季结束后继续播放下一季",
+            toggle = snapshot.autoSeason,
+            onToggle = { vm.setAutoSeason(it) },
+        )
+    }
+    item {
+        SettingRow(
+            title = "画面模式",
+            description = "完整画面保留字幕，铺满模式填满屏幕",
+            value = VideoFrameMode.fromStored(snapshot.frameMode).label,
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "画面模式",
+                        VideoFrameMode.entries.map { Choice(it.name, it.label) },
+                        snapshot.frameMode,
+                    ) { vm.setFrameMode(VideoFrameMode.fromStored(it)) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "快进步长",
+            description = "播放时左右键单次快进的秒数",
+            value = "${snapshot.seekStepSeconds} 秒",
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "快进步长",
+                        PlaybackExtras.SEEK_STEPS.map { Choice(it.toString(), "$it 秒") },
+                        snapshot.seekStepSeconds.toString(),
+                    ) { vm.setSeekStep(it.toIntOrNull() ?: 10) },
+                )
+            },
+        )
+    }
+}
+
+// ------------------------------------------------------------------ 弹幕
+
+private fun androidx.compose.foundation.lazy.LazyListScope.danmakuPanel(
+    snapshot: SettingsSnapshot,
+    vm: AppViewModel,
+    onChoice: (ChoiceRequest) -> Unit,
+    onBlockedWords: () -> Unit,
+    onConfirm: (ConfirmRequest) -> Unit,
+) {
+    item {
+        SettingRow(
+            title = "显示弹幕",
+            description = "播放页叠加观众弹幕，关闭后所有剧集都不显示",
+            toggle = snapshot.danmaku,
+            onToggle = { vm.setDanmaku(it) },
+        )
+    }
+    item {
+        SettingRow(
+            title = "不透明度",
+            description = "弹幕压在画面上，太高会挡字幕",
+            value = "${snapshot.danmakuOpacity}%",
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "弹幕不透明度",
+                        (25..100 step 5).map { Choice(it.toString(), "$it%") },
+                        snapshot.danmakuOpacity.toString(),
+                    ) { vm.setDanmakuOpacity(it.toIntOrNull() ?: DanmakuPrefs.OPACITY_DEFAULT) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "字号",
+            description = "大屏距离远，可以适当调大",
+            value = DanmakuPrefs.fontLabel(snapshot.danmakuFont),
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "弹幕字号",
+                        DanmakuPrefs.FONT_LABELS.mapIndexed { index, label -> Choice(index.toString(), label) },
+                        snapshot.danmakuFont.toString(),
+                    ) { vm.setDanmakuFont(it.toIntOrNull() ?: DanmakuPrefs.FONT_DEFAULT) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "颜色",
+            description = "默认保留接口原色，也可以统一成一种颜色",
+            value = danmakuColorLabel(snapshot.danmakuColor),
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "弹幕颜色",
+                        (0..1).map { Choice(it.toString(), danmakuColorLabel(it)) } +
+                            DanmakuPrefsColor.names.mapIndexed { index, name -> Choice((index + 2).toString(), name) },
+                        snapshot.danmakuColor.toString(),
+                    ) { vm.setDanmakuColor(it.toIntOrNull() ?: 0) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "移动速度",
+            description = "太快来不及看，太慢会堆在一起",
+            value = DanmakuPrefs.speedLabel(snapshot.danmakuSpeed),
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "弹幕速度",
+                        DanmakuPrefs.SPEED_LABELS.mapIndexed { index, label -> Choice(index.toString(), label) },
+                        snapshot.danmakuSpeed.toString(),
+                    ) { vm.setDanmakuSpeed(it.toIntOrNull() ?: DanmakuPrefs.SPEED_DEFAULT) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "展示行数",
+            description = "同时在屏幕上滚动的轨道数量",
+            value = "${snapshot.danmakuRows} 行",
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "弹幕行数",
+                        (DanmakuPrefs.ROWS_MIN..DanmakuPrefs.ROWS_MAX).map { Choice(it.toString(), "$it 行") },
+                        snapshot.danmakuRows.toString(),
+                    ) { vm.setDanmakuRows(it.toIntOrNull() ?: DanmakuPrefs.ROWS_DEFAULT) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "屏蔽词",
+            description = if (snapshot.blockedWords.isEmpty()) "还没有屏蔽词" else "已屏蔽 ${snapshot.blockedWords.size} 个词",
+            value = "管理",
+            onClick = onBlockedWords,
+        )
+    }
+    item {
+        SettingRow(
+            title = "恢复弹幕默认",
+            description = "不透明度、字号、颜色、速度、行数恢复出厂值",
+            value = "恢复",
+            onClick = {
+                onConfirm(ConfirmRequest("恢复弹幕默认", "弹幕显示效果会恢复为默认值，屏蔽词不会删除。") { vm.resetDanmakuPreferences() })
+            },
+        )
+    }
+}
+
+private object DanmakuPrefsColor {
+    val names = listOf("白色", "红色", "橙色", "黄色", "绿色", "青色", "蓝色", "紫色")
+}
+
+private fun danmakuColorLabel(mode: Int): String = when (mode) {
+    0 -> "默认"
+    1 -> "多彩"
+    else -> DanmakuPrefsColor.names.getOrElse(mode - 2) { "默认" }
+}
+
+// ------------------------------------------------------------------ 画面
+
+private fun androidx.compose.foundation.lazy.LazyListScope.appearancePanel(
+    snapshot: SettingsSnapshot,
+    vm: AppViewModel,
+    onIconPicker: () -> Unit,
+    onChoice: (ChoiceRequest) -> Unit,
+) {
+    item {
+        SettingRow(
+            title = "应用图标",
+            description = "桌面图标与电视横幅一起换，共四款线稿",
+            value = appIconVariantLabel(snapshot.appIconVariant),
+            onClick = onIconPicker,
+        )
+    }
+    item {
+        SettingRow(
+            title = "海报列数",
+            description = "剧场与首页每行放几部，自动会跟随屏幕宽度",
+            value = if (snapshot.posterColumns == 0) "自动" else "${snapshot.posterColumns} 列",
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "海报列数",
+                        listOf(Choice("0", "自动")) + (3..8).map { Choice(it.toString(), "$it 列") },
+                        snapshot.posterColumns.toString(),
+                    ) { vm.setPosterColumns(it.toIntOrNull() ?: 0) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "播放信息",
+            description = "播放页叠加分辨率与码率",
+            value = videoInfoLabel(snapshot.videoInfoMode),
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "播放信息",
+                        listOf(Choice("0", "关闭"), Choice("1", "简要（分辨率）"), Choice("2", "详细（码率与帧率）")),
+                        snapshot.videoInfoMode.toString(),
+                    ) { vm.setVideoInfoMode(it.toIntOrNull() ?: 0) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "实时网速",
+            description = "播放页右下角显示当前下载速度",
+            toggle = snapshot.showNetworkSpeed,
+            onToggle = { vm.setShowNetworkSpeed(it) },
+        )
+    }
+    item {
+        SettingRow(
+            title = "顶部时钟",
+            description = "在顶栏显示当前时间",
+            toggle = snapshot.showClock,
+            onToggle = { vm.setShowClock(it) },
+        )
+    }
+}
+
+// ------------------------------------------------------------------ 按键
+
+private val remoteActionChoices = listOf(
+    Choice(PlaybackExtras.REMOTE_PREVIOUS, "上一集"),
+    Choice(PlaybackExtras.REMOTE_NEXT, "下一集"),
+    Choice(PlaybackExtras.REMOTE_PLAY_PAUSE, "播放 / 暂停"),
+    Choice(PlaybackExtras.REMOTE_EPISODES, "打开选集"),
+    Choice(PlaybackExtras.REMOTE_COMMENTS, "弹幕开关"),
+    Choice(PlaybackExtras.REMOTE_MENU, "打开播放设置"),
+    Choice(PlaybackExtras.REMOTE_SLEEP_TIMER, "定时关闭"),
+    Choice(PlaybackExtras.REMOTE_NONE, "无操作"),
+)
+
+private fun remoteActionLabel(action: String): String =
+    remoteActionChoices.firstOrNull { it.key == action }?.label ?: "无操作"
+
+private fun androidx.compose.foundation.lazy.LazyListScope.controlPanel(
+    snapshot: SettingsSnapshot,
+    vm: AppViewModel,
+    onChoice: (ChoiceRequest) -> Unit,
+) {
+    item {
+        SettingRow(
+            title = "上键",
+            description = "播放中按遥控器上键",
+            value = remoteActionLabel(snapshot.remoteUp),
+            onClick = {
+                onChoice(
+                    ChoiceRequest("上键行为", remoteActionChoices, snapshot.remoteUp) {
+                        vm.setRemoteAction(RemoteKey.UP, it)
+                    },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "下键",
+            description = "播放中按遥控器下键",
+            value = remoteActionLabel(snapshot.remoteDown),
+            onClick = {
+                onChoice(
+                    ChoiceRequest("下键行为", remoteActionChoices, snapshot.remoteDown) {
+                        vm.setRemoteAction(RemoteKey.DOWN, it)
+                    },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "确认键",
+            description = "播放中按遥控器确认键",
+            value = remoteActionLabel(snapshot.remoteConfirm),
+            onClick = {
+                onChoice(
+                    ChoiceRequest("确认键行为", remoteActionChoices, snapshot.remoteConfirm) {
+                        vm.setRemoteAction(RemoteKey.CONFIRM, it)
+                    },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "菜单键",
+            description = "播放中按遥控器菜单键",
+            value = remoteActionLabel(snapshot.remoteMenu),
+            onClick = {
+                onChoice(
+                    ChoiceRequest("菜单键行为", remoteActionChoices, snapshot.remoteMenu) {
+                        vm.setRemoteAction(RemoteKey.MENU, it)
+                    },
+                )
+            },
+        )
+    }
+}
+
+// ------------------------------------------------------------------ 网络
+
+private fun androidx.compose.foundation.lazy.LazyListScope.networkPanel(
+    status: ApiStatusState,
+    vm: AppViewModel,
+    onApiStatus: () -> Unit,
+) {
+    item {
+        SettingRow(
+            title = "接口状态",
+            description = "首页、搜索、播放与联想四项接口的连通性",
+            value = status.summary,
+            onClick = onApiStatus,
+        )
+    }
+    item {
+        SettingRow(
+            title = "重新检测",
+            description = "立即对四项接口各发一次请求，只读公开数据",
+            value = if (status.running) "检测中…" else "检测",
+            onClick = { if (!status.running) vm.refreshApiStatus() },
+        )
+    }
+    item {
+        val context = LocalContext.current
+        InfoRow("当前网络", remember(context) { networkLabel(context) })
+    }
+    item { InfoRow("更新通道", "官方 GitHub 发布 + GitCode 镜像，自动择优") }
+}
+
+private fun networkLabel(context: Context): String = runCatching {
+    val manager = context.getSystemService(ConnectivityManager::class.java) ?: return@runCatching "未知"
+    val network = manager.activeNetwork ?: return@runCatching "未连接"
+    val caps = manager.getNetworkCapabilities(network) ?: return@runCatching "未连接"
+    when {
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "有线网络"
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "无线网络"
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "移动网络"
+        else -> "其他网络"
+    }
+}.getOrDefault("未知")
+
+// ------------------------------------------------------------------ 数据
+
+private fun androidx.compose.foundation.lazy.LazyListScope.dataPanel(
+    vm: AppViewModel,
+    onConfirm: (ConfirmRequest) -> Unit,
+    onMessage: (String) -> Unit,
+) {
+    item {
+        SettingRow(
+            title = "恢复播放偏好",
+            description = "清晰度、倍速、连播等恢复默认，保留追剧与历史",
+            value = "恢复",
+            onClick = {
+                onConfirm(ConfirmRequest("恢复播放偏好", "播放相关设置会恢复为默认值，追剧、收藏、观看历史不会受影响。") { vm.resetPlaybackPreferences() })
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "清空观看历史",
+            description = "本机所有观看进度将被删除",
+            value = "清空",
+            onClick = {
+                onConfirm(ConfirmRequest("清空观看历史", "此操作不可恢复，确定清空全部观看记录？") { vm.clearHistory() })
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "清空搜索历史",
+            description = "只清除本机保存的搜索词",
+            value = "清空",
+            onClick = {
+                onConfirm(ConfirmRequest("清空搜索历史", "清除本机保存的全部搜索词？") { vm.clearSearchHistory() })
+            },
+        )
+    }
+}
+
+// ------------------------------------------------------------------ 关于
+
+private fun androidx.compose.foundation.lazy.LazyListScope.aboutPanel(
+    versionName: String,
+    vm: AppViewModel,
+) {
+    item {
+        SettingRow(
+            title = "检查更新",
+            description = "检查官方发布通道，可直接下载并安装新版",
+            value = "检查",
+            onClick = { vm.openUpdateDialog() },
+        )
+    }
+    item { InfoRow("版本", versionName) }
+    item { InfoRow("内容来源", "红果短剧官方公开接口") }
+    item { InfoRow("本地数据", "追剧、历史与设置仅保存在本机，卸载即清除") }
+    item { InfoRow("开源许可", "GPL-3.0 · 界面基于 Jetpack Compose 重写") }
+}
+
+// ------------------------------------------------------------------ 通用
+
+private data class ChoiceRequest(
+    val title: String,
+    val choices: List<Choice>,
+    val selected: String,
+    val onPick: (String) -> Unit,
+)
+
+private data class ConfirmRequest(
+    val title: String,
+    val message: String,
+    val onConfirm: () -> Unit,
+)
+
+@Composable
+private fun SectionTab(section: SettingsSection, selected: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(d(12)))
+            .background(
+                when {
+                    focused -> Color(0x14FFFFFF)
+                    selected -> Rouge.Veil
+                    else -> Color.Transparent
+                },
+            )
+            .border(
+                d(1.2f),
+                when {
+                    focused -> Rouge.Bright
+                    selected -> Rouge.Core.copy(0.35f)
+                    else -> Color.Transparent
+                },
+                RoundedCornerShape(d(12)),
+            )
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = d(16), vertical = d(11)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            section.icon,
+            null,
+            tint = if (focused || selected) Rouge.Bright else Paper.Tertiary,
+            modifier = Modifier.size(d(18)),
+        )
+        Spacer(Modifier.width(d(12)))
+        Text(
+            section.label,
+            style = MaterialTheme.typography.titleSmall,
+            color = if (focused || selected) Paper.Pure else Paper.Secondary,
+        )
+    }
+}
+
+@Composable
+private fun SettingRow(
+    title: String,
+    description: String,
+    value: String? = null,
+    toggle: Boolean? = null,
+    onClick: (() -> Unit)? = null,
+    onToggle: ((Boolean) -> Unit)? = null,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val active = focused && onClick != null
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(d(13)))
+            .background(
+                when {
+                    active -> Color(0x1AFFFFFF)
+                    focused -> Color(0x14FFFFFF)
+                    else -> Color(0x08FFFFFF)
+                },
+            )
+            .border(
+                d(1.2f),
+                if (focused) Rouge.Bright else Color(0x0AFFFFFF),
+                RoundedCornerShape(d(13)),
+            )
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = onClick != null || onToggle != null,
+            ) {
+                if (onToggle != null && toggle != null) onToggle(!toggle) else onClick?.invoke()
+            }
+            .padding(horizontal = d(18), vertical = d(12)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = Paper.Primary)
+            Spacer(Modifier.height(d(3)))
+            Text(description, style = MaterialTheme.typography.bodySmall, color = Paper.Tertiary, maxLines = 1)
+        }
+        if (toggle != null) {
+            TogglePill(toggle, focused)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(value.orEmpty(), style = MaterialTheme.typography.labelMedium, color = if (focused) Gold.Bright else Paper.Secondary)
+                if (onClick != null) {
+                    Spacer(Modifier.width(d(6)))
+                    Icon(
+                        Icons.Rounded.ChevronRight,
+                        null,
+                        tint = if (focused) Paper.Primary else Paper.Tertiary,
+                        modifier = Modifier.size(d(17)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TogglePill(on: Boolean, focused: Boolean) {
+    val offset by animateFloatAsState(if (on) 1f else 0f, spring(0.7f, 500f), label = "toggle")
+    val travel = with(androidx.compose.ui.platform.LocalDensity.current) { (d(46) - d(26)).toPx() }
+    val bg by animateColorAsState(
+        when {
+            on && focused -> Rouge.Bright
+            on -> Rouge.Core
+            focused -> Color(0x33FFFFFF)
+            else -> Color(0x1AFFFFFF)
+        },
+        tween(160),
+        label = "toggle-bg",
+    )
+    Box(
+        Modifier
+            .width(d(46))
+            .height(d(26))
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .border(d(1f), if (focused) Color.White.copy(0.65f) else Color.Transparent, RoundedCornerShape(999.dp))
+            .padding(horizontal = d(3)),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            Modifier
+                .graphicsLayer { translationX = offset * travel }
+                .size(d(20))
+                .clip(CircleShape)
+                .background(Color.White),
+        )
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(d(13)))
+            .background(Color(0x06FFFFFF))
+            .padding(horizontal = d(18), vertical = d(13)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.titleSmall, color = Paper.Secondary)
+        Spacer(Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodySmall, color = Paper.Tertiary)
+    }
+}
+
+/** 屏蔽词管理：列表删除 + 输入框添加。遥控器用系统输入法输入。 */
+@Composable
+private fun BlockedWordsDialog(
+    words: List<String>,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var draft by remember { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    val addFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val ime = LocalSoftwareKeyboardController.current
+    var fieldFocused by remember { mutableStateOf(false) }
+
+    fun closeKeyboard() {
+        focusManager.clearFocus()
+        ime?.hide()
+    }
+
+    // 输入态下返回键只收键盘，不关闭弹窗；输入框失焦后返回键恢复正常关闭。
+    // 之前的做法缺了这一层：返回直接把 Dialog 关掉，输入法窗口却留在屏幕上。
+    BackHandler(enabled = fieldFocused) { closeKeyboard() }
+    // 弹窗退出时兜底收键盘，避免 Dialog 销毁后输入法残留。
+    DisposableEffect(Unit) { onDispose { ime?.hide() } }
+
+    AppDialog(
+        title = "弹幕屏蔽词",
+        message = if (words.isEmpty()) "还没有屏蔽词，命中任意一个词的弹幕都不会显示。" else null,
+        confirmText = "完成",
+        dismissText = null,
+        onConfirm = {
+            closeKeyboard()
+            onDismiss()
+        },
+        onDismiss = {
+            closeKeyboard()
+            onDismiss()
+        },
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(d(12)))
+                    .background(Color(0x0FFFFFFF))
+                    .padding(horizontal = d(16), vertical = d(12)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    textStyle = TextStyle(color = Paper.Pure, fontSize = MaterialTheme.typography.titleSmall.fontSize),
+                    cursorBrush = SolidColor(Rouge.Bright),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (draft.isNotBlank()) {
+                            onAdd(draft)
+                            draft = ""
+                        }
+                    }),
+                    decorationBox = { inner ->
+                        Box {
+                            if (draft.isEmpty()) {
+                                Text("输入要屏蔽的词", style = MaterialTheme.typography.titleSmall, color = Paper.Disabled)
+                            }
+                            inner()
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focus)
+                        .onFocusChanged { info ->
+                            fieldFocused = info.isFocused
+                            if (!info.isFocused) ime?.hide()
+                        }
+                        // 遥控器不会困在输入框里：按「下」直接到「添加」，再按 OK 入列。
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                                addFocus.tryRequestFocus()
+                            } else {
+                                false
+                            }
+                        },
+                )
+                Spacer(Modifier.width(d(10)))
+                TvButton(
+                    text = "添加",
+                    onClick = {
+                        if (draft.isNotBlank()) {
+                            onAdd(draft)
+                            draft = ""
+                        }
+                    },
+                    tone = ButtonTone.Primary,
+                    focusRequester = addFocus,
+                )
+            }
+            if (words.isNotEmpty()) {
+                Spacer(Modifier.height(d(12)))
+                LazyColumn(Modifier.fillMaxWidth().height(d(220)), verticalArrangement = Arrangement.spacedBy(d(6))) {
+                    words.forEach { word ->
+                        item {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(d(10)))
+                                    .background(Color(0x0AFFFFFF))
+                                    .padding(horizontal = d(14), vertical = d(10)),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(word, style = MaterialTheme.typography.bodyMedium, color = Paper.Secondary)
+                                Spacer(Modifier.weight(1f))
+                                TvButton(text = "移除", onClick = { onRemove(word) }, tone = ButtonTone.Ghost)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------ 应用图标
+
+private fun appIconVariantLabel(variant: String): String = when (variant) {
+    "h" -> "环刻"
+    "j" -> "光弧"
+    "k" -> "光圈"
+    else -> "玻璃窗"
+}
+
+private val appIconChoices = listOf(
+    Triple("i", "玻璃窗", "圆窗 · 一线反光"),
+    Triple("h", "环刻", "圆环 · 金弧"),
+    Triple("j", "光弧", "暗场一束光"),
+    Triple("k", "光圈", "六叶快门"),
+)
+
+@Composable
+private fun AppIconDialog(
+    current: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val fgRes = mapOf(
+        "h" to R.drawable.ic_launcher_fg_h,
+        "i" to R.drawable.ic_launcher_fg_i,
+        "j" to R.drawable.ic_launcher_fg_j,
+        "k" to R.drawable.ic_launcher_fg_k,
+    )
+    AppDialog(
+        title = "应用图标",
+        message = "选中即生效，桌面图标与电视横幅一起更换",
+        confirmText = "完成",
+        dismissText = null,
+        onConfirm = onDismiss,
+        onDismiss = onDismiss,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(d(14))) {
+            appIconChoices.chunked(2).forEach { rowItems ->
+                Row(horizontalArrangement = Arrangement.spacedBy(d(14))) {
+                    rowItems.forEach { (key, name, hint) ->
+                        val selected = key == current
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(d(18)))
+                                .border(
+                                    d(if (selected) 1.6f else 1f),
+                                    if (selected) Gold.Core else Color(0x1FFFFFFF),
+                                    RoundedCornerShape(d(18)),
+                                )
+                                .background(if (selected) Color(0x14E7BE7C) else Color(0x0AFFFFFF))
+                                .clickable { onPick(key) }
+                                .padding(d(12)),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(d(92))
+                                    .clip(RoundedCornerShape(d(20)))
+                                    .background(Brush.verticalGradient(listOf(Color(0xFF131722), Color(0xFF04050A)))),
+                            ) {
+                                Image(
+                                    painter = painterResource(fgRes.getValue(key)),
+                                    contentDescription = name,
+                                    Modifier.fillMaxSize().padding(d(14)),
+                                )
+                                if (selected) {
+                                    Icon(
+                                        Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        tint = Gold.Bright,
+                                        modifier = Modifier.align(Alignment.TopEnd).size(d(18)).padding(d(2)),
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(d(10)))
+                            Text(
+                                name,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (selected) Gold.Core else Paper.Pure,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(Modifier.height(d(3)))
+                            Text(hint, style = MaterialTheme.typography.labelSmall, color = Paper.Tertiary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

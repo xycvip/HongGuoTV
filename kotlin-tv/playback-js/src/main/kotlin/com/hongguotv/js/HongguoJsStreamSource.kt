@@ -1,0 +1,88 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package com.hongguotv.js
+
+import com.hongguotv.core.EmptyPlaybackResponseException
+import com.hongguotv.core.StreamInfo
+import com.hongguotv.core.StreamSource
+import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
+import java.io.IOException
+import java.io.InterruptedIOException
+
+/**
+ * 热更新 JS 播放线路：StreamSource 的 JS 实现。
+ *
+ * 取流全在 main.js 内完成（vendor 的 spider.play -> video_model + V5 签名），
+ * 本类只负责三件事：ID 解析、调脚本、把返回值映射成 StreamInfo。
+ *
+ * ID 约定（与 adapter 的 chapter.id 一致）：
+ *   "hongguo:<seriesId>:<videoId>" 或 "<seriesId>:<videoId>"
+ * 纯 videoId 无法取流（vendor 需要 seriesId 构造 player URL），调用方
+ * （PlayerSession / 探测）必须传组合 ID。
+ */
+class HongguoJsStreamSource(
+    private val js: HongguoJs,
+) : StreamSource {
+    override val name: String = "hongguo-js"
+
+    override fun stream(id: String, maxQuality: Int): StreamInfo {
+        val (seriesId, videoId) = parseEpisodeId(id)
+        val task = JSONObject()
+            .put("dramaId", seriesId)
+            .put("chapter", JSONObject().put("id", "hongguo:$seriesId:$videoId"))
+            .put("maxQuality", maxQuality)
+        val result = runBlocking { js.call("resolveMedia", task) }
+        if (!result.ok) throw mapScriptError(result)
+        val data = JSONObject(result.data ?: "{}")
+        val url = data.optString("url").trim()
+        if (url.isEmpty()) throw IOException("脚本未返回播放地址")
+        val key = data.optString("key").trim().takeIf { it.isNotEmpty() }?.let { decodeKey(it) }
+        val quality = data.optInt("quality")
+        return StreamInfo(
+            url = url,
+            key = key,
+            quality = if (quality > 0) "${quality}P" else "",
+            mimeType = data.optString("mimeType").ifBlank { "video/mp4" },
+        )
+    }
+
+    private fun mapScriptError(result: JsCallResult): IOException = when (result.code) {
+        "PLAYBACK_UNRESOLVED" -> EmptyPlaybackResponseException(result.error)
+        "CANCELLED", "SCRIPT_TIMEOUT" -> InterruptedIOException(result.error)
+        else -> IOException(result.error ?: "脚本取流失败（${result.code}）")
+    }
+
+    companion object {
+        private val DIGITS = Regex("[0-9]{1,30}")
+
+        fun parseEpisodeId(id: String): Pair<String, String> {
+            val cleaned = id.trim().removePrefix("hongguo:")
+            val colon = cleaned.lastIndexOf(':')
+            if (colon > 0) {
+                val series = cleaned.substring(0, colon)
+                val video = cleaned.substring(colon + 1)
+                if (series.matches(DIGITS) && video.matches(DIGITS)) return series to video
+            }
+            val under = cleaned.lastIndexOf('_')
+            if (under > 0) {
+                val series = cleaned.substring(0, under)
+                val video = cleaned.substring(under + 1)
+                if (series.matches(DIGITS) && video.matches(DIGITS)) return series to video
+            }
+            throw IOException("无效的分集 ID（需要 剧集ID:分集ID 组合）")
+        }
+
+        /** vendor 的 decryptionKey 是 hex 串；容错解析 base64。 */
+        fun decodeKey(raw: String): ByteArray? {
+            val hex = Regex("^[0-9a-fA-F]{32,}$").matches(raw)
+            if (hex) {
+                val out = ByteArray(raw.length / 2)
+                for (i in out.indices) {
+                    out[i] = raw.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+                }
+                return out
+            }
+            return runCatching { java.util.Base64.getDecoder().decode(raw) }.getOrNull()
+        }
+    }
+}
