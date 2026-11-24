@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "1cdf5938be9deeda0c6c5eb61dac9ecb0f843184",
-  "versionCode": 101,
-  "versionName": "0.0.101",
+  "sourceCommit": "b936c2b7e8caac282dda43e22d4d2b41cc00d4b9",
+  "versionCode": 102,
+  "versionName": "0.0.102",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.101",
+  "tag": "hongguotv-bate-v0.0.102",
   "apk": {
-    "name": "HongguoTV-0.0.101.apk",
+    "name": "HongguoTV-0.0.102.apk",
     "size": 7849054,
-    "sha256": "421150ff644327e2e5406f1ab70657c6589fa8ab252d42fee835713259bb2908",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.101/HongguoTV-0.0.101.apk"
+    "sha256": "ddccd1eab9cebdb64a4b65675898f69e9816020c6a6956f1b6b47ecb0574bf93",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.102/HongguoTV-0.0.102.apk"
   },
-  "notes": "【网络与接口】\n- 迁移全部数据接口到 QuickJS 热更新脚本并修复 debug 双桌面图标"
+  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
 }
