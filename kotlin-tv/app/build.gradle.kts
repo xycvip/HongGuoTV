@@ -64,7 +64,8 @@ android {
 
     // 保持 Android Gradle Plugin 默认产物名，兼容正式版与测试版发布工作流：
     // app/build/outputs/apk/release/app-release.apk
-    // 版本名、版本码由 APK 内部 BuildConfig 和发布清单记录，不依赖文件名。}
+    // 版本名、版本码由 APK 内部 BuildConfig 和发布清单记录，不依赖文件名。
+}
 dependencies {
     // Use Android's built-in emoji font; do not bundle Emoji2's large font assets.
     implementation("androidx.core:core:1.16.0")
