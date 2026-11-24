@@ -9,6 +9,11 @@ on:
         required: true
         type: boolean
         default: false
+      manual_version_name:
+        description: 手动指定正式版版本号（如 1.1.44）；留空则自动递增
+        required: false
+        type: string
+        default: ''
       release_notes:
         description: 本次正式版更新说明（支持多行，将原样用于各发布页面）
         required: true
@@ -100,7 +105,20 @@ jobs:
             echo "::error::AppDownload中的版本名称不是标准的主版本.次版本.修订版本格式：$OLD_NAME"
             exit 1
           fi
-          NEXT_NAME="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+
+          # 手动填写版本号时采用指定的 versionName；留空时保持原有自动递增逻辑。
+          MANUAL_NAME="$(printf '%s' "${{ inputs.manual_version_name }}" | tr -d '[:space:]')"
+          if [ -n "$MANUAL_NAME" ]; then
+            if [[ ! "$MANUAL_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::手动指定的正式版版本号格式错误：$MANUAL_NAME（应为例如 1.1.44）"
+              exit 1
+            fi
+            NEXT_NAME="$MANUAL_NAME"
+            echo "使用手动指定的正式版版本号：$NEXT_NAME"
+          else
+            NEXT_NAME="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+            echo "未指定版本号，自动递增为：$NEXT_NAME"
+          fi
           # 正式版 versionCode 使用北京时间 YYYYMMDDXX；当天序号从01开始，不预留00。
           # 测试版工作流及其独立版本号文件不受此规则影响。
           TODAY="$(TZ=Asia/Shanghai date +%Y%m%d)"
