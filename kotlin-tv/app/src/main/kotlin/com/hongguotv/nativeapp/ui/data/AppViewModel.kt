@@ -1909,6 +1909,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- 检查更新 ----
 
+    /**
+     * 根据安装包名选择更新通道，防止测试版读取正式版更新清单。
+     * 正式版保持原有 AppDownload 更新配置。
+     */
+    private fun createAppUpdateRepository(): AppUpdateRepository {
+        return if (getApplication<Application>().packageName == AppUpdate.BETA_PACKAGE) {
+            AppUpdateRepository(
+                expectedPackageName = AppUpdate.BETA_PACKAGE,
+                releaseRepository = AppUpdate.BETA_REPOSITORY,
+                releaseTagPrefix = AppUpdate.BETA_TAG_PREFIX,
+                latestManifestUrl = AppUpdate.BETA_LATEST_MANIFEST,
+                apkFilePrefix = "HongguoTV-",
+            )
+        } else {
+            AppUpdateRepository()
+        }
+    }
+
     fun openUpdateDialog() {
         _update.update { it.copy(visible = true, error = null, notice = null) }
         val current = _update.value
@@ -1926,7 +1944,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _update.update { it.copy(phase = UpdatePhase.CHECKING, update = null, error = null, notice = null) }
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { AppUpdateRepository().use { it.latest() } }
+                runCatching { createAppUpdateRepository().use { it.latest() } }
             }
             result.onSuccess { info ->
                 val installed = BuildConfig.VERSION_CODE.toLong()
@@ -1947,7 +1965,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _update.update { it.copy(phase = UpdatePhase.CHECKING, update = null, error = null, notice = null, progress = 0, apkPath = null) }
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { AppUpdateRepository().use { it.latest() } }
+                runCatching { createAppUpdateRepository().use { it.latest() } }
             }
             result.onSuccess { info ->
                 val installed = BuildConfig.VERSION_CODE.toLong()
@@ -1978,7 +1996,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         updateJob?.cancel()
         _update.update { it.copy(phase = UpdatePhase.DOWNLOADING, progress = 0, speedBytesPerSecond = 0, error = null, notice = null, apkPath = null) }
         updateJob = viewModelScope.launch {
-            val repo = AppUpdateRepository()
+            val repo = createAppUpdateRepository()
             try {
                 withContext(Dispatchers.IO) {
                     repo.download(
