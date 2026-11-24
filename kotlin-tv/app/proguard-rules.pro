@@ -11,6 +11,9 @@
 -keep class com.hongguotv.** { *; }
 -keep interface com.hongguotv.** { *; }
 
+# Kotlin unsigned byte array：供 QuickJS / Kotlin 桥接相关代码使用
+-keep class kotlin.UByteArray { *; }
+
 # Media3 内核用反射装配解码器 / 渲染器 / 音视频扩展
 -keep class androidx.media3.** { *; }
 -dontwarn androidx.media3.**
