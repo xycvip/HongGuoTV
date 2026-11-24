@@ -4,7 +4,7 @@
 
 <p><b>在电视上，安静地看完一整部短剧。</b></p>
 
-<p><sub>Kotlin · Jetpack Compose · Media3 / ExoPlayer · QuickJS　｜　单包约 2 MB　｜　只用遥控器</sub></p>
+<p><sub>Kotlin · Jetpack Compose · Media3 / ExoPlayer · QuickJS　｜　单包约 5 MB　｜　只用遥控器</sub></p>
 
 </div>
 
@@ -35,30 +35,7 @@
 - [查看测试版 0.0.102 发布说明](https://github.com/xycvip/HongGuoTV/releases/tag/hongguotv-bate-v0.0.102)
 <!-- TEST_RELEASE_INFO_END -->
 
-> 两个包名不同，可以同时装，版本号各自独立。测试版是开发用的，随时会坏。
-
-## 界面
-
-<table>
-<tr>
-<td width="50%"><img src="doc/首页.png" width="100%" alt="首页"><br>
-<b>首页</b><br><sub>接着看，再看热门。两个区一起滚，不打断</sub></td>
-<td width="50%"><img src="doc/剧场.png" width="100%" alt="剧场"><br>
-<b>剧场</b><br><sub>按题材分栏，竖排往下翻</sub></td>
-</tr>
-<tr>
-<td><img src="doc/排行榜.png" width="100%" alt="排行榜"><br>
-<b>排行榜</b><br><sub>总榜、真人剧、漫剧、AI 剧</sub></td>
-<td><img src="doc/搜索.png" width="100%" alt="搜索"><br>
-<b>搜索</b><br><sub>屏幕键盘，首拼全拼都能打，带联想和热搜</sub></td>
-</tr>
-<tr>
-<td><img src="doc/追剧.png" width="100%" alt="追剧"><br>
-<b>追剧</b><br><sub>观看历史与收藏，一处管理</sub></td>
-<td><img src="doc/设置.png" width="100%" alt="设置"><br>
-<b>设置</b><br><sub>无界设置，DNS、脚本、播放全在这里</sub></td>
-</tr>
-</table>
+> 两个包名不同，可以同时装，版本号各自独立。测试版是调试用的，可能会有严重BUG，不要下载
 
 ## 四个关键决定
 
