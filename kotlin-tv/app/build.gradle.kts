@@ -1,8 +1,4 @@
 import java.util.Properties
-import java.text.SimpleDateFormat
-import java.util.TimeZone
-import java.util.Date
-import java.util.Locale
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -66,22 +62,9 @@ android {
         }
     }
 
-    // 构建产物自描述：APK 文件名带版本名 / 版本码 / 构建类型 / 构建时间，
-    // 侧载时装的是哪一版一眼可辨，避免"装了半天还是旧的"。
-    // 时间戳固定 Asia/Shanghai（与用户看到的北京时间一致），精确到秒防止同名覆盖。
-    applicationVariants.all {
-        val vName = versionName
-        val vCode = versionCode
-        val buildTag = buildType.name
-        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("Asia/Shanghai")
-        }.format(Date())
-        outputs.all {
-            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
-                "HongGuoTV-v${vName}-b${vCode}-${buildTag}-${stamp}.apk"
-        }
-    }
-}
+    // 保持 Android Gradle Plugin 默认产物名，兼容正式版与测试版发布工作流：
+    // app/build/outputs/apk/release/app-release.apk
+    // 版本名、版本码由 APK 内部 BuildConfig 和发布清单记录，不依赖文件名。}
 dependencies {
     // Use Android's built-in emoji font; do not bundle Emoji2's large font assets.
     implementation("androidx.core:core:1.16.0")
