@@ -155,7 +155,7 @@ fun UpdateDialog(
             if (update != null && state.phase != UpdatePhase.UP_TO_DATE) {
                 Spacer(Modifier.height(d(12)))
                 Text(
-                    "只在应用前台检查更新；下载完成后需确认系统安装，追剧与观看记录保留。",
+                    "只在应用前台检查更新；下载完成后需确认系统安装，收藏与观看记录保留。",
                     style = MaterialTheme.typography.bodySmall,
                     color = Paper.Tertiary,
                 )

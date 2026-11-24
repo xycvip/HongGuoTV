@@ -47,11 +47,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,6 +78,7 @@ import com.hongguotv.nativeapp.ui.components.PosterCard
 import com.hongguotv.nativeapp.ui.components.RoundIconButton
 import com.hongguotv.nativeapp.ui.components.SelectChip
 import com.hongguotv.nativeapp.ui.components.TvButton
+import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import com.hongguotv.nativeapp.ui.data.SearchState
 import com.hongguotv.nativeapp.ui.theme.Ink
 import com.hongguotv.nativeapp.ui.theme.Paper
@@ -406,6 +409,15 @@ private fun KeyboardPanel(
     onClose: () -> Unit,
 ) {
     val rows = listOf("QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM")
+    // 键盘展开后焦点要落在正中间的键位（第二行 ASDFGHJKL 的第 5 个 = G）。
+    // 面板是滑入动画，键位要几帧才 attach，单次请求容易落空，这里重试到成功。
+    val centerKeyFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        repeat(16) {
+            if (centerKeyFocus.tryRequestFocus()) return@LaunchedEffect
+            withFrameNanos { }
+        }
+    }
     Column(
         Modifier
             .fillMaxWidth()
@@ -420,15 +432,21 @@ private fun KeyboardPanel(
             Spacer(Modifier.weight(1f))
             RoundIconButton(Icons.Rounded.Close, onClose, size = d(32), iconSize = d(16), contentDescription = "收起键盘")
         }
-        rows.forEachIndexed { index, row ->
+        rows.forEachIndexed { rowIndex, row ->
             Row(horizontalArrangement = Arrangement.spacedBy(d(7))) {
-                if (index == 2) {
+                if (rowIndex == 2) {
                     KeyboardKey(label = "删除", wide = true, icon = Icons.Rounded.Backspace, onClick = onDelete)
                 }
-                row.forEach { letter ->
-                    KeyboardKey(letter.toString(), onClick = { onKey(letter.lowercase()) })
+                row.forEachIndexed { colIndex, letter ->
+                    // 第二行（ASDFGHJKL）正中间第 5 个键 G：rowIndex=1、colIndex=4。
+                    val isCenter = rowIndex == 1 && colIndex == 4
+                    KeyboardKey(
+                        letter.toString(),
+                        onClick = { onKey(letter.lowercase()) },
+                        focusRequester = if (isCenter) centerKeyFocus else null,
+                    )
                 }
-                if (index == 2) {
+                if (rowIndex == 2) {
                     KeyboardKey(label = "搜索", wide = true, primary = true, onClick = onSearch)
                 }
             }
@@ -443,11 +461,13 @@ private fun KeyboardKey(
     wide: Boolean = false,
     primary: Boolean = false,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     Box(
         Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .width(if (wide) d(92) else d(52))
             .height(d(44))
             .clip(RoundedCornerShape(d(10)))

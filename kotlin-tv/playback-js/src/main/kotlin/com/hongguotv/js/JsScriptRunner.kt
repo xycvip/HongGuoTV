@@ -77,6 +77,8 @@ class JsScriptRunner(
             // 必须跑在 JsRuntimeThreads 的 8MB 栈线程上，否则这个 4MB 上限不生效（超限变成 SIGSEGV）。
             quickJs.maxStackSize = 4L * 1024 * 1024
             quickJs.installHost()
+            // 在 main.js 求值前注入设备身份：命中缓存则跳过 device_register 网络往返。
+            quickJs.restoreDeviceIdentity()
             val bytecode = loadBytecode(quickJs)
             quickJs.evaluate<Any?>(bytecode)
             val payload = callFunction(quickJs, function, argsJson)
@@ -93,6 +95,10 @@ class JsScriptRunner(
 
     private fun QuickJs.installHost() {
         with(host) { install() }
+    }
+
+    private suspend fun QuickJs.restoreDeviceIdentity() {
+        with(host) { injectDeviceIdentity() }
     }
 
     private fun loadBytecode(quickJs: QuickJs): ByteArray {

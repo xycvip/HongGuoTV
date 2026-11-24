@@ -2,15 +2,15 @@
 package com.hongguotv.nativeapp
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.PorterDuff
-import android.graphics.Rect
+import android.graphics.Typeface
 import android.os.SystemClock
 import android.util.TypedValue
+import android.view.Choreographer
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.hongguotv.core.Danmaku
@@ -20,330 +20,210 @@ import com.hongguotv.core.DanmakuPrefs
 import kotlin.math.ceil
 
 /**
- * Lightweight rolling-comment overlay. The playback position is the clock: a comment enters
- * from the right edge when playback crosses its anchor and drifts left at a fixed speed, so
- * pausing, seeking and playback-speed changes need no extra handling. Comments are assigned
- * to the first track whose previous comment has fully entered; when every track is busy the
- * comment is dropped, matching common danmaku behavior.
+ * 滚动弹幕覆盖层。
  *
- * 渲染方式：独立 SurfaceView（setZOrderMediaOverlay）+ 独立渲染线程。
- * 之前是普通 View 叠在 PlayerView 的 SurfaceView 上，弹幕每动一帧都会强制整个窗口走
- * GPU 合成（4K 输出时每帧八百万像素），廉价电视盒子直接掉帧。换成独立 surface 后
- * 视频留在自己的硬件层，弹幕只在顶部轨道带上贴图，两者由 HWC 叠加，不再互相拖累。
+ * 渲染机制：独立 SurfaceView + [Choreographer] 对齐 vsync 驱动 + 预排程 drawText。
  *
- * 文字仍在进场时一次性烤成小位图，滚动阶段只做 drawBitmap；重绘固定 30fps。
+ * 两个关键点缺一不可：
+ * 1) 【节奏】用 Choreographer 而非 sleep 计时。sleep(33ms) 既不能整除 60/90/120Hz，
+ *    精度又在 35~45ms 飘，几条弹幕也一顿一顿跳；vsync 回调帧间隔恒定，滚动才丝滑。
+ * 2) 【载体】用 SurfaceView 而非普通 View。普通 View 每帧 invalidate 会强制整个 window
+ *    重合成；本项目是双播放器叠放，两层全屏视频 SurfaceView 会被一起拖垮（视频卡死/错位）。
+ *    SurfaceView 是独立硬件层，弹幕重绘不触发 window 合成，视频完全不受影响。
+ *
+ * 弹幕一次性预排程：数据每批到来时把已缓冲弹幕排到轨道、算好 startMs/endMs，
+ * 每帧只做二分定位可见区间 + drawText，不做逐帧轨道分配/位图烤制。
  */
 class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_000L) :
     SurfaceView(context), SurfaceHolder.Callback {
-    private data class Active(
-        val danmaku: Danmaku,
-        val label: String,
-        val bitmap: Bitmap,
-        val width: Float,
-        val track: Int,
-    )
+    private data class Scheduled(
+        val text: String,
+        val color: Int,
+        val startMs: Long,
+        val endMs: Long,
+        val lane: Int,
+        val widthPx: Float,
+    ) {
+        /** 从左边缘进入、完全出屏的线性位置；分母恒为 travelMs。 */
+        fun xAt(timeMs: Long, viewportWidth: Int): Float =
+            viewportWidth - (viewportWidth + widthPx) * (timeMs - startMs).toFloat() / (endMs - startMs).toFloat()
+    }
 
-    private val lock = Any()
-    private val active = ArrayList<Active>()
-    @Volatile
-    var loader: DanmakuLoader? = null
-        private set
+    // 文字用描边衬底，每帧直接 drawText，不做位图烤制——同屏弹幕就那么几条，成本可忽略。
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
+        typeface = Typeface.DEFAULT_BOLD
+        color = Color.WHITE
+    }
+    private val outline = Paint(fill).apply {
+        style = Paint.Style.STROKE
+        strokeJoin = Paint.Join.ROUND
+        color = Color.BLACK
+    }
+
+    private var scheduled: List<Scheduled> = emptyList()
+    private var loader: DanmakuLoader? = null
     private var positionProvider: () -> Long = { 0L }
     private var needMore: (Long) -> Unit = {}
     private var lastPumpAt = 0L
-    private var lastEmit = -1L
-    private var cachedPosition = 0L
-    @Volatile
+    private var lastBuffered = -1
     private var running = false
-    @Volatile
     private var playbackActive = false
-    private var needsClear = false
-    private var pxPerMs = 0f
-    private var tracks = 1
-    private var trackHeight = 0f
+
+    private val baseTextSize = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_SP, textSizeSp, resources.displayMetrics
+    )
+    private val baseCrossMs = crossMs
+    private var travelMs = crossMs
+    private var maxRows = Int.MAX_VALUE
+    private var colorMode = COLOR_MODE_DEFAULT
+    private var opacityAlpha = 255
+    private var fontValue = DanmakuPrefs.FONT_DEFAULT
+    private var speedValue = DanmakuPrefs.SPEED_DEFAULT
+    private var blocked: (String) -> Boolean = { false }
+    private val gapPx = 8f * resources.displayMetrics.density
+
+    private var lineHeightPx = 1f
+    private var firstBaseline = 0f
+    private var lanes = 0
+
+    // SurfaceView 渲染调度：Choreographer 对齐屏幕 vsync，帧间隔恒定。
+    private val choreographer = Choreographer.getInstance()
+    private var frameScheduled = false
     private var surfaceW = 0
     private var surfaceH = 0
     private var surfaceAlive = false
-    private var renderThread: Thread? = null
-
-    private val baseTextSize = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_SP,
-        textSizeSp,
-        resources.displayMetrics
-    )
-    private val baseCrossMs = crossMs
-    private var currentCrossMs = crossMs
-    private var maxTracks = Int.MAX_VALUE
-    private var colorMode = COLOR_MODE_DEFAULT
-    private var opacityAlpha = 255
-    /** 命中屏蔽词的弹幕直接丢弃，不再参与轨道分配。 */
-    private var blocked: (String) -> Boolean = { false }
-    private val gapPx = 24 * resources.displayMetrics.density
-
-    /** 文字渲染专用的离屏画笔：阴影只在生成位图时算一次。 */
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        textSize = baseTextSize
-        setShadowLayer((baseTextSize / 7f).coerceAtLeast(1f), 0f, baseTextSize / 26f, Color.BLACK)
+    private val frameCallback = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            frameScheduled = false
+            if (!surfaceAlive) return
+            val source = loader
+            if (running && playbackActive && source != null) {
+                // 数据分批异步加载：数量变了就重排一次（弹幕量很小）。
+                val buffered = source.buffered
+                if (buffered != lastBuffered) {
+                    lastBuffered = buffered
+                    reschedule()
+                }
+                val now = positionProvider().coerceAtLeast(0L)
+                val tick = SystemClock.elapsedRealtime()
+                if (now > 0L && tick - lastPumpAt > 1_000L) {
+                    lastPumpAt = tick
+                    needMore(now)
+                }
+                drawFrame(now)
+            }
+            scheduleFrame()
+        }
     }
-    // 位图按 1:1 贴到 surface 上，关掉采样能省一部分 GPU/CPU。
-    private val bitmapPaint = Paint().apply {
-        isFilterBitmap = false
-        isAntiAlias = false
-    }
-    private val dirtyRect = Rect()
-    private var textPadding = 0f
 
     init {
         isFocusable = false
-        // 关键：让弹幕 surface 压在视频 surface 之上、但仍在窗口（Compose 控件）之下。
+        // 弹幕 surface 压在视频 surface 之上、Compose 控制层之下。
         setZOrderMediaOverlay(true)
         holder.addCallback(this)
         holder.setFormat(PixelFormat.TRANSLUCENT)
         visibility = GONE
-        updateMetrics()
     }
 
-    private fun updateMetrics() {
-        textPadding = ceil(textPaint.textSize * 0.20f)
-    }
-
-    /**
-     * Applies the user's rendering preferences. Layout-affecting changes (font size, row cap)
-     * clear on-screen comments; opacity and speed apply to what is already flying.
-     */
-    fun applyPrefs(opacityPct: Int, font: Int, speed: Int, rows: Int) {
-        synchronized(lock) {
-            val oldTextSize = textPaint.textSize
-            val oldMaxTracks = maxTracks
-            opacityAlpha = DanmakuPrefs.opacity(opacityPct) * 255 / 100
-            // 位图里保持满不透明，透明度统一在贴图时乘，避免 alpha 被乘两次变淡。
-            textPaint.alpha = 255
-            textPaint.textSize = baseTextSize * DanmakuPrefs.fontScale(font)
-            textPaint.setShadowLayer(
-                (textPaint.textSize / 7f).coerceAtLeast(1f),
-                0f,
-                textPaint.textSize / 26f,
-                Color.BLACK,
-            )
-            updateMetrics()
-            currentCrossMs = (baseCrossMs * DanmakuPrefs.speedScale(speed)).toLong().coerceAtLeast(1)
-            maxTracks = DanmakuPrefs.rows(rows)
-            relayout()
-            if (textPaint.textSize != oldTextSize || maxTracks != oldMaxTracks) {
-                clearActive()
-            }
-        }
-    }
-
-    /** 默认保留接口原色；多彩稳定分配颜色；固定颜色模式统一使用用户选择的颜色。 */
-    fun setColorMode(mode: Int) {
-        val normalized = mode.coerceIn(COLOR_MODE_DEFAULT, COLOR_MODE_LAST)
-        synchronized(lock) {
-            if (colorMode == normalized) return
-            colorMode = normalized
-            // 位图里已经烤进颜色，换模式后按新颜色重烤，避免旧颜色留在屏幕上。
-            if (active.isNotEmpty()) {
-                val rebuilt = active.mapNotNull { item ->
-                    val bitmap = renderText(item.label, colorOf(item.danmaku)) ?: return@mapNotNull null
-                    Active(item.danmaku, item.label, bitmap, item.width, item.track)
-                }
-                clearActive()
-                active.addAll(rebuilt)
-            }
-            needsClear = true
-        }
-    }
-
-    private fun relayout() {
-        if (surfaceW <= 0 || surfaceH <= 0 || currentCrossMs <= 0) return
-        pxPerMs = surfaceW.toFloat() / currentCrossMs
-        trackHeight = textPaint.textSize * 1.62f
-        tracks = (surfaceH / trackHeight).toInt().coerceAtLeast(1).coerceAtMost(maxTracks)
-    }
-
-    /**
-     * [position] reports playback milliseconds; [needMore] is raised on the render thread about
-     * once a second while playback advances — the host should schedule [DanmakuLoader.loadUpTo]
-     * off-thread.
-     */
-    fun bind(loader: DanmakuLoader, position: () -> Long, needMore: (Long) -> Unit = {}, playing: Boolean = true) {
-        unbind()
-        synchronized(lock) {
-            this.loader = loader
-            positionProvider = position
-            this.needMore = needMore
-            lastEmit = position().coerceAtLeast(0)
-            cachedPosition = lastEmit
-            lastPumpAt = 0L
-            running = true
-            playbackActive = playing
-            needsClear = true
-        }
-        visibility = VISIBLE
-    }
-
-    /** Stop drawing while video is paused; resume from the media clock without drifting. */
-    fun setPlaybackActive(active: Boolean) {
-        if (!running || playbackActive == active) return
-        playbackActive = active
-        if (active) {
-            // 暂停期间媒体时钟可能被 seek 过，先对齐一次，避免恢复瞬间弹幕乱飞。
-            synchronized(lock) {
-                cachedPosition = positionProvider().coerceAtLeast(0)
-                if (lastEmit < 0) lastEmit = cachedPosition
-                lastPumpAt = 0L
-            }
-        }
-    }
-
-    fun setBlockedFilter(filter: (String) -> Boolean) {
-        synchronized(lock) {
-            blocked = filter
-            // 只回收命中的那几条：整表清空会把还要继续显示的位图一起 recycle 掉。
-            val removed = active.filter { blocked(it.label) }
-            if (removed.isNotEmpty()) {
-                active.removeAll(removed)
-                removed.forEach { runCatching { it.bitmap.recycle() } }
-            }
-            needsClear = true
-        }
-    }
-
-    fun unbind() {
-        running = false
-        playbackActive = false
-        synchronized(lock) {
-            loader = null
-            needMore = {}
-            clearActive()
-            lastEmit = -1L
-        }
-        visibility = GONE
-    }
-
-    /** Playback jumped; comments on screen belong to the old position. */
-    fun seekTo(positionMs: Long) {
-        synchronized(lock) {
-            clearActive()
-            lastEmit = positionMs.coerceAtLeast(0)
-            cachedPosition = lastEmit
-            needsClear = true
-        }
-    }
-
-    // ------------------------------------------------------------ surface 生命周期
-
+    // ---------------------------------------------------------------- surface 生命周期
     override fun surfaceCreated(holder: SurfaceHolder) {
         surfaceAlive = true
-        needsClear = true
-        startRenderThread()
+        updateMetrics()
+        scheduleFrame()
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        synchronized(lock) {
-            surfaceW = width
-            surfaceH = height
-            relayout()
-            clearActive()
-            lastEmit = -1L
-            needsClear = true
-        }
+        surfaceW = width
+        surfaceH = height
+        updateMetrics()
+        reschedule()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        // 不在这里清 renderThread：线程可能正卡在 lockCanvas 上，
-        // 让它自己看到 surfaceAlive=false 后退出，避免 surface 重建时出现两条线程。
         surfaceAlive = false
+        choreographer.removeFrameCallback(frameCallback)
+        frameScheduled = false
     }
 
     override fun onDetachedFromWindow() {
         surfaceAlive = false
+        choreographer.removeFrameCallback(frameCallback)
+        frameScheduled = false
         super.onDetachedFromWindow()
     }
 
-    private fun startRenderThread() {
-        val existing = renderThread
-        if (existing != null && existing.isAlive) return
-        val thread = Thread({
-            try {
-            while (surfaceAlive) {
-                if (!running || !playbackActive) {
-                    SystemClock.sleep(60)
-                    continue
-                }
-                val startedAt = SystemClock.uptimeMillis()
-                val empty = synchronized(lock) {
-                    step()
-                    active.isEmpty() && !needsClear
-                }
-                if (!empty) drawFrame()
-                val cost = SystemClock.uptimeMillis() - startedAt
-                SystemClock.sleep((FRAME_INTERVAL_MS - cost).coerceAtLeast(4L))
-            }
-            } finally {
-                if (renderThread === Thread.currentThread()) renderThread = null
-            }
-        }, "danmaku-surface")
-        thread.priority = Thread.NORM_PRIORITY + 1
-        renderThread = thread
-        thread.start()
+    /** 向屏幕刷新节奏挂一帧回调；标志防止一帧内重复 post 造成回调叠加。 */
+    private fun scheduleFrame() {
+        if (!surfaceAlive || frameScheduled) return
+        frameScheduled = true
+        choreographer.postFrameCallback(frameCallback)
     }
 
-    private fun x(item: Active, position: Long) = surfaceW - (position - item.danmaku.offsetMs) * pxPerMs
-
-    /** 推进媒体时钟、放行新弹幕、回收出屏弹幕。调用方需持有 [lock]。 */
-    private fun step() {
-        val loader = loader ?: return
-        if (surfaceW == 0) return
-        val position = positionProvider().coerceAtLeast(0)
-        cachedPosition = position
-        if (lastEmit < 0) lastEmit = position
-        if (position < lastEmit - SEEK_TOLERANCE_MS || position - lastEmit > SEEK_FORWARD_MS) {
-            clearActive()
-            lastEmit = position
-            needsClear = true
-        }
-        if (position > lastEmit) {
-            // 一次追帧最多放行这么多条：缓存 miss 后突然补一大批时，别在单帧里烤几十张位图。
-            var budget = MAX_EMITS_PER_FRAME
-            for (comment in loader.between(lastEmit, position)) {
-                if (budget-- <= 0) break
-                emit(comment, position)
-            }
-            lastEmit = position
-        }
-        // 倒序删除，避免每帧 removeAll 分配迭代器。
-        for (index in active.indices.reversed()) {
-            val item = active[index]
-            if (x(item, position) + item.width < 0) {
-                active.removeAt(index)
-                runCatching { item.bitmap.recycle() }
-                needsClear = true
-            }
-        }
-        val now = SystemClock.elapsedRealtime()
-        if (position > 0 && now - lastPumpAt > 1_000) {
-            lastPumpAt = now
-            needMore(position)
-        }
+    private fun updateMetrics() {
+        val textSize = baseTextSize * DanmakuPrefs.fontScale(fontValue)
+        fill.textSize = textSize
+        outline.textSize = textSize
+        outline.strokeWidth = ceil(textSize / 12f).coerceAtLeast(1f)
+        fill.alpha = opacityAlpha
+        outline.alpha = opacityAlpha
+        travelMs = (baseCrossMs * DanmakuPrefs.speedScale(speedValue)).toLong().coerceAtLeast(1L)
+        val metrics = fill.fontMetrics
+        val textHeightPx = ceil(metrics.descent - metrics.ascent + outline.strokeWidth).coerceAtLeast(1f)
+        lineHeightPx = maxOf(textHeightPx, textSize * 1.55f)
+        firstBaseline = -metrics.ascent + outline.strokeWidth / 2f
+        val availableLanes = if (surfaceH <= 0) 0 else (surfaceH / lineHeightPx).toInt()
+        lanes = availableLanes.coerceAtMost(maxRows).coerceAtLeast(0)
     }
 
-    private fun emit(comment: Danmaku, position: Long) {
-        if (pxPerMs <= 0f) return
-        if (blocked(comment.text)) return
-        // Expand emoji codes once here: measure and draw must see the same text.
-        val label = DanmakuEmoji.display(comment.text).take(MAX_TEXT_CHARS)
-        val widthF = surfaceW.toFloat()
-        for (track in 0 until tracks) {
-            val last = active.lastOrNull { it.track == track }
-            if (last == null || x(last, position) + last.width < widthF - gapPx) {
-                val bitmap = renderText(label, colorOf(comment)) ?: return
-                active.add(Active(comment, label, bitmap, textPaint.measureText(label), track))
-                return
-            }
+    /**
+     * 把已缓冲弹幕预排到轨道。每批新数据到来、偏好变化或尺寸变化时重排一次；
+     * 算法从前往后确定性分配，前面弹幕的轨道不受后续追加影响，不会闪跳。
+     */
+    private fun reschedule() {
+        val source = loader ?: return
+        if (surfaceW <= 0 || travelMs <= 0 || lanes <= 0) return
+        val comments = source.between(0L, Long.MAX_VALUE)
+        if (comments.isEmpty()) {
+            scheduled = emptyList()
+            return
         }
-        // Every track is busy; drop the comment rather than overlapping.
+        val prepared = ArrayList<Triple<String, Int, Long>>(comments.size)
+        for (comment in comments) {
+            val label = DanmakuEmoji.display(comment.text).take(MAX_TEXT_CHARS)
+            if (label.isBlank() || blocked(label)) continue
+            prepared.add(Triple(label, colorOf(comment), comment.offsetMs))
+        }
+        prepared.sortBy { it.third }
+
+        val lastOnLane = arrayOfNulls<Scheduled>(lanes)
+        val clearanceMs = LongArray(lanes)
+        val output = ArrayList<Scheduled>(prepared.size)
+        for ((text, color, at) in prepared) {
+            val widthPx = fill.measureText(text)
+            if (widthPx <= 0f) continue
+            // 同轨两条的安全间隔：前条尾部离开入口后，后条才入轨，避免追尾。
+            val clearance = ceil(travelMs * (widthPx + gapPx) / (surfaceW + widthPx)).toLong()
+                .coerceAtLeast(MIN_GAP_MS)
+            var bestLane = 0
+            var bestStart = Long.MAX_VALUE
+            for (lane in 0 until lanes) {
+                val prev = lastOnLane[lane]
+                val earliest = if (prev == null) at
+                else maxOf(at, prev.startMs + maxOf(clearanceMs[lane], clearance))
+                if (earliest < bestStart) {
+                    bestStart = earliest
+                    bestLane = lane
+                }
+            }
+            // 轨道全忙且要等太久：丢弃，弹幕宁缺毋滥，不强行叠字。
+            if (bestStart > at + MAX_DELAY_MS) continue
+            val item = Scheduled(text, color, bestStart, bestStart + travelMs, bestLane, widthPx)
+            lastOnLane[bestLane] = item
+            clearanceMs[bestLane] = clearance
+            output.add(item)
+        }
+        output.sortBy { it.startMs }
+        scheduled = output
     }
 
     private fun colorOf(comment: Danmaku): Int = when {
@@ -356,66 +236,126 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         else -> comment.color ?: Color.WHITE
     }
 
-    /** 把一条弹幕（含阴影）画进小位图；滚动时只剩贴图，不再触发文字光栅化。 */
-    private fun renderText(label: String, color: Int): Bitmap? {
-        val textWidth = textPaint.measureText(label)
-        if (textWidth <= 0f) return null
-        val metrics = textPaint.fontMetrics
-        val bitmapWidth = ceil(textWidth + textPadding * 2f).toInt().coerceAtLeast(1)
-        val bitmapHeight = ceil(metrics.descent - metrics.ascent + textPadding * 2f).toInt().coerceAtLeast(1)
-        return runCatching {
-            val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            val previous = textPaint.color
-            textPaint.color = color
-            canvas.drawText(label, textPadding, textPadding - metrics.ascent, textPaint)
-            textPaint.color = previous
-            bitmap
-        }.getOrNull()
+    /** 二分：第一个 startMs > timeMs 的下标。scheduled 按 startMs 升序。 */
+    private fun firstStartingAfter(timeMs: Long): Int {
+        var low = 0
+        var high = scheduled.size
+        while (low < high) {
+            val mid = (low + high) ushr 1
+            if (scheduled[mid].startMs <= timeMs) low = mid + 1 else high = mid
+        }
+        return low
     }
 
-    private fun clearActive() {
-        active.forEach { runCatching { it.bitmap.recycle() } }
-        active.clear()
-        needsClear = true
-    }
-
-    /** 在独立 surface 上重绘顶部轨道带；视频画面完全不受影响。 */
-    private fun drawFrame() {
+    /**
+     * 在独立 surface 上画一帧。硬件画布由 GPU 合成，CPU 零光栅化，
+     * 且不触发 window 重合成——双播放器视频层完全不受影响。
+     * 调度节奏由 [frameCallback] 的 Choreographer vsync 回调负责，这里只管画。
+     */
+    private fun drawFrame(now: Long) {
         if (!surfaceAlive || surfaceW <= 0 || surfaceH <= 0) return
-        val surfaceHolder = holder
-        val bottom = (tracks * trackHeight).toInt() + 2
-        dirtyRect.set(0, 0, surfaceW, bottom.coerceIn(1, surfaceH))
         val canvas = try {
-            // 硬件画笔：文字位图由 GPU 直接合成，省掉 lockCanvas 的 CPU 光栅化与整块上传。
-            // 低端盒子上个别机型不支持，回退到软件画笔。
-            surfaceHolder.lockHardwareCanvas()
+            holder.lockHardwareCanvas()
         } catch (_: Throwable) {
+            // 个别盒子硬件画布不可用，降级软件画布 + 脏区。
             try {
-                surfaceHolder.lockCanvas(dirtyRect)
+                holder.lockCanvas()
             } catch (_: Exception) {
-                null
+                return
             }
         } ?: return
         try {
-            synchronized(lock) {
-                canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-                needsClear = false
-                if (active.isEmpty()) return@synchronized
-                val position = cachedPosition
-                val widthF = surfaceW.toFloat()
-                bitmapPaint.alpha = opacityAlpha
-                for (item in active) {
-                    val left = x(item, position)
-                    if (left > widthF || left + item.width < 0) continue
-                    canvas.drawBitmap(item.bitmap, left - textPadding, item.track * trackHeight, bitmapPaint)
-                }
+            // 只清弹幕轨道带，避免每帧清整屏；布局变化时 lastBuffered 重排已覆盖。
+            val clipBottom = (lanes * lineHeightPx).coerceAtMost(surfaceH.toFloat())
+            canvas.save()
+            canvas.clipRect(0f, 0f, surfaceW.toFloat(), clipBottom)
+            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+
+            // 可见区间：startMs 落在 (now - travelMs, now]。
+            val from = now - travelMs
+            val first = firstStartingAfter(from)
+            val end = firstStartingAfter(now)
+            for (i in first until end) {
+                val item = scheduled[i]
+                val x = item.xAt(now, surfaceW)
+                val y = firstBaseline + item.lane * lineHeightPx
+                fill.color = item.color
+                canvas.drawText(item.text, x, y, outline)
+                canvas.drawText(item.text, x, y, fill)
             }
+            canvas.restore()
         } catch (_: Exception) {
-            // surface 被回收/尺寸变化时丢掉这一帧即可。
+            // surface 尺寸变化/回收时丢掉这一帧即可。
         } finally {
-            runCatching { surfaceHolder.unlockCanvasAndPost(canvas) }
+            runCatching { holder.unlockCanvasAndPost(canvas) }
         }
+    }
+
+    // ---------------------------------------------------------------- 对外接口（保持兼容）
+
+    fun applyPrefs(opacityPct: Int, font: Int, speed: Int, rows: Int) {
+        opacityAlpha = DanmakuPrefs.opacity(opacityPct) * 255 / 100
+        fontValue = font
+        speedValue = speed
+        maxRows = DanmakuPrefs.rows(rows)
+        updateMetrics()
+        reschedule()
+    }
+
+    fun setColorMode(mode: Int) {
+        val normalized = mode.coerceIn(COLOR_MODE_DEFAULT, COLOR_MODE_LAST)
+        if (colorMode == normalized) return
+        colorMode = normalized
+        reschedule()
+    }
+
+    fun setBlockedFilter(filter: (String) -> Boolean) {
+        blocked = filter
+        reschedule()
+    }
+
+    fun bind(
+        loader: DanmakuLoader,
+        position: () -> Long,
+        needMore: (Long) -> Unit = {},
+        playing: Boolean = true,
+    ) {
+        unbind()
+        this.loader = loader
+        positionProvider = position
+        this.needMore = needMore
+        lastPumpAt = 0L
+        lastBuffered = -1
+        running = true
+        playbackActive = playing
+        visibility = VISIBLE
+        updateMetrics()
+        reschedule()
+        needMore(position().coerceAtLeast(0L))
+        // 启动 vsync 循环；surface 可能已存在（bind 晚于 surfaceCreated），这里补一次调度。
+        surfaceAlive = holder.surface.isValid
+        scheduleFrame()
+    }
+
+    /** 暂停/恢复：vsync 循环持续运行，只切换绘制开关即可，无需重启线程。 */
+    fun setPlaybackActive(active: Boolean) {
+        if (!running || playbackActive == active) return
+        playbackActive = active
+    }
+
+    /** 位置按绝对媒体时间计算，seek 后自然落到正确位置，无需清空。 */
+    fun seekTo(positionMs: Long) {
+        lastPumpAt = 0L
+    }
+
+    fun unbind() {
+        running = false
+        playbackActive = false
+        loader = null
+        needMore = {}
+        scheduled = emptyList()
+        lastBuffered = -1
+        visibility = GONE
     }
 
     companion object {
@@ -435,14 +375,10 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
             Color.rgb(199, 146, 234),
         )
         private val COLORFUL_COLORS = COLOR_VALUES.drop(1).toIntArray()
-        private const val SEEK_TOLERANCE_MS = 250L
-        private const val SEEK_FORWARD_MS = 1_000L
-        /**
-         * 24fps：弹幕是匀速平移，25/30fps 的差别肉眼几乎看不出来，
-         * 但每帧的合成/上传成本直接少 20%，低端盒子更稳。
-         */
-        private const val FRAME_INTERVAL_MS = 41L
-        private const val MAX_EMITS_PER_FRAME = 4
+        /** 同轨道两条弹幕的最小入场间隔。 */
+        private const val MIN_GAP_MS = 400L
+        /** 轨道挤满时最多顺延多久，太久就丢弃，避免弹幕远离剧情。 */
+        private const val MAX_DELAY_MS = 3_000L
         private const val MAX_TEXT_CHARS = 80
     }
 }

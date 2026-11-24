@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,11 +36,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.FastForward
-import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.SkipNext
@@ -79,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.hongguotv.core.PlaybackQuality
 import com.hongguotv.core.PlaybackSpeed
@@ -89,6 +92,7 @@ import com.hongguotv.nativeapp.ui.components.ChoiceDialog
 import com.hongguotv.nativeapp.ui.components.PulseDots
 import com.hongguotv.nativeapp.ui.components.TvButton
 import com.hongguotv.nativeapp.ui.components.tryRequestFocus
+import com.hongguotv.nativeapp.R
 import com.hongguotv.nativeapp.ui.player.PlayerSession
 import com.hongguotv.nativeapp.ui.theme.Ink
 import com.hongguotv.nativeapp.ui.theme.Paper
@@ -108,6 +112,8 @@ fun PlayerScreen(
     settings: SettingsSnapshot,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    clock: String = "",
+    onDanmakuSettings: () -> Unit = {},
 ) {
     val context = LocalContext.current
     var controlsVisible by remember { mutableStateOf(true) }
@@ -277,29 +283,51 @@ fun PlayerScreen(
                 }
             },
     ) {
-        // 视频画面
+        // 视频画面：两层 PlayerView（均为 SurfaceView）叠放，切集时只交换两层的屏幕位置、
+        // 不重新绑定播放器，避免「换 player → surface 重建 → 闪屏/黑帧」。
+        // inactive 层由 session 用 translationX 物理移出屏幕（surface 仍存活、照常预渲染首帧），
+        // 不用 alpha / z-order——那两类「改属性」方式在 SurfaceView 上有传播时序窗口，
+        // 会让备用首帧偶发闪到前台。位置切换是 View 属性、同步生效，无此问题。
+        // 弹幕是独立 SurfaceView（setZOrderMediaOverlay），浮在视频之上、控制层之下，
+        // 由 Choreographer 对齐 vsync 驱动，重绘不触发 window 合成，视频不受影响。
+        // 播放器与 view 的绑定、位置切换由 session 管理，这里的 update 只同步缩放模式。
+        fun buildVideoLayer(ctx: android.content.Context, slot: Int): PlayerView {
+            val view = android.view.View.inflate(ctx, R.layout.player_view_surface, null) as PlayerView
+            return view.apply {
+                useController = false
+                // PlayerView 是原生 View，一旦参与 Android 层的焦点分配，
+                // Compose 就收不到方向键了（表现：整页遥控器全失效）。
+                isFocusable = false
+                isFocusableInTouchMode = false
+                descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                // 首帧不跳变：PlayerView 内部的 AspectRatioFrameLayout 在视频尺寸回来之前
+                // 没有宽高比约束，会先按全屏铺满，等 onVideoSizeChanged 才缩到真实比例——
+                // 表现就是「首帧先全屏再缩小」。短剧源均为 9:16 竖屏，这里先预设 9:16，
+                // 首帧即按竖屏窄条布局（与最终正常画面一致），不会全屏铺满再跳变；
+                // 真实尺寸到达后 Media3 会覆盖该值，不影响后续任何一集。
+                // 横屏内容极少见；若遇到，首帧会先按 9:16 布局、拿到尺寸后自动更正一次。
+                findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
+                    ?.setAspectRatio(9f / 16f)
+                session.attachPlayerView(this, slot)
+            }
+        }
         AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    useController = false
-                    // PlayerView 是原生 View，一旦参与 Android 层的焦点分配，
-                    // Compose 就收不到方向键了（表现：整页遥控器全失效）。
-                    isFocusable = false
-                    isFocusableInTouchMode = false
-                    descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                    setShutterBackgroundColor(android.graphics.Color.BLACK)
-                    player = session.player
-                    // 接管备用播放器时要用同一个 PlayerView 换实例，隐藏输出面也挂在它内部。
-                    session.attachPlayerView(this)
-                }
-            },
-            update = { view ->
-                if (view.player !== session.player) view.player = session.player
-                view.resizeMode = session.frameResizeMode
-            },
-            onRelease = { view -> session.detachPlayerView(view) },
-            modifier = Modifier
+            factory = { ctx -> buildVideoLayer(ctx, 0) },
+            update = { view -> view.resizeMode = session.frameResizeMode },
+            onRelease = { view -> session.detachPlayerView(view, 0) },
+            modifier = Modifier.fillMaxSize(),
+        )
+        AndroidView(
+            factory = { ctx -> buildVideoLayer(ctx, 1) },
+            update = { view -> view.resizeMode = session.frameResizeMode },
+            onRelease = { view -> session.detachPlayerView(view, 1) },
+            modifier = Modifier.fillMaxSize(),
+        )
+        // 手势覆盖层：放在两层视频之上，切集换层时点击/双击行为保持稳定。
+        Box(
+            Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTapGestures(
@@ -318,9 +346,10 @@ fun PlayerScreen(
                 },
         )
 
-        // 弹幕层：叠在画面之上、控制层之下。
-        // 只覆盖顶部弹幕带，不要 fillMaxSize：SurfaceView 的每个缓冲都是整块尺寸，
-        // 4K 下全屏 3 缓冲约 100MB，每帧提交的带宽就是掉帧的根源。
+        // 弹幕层：独立 SurfaceView + Choreographer（vsync 对齐），setZOrderMediaOverlay 浮在
+        // 视频之上、控制层之下。用独立 surface 而非普通 View：普通 View 每帧 invalidate
+        // 会强制整个 window 重合成，把两层全屏视频 SurfaceView 一起拖垮（视频卡死/错位）。
+        // 只覆盖顶部弹幕带：匹配常见弹幕区域，也限制每帧清屏/绘制面积。
         val danmakuView = remember { DanmakuView(context) }
         AndroidView(
             factory = { danmakuView },
@@ -434,8 +463,11 @@ fun PlayerScreen(
                         .padding(horizontal = ui.gutter, vertical = d(22)),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    CircleAction(Icons.Rounded.ArrowBackIosNew, "返回", d(44)) { onBack() }
-                    Spacer(Modifier.width(d(18)))
+                    // 屏幕返回箭头按设置显隐；遥控器返回键始终通过 BackHandler 生效，不受此开关影响。
+                    if (settings.showScreenBack) {
+                        CircleAction(Icons.Rounded.ArrowBackIosNew, "返回", d(44)) { onBack() }
+                        Spacer(Modifier.width(d(18)))
+                    }
                     Column {
                         Text(
                             session.series.title,
@@ -451,18 +483,11 @@ fun PlayerScreen(
                             color = Paper.Secondary,
                         )
                     }
-                    Spacer(Modifier.weight(1f))
-                    ControlChip(if (session.qualityLabel.isBlank()) "清晰度" else session.qualityLabel, Icons.Rounded.HighQuality) {
-                        qualityDialog = true
+                    // 右上角时间：跟随设置里的「时间显示」开关，不加背景框，避免遮挡画面。
+                    if (settings.showClock && clock.isNotBlank()) {
+                        Spacer(Modifier.weight(1f))
+                        Text(clock, style = MaterialTheme.typography.labelMedium, color = Paper.Secondary)
                     }
-                    Spacer(Modifier.width(d(10)))
-                    ControlChip(PlaybackSpeed.label(session.speed), Icons.Rounded.Speed) { speedDialog = true }
-                    Spacer(Modifier.width(d(10)))
-                    ControlChip(session.frameMode.label, Icons.Rounded.AspectRatio) {
-                        frameDialog = true
-                    }
-                    Spacer(Modifier.width(d(10)))
-                    ControlChip("选集", Icons.Rounded.PlaylistPlay) { episodesOpen = true }
                 }
 
                 // 底部控制区
@@ -480,12 +505,18 @@ fun PlayerScreen(
                         onSeekBy = { seek(it, if (it > 0) "快进 10 秒" else "快退 10 秒") },
                         onInteract = { poke() },
                     )
-                    Spacer(Modifier.height(d(14)))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Spacer(Modifier.weight(1f))
-                        Row(horizontalArrangement = Arrangement.spacedBy(d(18)), verticalAlignment = Alignment.CenterVertically) {
+                    // 进度条、播放键整组下移：两段间距各收窄 7dp，让它们更贴近底部选项行，
+                    // 而不是悬在控制区上半部分。选项行仍锚在底部，不动。
+                    Spacer(Modifier.height(d(9)))
+                    // 主播放控制：去掉快退/快进图标后只留「上一集 / 播放 / 下一集」，居中排布。
+                    // 快进快退仍可用——控制层隐藏时左右键直接 seek，进度条聚焦时左右键也能 seek。
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(d(28)), verticalAlignment = Alignment.CenterVertically) {
                             CircleAction(Icons.Rounded.SkipPrevious, "上一集", d(46)) { session.previous() }
-                            CircleAction(Icons.Rounded.FastRewind, "快退 10 秒", d(50)) { seek(-10_000, "快退 10 秒") }
                             Box(
                                 Modifier
                                     .size(d(68))
@@ -506,8 +537,38 @@ fun PlayerScreen(
                                     modifier = Modifier.size(d(34)),
                                 )
                             }
-                            CircleAction(Icons.Rounded.FastForward, "快进 10 秒", d(50)) { seek(10_000, "快进 10 秒") }
                             CircleAction(Icons.Rounded.SkipNext, "下一集", d(46)) { session.next() }
+                        }
+                    }
+                    Spacer(Modifier.height(d(9)))
+                    // 选项从右上角移到左下角，紧邻播放键下方，遥控器一进来就能左右遍历到。
+                    // 右下角保留遥控器提示，两者共用一行，互不遮挡。
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(d(10)), verticalAlignment = Alignment.CenterVertically) {
+                            ControlChip(if (session.qualityLabel.isBlank()) "清晰度" else session.qualityLabel, Icons.Rounded.HighQuality) {
+                                qualityDialog = true
+                            }
+                            ControlChip(PlaybackSpeed.label(session.speed), Icons.Rounded.Speed) { speedDialog = true }
+                            ControlChip(session.frameMode.label, Icons.Rounded.AspectRatio) { frameDialog = true }
+                            // 两个弹幕图标（设置页弹幕图标 Subtitles 的副本），放在选集前面：
+                            // 开关角标 = 小勾/小叉；设置角标 = 小螺丝（齿轮）。互不抢焦点。
+                            DanmakuBadgeChip(
+                                badge = if (session.danmakuEnabled) Icons.Rounded.Check else Icons.Rounded.Close,
+                                badgeTint = if (session.danmakuEnabled) Color(0xFF43A047) else Color(0xFF9AA0AA),
+                                description = if (session.danmakuEnabled) "弹幕已开启" else "弹幕已关闭",
+                            ) {
+                                session.toggleDanmaku()
+                                seekHint = if (session.danmakuEnabled) "弹幕已开启" else "弹幕已关闭"
+                                hintToken++
+                                poke()
+                            }
+                            DanmakuBadgeChip(
+                                badge = Icons.Rounded.Settings,
+                                badgeTint = Rouge.Bright,
+                                description = "弹幕设置",
+                                onClick = onDanmakuSettings,
+                            )
+                            ControlChip("选集", Icons.Rounded.PlaylistPlay) { episodesOpen = true }
                         }
                         Spacer(Modifier.weight(1f))
                         // 提示文案由设置里的按键映射实时推导，改完设置回播放页就能看到新说明。
@@ -543,6 +604,16 @@ fun PlayerScreen(
                     }
                 }
             }
+        }
+
+        // 进度条常驻：屏幕最底部一条极细进度线，比常规进度条更细、低对比，不聚焦不拦截输入，
+        // 只为随时看到播放位置。控制层显隐、选集抽屉都不影响它；有真实时长才绘制。
+        if (settings.persistentProgress && session.duration > 0L) {
+            PersistentProgress(
+                position = session.position,
+                duration = session.duration,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
 
         seekHint?.let { hint ->
@@ -679,6 +750,68 @@ private fun ControlChip(label: String, icon: ImageVector, onClick: () -> Unit) {
         Icon(icon, null, tint = if (focused) Color.White else Paper.Secondary, modifier = Modifier.size(d(16)))
         Spacer(Modifier.width(d(7)))
         Text(label, style = MaterialTheme.typography.labelSmall, color = if (focused) Color.White else Paper.Secondary, maxLines = 1)
+    }
+}
+
+@Composable
+private fun DanmakuBadgeChip(
+    badge: ImageVector,
+    badgeTint: Color,
+    description: String,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(d(999)))
+            .background(if (focused) Color(0x2EFFFFFF) else Color(0x14FFFFFF))
+            .border(d(1.2f), if (focused) Rouge.Bright else Color(0x22FFFFFF), RoundedCornerShape(d(999)))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = d(13), vertical = d(9)),
+    ) {
+        // 与设置页弹幕入口同一个图标（Subtitles），角标贴在主图标右下角。
+        Box {
+            Icon(
+                Icons.Rounded.Subtitles,
+                null,
+                tint = if (focused) Color.White else Paper.Secondary,
+                modifier = Modifier.size(d(18)),
+            )
+            Box(
+                Modifier
+                    .offset(x = d(9), y = d(9))
+                    .size(d(11))
+                    .clip(CircleShape)
+                    .background(Color(0xE60A0C12))
+                    .border(d(0.8f), Color(0x66FFFFFF), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(badge, description, tint = badgeTint, modifier = Modifier.size(d(8)))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PersistentProgress(
+    position: Long,
+    duration: Long,
+    modifier: Modifier = Modifier,
+) {
+    val progress = (position.toFloat() / duration).coerceIn(0f, 1f)
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(d(2.5f))
+            .background(Color(0x2EFFFFFF)),
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(progress)
+                .background(Brush.horizontalGradient(listOf(Rouge.Bright, Rouge.Core))),
+        )
     }
 }
 

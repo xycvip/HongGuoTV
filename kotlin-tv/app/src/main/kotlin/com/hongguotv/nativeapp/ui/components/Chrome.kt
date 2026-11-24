@@ -39,7 +39,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -52,7 +51,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hongguotv.nativeapp.ui.data.ApiStatusState
@@ -208,8 +206,7 @@ private fun NavItem(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val focusManager = LocalFocusManager.current
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, spring(0.65f, 600f), label = "nav")
+    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(150), label = "nav")
     val bg by animateColorAsState(if (focused) Color(0x1FFFFFFF) else Color.Transparent, tween(150), label = "nav-bg")
     val color by animateColorAsState(
         when {
@@ -231,14 +228,23 @@ private fun NavItem(
                     // 大块内容前经常落空，表现就是「焦点卡在导航栏」。
                     // 精确 requester 失败时再交给焦点管理器做几何搜索，双保险。
                     Key.DirectionDown -> {
-                        // 光标停在下划线以外的导航项上：先把页面切过去，再进它的内容区。
-                        // 直接走几何搜索会掉进「当前页」的内容里，看起来像跳错导航区。
-                        if (!selected && onEnter != null) {
-                            onEnter()
+                        // 只有「当前选中项」（页面就是它）按「下」才进入内容区。
+                        // 光标停在别的导航项上时，「下」必须无动作：既不切页、也不进内容，
+                        // 否则就是「光标在 A 上按一下，却跑进了 B 页」的越界。
+                        // 切页统一交给 OK/确定（clickable onClick）：选中后它成为当前项，再按下才进内容。
+                        if (!selected) {
+                            true
+                        } else if (downEntry != null) {
+                            // 内容已就绪：精确落到内容落点。无论成功与否都吞掉事件——
+                            // 失败时若回退几何搜索，焦点会落到 hero、页脚等不确定位置。
+                            downEntry.tryRequestFocus()
                             true
                         } else {
-                            val moved = downEntry?.let { it.tryRequestFocus() } ?: false
-                            if (moved) true else focusManager.moveFocus(FocusDirection.Down)
+                            // 内容还没就绪（首屏转圈，contentReady=false → contentEntry 为 null）。
+                            // 绝不能交给系统几何搜索：加载占位/空列表里没有可靠落点，焦点会乱跳。
+                            // 吞掉事件，并通知上层记住「按过下」的意图，等数据到了自动精确进入。
+                            onEnter?.invoke()
+                            true
                         }
                     }
                     // 最左侧再按一次左键才进 logo（见 TopBar 里的 logoReachable）。
@@ -283,7 +289,7 @@ private fun NavItem(
 private fun CastEntry(onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, spring(0.62f, 620f), label = "cast-entry")
+    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(150), label = "cast-entry")
     val line by animateColorAsState(if (focused) Gold.Core else Ink.LineSoft, tween(150), label = "cast-line")
     Row(
         Modifier

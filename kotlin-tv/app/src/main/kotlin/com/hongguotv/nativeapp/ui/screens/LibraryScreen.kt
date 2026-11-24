@@ -31,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -39,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hongguotv.core.BackupProgress
 import com.hongguotv.core.Series
+import com.hongguotv.nativeapp.ui.components.CornerBadge
 import com.hongguotv.nativeapp.ui.components.EmptyState
 import com.hongguotv.nativeapp.ui.components.FocusSurface
 import com.hongguotv.nativeapp.ui.components.PosterCard
@@ -55,8 +58,8 @@ import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
 
 private enum class LibraryTab(val label: String) {
-    FAVORITES("我的追剧"),
     HISTORY("观看历史"),
+    FAVORITES("我的收藏"),
 }
 
 @Composable
@@ -74,7 +77,10 @@ fun LibraryScreen(
     entryFocus: FocusRequester? = null,
     upFocus: FocusRequester? = null,
 ) {
-    var tab by remember(version) { mutableIntStateOf(0) }
+    // 「观看历史」排在前且为默认入口：进入追剧页先看历史。
+    // 计数/落点全部按枚举类型判断，避免依赖顺序；entryFocus 也绑到历史标签。
+    val historyIndex = LibraryTab.entries.indexOf(LibraryTab.HISTORY)
+    var tab by remember(version) { mutableIntStateOf(historyIndex) }
     val current = LibraryTab.entries[tab.coerceIn(0, LibraryTab.entries.lastIndex)]
     val favorites = state.favorites
     val history = state.history
@@ -108,10 +114,10 @@ fun LibraryScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(d(10))) {
                         LibraryTab.entries.forEachIndexed { index, item ->
                             SelectChip(
-                                text = "${item.label}  ${if (index == 0) favorites.size else history.size}",
+                                text = "${item.label}  ${if (item == LibraryTab.FAVORITES) favorites.size else history.size}",
                                 selected = tab == index,
                                 onClick = { tab = index },
-                                focusRequester = if (index == 0) entryFocus else null,
+                                focusRequester = if (item == LibraryTab.HISTORY) entryFocus else null,
                                 upFocus = upFocus,
                             )
                         }
@@ -125,8 +131,8 @@ fun LibraryScreen(
                     if (favorites.isEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             EmptyState(
-                                title = "还没有追剧",
-                                subtitle = "在剧集详情页按「加入追剧」，更新会第一时间出现在这里。",
+                                title = "还没有收藏",
+                                subtitle = "在剧集详情页按「加入收藏」，更新会第一时间出现在这里。",
                                 modifier = Modifier.height(d(320)),
                                 action = { TvButton("去剧场逛逛", onGoTheater, tone = ButtonTone.Ghost) },
                             )
@@ -139,6 +145,7 @@ fun LibraryScreen(
                                 onLongClick = { onToggleFavorite(series) },
                                 fillWidth = true,
                                 subtitle = state.favoriteLabels[series.id],
+                                completed = series.id in state.completedIds,
                             )
                         }
                     }
@@ -175,11 +182,18 @@ private fun HistoryRow(
     onRemove: () -> Unit,
 ) {
     val percent = if (progress.duration > 0) (progress.position.toFloat() / progress.duration).coerceIn(0f, 1f) else 0f
+    // 整行是外层焦点，两个按钮各自可聚焦。显式指定横向焦点链，避免外层 combinedClickable
+    // 与内层按钮焦点竞争导致「继续观看 / 移除」按遥控器选不中。
+    val rowFocus = remember { FocusRequester() }
+    val playFocus = remember { FocusRequester() }
+    val removeFocus = remember { FocusRequester() }
     FocusSurface(
         onClick = onClick,
         shape = RoundedCornerShape(d(16)),
         focusScale = 1.012f,
         borderWidth = d(1.2f),
+        focusRequester = rowFocus,
+        modifier = Modifier.focusProperties { right = playFocus },
     ) { focused ->
         Row(
             Modifier
@@ -200,6 +214,12 @@ private fun HistoryRow(
                         .fillMaxSize()
                         .background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color(0xAA000000))),
                 )
+                // 已看完角标：completed 表示本集播完、续播跳下一集，与首页「看下一集」口径一致。
+                if (progress.completed) {
+                    Box(Modifier.align(Alignment.TopStart).padding(d(6))) {
+                        CornerBadge("已看完", background = Color(0xCC1B8A4C))
+                    }
+                }
                 ThinProgress(
                     percent,
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
@@ -217,8 +237,12 @@ private fun HistoryRow(
                 )
                 Spacer(Modifier.height(d(6)))
                 Text(
-                    "看到第 ${progress.episodeIndex + 1} 集 · ${formatSeconds(progress.position)}" +
-                        if (progress.duration > 0) " / ${formatSeconds(progress.duration)}" else "",
+                    if (progress.completed) {
+                        "看到第 ${progress.episodeIndex + 1} 集 · 已看完"
+                    } else {
+                        "看到第 ${progress.episodeIndex + 1} 集 · ${formatSeconds(progress.position)}" +
+                            if (progress.duration > 0) " / ${formatSeconds(progress.duration)}" else ""
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = Paper.Tertiary,
                 )
@@ -226,9 +250,19 @@ private fun HistoryRow(
                 ThinProgress(percent, Modifier.width(d(280)), height = d(3))
             }
             Spacer(Modifier.width(d(16)))
-            TvButton("继续观看", onClick, tone = ButtonTone.Ghost)
+            TvButton(
+                "继续观看", onClick, tone = ButtonTone.Ghost,
+                modifier = Modifier
+                    .focusRequester(playFocus)
+                    .focusProperties { right = removeFocus; left = rowFocus },
+            )
             Spacer(Modifier.width(d(10)))
-            TvButton("移除", onRemove, tone = ButtonTone.Quiet)
+            TvButton(
+                "移除", onRemove, tone = ButtonTone.Quiet,
+                modifier = Modifier
+                    .focusRequester(removeFocus)
+                    .focusProperties { left = playFocus },
+            )
         }
     }
 }

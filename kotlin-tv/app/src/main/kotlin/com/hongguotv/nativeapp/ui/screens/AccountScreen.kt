@@ -620,7 +620,7 @@ private fun AccountIntro(
             when {
                 state.signedIn -> "云端数据已与本机合并，换设备也能接着看。"
                 phoneMode -> "没有手机在手上也能登录：输手机号收一条短信，验证码一填就好。"
-                else -> "扫码登录后，追剧、观看进度和预约会跟随账号，换一台电视也能无缝续上。"
+                else -> "扫码登录后，收藏、观看进度和预约会跟随账号，换一台电视也能无缝续上。"
             },
             style = MaterialTheme.typography.bodyLarge,
             color = Paper.Secondary,
@@ -630,9 +630,9 @@ private fun AccountIntro(
         if (phoneMode && !state.signedIn) {
             FeatureRow(Icons.Rounded.Sms, "短信验证", "手机号 + 验证码，不用另一台设备")
             FeatureRow(Icons.Rounded.Lock, "不存密码", "只校验验证码，本机不保存任何密码")
-            FeatureRow(Icons.Rounded.CloudSync, "登录即同步", "追剧、历史与预约自动并入云端")
+            FeatureRow(Icons.Rounded.CloudSync, "登录即同步", "收藏、历史与预约自动并入云端")
         } else {
-            FeatureRow(Icons.Rounded.CloudSync, "追剧同步", "收藏与观看进度自动同步到红果云端")
+            FeatureRow(Icons.Rounded.CloudSync, "收藏同步", "剧集与观看进度自动同步到红果云端")
             FeatureRow(Icons.Rounded.PlayCircle, "跨设备续播", "在手机看到一半，电视上接着播")
             FeatureRow(Icons.Rounded.QrCode2, "无需输入密码", "用红果 App 扫码确认即可登录")
         }

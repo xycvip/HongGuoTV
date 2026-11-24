@@ -8,11 +8,6 @@ import android.content.res.Configuration
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.view.Gravity
-import android.view.SurfaceView
-import android.view.View
-import android.view.ViewGroup
-import android.widget.FrameLayout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -199,8 +194,19 @@ class PlayerSession(
 
     // ------------------------------------------------------------ 双播放器状态
 
-    /** 主画面容器：接管时用它把备用播放器换上去，并给隐藏输出面提供挂载点。 */
-    private var playerView: PlayerView? = null
+    /**
+     * 两层全屏 PlayerView（均为 SurfaceView）叠放：active 层显示当前集，
+     * inactive 层物理移出屏幕（translationX），在其中预渲染下一集首帧。
+     * 每个 view 一旦 setPlayer 就固定绑定那个播放器实例，切集只交换两层的屏幕位置、
+     * 绝不换绑定——换绑定会让 PlayerView 把主 surface 重新设置给新播放器，触发 codec 重建而闪屏。
+     */
+    private val playerViews: Array<PlayerView?> = arrayOfNulls(2)
+    private var activeSlot = 0
+    /** 当前显示层。 */
+    private val playerView: PlayerView? get() = playerViews.getOrNull(activeSlot)
+    /** 预渲染层（移出屏幕），下一集在这里渲染好首帧等待接管。 */
+    private val inactiveView: PlayerView? get() = playerViews.getOrNull(1 - activeSlot)
+
     private var standbyPlayer: ExoPlayer? = null
     private var standbyRemote: RemoteVideo? = null
     private var standbyHttp: OkHttpClient? = null
@@ -208,7 +214,6 @@ class PlayerSession(
     private var standbyQuality = ""
     private var standbyReady = false
     private var standbyFirstFrameAt = 0L
-    private var standbyOutputView: SurfaceView? = null
     private var standbyJob: Job? = null
 
     /** 接管后的稳定窗内不显示缓冲圈：画面已接上，转圈会闪。 */
@@ -262,13 +267,16 @@ class PlayerSession(
         /** 单实例 playlist 自动/手动过渡到下一集：状态、弹幕、进度都换到新集。 */
         override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
             if (released || useDualDecoder) return
-            val exo = player ?: return
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
                 reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
             ) return
-            val newIndex = exo.currentMediaItemIndex
-            if (newIndex == index) return
-            if (mediaItem?.mediaId != episodes.getOrNull(newIndex)) return
+            // 修复：单实例 playlist 恒被收敛成 [当前集, 下一集] 两项，currentMediaItemIndex
+            // 只有 0/1，不能当绝对集号用——从第 2 集起 newIndex(1) 恰好等于 index(1)，
+            // 过渡会被 "newIndex == index" 误判为没换集而丢弃，index 卡住、不预载再下一集；
+            // 播完后 STATE_ENDED 又用错误的 index+1 重新 prepare，于是重新取流又播回当前集。
+            // 改用 mediaId 在 episodes 里反查真实集号。
+            val newIndex = mediaItem?.mediaId?.let { episodes.indexOf(it) } ?: -1
+            if (newIndex < 0 || newIndex == index) return
             applyEpisodeTransition(newIndex)
         }
 
@@ -533,12 +541,50 @@ class PlayerSession(
 
     // ------------------------------------------------------------ 界面挂载
 
-    /** 由播放页在 PlayerView 创建后调用：接管时换播放器、隐藏输出面挂到同一容器。 */
-    fun attachPlayerView(view: PlayerView) {
-        playerView = view
-        if (view.player !== player) view.player = player
+    /**
+     * 两层视频 SurfaceView 的显隐只用「物理隔离」：inactive 层整体移出屏幕，
+     * 不靠 alpha、也不靠 z-order——这两类「改属性」的方式都有异步传播窗口，
+     * 会让 standby 首帧偶发闪到前台（alpha 不可靠 / z-order 设置晚于 surface 重建）。
+     *
+     * 用 translationX 把 inactive 层挪到屏幕外：
+     *  - surface 全程存活、首帧照常渲染（ExoPlayer 只认 surface，不管它在不在屏幕内）；
+     *  - 位置在屏幕外，物理上不可能闪到前台，与播放器内部设置无关；
+     *  - translation 是 View 属性，无需 surface 即可同步生效，没有异步时序窗口；
+     *  - 切集时同帧交换两层的 translation，旧层移出、新层移入，画面无缝续上。
+     *
+     * 层级完全交给自然顺序：视频(默认, window 之下) < 弹幕(mediaOverlay) < Compose 控制层。
+     */
+    private fun applyVideoLayerOrder() {
+        // 足够大，确保整层完全移出屏幕；不改 visibility，surface 才不会被销毁。
+        val offScreenX = 20_000f
+        for (slot in 0..1) {
+            val pv = playerViews[slot] ?: continue
+            val isActive = slot == activeSlot
+            val targetX = if (isActive) 0f else offScreenX
+            if (pv.translationX != targetX) pv.translationX = targetX
+        }
+    }
+
+    /**
+     * 由播放页在两层 PlayerView 创建后分别调用（slot 0 / 1）。
+     * 每层固定绑定一个播放器：active 层绑主播放器，inactive 层留给备用播放器。
+     * 切集时只切两层的 z-order，不在这里换绑定，避免 surface 重建闪屏。
+     */
+    fun attachPlayerView(view: PlayerView, slot: Int) {
+        if (slot !in 0..1) return
+        playerViews[slot] = view
+        if (slot == activeSlot) {
+            if (view.player !== player) view.player = player
+        } else {
+            // inactive 层：若备用播放器已经建好就补绑，否则留空等 prepareStandby。
+            val standby = standbyPlayer
+            if (standby != null && view.player !== standby) view.player = standby
+        }
+        // 显隐只用 translationX 物理移屏，alpha 恒为 1（SurfaceView 的 alpha 不可靠）。
+        view.alpha = 1f
+        applyVideoLayerOrder()
         // 会话可能先于画面视图创建：视图加入后补一次「下一集」准备。
-        // 双解码器要等隐藏输出面，单实例预载不需要，两条路都要补，否则先建会话的情况下
+        // 双解码器要等 inactive 层挂载，单实例预载不需要，两条路都要补，否则先建会话的情况下
         // 这一集播完就直接停了、没有预载。
         view.post {
             if (released || !ready) return@post
@@ -550,8 +596,8 @@ class PlayerSession(
         }
     }
 
-    fun detachPlayerView(view: PlayerView) {
-        if (playerView === view) playerView = null
+    fun detachPlayerView(view: PlayerView, slot: Int) {
+        if (slot in 0..1 && playerViews[slot] === view) playerViews[slot] = null
     }
 
     private fun friendlyError(error: PlaybackException): String {
@@ -836,8 +882,8 @@ class PlayerSession(
             if (extras.seamlessPlayback) queueNextEpisode(index, force = true)
             return
         }
-        // 没有画面容器就没有隐藏输出面，等 PlayerView 挂载后由 attachPlayerView 再触发。
-        if (playerView == null) return
+        // 没有 inactive 画面层就没有预渲染输出面，等两层 PlayerView 挂载后由 attachPlayerView 再触发。
+        if (inactiveView == null) return
         // 刚完成一次接管：旧实例的 codec 才释放、新实例还在爬坡。
         // 这个窗口里再申请第二路解码器，就是把刚接上的画面往火坑里推。
         if (lastHandoffAt > 0L && SystemClock.elapsedRealtime() - lastHandoffAt < HANDOFF_WARMUP_MS) return
@@ -931,14 +977,17 @@ class PlayerSession(
         )
         secondary.volume = 0f
         secondary.playWhenReady = false
-        val output = createStandbyOutput()
-        if (output == null) {
+        // 备用实例固定绑定到 inactive 层的 PlayerView（alpha=0），在其中渲染首帧。
+        // 这一绑定在整个备用周期内都不再改变；接管时只切两层 alpha，不重新 setPlayer。
+        val backView = inactiveView
+        if (backView == null) {
             // 没有挂载点就预热不了首帧，留着这个实例只会白占解码器。
             clearStandby("画面容器尚未就绪")
             return
         }
-        standbyOutputView = output
-        secondary.setVideoSurfaceView(output)
+        if (backView.player !== secondary) backView.player = secondary
+        // 备用层压到 active 之下（不靠 alpha）。首帧 surface 仍存活、正常渲染，只是被盖住。
+        applyVideoLayerOrder()
         secondary.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (standbyPlayer !== secondary || standbyIndex != target) return
@@ -1027,9 +1076,19 @@ class PlayerSession(
         danmakuLoaded = 0
         qualityLabel = standbyQuality
         discardQueue()
-        // 先换状态再换输出面：重组时的 update 块不会把旧实例写回来。
+        // 治本：两层 view 各自固定绑定一个播放器，切集只切 z-order，绝不重新 setPlayer。
+        // inactive 层的 standby 已经渲染好下一集首帧；把它抬到前台、旧层压到后台，
+        // 再交换 activeSlot。整个过程 surface 没被重新设置给任何播放器，因此不闪屏。
+        val outgoingView = playerView
+        activeSlot = 1 - activeSlot
+        // 同步切层级：新 active 抬到 mediaOverlay、旧层回到底层。区别于不可靠的 alpha，
+        // z-order 能保证 standby 已渲染的首帧真正显示在最前，画面不再「定格」。
+        applyVideoLayerOrder()
+        // 旧层解绑即将释放的播放器；下一轮 prepareStandby 会把它绑到新的备用实例。
+        // 放在切层级之后，解绑带来的重新布局发生在后台层，不影响刚抬上来的画面。
+        runCatching { outgoingView?.player = null }
+        // 状态引用跟着一起换：player 指向刚抬上来的 standby，它本来就绑在现在的 active 层。
         player = standby
-        playerView?.player = standby
         remote = promotedRemote
         standbyPlayer = null
         standbyRemote = null
@@ -1039,8 +1098,6 @@ class PlayerSession(
         standbyJob = null
         standbyHttp?.let(::closeClient)
         standbyHttp = null
-        // 隐藏输出面先留着：接管瞬间立刻 removeView 会让 PlayerView 重新布局，
-        // 某些设备上就是这一下导致「交接时黑一帧」。等画面稳定后再收。
         standby.addListener(mainListener)
         // 预渲染阶段音量为 0（避免和第二实例抢声音），接管时必须恢复，
         // 否则下一集只有画面没有声音。
@@ -1091,33 +1148,6 @@ class PlayerSession(
         return true
     }
 
-    private fun createStandbyOutput(): SurfaceView? {
-        // 必须挂进 PlayerView（FrameLayout）内部：Compose 容器不会给额外 addView 的子视图布局，
-        // 放在外面会得到 0 尺寸的 surface，备用播放器永远渲染不出首帧。
-        val host = playerView ?: return null
-        // 复用同一块隐藏输出面：每次准备下一集都 add/remove 会让 PlayerView 反复 requestLayout，
-        // 接管瞬间的那次重排就是「交接黑一帧」的来源。
-        standbyOutputView?.takeIf { it.parent === host }?.let { return it }
-        val size = (16 * context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
-        val view = SurfaceView(host.context).apply {
-            alpha = 0f
-            isFocusable = false
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-        return runCatching {
-            host.addView(view, FrameLayout.LayoutParams(size, size, Gravity.END or Gravity.BOTTOM))
-            standbyOutputView = view
-            view
-        }.getOrNull()
-    }
-
-    private fun removeStandbyOutput() {
-        standbyOutputView?.let { view ->
-            runCatching { (view.parent as? ViewGroup)?.removeView(view) }
-        }
-        standbyOutputView = null
-    }
-
     /** 释放备用播放器及其独立网络会话；不触碰正在播放的主实例。 */
     private fun clearStandby(reason: String) {
         if (standbyPlayer != null || standbyJob != null) PlayerLog.info("clearStandby: $reason")
@@ -1131,7 +1161,14 @@ class PlayerSession(
             runCatching { secondary.clearMediaItems() }
             runCatching { secondary.release() }
         }
-        // 隐藏输出面留着复用，只在会话结束时 remove（见 release）。
+        // inactive 层不再持有已释放的备用实例；保持压在底层，等下一次 prepareStandby 重新绑定。
+        inactiveView?.let { view ->
+            if (view.player === secondary || view.player == null) {
+                runCatching { view.player = null }
+            }
+            view.alpha = 1f
+        }
+        applyVideoLayerOrder()
         standbyRemote?.let { runCatching { it.close() } }
         standbyRemote = null
         closeClient(standbyHttp)
@@ -1197,9 +1234,12 @@ class PlayerSession(
         val loader = DanmakuLoader(danmakuSource, series.id, currentEpisodeId, span)
         danmakuLoader = loader
         danmakuKey = key
+        // 弹幕时钟必须读 ExoPlayer 的实时进度，而不是 UI 每 400ms 才刷新的 position 缓存。
+        // 直接用缓存会让弹幕每秒只跳 2.5 次，画面一顿一顿、怎么调画布都不丝滑。
+        // player 始终指向当前激活的播放器（切集 promoteStandby 时已同步更新）。
         view.bind(
             loader,
-            { position },
+            { runCatching { player?.currentPosition }.getOrNull()?.coerceAtLeast(0L) ?: position },
             { p -> scope.launch(Dispatchers.IO) { runCatching { loader.loadUpTo(p) } } },
             playing,
         )
@@ -1255,6 +1295,35 @@ class PlayerSession(
 
     fun pause() {
         player?.pause()
+    }
+
+    /** 切到后台前是否在播：仅当切后台时正在播，回到前台才自动恢复，避免覆盖用户的手动暂停。 */
+    private var resumeOnForeground = false
+
+    /**
+     * Activity 进入后台（ON_STOP）：暂停播放并落盘进度。
+     * 之前没有生命周期监听，切后台时页面未 dispose、播放器继续解码播放（声音/流量都在跑）。
+     */
+    fun onAppBackground() {
+        if (released) return
+        resumeOnForeground = playing
+        if (resumeOnForeground) {
+            runCatching { player?.pause() }
+            // 暂停即落盘：切后台/息屏时进度不丢。
+            save(completed = false)
+        }
+        // 备用播放器本就 playWhenReady=false，这里再兜底一次，避免后台偷偷解码。
+        runCatching { standbyPlayer?.playWhenReady = false }
+    }
+
+    /** Activity 回到前台（ON_START）：只在切后台前正在播时恢复，尊重用户此前的暂停。 */
+    fun onAppForeground() {
+        if (released) return
+        val shouldResume = resumeOnForeground
+        resumeOnForeground = false
+        if (shouldResume && player?.isPlaying != true) {
+            runCatching { player?.play() }
+        }
     }
 
     fun seekTo(ms: Long) {
@@ -1377,8 +1446,12 @@ class PlayerSession(
         player = null
         remote?.let { runCatching { it.close() } }
         remote = null
-        removeStandbyOutput()
-        playerView = null
+        // 两层 view 都解绑播放器（view 本身由 Compose 负责销毁）。
+        playerViews.forEach { view ->
+            runCatching { view?.player = null }
+        }
+        playerViews[0] = null
+        playerViews[1] = null
     }
 
     private companion object {

@@ -32,7 +32,7 @@ enum class CollectionKind(val title: String) {
     RESUME("接着看"),
     UPDATES("收藏有更新"),
     LATER("稍后看"),
-    FAVORITES("我的追剧"),
+    FAVORITES("我的收藏"),
     HISTORY("观看历史"),
     HOT_SHORT("热门短剧"),
     HOT_COMIC("热门漫剧"),

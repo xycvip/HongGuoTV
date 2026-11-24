@@ -4,6 +4,7 @@ package com.hongguotv.nativeapp.ui.data
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -69,6 +70,7 @@ import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.system.exitProcess
 
 /**
  * 全应用唯一的数据入口。网络与解析在 IO 线程完成，本地片单在主线程读写，
@@ -464,7 +466,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 add(
                     Shelf(
                         key = "updates",
-                        title = "追剧更新",
+                        title = "收藏更新",
                         subtitle = "你收藏的剧有新内容",
                         collection = CollectionKind.UPDATES,
                         entries = updates.take(10).map { ShelfEntry(it, library.favoriteLabel(it.id)) },
@@ -558,7 +560,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (s.detail.series?.id == series.id) s.copy(detail = s.detail.copy(favorite = added)) else s
         }
         refreshHomeShelves()
-        toast(if (added) "已加入追剧" else "已取消追剧")
+        toast(if (added) "已加入收藏" else "已取消收藏")
         return added
     }
 
@@ -603,17 +605,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshLibraryState() {
         if (!library.isLoaded) return
         _state.update {
-            // 「稍后看」在电视上和「追剧」是同一个动作，UI 只保留一个入口；
-            // 旧的稍后看数据并到追剧列表尾部展示，不丢内容，也不用再让用户二选一。
+            // 「稍后看」在电视上和「收藏」是同一个动作，UI 只保留一个入口；
+            // 旧的稍后看数据并到收藏列表尾部展示，不丢内容，也不用再让用户二选一。
             val favoriteRows = library.favorites()
             val seen = favoriteRows.mapTo(HashSet()) { row -> row.id }
             val favorites = favoriteRows + library.later().filter { seen.add(it.id) }
+            val history = library.history()
+            // 同一部剧可能有多条进度，取最新一条的 completed 作为整剧「已看完」状态。
+            val completedIds = history
+                .sortedByDescending { it.updatedAt }
+                .distinctBy { it.series.id }
+                .filter { it.completed }
+                .mapTo(HashSet()) { it.series.id }
             it.copy(
                 library = LibraryState(
                     favorites = favorites,
-                    history = library.history(),
+                    history = history,
                     later = emptyList(),
                     favoriteLabels = favorites.associate { series -> series.id to library.favoriteLabel(series.id) },
+                    completedIds = completedIds,
                     version = it.library.version + 1,
                     groupFilter = it.library.groupFilter,
                 ),
@@ -637,7 +647,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         publishHome(loading = false)
     }
 
-    /** 从播放器回到详情页时，同步最新进度与追剧状态。 */
+    /** 从播放器回到详情页时，同步最新进度与收藏状态。 */
     fun refreshDetailResume() {
         val id = _state.value.detail.series?.id ?: return
         val progress = library.progress(id) ?: return
@@ -1576,6 +1586,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         posterColumns = extras.posterColumns,
         videoInfoMode = library.videoInfoMode,
         showNetworkSpeed = library.showNetworkSpeed,
+        persistentProgress = library.persistentProgress,
+        showScreenBack = library.showScreenBack,
         appIconVariant = appIconVariant(),
         remoteUp = extras.remoteUpAction,
         remoteDown = extras.remoteDownAction,
@@ -1624,6 +1636,65 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun resetPlaybackPreferences() {
         library.resetPlaybackPreferences()
         toast("播放偏好已恢复默认")
+    }
+
+    /** 重置设备身份：清掉持久化的 device_register 结果，下次请求会重新注册一台新设备。 */
+    fun resetDeviceIdentity() {
+        HongguoJsStore.resetDeviceIdentity(getApplication())
+        toast("设备身份已重置，下次联网将重新注册")
+    }
+
+    /**
+     * 清除缓存：只删可自动重建的临时文件——更新下载包与 JS 字节码缓存。
+     * 收藏/历史/设置/账号/脚本本体全部保留，重启后 bytecode 会自动重编译。
+     */
+    fun clearCache() {
+        val app = getApplication<Application>()
+        var bytes = 0L
+        runCatching {
+            File(app.cacheDir, "updates").let { if (it.exists()) { bytes += dirSize(it); it.deleteRecursively() } }
+            File(app.filesDir, "js-bytecode").let { if (it.exists()) { bytes += dirSize(it); it.deleteRecursively() } }
+        }
+        toast(if (bytes > 0) "已清除缓存 ${formatBytes(bytes)}" else "暂无缓存可清理")
+    }
+
+    /**
+     * 清除全部数据：清空本机所有 SharedPreferences（收藏/历史/设置/账号/设备身份/脚本版本等）、
+     * 缓存，以及 data 脚本本体。APK 不内置脚本，启动检测不到本地脚本会自动走首次安装流程联网下载，
+     * 因此删掉脚本不会变砖，重启后等同于全新安装。
+     */
+    fun clearAllData() {
+        val app = getApplication<Application>()
+        val prefNames = listOf(
+            "native-library-v1", "native-home-cache-v1", "startup_playback",
+            "playback-settings-v1", "playback-extras-v1", "compose-account-v1",
+            "hongguo-js-kv", "script-update-v1",
+        )
+        prefNames.forEach { name ->
+            runCatching { app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit() }
+        }
+        runCatching { app.cacheDir.deleteRecursively() }
+        runCatching { File(app.filesDir, "js-bytecode").deleteRecursively() }
+        // 脚本本体也清掉：重启后走首次安装流程重新联网下载，等同全新安装。
+        runCatching { File(app.filesDir, "hongguo-js").deleteRecursively() }
+        toast("已清除全部数据，正在重启…")
+        // 用 launch intent 重启：杀进程后由系统按 MAIN/LEANBACK 入口重新拉起，兼容电视桌面。
+        runCatching {
+            val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
+            if (intent != null) app.startActivity(intent)
+        }
+        exitProcess(0)
+    }
+
+    private fun dirSize(dir: File): Long =
+        runCatching { dir.walkTopDown().filter { it.isFile }.map { it.length() }.sum() }.getOrDefault(0L)
+
+    private fun formatBytes(bytes: Long): String = when {
+        bytes >= 1024 * 1024 -> "${bytes / 1024 / 1024} MB"
+        bytes >= 1024 -> "${bytes / 1024} KB"
+        else -> "$bytes B"
     }
 
     // ---- 弹幕细化 ----
@@ -1749,6 +1820,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setShowNetworkSpeed(value: Boolean) {
         library.showNetworkSpeed = value
+        touchSettings()
+    }
+
+    fun setPersistentProgress(value: Boolean) {
+        library.persistentProgress = value
+        touchSettings()
+    }
+
+    fun setShowScreenBack(value: Boolean) {
+        library.showScreenBack = value
         touchSettings()
     }
 

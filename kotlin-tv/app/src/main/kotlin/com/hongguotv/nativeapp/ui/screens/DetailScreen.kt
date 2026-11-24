@@ -100,6 +100,8 @@ fun DetailScreen(
     /** 切季成功后希望落到哪一季的季签上，由上一级设置、请求一次后回清。 */
     focusSeasonId: String? = null,
     onSeasonFocusConsumed: () -> Unit = {},
+    /** 屏幕顶部是否显示可点击的返回箭头；遥控器返回键始终可用，不受此开关影响。 */
+    showBack: Boolean = true,
 ) {
     Box(modifier.fillMaxSize()) {
         val detail = state.detail
@@ -117,6 +119,7 @@ fun DetailScreen(
                 onExpandSynopsis = onExpandSynopsis,
                 focusSeasonId = focusSeasonId,
                 onSeasonFocusConsumed = onSeasonFocusConsumed,
+                showBack = showBack,
             )
         }
     }
@@ -134,6 +137,7 @@ private fun DetailContent(
     onExpandSynopsis: () -> Unit,
     focusSeasonId: String?,
     onSeasonFocusConsumed: () -> Unit,
+    showBack: Boolean = true,
 ) {
     val series = detail.series
     var episodesExpanded by remember(series.id) { mutableIntStateOf(0) }
@@ -189,6 +193,7 @@ private fun DetailContent(
                 onFavorite = onFavorite,
                 onLater = onLater,
                 onExpandSynopsis = onExpandSynopsis,
+                showBack = showBack,
             )
         }
         if (episodes.isNotEmpty()) {
@@ -228,6 +233,7 @@ private fun DetailHero(
     onFavorite: () -> Unit,
     onLater: () -> Unit,
     onExpandSynopsis: () -> Unit,
+    showBack: Boolean = true,
 ) {
     val series = detail.series
     // 高度跟着屏幕走：固定 520dp 在 540dp 高的盒子上会把竖版海报整块顶出屏外，
@@ -258,15 +264,21 @@ private fun DetailHero(
                 ),
             ),
         )
-        RoundIconButton(
-            Icons.Rounded.ArrowBackIosNew,
-            onBack,
-            size = d(44),
-            iconSize = d(17),
-            modifier = Modifier.padding(start = ui.gutter, top = d(24)),
-            contentDescription = "返回",
-            focusRequester = backFocus,
-        )
+        // 屏幕返回箭头按设置显隐。backFocus 同时是播放键/收藏键的「上」目标：
+        // 隐藏时按钮不再 attach，upFocus 传 null 降级为系统几何搜索，避免指向悬空 requester。
+        if (showBack) {
+            RoundIconButton(
+                Icons.Rounded.ArrowBackIosNew,
+                onBack,
+                size = d(44),
+                iconSize = d(17),
+                modifier = Modifier.padding(start = ui.gutter, top = d(24)),
+                contentDescription = "返回",
+                focusRequester = backFocus,
+            )
+        } else {
+            Spacer(Modifier.height(d(44 + 24)))
+        }
         Row(
             Modifier
                 .align(Alignment.BottomStart)
@@ -359,16 +371,16 @@ private fun DetailHero(
                         icon = Icons.Rounded.PlayArrow,
                         tone = ButtonTone.Primary,
                         focusRequester = playFocus,
-                        upFocus = backFocus,
+                        upFocus = backFocus.takeIf { showBack },
                     )
                     TvButton(
-                        text = if (state.favorite) "已追剧" else "加入追剧",
+                        text = if (state.favorite) "已收藏" else "加入收藏",
                         onClick = onFavorite,
                         icon = if (state.favorite) Icons.Rounded.Check else Icons.Rounded.Add,
                         tone = ButtonTone.Ghost,
-                        upFocus = backFocus,
+                        upFocus = backFocus.takeIf { showBack },
                     )
-                    // 「稍后看」与「追剧」是同一件事，只留一个入口，避免每次都要想点哪个。
+                    // 「稍后看」与「收藏」是同一件事，只留一个入口，避免每次都要想点哪个。
                 }
             }
         }

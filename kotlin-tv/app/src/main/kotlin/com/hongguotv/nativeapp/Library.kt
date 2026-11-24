@@ -194,6 +194,14 @@ class Library(context: Context) {
     var showNetworkSpeed: Boolean
         get() = prefs.getBoolean("showNetworkSpeed", false)
         set(value) { prefs.edit().putBoolean("showNetworkSpeed", value).apply() }
+    /** 屏幕最底部常驻一条极细进度条；设备本地显示偏好，默认关闭。 */
+    var persistentProgress: Boolean
+        get() = prefs.getBoolean("persistentProgress", false)
+        set(value) { prefs.edit().putBoolean("persistentProgress", value).apply() }
+    /** 是否在页面顶部显示可点击的返回箭头；默认关闭，遥控器返回键始终可用。 */
+    var showScreenBack: Boolean
+        get() = prefs.getBoolean("showScreenBack", false)
+        set(value) { prefs.edit().putBoolean("showScreenBack", value).apply() }
     var theme: String
         get() = prefs.getString("theme", null) ?: "NIGHT"
         set(value) { prefs.edit().putString("theme", value).apply() }
@@ -264,7 +272,8 @@ class Library(context: Context) {
         val defaults = LibraryDisk.decode(emptyMap<String, Any?>()).settings
         state().settings = defaults
         marksCache = linkedMapOf()
-        prefs.edit().remove("theme").remove("skipMarks").remove("videoInfoMode").remove("showNetworkSpeed").apply()
+        prefs.edit().remove("theme").remove("skipMarks").remove("videoInfoMode").remove("showNetworkSpeed")
+            .remove("persistentProgress").remove("showScreenBack").apply()
         writes.submit(mapOf(
             "quality" to { defaults.quality }, "playbackSpeed" to { defaults.speed },
             "autoNext" to { defaults.autoNext },

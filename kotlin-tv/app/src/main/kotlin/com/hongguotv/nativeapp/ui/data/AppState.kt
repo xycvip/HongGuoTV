@@ -115,6 +115,8 @@ data class LibraryState(
     val history: List<BackupProgress> = emptyList(),
     val later: List<Series> = emptyList(),
     val favoriteLabels: Map<String, String> = emptyMap(),
+    // 每部剧最新一集是否已看完（history.completed），供收藏页显示「已看完」角标。
+    val completedIds: Set<String> = emptySet(),
     val version: Int = 0,
     val groupFilter: String? = null,
 )
@@ -143,6 +145,10 @@ data class SettingsSnapshot(
     val posterColumns: Int = 0,
     val videoInfoMode: Int = 0,
     val showNetworkSpeed: Boolean = false,
+    /** 屏幕最底部常驻一条极细进度条；默认关闭，不影响观感。 */
+    val persistentProgress: Boolean = false,
+    /** 是否在页面顶部显示可点击的返回箭头；默认关闭，遥控器按返回键即可返回。 */
+    val showScreenBack: Boolean = false,
     val appIconVariant: String = "i",
     // ---- 按键 ----
     val remoteUp: String = "previous",

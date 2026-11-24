@@ -1,4 +1,8 @@
 import java.util.Properties
+import java.text.SimpleDateFormat
+import java.util.TimeZone
+import java.util.Date
+import java.util.Locale
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -59,6 +63,22 @@ android {
                 it.systemProperty("robolectric.logging.enabled", "true")
                 it.maxHeapSize = "3g"
             }
+        }
+    }
+
+    // 构建产物自描述：APK 文件名带版本名 / 版本码 / 构建类型 / 构建时间，
+    // 侧载时装的是哪一版一眼可辨，避免"装了半天还是旧的"。
+    // 时间戳固定 Asia/Shanghai（与用户看到的北京时间一致），精确到秒防止同名覆盖。
+    applicationVariants.all {
+        val vName = versionName
+        val vCode = versionCode
+        val buildTag = buildType.name
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+        }.format(Date())
+        outputs.all {
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
+                "HongGuoTV-v${vName}-b${vCode}-${buildTag}-${stamp}.apk"
         }
     }
 }

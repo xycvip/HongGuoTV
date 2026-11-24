@@ -105,6 +105,8 @@ fun CastScreen(
     onDismissCandidates: () -> Unit,
     onPick: (Series) -> Unit,
     modifier: Modifier = Modifier,
+    /** 屏幕顶部是否显示可点击的返回箭头；遥控器返回键始终可用，不受此开关影响。 */
+    showBack: Boolean = true,
 ) {
     // 进页面先落一次焦点：电视端没有鼠标，首帧必须有可见光标，用户才知道遥控器有响应。
     val entryFocus = remember { FocusRequester() }
@@ -121,6 +123,7 @@ fun CastScreen(
             title = "投播",
             subtitle = "PUSH TO TV · 手机直连",
             onBack = onBack,
+            showBack = showBack,
             actions = {
                 StatusPill(state)
                 Spacer(Modifier.width(d(14)))
@@ -203,7 +206,7 @@ private fun CastCopy(state: CastState, modifier: Modifier = Modifier) {
         )
         Spacer(Modifier.height(d(16)))
         Text(
-            "整段粘贴红果 / 抖音的分享文案，电视自动识别剧名与集数。\n不必再拿遥控器一个字一个字地敲。",
+            "整段粘贴红果 / 抖音的分享文案，电视自动识别。\n个别特殊的分享链接可能暂时无法识别播放。",
             style = MaterialTheme.typography.bodyLarge,
             color = Paper.Secondary,
             modifier = Modifier.widthIn(max = d(560)),
@@ -387,7 +390,7 @@ private fun TicketQr(state: CastState) {
 
             Spacer(Modifier.height(d(14)))
             Text(
-                "用相机或浏览器扫一扫",
+                "用微信或浏览器扫一扫",
                 style = MaterialTheme.typography.titleSmall,
                 color = QrInk.copy(alpha = 0.82f),
                 fontWeight = FontWeight.SemiBold,
@@ -485,7 +488,7 @@ private data class CastStep(val title: String, val hint: String)
 
 private val castSteps = listOf(
     CastStep("连同一 Wi-Fi", "手机与电视在同一网络"),
-    CastStep("扫码打开投播页", "相机或浏览器扫一扫"),
+    CastStep("扫码打开投播页", "微信或浏览器扫一扫"),
     CastStep("粘贴分享文案", "红果 / 抖音整段分享"),
     CastStep("电视自动开播", "识别剧名与集数"),
 )

@@ -124,8 +124,18 @@ fun SettingsScreen(
     versionName: String,
     modifier: Modifier = Modifier,
     onApiStatus: () -> Unit = {},
+    /** 从播放页「弹幕设置」进来时直接落到弹幕栏；消费后由调用方清空。 */
+    initialSection: String? = null,
+    onInitialSectionConsumed: () -> Unit = {},
 ) {
     var section by remember { mutableStateOf(SettingsSection.PLAYBACK) }
+    LaunchedEffect(initialSection) {
+        if (!initialSection.isNullOrBlank()) {
+            section = SettingsSection.entries.firstOrNull { it.name.equals(initialSection, ignoreCase = true) }
+                ?: SettingsSection.PLAYBACK
+            onInitialSectionConsumed()
+        }
+    }
     val apiStatus by vm.apiStatus.collectAsStateWithLifecycle()
     val scriptUpdate by vm.scriptUpdate.collectAsStateWithLifecycle()
     // 冷启动那次检测被系统打断时，进入网络栏补一次。
@@ -541,6 +551,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.appearancePanel(
     }
     item {
         SettingRow(
+            title = "进度条常驻",
+            description = "屏幕最底部显示一条极细进度线，随时看到进度，不影响画面",
+            toggle = snapshot.persistentProgress,
+            onToggle = { vm.setPersistentProgress(it) },
+        )
+    }
+    item {
+        SettingRow(
             title = "顶部时钟",
             description = "在顶栏显示当前时间",
             toggle = snapshot.showClock,
@@ -560,6 +578,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.controlPanel(
     vm: AppViewModel,
     onChoice: (ChoiceRequest) -> Unit,
 ) {
+    item {
+        SettingRow(
+            title = "屏幕返回按钮",
+            description = "各页面顶部显示可点击的返回箭头；遥控器返回键始终可用",
+            toggle = snapshot.showScreenBack,
+            onToggle = { vm.setShowScreenBack(it) },
+        )
+    }
     item {
         SettingRow(
             title = "上键",
@@ -830,10 +856,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dataPanel(
     item {
         SettingRow(
             title = "恢复播放偏好",
-            description = "清晰度、倍速、连播等恢复默认，保留追剧与历史",
+            description = "清晰度、倍速、连播等恢复默认，保留收藏与历史",
             value = "恢复",
             onClick = {
-                onConfirm(ConfirmRequest("恢复播放偏好", "播放相关设置会恢复为默认值，追剧、收藏、观看历史不会受影响。") { vm.resetPlaybackPreferences() })
+                onConfirm(ConfirmRequest("恢复播放偏好", "播放相关设置会恢复为默认值，收藏与观看历史不会受影响。") { vm.resetPlaybackPreferences() })
             },
         )
     }
@@ -857,6 +883,34 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dataPanel(
             },
         )
     }
+    item {
+        SettingRow(
+            title = "重置设备身份",
+            description = "重新注册一台新设备，可解决接口被风控限制",
+            value = "重置",
+            onClick = {
+                onConfirm(ConfirmRequest("重置设备身份", "将清除本机保存的设备注册信息，下次联网时重新注册一台新设备。收藏与观看历史不受影响。") { vm.resetDeviceIdentity() })
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "清除缓存",
+            description = "清理更新包与脚本字节码，收藏、历史与设置保留",
+            value = "清除",
+            onClick = { vm.clearCache() },
+        )
+    }
+    item {
+        SettingRow(
+            title = "清除全部数据",
+            description = "清空收藏、历史、设置、账号与数据脚本并重启，脚本会重新下载",
+            value = "清除",
+            onClick = {
+                onConfirm(ConfirmRequest("清除全部数据", "将删除本机全部收藏、观看历史、设置、账号与数据脚本，应用随后自动重启并重新下载脚本。此操作不可恢复，确定继续？") { vm.clearAllData() })
+            },
+        )
+    }
 }
 
 // ------------------------------------------------------------------ 关于
@@ -875,7 +929,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.aboutPanel(
     }
     item { InfoRow("版本", versionName) }
     item { InfoRow("内容来源", "红果短剧官方公开接口") }
-    item { InfoRow("本地数据", "追剧、历史与设置仅保存在本机，卸载即清除") }
+    item { InfoRow("本地数据", "收藏、历史与设置仅保存在本机，卸载即清除") }
     item { InfoRow("开源许可", "GPL-3.0 · 界面基于 Jetpack Compose 重写") }
 }
 
@@ -1195,12 +1249,14 @@ private fun AppIconDialog(
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // 用与桌面同一份「安全区」前景：预览里看到的就是 launcher 裁切后的真实大小。
+    // 预览必须用原始 webp 位图：_safe 是 <inset> 容器 drawable，Compose 的 painterResource
+    // 只支持 VectorDrawable 与 PNG/JPG/WEBP，加载 <inset> 会抛 IllegalArgumentException 闪退。
+    // 桌面那份 inset 安全区（8dp）在这里改用 Modifier.padding 复现，视觉一致且不再崩溃。
     val fgRes = mapOf(
-        "h" to R.drawable.ic_launcher_fg_h_safe,
-        "i" to R.drawable.ic_launcher_fg_i_safe,
-        "j" to R.drawable.ic_launcher_fg_j_safe,
-        "k" to R.drawable.ic_launcher_fg_k_safe,
+        "h" to R.drawable.ic_launcher_fg_h,
+        "i" to R.drawable.ic_launcher_fg_i,
+        "j" to R.drawable.ic_launcher_fg_j,
+        "k" to R.drawable.ic_launcher_fg_k,
     )
     AppDialog(
         title = "应用图标",
@@ -1238,7 +1294,8 @@ private fun AppIconDialog(
                                 Image(
                                     painter = painterResource(fgRes.getValue(key)),
                                     contentDescription = name,
-                                    Modifier.fillMaxSize().padding(d(6)),
+                                    // 用 padding 复现 _safe 那份 8dp inset 安全区，保证预览与桌面裁切一致。
+                                    Modifier.fillMaxSize().padding(d(14)),
                                 )
                                 if (selected) {
                                     Icon(

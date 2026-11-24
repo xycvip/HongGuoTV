@@ -24,6 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hongguotv.nativeapp.AppUpdateInstaller
 import com.hongguotv.core.Series
@@ -66,6 +68,9 @@ fun HongguoApp(vm: AppViewModel) {
     var route by remember { mutableStateOf<Route>(Route.Main) }
     var clock by remember { mutableStateOf("") }
     var showApiStatus by remember { mutableStateOf(false) }
+    // 播放页「弹幕设置」入口：先记下要落到的分栏，再切回设置页；SettingsScreen 消费后清空，
+    // 避免下次正常进设置还停在弹幕栏。
+    var pendingSettingsSection by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val apiStatus by vm.apiStatus.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
@@ -200,20 +205,38 @@ fun HongguoApp(vm: AppViewModel) {
         }
     }
 
-    // 非当前导航项按「下」：先切页，等这一页的内容落点 attach 后再把焦点交过去。
-    LaunchedEffect(pendingContent, tab, route, state.booted) {
+    // 导航项按「下」进入内容：非当前项先切页；当前项若内容还在转圈则记下意图。
+    // contentReady 作为关键依赖：内容未就绪时保持意图、不清除，等数据到了自动精确进入，
+    // 这样用户按一次「下」就够了，不必等转圈结束再按一次，也不会 fallback 到几何搜索乱跳。
+    LaunchedEffect(pendingContent, tab, route, state.booted, contentReady) {
         val target = pendingContent ?: return@LaunchedEffect
-        if (route != Route.Main || !state.booted || tab != target) return@LaunchedEffect
+        if (route != Route.Main || !state.booted) return@LaunchedEffect
+        if (tab != target) {
+            // 用户已切到别的页/离开主页：旧的进入意图作废，清掉避免悬挂。
+            pendingContent = null
+            return@LaunchedEffect
+        }
         val requester = entryOf(target)
+        if (requester == null) {
+            // 这一页本来就没有内容落点（设置/账号）：停在导航项，清掉意图。
+            tabAnchors[target]?.tryRequestFocus()
+            pendingContent = null
+            return@LaunchedEffect
+        }
+        if (!contentReady) {
+            // 有落点但内容还在加载：保持 pendingContent，等 contentReady 变 true 后
+            // 本 effect 会因依赖变化重启，再把焦点精确送进去。此时绝不动焦点、也不清除意图。
+            return@LaunchedEffect
+        }
+        // 内容就绪：落点可能刚 attach，多试几帧确保成功。
         var moved = false
         var attempts = 0
         while (!moved && attempts < 30) {
-            moved = requester?.tryRequestFocus() == true
+            moved = requester.tryRequestFocus()
             if (!moved) withFrameNanos { }
             attempts++
         }
-        // 内容还没数据（或这一页本来就没有落点，如设置/账号）就停在导航项上，
-        // 绝不让焦点掉进别的页面。
+        // 极端情况仍未 attach：停在导航项，绝不让焦点掉进别的页面。
         if (!moved) tabAnchors[target]?.tryRequestFocus()
         pendingContent = null
     }
@@ -260,6 +283,8 @@ fun HongguoApp(vm: AppViewModel) {
                         rankEntry = rankEntry,
                         libraryEntry = libraryEntry,
                         upFocus = tabAnchors[tab],
+                        initialSettingsSection = pendingSettingsSection,
+                        onSettingsSectionConsumed = { pendingSettingsSection = null },
                     )
                     TopBar(
                         current = tab,
@@ -283,7 +308,12 @@ fun HongguoApp(vm: AppViewModel) {
                         tabFocus = tabAnchors,
                         onEnterContent = { selected ->
                             if (selected != tab) {
+                                // 非当前项按「下」：先切页，等这一页内容落点 attach 再进入。
                                 tab = selected
+                                pendingContent = selected
+                            } else if (!contentReady) {
+                                // 当前项按「下」但内容还在转圈：记下意图，等数据就绪后自动进入。
+                                // NavItem 此时已吞掉按键、没有交给几何搜索，这里补上"待进入"状态。
                                 pendingContent = selected
                             }
                         },
@@ -294,6 +324,7 @@ fun HongguoApp(vm: AppViewModel) {
                 is Route.Cast -> CastScreen(
                     state = state.cast,
                     onBack = { route = Route.Main },
+                    showBack = snapshot?.showScreenBack == true,
                     onStart = vm::startCastServer,
                     onRestart = vm::restartCastServer,
                     onStop = vm::stopCastServer,
@@ -336,13 +367,20 @@ fun HongguoApp(vm: AppViewModel) {
                         route = Route.Detail(series.id, series)
                     },
                     onExpandSynopsis = vm::toggleSynopsis,
+                    showBack = snapshot?.showScreenBack == true,
                 )
 
                 is Route.Player -> PlayerRoute(
                     route = target,
                     vm = vm,
+                    clock = clock,
                     onBack = {
                         route = Route.Detail(target.series.id, target.series)
+                    },
+                    onDanmakuSettings = {
+                        pendingSettingsSection = "DANMAKU"
+                        tab = Tab.SETTINGS
+                        route = Route.Main
                     },
                 )
 
@@ -394,7 +432,13 @@ fun HongguoApp(vm: AppViewModel) {
 }
 
 @Composable
-private fun PlayerRoute(route: Route.Player, vm: AppViewModel, onBack: () -> Unit) {
+private fun PlayerRoute(
+    route: Route.Player,
+    vm: AppViewModel,
+    clock: String,
+    onBack: () -> Unit,
+    onDanmakuSettings: () -> Unit,
+) {
     val session = remember(route.series.id) {
         PlayerSession(
             context = vm.getApplication(),
@@ -414,10 +458,16 @@ private fun PlayerRoute(route: Route.Player, vm: AppViewModel, onBack: () -> Uni
             vm.syncWatchHistory()
         }
     }
+    // 切后台暂停、回前台恢复：Activity 不随 Compose 页面 dispose，切后台时播放器会继续播。
+    // 只在切后台前正在播时才恢复，不覆盖用户此前的手动暂停。
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { session.onAppBackground() }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { session.onAppForeground() }
     PlayerScreen(
         session = session,
         settings = remember { vm.settingsSnapshot() },
         onBack = onBack,
+        clock = clock,
+        onDanmakuSettings = onDanmakuSettings,
     )
 }
 
@@ -438,6 +488,8 @@ private fun MainTabContent(
     rankEntry: FocusRequester? = null,
     libraryEntry: FocusRequester? = null,
     upFocus: FocusRequester? = null,
+    initialSettingsSection: String? = null,
+    onSettingsSectionConsumed: () -> Unit = {},
 ) {
     val favoriteIds = remember(state.library.version) { state.library.favorites.map { it.id }.toSet() }
     val progressById = remember(state.library.version) { state.library.history.associateBy { it.series.id } }
@@ -515,6 +567,8 @@ private fun MainTabContent(
                 snapshot = snapshot,
                 versionName = BuildConfig.VERSION_NAME,
                 onApiStatus = onApiStatus,
+                initialSection = initialSettingsSection,
+                onInitialSectionConsumed = onSettingsSectionConsumed,
             )
         }
 

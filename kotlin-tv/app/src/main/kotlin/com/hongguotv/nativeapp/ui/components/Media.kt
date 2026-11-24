@@ -79,6 +79,7 @@ fun PosterCard(
     onLongClick: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     upFocus: FocusRequester? = null,
+    completed: Boolean = false,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -141,6 +142,11 @@ fun PosterCard(
             )
             if (rank != null) {
                 RankNumeral(rank, Modifier.align(Alignment.TopStart).padding(d(8)))
+            } else if (completed) {
+                // 已看完角标：与首页/历史「看下一集·已看完」口径一致，仅在无榜单名次时占位左上角。
+                Box(Modifier.align(Alignment.TopStart).padding(d(8))) {
+                    CornerBadge("已看完", background = Color(0xCC1B8A4C))
+                }
             }
             if (!series.badge.isNullOrBlank() && rank == null) {
                 Box(Modifier.align(Alignment.TopEnd).padding(d(8))) {
@@ -368,7 +374,7 @@ fun HeroBanner(
                     upFocus = upFocus,
                 )
                 TvButton(
-                    text = if (isFavorite) "已追剧" else "加入追剧",
+                    text = if (isFavorite) "已收藏" else "加入收藏",
                     onClick = onFavorite,
                     icon = if (isFavorite) Icons.Rounded.Check else Icons.Rounded.Add,
                     tone = ButtonTone.Ghost,

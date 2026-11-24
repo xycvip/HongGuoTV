@@ -65,6 +65,26 @@ class JsEngineHost(
         }
     }
 
+    /**
+     * 在 main.js evaluate 之前注入设备身份持久化 bootstrap（suspend：evaluate 是 suspend）。
+     *  - 载入上次注册结果写回 globalThis.__hongguoCachedDevice，让 vendor 的 Ot() 命中缓存分支，
+     *    跳过每次新建 runtime 都要走的 device_register 网络往返（延迟 + 风控双重收益）；
+     *  - 补上 JS 侧缺失的 __native_save_device 桥接，Ot() 注册成功后把新身份回写 store。
+     * 任何注入失败都不该让 runtime 创建失败，用 runCatching 兜底退回原逻辑。
+     */
+    suspend fun QuickJs.injectDeviceIdentity() {
+        store.get(DEVICE_IDENTITY_KEY)?.let { cached ->
+            runCatching { evaluate<Any?>("globalThis.__hongguoCachedDevice = $cached;") }
+        }
+        runCatching {
+            evaluate<Any?>(
+                "globalThis.__native_save_device = function(json) { " +
+                    "host.cacheSet('$DEVICE_IDENTITY_KEY', json); " +
+                    "};"
+            )
+        }
+    }
+
     // ------------------------------------------------------------------ fetch --
 
     private fun fetchSpec(rawSpec: Any?): Map<String, Any?> {
@@ -121,6 +141,9 @@ class JsEngineHost(
     }
 
     companion object {
+        /** 设备身份在 KV store 里的键；设置页「重置设备身份」也是清这个键。 */
+        const val DEVICE_IDENTITY_KEY = "__device_identity"
+
         /** 脚本只应访问公网 HTTPS；阻断 localhost 与内网地址，防脚本被篡改后打内网。 */
         fun isAllowedScriptUrl(url: String): Boolean {
             val uri = runCatching { java.net.URI(url) }.getOrElse { return false }

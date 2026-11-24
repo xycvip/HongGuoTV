@@ -15,7 +15,11 @@ object HongguoJsStore {
     fun get(context: Context, http: OkHttpClient): HongguoJs {
         instance?.let { return it }
         return synchronized(this) {
-            instance ?: HongguoJs.create(context.applicationContext, http).also { instance = it }
+            instance ?: HongguoJs.create(
+                context.applicationContext,
+                http,
+                store = SharedPrefsJsKeyValueStore(context.applicationContext),
+            ).also { instance = it }
         }
     }
 
@@ -26,9 +30,13 @@ object HongguoJsStore {
     fun getOrNull(context: Context, http: OkHttpClient): HongguoJs? {
         instance?.let { return it }
         return synchronized(this) {
-            instance ?: runCatching { HongguoJs.create(context.applicationContext, http) }
-                .getOrNull()
-                ?.also { instance = it }
+            instance ?: runCatching {
+                HongguoJs.create(
+                    context.applicationContext,
+                    http,
+                    store = SharedPrefsJsKeyValueStore(context.applicationContext),
+                )
+            }.getOrNull()?.also { instance = it }
         }
     }
 
@@ -37,5 +45,15 @@ object HongguoJsStore {
         synchronized(this) { instance = null }
         // 旧脚本解析出的播放地址不再沿用，避免热更新后短暂播放到旧线路。
         HongguoJsStreamSource.clearCache()
+    }
+
+    /**
+     * 重置设备身份：删掉持久化的 device_register 结果。
+     * 下次任意脚本调用新建 runtime 时，bootstrap 读不到缓存，vendor 的 Ot() 会重新注册一台新设备。
+     * 用于被风控封禁后换身份；SharedPreferences 按 name 共享，这里直接构造 store 操作同一份数据即可。
+     */
+    fun resetDeviceIdentity(context: Context) {
+        SharedPrefsJsKeyValueStore(context.applicationContext)
+            .set(JsEngineHost.DEVICE_IDENTITY_KEY, null, null)
     }
 }

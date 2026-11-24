@@ -95,6 +95,7 @@ fun FocusSurface(
     borderWidth: Dp = d(2f),
     enabled: Boolean = true,
     onLongClick: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -105,7 +106,9 @@ fun FocusSurface(
         focused -> focusScale
         else -> 1f
     }
-    val scale by animateFloatAsState(targetScale, spring(dampingRatio = 0.62f, stiffness = 520f), label = "focus-scale")
+    // 无过冲的短缓出：spring 的回弹会让焦点项边界在几帧内反复涨缩，
+    // 带动外层 LazyList 反复做 bringIntoView 校正，整屏看着像在上下抖。
+    val scale by animateFloatAsState(targetScale, tween(150), label = "focus-scale")
     val glowAlpha by animateFloatAsState(if (focused) 0.55f else 0f, tween(180), label = "focus-glow")
     val borderColor by animateColorAsState(
         if (focused) glow else Ink.LineSoft,
@@ -114,6 +117,7 @@ fun FocusSurface(
     )
     Box(
         modifier = modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -149,7 +153,7 @@ fun focusRing(
 ): Pair<Color, Float> {
     val focused by interaction.collectIsFocusedAsState()
     val color by animateColorAsState(if (focused) glow else Color.Transparent, tween(160), label = "ring-color")
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, spring(0.7f, 600f), label = "ring-scale")
+    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(150), label = "ring-scale")
     return color to scale
 }
 
@@ -229,7 +233,7 @@ fun TvButton(
             focused -> 1.055f
             else -> 1f
         },
-        spring(0.62f, 620f),
+        tween(150),
         label = "btn",
     )
     val shape = RoundedCornerShape(d(999))
@@ -299,7 +303,7 @@ fun RoundIconButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused) 1.12f else 1f, spring(0.6f, 620f), label = "icon")
+    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(150), label = "icon")
     val background = when (tone) {
         ButtonTone.Primary -> Brush.linearGradient(listOf(Rouge.Bright, Rouge.Deep))
         ButtonTone.Gold -> Brush.linearGradient(listOf(Gold.Bright, Gold.Deep))
@@ -352,7 +356,7 @@ fun SelectChip(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused) 1.08f else 1f, spring(0.65f, 650f), label = "chip")
+    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(150), label = "chip")
     val bg by animateColorAsState(
         when {
             selected -> accent.copy(alpha = 0.22f)

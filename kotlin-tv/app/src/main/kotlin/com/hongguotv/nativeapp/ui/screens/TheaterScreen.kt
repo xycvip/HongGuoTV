@@ -344,7 +344,7 @@ private fun TypeTab(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused) 1.05f else 1f, spring(0.65f, 600f), label = "type-tab")
+    val scale by animateFloatAsState(if (focused) 1.05f else 1f, androidx.compose.animation.core.tween(150), label = "type-tab")
     Box(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }

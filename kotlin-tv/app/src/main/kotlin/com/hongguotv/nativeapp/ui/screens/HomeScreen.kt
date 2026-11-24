@@ -101,7 +101,7 @@ fun HomeScreen(
     // 正在淡出的那一份。第一张海报是稳定节点，落点不会丢。
     val firstShelfFocus = remember(entryFocus) { entryFocus ?: FocusRequester() }
     val hero = state.hero
-    // 光标停在主视觉（播放/详情/追剧按钮）时暂停轮播：换图会重建 AnimatedContent 子树，
+    // 光标停在主视觉（播放/详情/收藏按钮）时暂停轮播：换图会重建 AnimatedContent 子树，
     // 正在聚焦的按钮被销毁，焦点就会掉到顶栏。
     var heroFocused by remember { mutableStateOf(false) }
     // 主视觉自动轮播：7 秒换一张，用户从详情返回时仍停留在原来的位置。

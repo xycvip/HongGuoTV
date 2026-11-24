@@ -37,6 +37,51 @@
 
 > 两个包名不同，可以同时装，版本号各自独立。测试版是调试用的，可能会有严重BUG，不要下载
 
+## 界面一览
+
+<div align="center">
+
+<p>每一屏都为遥控器而设计。五向键走完全部流程——选剧、翻页、输验证码、调弹幕，不用触摸，也不用鼠标。</p>
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>首页 · 正在热播</b><br><img src="kotlin-tv/docs/首页.jpg" alt="首页" width="420"></td>
+    <td align="center" width="50%"><b>剧场 · 分类点播</b><br><img src="kotlin-tv/docs/剧场.jpg" alt="剧场" width="420"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>排行榜 · 每日更新</b><br><img src="kotlin-tv/docs/排行榜.jpg" alt="排行榜" width="420"></td>
+    <td align="center"><b>设置 · 播放与画面</b><br><img src="kotlin-tv/docs/设置.jpg" alt="设置" width="420"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>搜索 · 屏幕键盘</b><br><img src="kotlin-tv/docs/搜索.jpg" alt="搜索" width="420"></td>
+    <td align="center"><b>投播 · 扫码推屏</b><br><img src="kotlin-tv/docs/投播.jpg" alt="投播" width="420"></td>
+  </tr>
+</table>
+
+<p><b>四套图标 · 四张横幅</b><br>应用入口的样式可以在设置里随时更换。</p>
+
+<table>
+  <tr>
+    <td align="center"><b>H</b><br><img src="kotlin-tv/docs/app图标-h.webp" alt="图标 H" width="88"></td>
+    <td align="center"><b>I</b><br><img src="kotlin-tv/docs/app图标-i.webp" alt="图标 I" width="88"></td>
+    <td align="center"><b>J</b><br><img src="kotlin-tv/docs/app图标-j.webp" alt="图标 J" width="88"></td>
+    <td align="center"><b>K</b><br><img src="kotlin-tv/docs/app图标-k.webp" alt="图标 K" width="88"></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center"><img src="kotlin-tv/docs/横幅-h.webp" alt="横幅 H" width="420"></td>
+    <td align="center"><img src="kotlin-tv/docs/横幅-i.webp" alt="横幅 I" width="420"></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="kotlin-tv/docs/横幅-j.webp" alt="横幅 J" width="420"></td>
+    <td align="center"><img src="kotlin-tv/docs/横幅-k.webp" alt="横幅 K" width="420"></td>
+  </tr>
+</table>
+
+</div>
+
 ## 四个关键决定
 
 | 决定 | 为什么 |
