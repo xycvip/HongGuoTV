@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "42dd7979ebc29c650c9d64d2f103647e97307e17",
-  "versionCode": 103,
-  "versionName": "0.0.103",
+  "sourceCommit": "89e7c27374abe2ca27e4e7e9661f0241be067ed0",
+  "versionCode": 104,
+  "versionName": "0.0.104",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.103",
+  "tag": "hongguotv-bate-v0.0.104",
   "apk": {
-    "name": "HongguoTV-0.0.103.apk",
-    "size": 5672854,
-    "sha256": "f747f8126e8bdfa55949626f4876125c8dfc5447545d242e1f909565e9f31775",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.103/HongguoTV-0.0.103.apk"
+    "name": "HongguoTV-0.0.104.apk",
+    "size": 5689762,
+    "sha256": "591a36a5bd2326c7574b54fc6d69e9559152fbac74824b98ec3d3d126b1abde9",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.104/HongguoTV-0.0.104.apk"
   },
-  "notes": "【片源与数据管理】\n- 精简仓库并重写说明：移除历史工具、死代码与内置脚本，数据层改为云端下发"
+  "notes": "【播放与播放器】\n- feat: 播放体验优化、焦点修复、设置项与界面一览文档\n【其他功能与问题修复】\n- 修复测试版应用内更新通道识别"
 }
