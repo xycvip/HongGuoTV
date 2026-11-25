@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "adce1eac00beb03867bc52f4fb34166ddc1c3b5c",
-  "versionCode": 105,
-  "versionName": "0.0.105",
+  "sourceCommit": "645d8c1ca031cc5f9906c823f8ab7a716139ed83",
+  "versionCode": 106,
+  "versionName": "0.0.106",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.105",
+  "tag": "hongguotv-bate-v0.0.106",
   "apk": {
-    "name": "HongguoTV-0.0.105.apk",
+    "name": "HongguoTV-0.0.106.apk",
     "size": 5706146,
-    "sha256": "45db1a06e4e70483199d3f5fca3e0cc7c31178ddd80f3f155870ce2084e54ed6",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.105/HongguoTV-0.0.105.apk"
+    "sha256": "da6a19995e457fcf3ab473de59ba8e3a4da81427537a24ed7815ed2d870006fc",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.106/HongguoTV-0.0.106.apk"
   },
-  "notes": "【播放与播放器】\n- 修复双播放器交接与预载资源生命周期\n- feat(player): 进播放页默认隐藏控制层，开播即为全屏画面\n- fix(player): 弹幕设置改为播放页内联面板，不再跳转设置页\n- fix(player): 播放中途地址失效自动重新取流，兼容模式重试不再误显示\n- fix(player): 双播放器重叠换层、备用实例延迟释放与心跳补建\n【焦点与遥控器】\n- fix: 设置页左右区域焦点连线、设置入口焦点恢复；release 产物不再重命名（修 CI）\n【界面与交互】\n- fix(player): 错误弹窗自动聚焦到主按钮，上下键不再落到背后的控制条\n【其他功能与问题修复】\n- feat(home): 接着看海报直接按上次进度起播，不再经过详情页"
+  "notes": "【播放与播放器】\n- 统一单播放器降级预载入口\n- 修复单播放器模式下下一集预载被开关禁用"
 }
