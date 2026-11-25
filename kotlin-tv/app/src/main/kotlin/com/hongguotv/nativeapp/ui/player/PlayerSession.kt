@@ -624,6 +624,8 @@ class PlayerSession(
         // 尤其是设备本来就在资源紧张状态。这里让系统先回收，再建新实例。
         activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }
         activeMainListener = null
+        // 重建前先让 PlayerView 脱离旧实例；若新实例构建失败，View 也不会继续持有已 release 的播放器。
+        runCatching { playerView?.player = null }
         runCatching { player?.release() }
         player = null
         error = null
