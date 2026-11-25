@@ -687,8 +687,10 @@ class PlayerSession(
      * 接管瞬间即有画面。2px 在屏幕最左边缘，正常观看不可察。
      */
     private fun offScreenX(view: PlayerView): Float {
-        val width = view.width
-        return if (width > 8) width.toFloat() - 2f else 1_918f
+        val width = view.width.takeIf { it > 8 } ?: view.rootView.width
+        // 首次布局尚未测量时先彻底移出，布局完成后 applyVideoLayerOrder 会按真实宽度
+        // 调整为只留 2px 的缓冲保留区；不能用固定 1918px（宽屏会露出备用画面）。
+        return if (width > 8) width.toFloat() - 2f else 100_000f
     }
 
     /**
@@ -840,10 +842,14 @@ class PlayerSession(
         loadJob?.cancel()
         stopDanmaku()
         danmakuLoaded = 0
+        // 先停止并清空旧 MediaSource，再关闭其 RemoteVideo，避免旧数据源仍在读取时断流。
+        player?.let { exo ->
+            runCatching { exo.playWhenReady = false }
+            runCatching { exo.stop() }
+            runCatching { exo.clearMediaItems() }
+        }
         remote?.let { runCatching { it.close() } }
         remote = null
-        player?.stop()
-        player?.clearMediaItems()
         discardQueue()
         player?.let(::applyPlaylistPolicy)
         loadJob = scope.launch {
@@ -1110,8 +1116,8 @@ class PlayerSession(
         // 低内存设备（isLowRamDevice）：解码器和内存都紧张，默认就不并发。
         // 这条比 maxSupportedInstances 更可靠——很多盒子那项虚标成 4，实际只有一路硬解。
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        if (activityManager?.isLowRamDevice == true) {
-            switchToPlaylistPreload("低内存设备，不启用双解码器")
+        if (activityManager == null || activityManager.isLowRamDevice) {
+            switchToPlaylistPreload("低内存设备或设备信息不可用，不启用双解码器")
             return
         }
         // 接着问设备能不能同时跑两路：maxSupportedInstances 不够就根本不申请，
@@ -1128,9 +1134,12 @@ class PlayerSession(
         }
         if (standbyIndex == nextIndex && (standbyPlayer != null || standbyJob?.isActive == true)) return
         val availableMb = availableMemoryMb()
-        if (availableMb in 0..(STANDBY_MEMORY_FLOOR_MB - 1)) {
-            clearStandby("可用内存不足（${availableMb}MB）")
-            queueNextEpisode(index, force = true)
+        if (availableMb < STANDBY_MEMORY_FLOOR_MB) {
+            // -1 代表无法读取内存，不是「内存无限充足」；未知状态一律退回单播放器。
+            switchToPlaylistPreload(
+                if (availableMb < 0) "无法读取可用内存，不启用双解码器"
+                else "可用内存不足（${availableMb}MB）",
+            )
             return
         }
         clearStandby("准备新的下一集")
@@ -1327,10 +1336,15 @@ class PlayerSession(
         // 旧层的移出、解绑、释放统一交给 finishOverlapSwap()，等新层真正出画后再做——
         // 这样无论 surface 位置变更早一帧还是晚一帧，屏幕上都始终有一层画面。
         val outgoingView = playerView
+        // 在全局 player 引用切换前隔离旧播放器，防止旧集事件误操作新集状态。
+        old?.let { outgoing ->
+            runCatching { outgoing.removeListener(mainListener) }
+            runCatching { outgoing.playWhenReady = false }
+            runCatching { outgoing.volume = 0f }
+        }
         activeSlot = 1 - activeSlot
         playerViews[activeSlot]?.let { if (it.translationX != 0f) it.translationX = 0f }
-        // 旧层继续显示但要静音，避免重叠期两层同时出声。
-        runCatching { old?.volume = 0f }
+        // 旧层已暂停并移除主监听器；Surface 保留最后一帧作为新层出画前的兜底。
         // 状态引用跟着一起换：player 指向刚抬上来的 standby，它本来就绑在现在的 active 层。
         player = standby
         remote = promotedRemote
@@ -1399,9 +1413,9 @@ class PlayerSession(
      * 实例本体放到下一轮消息销毁；会话结束（[release]）时统一同步收尾。
      */
     private fun clearStandby(reason: String) {
-        // 重叠换层期间，inactive 层就是「还停在屏上的旧层」：直接解绑会让它当场断流。
-        // 先把重叠收尾（旧层移出后才会被解绑），再清备用实例。
-        if (overlapOutView != null || overlapOutPlayer != null) finishOverlapSwap("clearStandby", scheduleNext = false)
+        // 重叠换层期间 inactiveView 可能正是仍在屏上的旧层。
+        // clearStandby 只清待接管资源，不能结束/解绑由 finishOverlapSwap 管理的旧画面。
+        val overlapManagedView = overlapOutView
         // 幂等：没有备用实例就什么都不做，避免重复清状态把刚建好的重叠换层打断。
         if (standbyPlayer == null && standbyJob == null && standbyRemote == null &&
             standbyHttp == null && standbyIndex == -1
@@ -1415,10 +1429,18 @@ class PlayerSession(
         standbyPlayer = null
         // inactive 层不再持有即将释放的备用实例（解绑必须立即做，PlayerView 不能留着死引用）。
         inactiveView?.let { view ->
-            if (secondary == null || view.player === secondary || view.player == null) {
+            if (view !== overlapManagedView &&
+                (secondary == null || view.player === secondary || view.player == null)
+            ) {
                 runCatching { view.player = null }
             }
             view.alpha = 1f
+        }
+        // 先停止备用播放器并清空 source，再关闭 RemoteVideo / 独立 HTTP 客户端。
+        secondary?.let { exo ->
+            runCatching { exo.playWhenReady = false }
+            runCatching { exo.stop() }
+            runCatching { exo.clearMediaItems() }
         }
         applyVideoLayerOrder()
         standbyRemote?.let { runCatching { it.close() } }
@@ -1460,8 +1482,10 @@ class PlayerSession(
     private fun availableMemoryMb(): Long {
         val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return -1L
         val info = ActivityManager.MemoryInfo()
-        manager.getMemoryInfo(info)
-        return info.availMem / (1024L * 1024L)
+        return runCatching {
+            manager.getMemoryInfo(info)
+            info.availMem / (1024L * 1024L)
+        }.getOrDefault(-1L)
     }
 
     // ---------------------------------------------------------------- 弹幕
