@@ -91,6 +91,8 @@ class PlayerSession(
 
     var player by mutableStateOf<ExoPlayer?>(null)
         private set
+    /** 当前主监听器的播放器身份；拦截已经排队但在接管后才到达的旧播放器事件。 */
+    private var mainListenerOwner: ExoPlayer? = null
     var playing by mutableStateOf(false)
         private set
     var buffering by mutableStateOf(true)
@@ -287,7 +289,7 @@ class PlayerSession(
 
     private val mainListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (released) return
+            if (released || mainListenerOwner == null || mainListenerOwner !== player) return
             when (playbackState) {
                 Player.STATE_BUFFERING -> if (!suppressBuffering) buffering = true
                 Player.STATE_READY -> {
@@ -340,7 +342,7 @@ class PlayerSession(
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (released) return
+            if (released || mainListenerOwner == null || mainListenerOwner !== player) return
             playing = isPlaying
             // 弹幕跟着播放状态走：暂停时停帧，继续时从当前媒体时间接着滚。
             // 之前没人通知弹幕层，暂停后再播弹幕会卡在暂停那一帧不动。
@@ -348,7 +350,7 @@ class PlayerSession(
         }
 
         override fun onPlayerError(playerError: PlaybackException) {
-            if (released) return
+            if (released || mainListenerOwner == null || mainListenerOwner !== player) return
             buffering = false
             suppressBuffering = false
             playing = false
@@ -503,6 +505,7 @@ class PlayerSession(
 
         /** 接管后首帧出现：先收掉重叠期的旧层，再等 350ms 稳定窗，避免"画面已出却闪一下转圈"。 */
         override fun onRenderedFirstFrame() {
+            if (released || mainListenerOwner == null || mainListenerOwner !== player) return
             // 新层真正出画了，旧层可以退场（这是重叠换层的最优退出点，比定时兜底更准）。
             if (overlapOutView != null) finishOverlapSwap("rendered")
             if (!handoffInProgress) return
@@ -554,8 +557,9 @@ class PlayerSession(
         exo.setHandleAudioBecomingNoisy(true)
         exo.playWhenReady = true
         applyPlaylistPolicy(exo)
-        exo.addListener(mainListener)
         player = exo
+        mainListenerOwner = exo
+        exo.addListener(mainListener)
     }
 
     /** 软解兜底时把系统软解 codec 排到最前；平时保持系统默认优先级。 */
@@ -590,6 +594,8 @@ class PlayerSession(
         dualDecoderBlocked = true
         // 先彻底释放：同一颗解码器在旧实例刚 release 时立刻被新实例申请，成功率很低，
         // 尤其是设备本来就在资源紧张状态。这里让系统先回收，再建新实例。
+        mainListenerOwner = null
+        runCatching { player?.removeListener(mainListener) }
         runCatching { player?.release() }
         player = null
         error = null
@@ -1407,6 +1413,7 @@ class PlayerSession(
         // 旧层已暂停并移除主监听器；Surface 保留最后一帧作为新层出画前的兜底。
         // 状态引用跟着一起换：player 指向刚抬上来的 standby，它本来就绑在现在的 active 层。
         player = standby
+        mainListenerOwner = standby
         remote = promotedRemote
         standbyPlayer = null
         standbyRemote = null
@@ -1910,6 +1917,7 @@ class PlayerSession(
         standbyGeneration += 1
         loadJob?.cancel()
         scope.cancel()
+        mainListenerOwner = null
         player?.removeListener(mainListener)
         runCatching { player?.release() }
         player = null
