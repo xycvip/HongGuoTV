@@ -127,11 +127,11 @@ class JsEngineHost(
             val responseBody = response.body
             val contentLength = responseBody?.contentLength() ?: 0L
             if (contentLength > limit) throw IOException("响应体超过 limit（$limit 字节）")
-            val bytes = if (responseBody == null) {
-                ByteArray(0)
+            val bodyText = if (responseBody == null) {
+                ""
             } else {
-                // 不使用 bytes() 整体读入：按块读取，最多触碰 limit + 1 字节。
-                // Avoid allocating an untrusted full Content-Length before data arrives.
+                // 分块读取并直接解码 ByteArrayOutputStream 内部缓冲，避免 toByteArray() 再复制整份响应。
+                // Content-Length 不可信；最多读取 limit + 1 字节以检测超限。
                 val output = java.io.ByteArrayOutputStream(minOf(contentLength, 256L * 1024L).toInt().coerceAtLeast(0))
                 val buffer = ByteArray(8 * 1024)
                 var total = 0L
@@ -146,7 +146,7 @@ class JsEngineHost(
                         output.write(buffer, 0, count)
                     }
                 }
-                output.toByteArray()
+                output.toString(Charsets.UTF_8)
             }
             val outHeaders = linkedMapOf<String, String>()
             response.headers.toMultimap().forEach { (name, values) ->
@@ -159,7 +159,7 @@ class JsEngineHost(
             mapOf(
                 "status" to response.code,
                 "headers" to outHeaders.toJsObject(),
-                "body" to String(bytes, Charsets.UTF_8),
+                "body" to bodyText,
                 "url" to response.request.url.toString(),
             ).toJsObject()
         }
@@ -215,6 +215,7 @@ class JsEngineHost(
                     a == 169 && b == 254 -> false
                     a == 172 && b in 16..31 -> false
                     a == 192 && (b == 0 || b == 168) -> false
+                    a == 192 && b == 88 && c == 99 -> false // 192.88.99.0/24 (special-purpose relay)
                     a == 198 && (b == 18 || b == 19 || (b == 51 && c == 100)) -> false
                     a == 203 && b == 0 && c == 113 -> false
                     else -> true
@@ -229,7 +230,9 @@ class JsEngineHost(
                 // Only global-unicast 2000::/3 is accepted; exclude transition/documentation ranges.
                 if ((bytes[0].toInt() and 0xe0) != 0x20) return false
                 if (bytes[0] == 0x20.toByte() && bytes[1] == 0x01.toByte() &&
-                    (bytes[2] == 0x00.toByte() || bytes[2] == 0x0d.toByte())) return false // Teredo / documentation
+                    (bytes[2] == 0x00.toByte() || bytes[2] == 0x01.toByte())) return false // 2001::/23 special-purpose
+                if (bytes[0] == 0x20.toByte() && bytes[1] == 0x01.toByte() &&
+                    bytes[2] == 0x0d.toByte() && bytes[3] == 0xb8.toByte()) return false // 2001:db8::/32 documentation
                 if (bytes[0] == 0x20.toByte() && bytes[1] == 0x02.toByte()) return false // 6to4
                 if (bytes[0] == 0x3f.toByte() && bytes[1] == 0xff.toByte()) return false // documentation
                 return true
