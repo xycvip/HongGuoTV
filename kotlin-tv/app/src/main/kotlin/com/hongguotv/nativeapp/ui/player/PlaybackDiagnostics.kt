@@ -114,7 +114,7 @@ internal object PlaybackDiagnostics {
             } else {
                 sessionFile = null
                 sessionId = ""
-                appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(ACTIVE_FILE)?.commit()
+                appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(ACTIVE_FILE)?.remove(ACTIVE_SESSION_ID)?.commit()
             }
         }
     }
