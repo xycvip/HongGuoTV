@@ -14,7 +14,7 @@ class JsEngineHostUrlSafetyTest {
             "http://example.com/", "https://localhost/", "https://sub.localhost/",
             "https://router.local/", "https://service.internal/", "https://127.0.0.1/",
             "https://10.1.2.3/", "https://172.16.0.1/", "https://192.168.1.1/",
-            "https://100.64.0.1/", "https://[::1]/", "https://[fc00::1]/",
+            "https://100.64.0.1/", "https://192.88.99.1/", "https://[2001:db8::1]/", "https://[::1]/", "https://[fc00::1]/",
             "https://[fe80::1]/", "https://user:pass@example.com/"
         ).forEach { assertFalse("must reject $it", JsEngineHost.isAllowedScriptUrl(it)) }
     }
