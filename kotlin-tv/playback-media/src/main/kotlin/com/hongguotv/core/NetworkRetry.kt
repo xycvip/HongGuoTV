@@ -8,6 +8,7 @@ import java.io.InterruptedIOException
 import java.net.NoRouteToHostException
 import java.net.ProtocolException
 import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
 /** HTTP status with retry metadata kept separate from user-facing error text. */
@@ -28,9 +29,12 @@ object NetworkRetry {
             error.status in setOf(408, 500, 502, 503, 504) && error.retryAfter.isNullOrBlank()
         is EOFException,
         is SocketException,
+        is SocketTimeoutException,
         is UnknownHostException,
-        is NoRouteToHostException,
-        is InterruptedIOException -> true
+        is NoRouteToHostException -> true
+        // InterruptedIOException also represents explicit cancellation/interruption.
+        // Only SocketTimeoutException (handled above) is safe to retry.
+        is InterruptedIOException -> false
         is ProtocolException ->
             error.message?.contains("unexpected end of stream", ignoreCase = true) == true
         else -> false
