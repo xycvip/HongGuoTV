@@ -295,9 +295,9 @@ internal object DouyinShareResolver {
         val endpoint="https://$host/aweme/v1/feed/?aweme_id=$awemeId&aid=1128"
         val client=okhttp3.OkHttpClient.Builder()
             .dns(object : okhttp3.Dns {
-                override fun lookup(requestedHost: String): List<InetAddress> =
-                    if(requestedHost.equals(host,true)) addresses
-                    else okhttp3.Dns.SYSTEM.lookup(requestedHost)
+                override fun lookup(hostname: String): List<InetAddress> =
+                    if(hostname.equals(host,true)) addresses
+                    else okhttp3.Dns.SYSTEM.lookup(hostname)
             })
             .connectTimeout(8,java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(10,java.util.concurrent.TimeUnit.SECONDS)
@@ -392,7 +392,7 @@ internal object DouyinShareResolver {
                 )
             }
         }
-        val root=JSONObject(body!!)
+        val root=JSONObject(body)
         val aweme=findAweme(root,awemeId) ?: throw java.io.IOException("Feed 返回成功，但没有找到匹配作品 ID")
         val series=aweme.optJSONObject("series_info")
         val mix=aweme.optJSONObject("mix_info")
