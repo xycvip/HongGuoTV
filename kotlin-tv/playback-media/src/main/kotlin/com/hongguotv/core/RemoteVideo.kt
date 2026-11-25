@@ -47,11 +47,11 @@ class RemoteVideo(
     }
     fun stats(): Stats = synchronized(lock) { Stats(readerChunks,aheadChunks,hitChunks,missChunks,fetchedBytes) }
 
-    private fun range(start: Long,end: Long): Range {
+    private fun range(start: Long,end: Long,maxAttempts: Int = 3): Range {
         if(closed) throw IOException("播放请求已取消")
         require(start>=0 && end>=start && end-start<8*1024*1024)
         val request=Request.Builder().url(info.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Referer","https://novel.snssdk.com/").header("Range","bytes=$start-$end").header("Accept-Encoding","identity").build()
-        return NetworkRetry.execute(request) {
+        return NetworkRetry.execute(request, maxAttempts) {
             val call=http.newCall(request)
             synchronized(calls) { if(closed) throw IOException("播放请求已取消"); calls+=call }
             try {
@@ -73,10 +73,10 @@ class RemoteVideo(
             } finally { synchronized(calls) { calls-=call } }
         }
     }
-    private fun fetchChunk(start: Long): Range {
+    private fun fetchChunk(start: Long,maxAttempts: Int = 3): Range {
         val requestedEnd=if(start>Long.MAX_VALUE-chunkBytes.toLong()) Long.MAX_VALUE else start+chunkBytes.toLong()
         val end=if(total>0) minOf(total,requestedEnd)-1 else requestedEnd-1
-        return range(start,end)
+        return range(start,end,maxAttempts)
     }
     private fun inFlightLocked(start: Long)=fetchingRead==start || fetchingAhead==start
     /** Fetch one chunk into the cache from the reader path; waits out an in-flight duplicate. */
@@ -229,6 +229,14 @@ class RemoteVideo(
     private fun evictLocked() {
         val floor=lastRead-lastRead%chunkBytes
         cache.keys.filter { it!=0L && it<floor }.forEach { cache.remove(it) }
+
+        // Failure bookkeeping is only useful while a failed chunk is inside the active
+        // prefetch window. Drop stale offsets after forward playback or a seek.
+        val aheadEnd=if(lastRead>Long.MAX_VALUE-aheadBytes) Long.MAX_VALUE else lastRead+aheadBytes
+        val target=minOf(total,aheadEnd)
+        val stale = { offset: Long -> offset < floor || offset >= target }
+        aheadFailed.removeAll(stale)
+        aheadAttempts.keys.removeAll(stale)
     }
     private fun aheadLoop() {
         while(true) {
@@ -245,7 +253,7 @@ class RemoteVideo(
             } catch(e: InterruptedException) { return }
             if(next<0) return
             try {
-                val chunk=fetchChunk(next)
+                val chunk=fetchChunk(next,maxAttempts=1)
                 synchronized(lock) { if(total==0L) total=chunk.total; if(!closed) { cache[next]=chunk.bytes; evictLocked() }; aheadFailed.remove(next); aheadAttempts.remove(next); fetchingAhead=-1L; aheadChunks++; fetchedBytes+=chunk.bytes.size; lock.notifyAll() }
             } catch(e: Throwable) {
                 val stopRetry = synchronized(lock) {
