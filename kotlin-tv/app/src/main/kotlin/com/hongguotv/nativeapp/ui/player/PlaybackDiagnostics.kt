@@ -88,9 +88,16 @@ internal object PlaybackDiagnostics {
         synchronized(lock) {
             val dir = appContext?.let { File(it.filesDir, "playback-diagnostics") } ?: return
             dir.listFiles()?.filter { it.isFile && it.name.endsWith(".log") }?.forEach { it.delete() }
-            sessionFile = null
-            sessionId = ""
-            appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(ACTIVE_FILE)?.commit()
+            val active = sessionFile
+            dir.listFiles()?.filter { it.isFile && it.name.endsWith(".log") && it != active }?.forEach { it.delete() }
+            if (active != null) {
+                active.writeText("", Charsets.UTF_8)
+                recordLocked("RECORDS_CLEARED", "用户清空了播放诊断记录", emptyMap())
+            } else {
+                sessionFile = null
+                sessionId = ""
+                appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(ACTIVE_FILE)?.commit()
+            }
         }
     }
 
@@ -103,7 +110,13 @@ internal object PlaybackDiagnostics {
             if (context != null) enriched["memory"] = memorySnapshot(context)
         }
         appendTo(file, name, detail, enriched)
-        if (file.length() > MAX_BYTES) rotate(file.parentFile)
+        if (file.length() > MAX_BYTES) {
+            runCatching {
+                val tail = file.readText(Charsets.UTF_8).takeLast((MAX_BYTES * 3L / 4L).toInt())
+                file.writeText(tail, Charsets.UTF_8)
+            }
+        }
+        rotate(file.parentFile)
     }
 
     private fun appendTo(file: File, name: String, detail: String, fields: Map<String, Any?>) {
