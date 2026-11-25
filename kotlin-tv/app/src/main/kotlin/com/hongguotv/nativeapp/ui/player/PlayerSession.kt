@@ -153,6 +153,8 @@ class PlayerSession(
     /** 关闭无感连播时的单实例 playlist 预载：已经追加进队列的下一集。 */
     private var queuedIndex = -1
     private var queuedStream: PreparedStream? = null
+    /** 下一集是否已追加到 ExoPlayer playlist；autoNext 关闭时只缓存流，不允许播放器自动跳集。 */
+    private var queuedAppended = false
     private var queueJob: Job? = null
 
     private data class PreparedStream(val video: RemoteVideo, val quality: String)
@@ -909,8 +911,7 @@ class PlayerSession(
     private fun queueNextEpisode(current: Int, force: Boolean = false) {
         if (useDualDecoder && !force) return
         if (released) return
-        // 用户关掉「自动连播」时不应在播完后自动前进，这里就不排下一集。
-        if (!library.autoNext) {
+        if (!extras.seamlessPlayback) {
             discardQueue()
             return
         }
@@ -941,15 +942,23 @@ class PlayerSession(
             }
             queuedIndex = nextIndex
             queuedStream = prepared
-            // 自动连播链上队列会一直往后长：加新项前把当前集之前的旧项摘掉。
-            runCatching { exo.removeMediaItems(0, exo.currentMediaItemIndex) }
-            if (force) runCatching { exo.setPreloadConfiguration(ExoPlayer.PreloadConfiguration(PLAYLIST_PRELOAD_US)) }
-            runCatching { exo.addMediaSource(episodeSource(targetId, prepared.video)) }
-                .onFailure {
-                    queuedIndex = -1
-                    queuedStream = null
-                    runCatching { prepared.video.close() }
+            queuedAppended = false
+            // 自动连播开启才加入 playlist。关闭自动连播时仅缓存 RemoteVideo，
+            // 手动按「下一集」仍可直接复用预载，但播放器不会自己跳集。
+            if (library.autoNext) {
+                runCatching { exo.removeMediaItems(0, exo.currentMediaItemIndex) }
+                if (force) runCatching {
+                    exo.setPreloadConfiguration(ExoPlayer.PreloadConfiguration(PLAYLIST_PRELOAD_US))
                 }
+                runCatching { exo.addMediaSource(episodeSource(targetId, prepared.video)) }
+                    .onSuccess { queuedAppended = true }
+                    .onFailure {
+                        queuedIndex = -1
+                        queuedStream = null
+                        queuedAppended = false
+                        runCatching { prepared.video.close() }
+                    }
+            }
         }
     }
 
@@ -957,10 +966,41 @@ class PlayerSession(
     private fun switchToQueued(targetIndex: Int): Boolean {
         if (useDualDecoder) return false
         val exo = player ?: return false
-        // 连按「下一集」时第一次已经发起 seek，第二次不能因为 index 还没更新就重建数据源，
-        // 否则会把当前集重新准备一遍——用户看到的就是「下一集还是这一集」。
         if (switchingTo == targetIndex && SystemClock.elapsedRealtime() - switchingAt < SWITCH_GUARD_MS) return true
         if (queuedIndex != targetIndex || queuedStream == null) return false
+
+        // autoNext 关闭时只做预解析缓存，不追加 playlist；手动切集直接消费缓存流。
+        if (!queuedAppended) {
+            val prepared = queuedStream ?: return false
+            queuedStream = null
+            queuedIndex = -1
+            queuedAppended = false
+            switchingTo = -1
+            saveLeavingEpisode(targetIndex)
+            val previous = remote
+            index = targetIndex
+            error = null
+            errorKind = ""
+            position = 0L
+            duration = 0L
+            buffering = true
+            ready = false
+            loadingLabel = "正在切换第 ${targetIndex + 1} 集"
+            loadJob?.cancel()
+            stopDanmaku()
+            danmakuLoaded = 0
+            runCatching { exo.playWhenReady = false }
+            runCatching { exo.stop() }
+            runCatching { exo.clearMediaItems() }
+            discardQueue()
+            remote = prepared.video
+            qualityLabel = prepared.quality
+            previous?.let(::releaseSoon)
+            applyPlaylistPolicy(exo)
+            attach(prepared.video, targetIndex, 0L)
+            return true
+        }
+
         val nextItem = exo.currentMediaItemIndex + 1
         if (nextItem >= exo.mediaItemCount) return false
         if (exo.getMediaItemAt(nextItem).mediaId != episodes[targetIndex]) return false
@@ -970,7 +1010,6 @@ class PlayerSession(
             switchingTo = -1
             return false
         }
-        // seek 没落到新集（播放器正好停在 IDLE 等边界状态）时兜底重建，避免看起来「按了没反应」。
         mainHandler.postDelayed({
             if (!released && switchingTo == targetIndex && index != targetIndex) {
                 switchingTo = -1
@@ -1028,8 +1067,8 @@ class PlayerSession(
         queueJob = null
         val exo = player
         val targetId = episodes.getOrNull(queuedIndex)
-        // 队列里那一项必须先移除：留着它而提前关闭数据源，用户切过去会直接播失败。
-        if (exo != null && targetId != null) {
+        // 只有实际追加进 playlist 的项目才需要摘除；未追加的缓存仅释放数据源。
+        if (queuedAppended && exo != null && targetId != null) {
             for (i in exo.mediaItemCount - 1 downTo 0) {
                 if (i != exo.currentMediaItemIndex && exo.getMediaItemAt(i).mediaId == targetId) {
                     runCatching { exo.removeMediaItem(i) }
@@ -1037,6 +1076,7 @@ class PlayerSession(
             }
         }
         queuedIndex = -1
+        queuedAppended = false
         queuedStream?.video?.let(::releaseSoon)
         queuedStream = null
     }
