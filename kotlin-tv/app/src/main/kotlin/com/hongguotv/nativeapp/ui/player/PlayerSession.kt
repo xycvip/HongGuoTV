@@ -1502,7 +1502,7 @@ class PlayerSession(
                         standbyFirstFrameAt = SystemClock.elapsedRealtime()
                     PlaybackDiagnostics.event("STANDBY_FIRST_FRAME", "standby first frame rendered", mapOf(
                         "targetIndex" to target, "quality" to standbyQuality,
-                        "readyElapsedMs" to (standbyFirstFrameAt - standbyCreatedAt),
+                        "firstFrameAtElapsedRealtimeMs" to standbyFirstFrameAt,
                     ))
                     }
                 }
