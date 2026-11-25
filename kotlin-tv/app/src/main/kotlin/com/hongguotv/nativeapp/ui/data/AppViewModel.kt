@@ -881,6 +881,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         theaterJob?.cancel()
         theaterMoreJob?.cancel()
         theaterMoreJob = null
+        // 新筛选条件必须从零统计，不能继承旧条件的空页/失败次数。
+        theaterMoreFailures = 0
+        theaterEmptyPages = 0
         // 保留旧结果：筛选面板展开时整页变成 loading 会闪一下，体验上像「页面被重置」。
         _state.update {
             it.copy(theater = it.theater.copy(selection = selection, loading = true, loadingMore = false, page = 1, hasMore = true))

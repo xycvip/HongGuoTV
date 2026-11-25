@@ -2,6 +2,7 @@
 package com.hongguotv.js
 
 import com.dokar.quickjs.QuickJs
+import com.hongguotv.core.RequestScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.TimeoutCancellationException
@@ -57,6 +58,9 @@ class JsScriptRunner(
         timeoutMillis: Long = DEFAULT_TIMEOUT_MS,
     ): JsCallResult {
         require(FUNCTION_NAME.matches(function)) { "非法函数名：$function" }
+        // TimeoutCancellationException cancels a child job, not the navigation parent Job.
+        // Capture the propagated scope so timeout and caller cancellation both abort OkHttp.
+        val requestScope = RequestScope.currentScope()
         return try {
             withTimeout(timeoutMillis) {
                 withContext(jobDispatcher) {
@@ -66,7 +70,11 @@ class JsScriptRunner(
                 }
             }
         } catch (error: TimeoutCancellationException) {
+            requestScope?.cancel()
             JsCallResult(false, null, "脚本执行超时（${timeoutMillis}ms）", "SCRIPT_TIMEOUT")
+        } catch (error: CancellationException) {
+            requestScope?.cancel()
+            throw error
         }
     }
 

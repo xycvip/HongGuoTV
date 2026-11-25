@@ -31,7 +31,7 @@ class HongguoJs private constructor(
 ) {
     suspend fun call(function: String, vararg args: Any?): JsCallResult {
         val argsJson = args.toJsonArray()
-        return RequestScope.run { runner.call(function, argsJson) }
+        return RequestScope().runSuspending { runner.call(function, argsJson) }
     }
 
     companion object {
