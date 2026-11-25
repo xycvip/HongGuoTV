@@ -92,7 +92,8 @@ class PlayerSession(
     var player by mutableStateOf<ExoPlayer?>(null)
         private set
     /** 当前主监听器的播放器身份；拦截已经排队但在接管后才到达的旧播放器事件。 */
-    private var mainListenerOwner: ExoPlayer? = null
+    /** 只保存当前主实例对应的监听器；每个 listener 捕获自己的 ExoPlayer。 */
+    private var activeMainListener: Player.Listener? = null
     var playing by mutableStateOf(false)
         private set
     var buffering by mutableStateOf(true)
@@ -287,9 +288,9 @@ class PlayerSession(
 
     private val bandwidthMeter = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.Builder(context).build()
 
-    private val mainListener = object : Player.Listener {
+    private fun mainListenerFor(owner: ExoPlayer): Player.Listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (released || mainListenerOwner == null || mainListenerOwner !== player) return
+            if (released || owner !== player) return
             when (playbackState) {
                 Player.STATE_BUFFERING -> if (!suppressBuffering) buffering = true
                 Player.STATE_READY -> {
@@ -327,7 +328,7 @@ class PlayerSession(
 
         /** 单实例 playlist 自动/手动过渡到下一集：状态、弹幕、进度都换到新集。 */
         override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
-            if (released || useDualDecoder) return
+            if (released || owner !== player || useDualDecoder) return
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
                 reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
             ) return
@@ -342,7 +343,7 @@ class PlayerSession(
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (released || mainListenerOwner == null || mainListenerOwner !== player) return
+            if (released || owner !== player) return
             playing = isPlaying
             // 弹幕跟着播放状态走：暂停时停帧，继续时从当前媒体时间接着滚。
             // 之前没人通知弹幕层，暂停后再播弹幕会卡在暂停那一帧不动。
@@ -350,7 +351,7 @@ class PlayerSession(
         }
 
         override fun onPlayerError(playerError: PlaybackException) {
-            if (released || mainListenerOwner == null || mainListenerOwner !== player) return
+            if (released || owner !== player) return
             buffering = false
             suppressBuffering = false
             playing = false
@@ -505,7 +506,7 @@ class PlayerSession(
 
         /** 接管后首帧出现：先收掉重叠期的旧层，再等 350ms 稳定窗，避免"画面已出却闪一下转圈"。 */
         override fun onRenderedFirstFrame() {
-            if (released || mainListenerOwner == null || mainListenerOwner !== player) return
+            if (released || owner !== player) return
             // 新层真正出画了，旧层可以退场（这是重叠换层的最优退出点，比定时兜底更准）。
             if (overlapOutView != null) finishOverlapSwap("rendered")
             if (!handoffInProgress) return
@@ -558,8 +559,9 @@ class PlayerSession(
         exo.playWhenReady = true
         applyPlaylistPolicy(exo)
         player = exo
-        mainListenerOwner = exo
-        exo.addListener(mainListener)
+        val listener = mainListenerFor(exo)
+        activeMainListener = listener
+        exo.addListener(listener)
     }
 
     /** 软解兜底时把系统软解 codec 排到最前；平时保持系统默认优先级。 */
@@ -594,8 +596,8 @@ class PlayerSession(
         dualDecoderBlocked = true
         // 先彻底释放：同一颗解码器在旧实例刚 release 时立刻被新实例申请，成功率很低，
         // 尤其是设备本来就在资源紧张状态。这里让系统先回收，再建新实例。
-        mainListenerOwner = null
-        runCatching { player?.removeListener(mainListener) }
+        activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }
+        activeMainListener = null
         runCatching { player?.release() }
         player = null
         error = null
@@ -731,7 +733,7 @@ class PlayerSession(
         }, OVERLAP_UNBIND_DELAY_MS)
         // 3) 实例本体走统一的延迟释放队列；数据源等实例释放后才真正关闭。
         if (outPlayer != null) {
-            runCatching { outPlayer.removeListener(mainListener) }
+            // 主监听器已在 promoteStandby 中从旧实例移除；旧实例只保留无状态的生命周期释放。
             retireStandbyInstance(outPlayer)
         }
         outRemote?.let(::releaseSoon)
@@ -1404,7 +1406,8 @@ class PlayerSession(
         val outgoingView = playerView
         // 在全局 player 引用切换前隔离旧播放器，防止旧集事件误操作新集状态。
         old?.let { outgoing ->
-            runCatching { outgoing.removeListener(mainListener) }
+            activeMainListener?.let { listener -> runCatching { outgoing.removeListener(listener) } }
+            activeMainListener = null
             runCatching { outgoing.playWhenReady = false }
             runCatching { outgoing.volume = 0f }
         }
@@ -1413,7 +1416,8 @@ class PlayerSession(
         // 旧层已暂停并移除主监听器；Surface 保留最后一帧作为新层出画前的兜底。
         // 状态引用跟着一起换：player 指向刚抬上来的 standby，它本来就绑在现在的 active 层。
         player = standby
-        mainListenerOwner = standby
+        val promotedListener = mainListenerFor(standby)
+        activeMainListener = promotedListener
         remote = promotedRemote
         standbyPlayer = null
         standbyRemote = null
@@ -1424,7 +1428,7 @@ class PlayerSession(
         standbyJob = null
         standbyHttp?.let(::closeClient)
         standbyHttp = null
-        standby.addListener(mainListener)
+        standby.addListener(promotedListener)
         // 预渲染阶段音量为 0（避免和第二实例抢声音），接管时必须恢复，
         // 否则下一集只有画面没有声音。
         standby.volume = 1f
@@ -1917,8 +1921,8 @@ class PlayerSession(
         standbyGeneration += 1
         loadJob?.cancel()
         scope.cancel()
-        mainListenerOwner = null
-        player?.removeListener(mainListener)
+        activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }
+        activeMainListener = null
         runCatching { player?.release() }
         player = null
         remote?.let { runCatching { it.close() } }
