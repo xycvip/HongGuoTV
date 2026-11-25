@@ -91,12 +91,13 @@ fun HongguoApp(vm: AppViewModel) {
     val theaterEntry = remember { FocusRequester() }
     val rankEntry = remember { FocusRequester() }
     val libraryEntry = remember { FocusRequester() }
+    val settingsEntry = remember { FocusRequester() }
     fun entryOf(target: Tab): FocusRequester? = when (target) {
         Tab.HOME -> homeEntry
         Tab.THEATER -> theaterEntry
         Tab.RANK -> rankEntry
         Tab.LIBRARY -> libraryEntry
-        Tab.SETTINGS -> null
+        Tab.SETTINGS -> settingsEntry
         Tab.ACCOUNT -> null
     }
     // 导航项各自的锚点。切页、返回首页时把光标钉在「下划线所在的那一项」上，
@@ -110,6 +111,8 @@ fun HongguoApp(vm: AppViewModel) {
         Tab.THEATER -> state.theater.items.isNotEmpty()
         Tab.RANK -> state.ranking.items.isNotEmpty()
         Tab.LIBRARY -> state.library.favorites.isNotEmpty() || state.library.history.isNotEmpty() || state.library.later.isNotEmpty()
+        // 设置页是静态布局，只要有快照就一定有可聚焦项（分类导轨）。
+        Tab.SETTINGS -> snapshot != null
         else -> false
     }
 
@@ -282,6 +285,7 @@ fun HongguoApp(vm: AppViewModel) {
                         theaterEntry = theaterEntry,
                         rankEntry = rankEntry,
                         libraryEntry = libraryEntry,
+                        settingsEntry = settingsEntry,
                         upFocus = tabAnchors[tab],
                         initialSettingsSection = pendingSettingsSection,
                         onSettingsSectionConsumed = { pendingSettingsSection = null },
@@ -487,6 +491,7 @@ private fun MainTabContent(
     theaterEntry: FocusRequester? = null,
     rankEntry: FocusRequester? = null,
     libraryEntry: FocusRequester? = null,
+    settingsEntry: FocusRequester? = null,
     upFocus: FocusRequester? = null,
     initialSettingsSection: String? = null,
     onSettingsSectionConsumed: () -> Unit = {},
@@ -569,6 +574,8 @@ private fun MainTabContent(
                 onApiStatus = onApiStatus,
                 initialSection = initialSettingsSection,
                 onInitialSectionConsumed = onSettingsSectionConsumed,
+                entryFocus = settingsEntry,
+                upFocus = upFocus,
             )
         }
 

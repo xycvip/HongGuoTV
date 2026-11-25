@@ -13,6 +13,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -58,7 +59,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -127,6 +130,10 @@ fun SettingsScreen(
     /** 从播放页「弹幕设置」进来时直接落到弹幕栏；消费后由调用方清空。 */
     initialSection: String? = null,
     onInitialSectionConsumed: () -> Unit = {},
+    /** 顶栏「设置」按「下」进入时的落点：分类导轨的当前项。 */
+    entryFocus: FocusRequester? = null,
+    /** 分类导轨最上面一项按「上」回到顶栏导航项。 */
+    upFocus: FocusRequester? = null,
 ) {
     var section by remember { mutableStateOf(SettingsSection.PLAYBACK) }
     LaunchedEffect(initialSection) {
@@ -151,8 +158,13 @@ fun SettingsScreen(
     var customDns by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
+    // 右侧内容区焦点锚点：分类导轨按「右/下」时精确落到内容区首个可聚焦项；
+    // 聚焦组内请求焦点会自动交给组内第一个可聚焦子项。
+    val contentFocus = remember { FocusRequester() }
+    val sections = SettingsSection.entries
+
     Row(modifier.fillMaxSize()) {
-        // 左侧分类导轨
+        // 左侧分类导轨（普通 Column：上下键在导轨内自然遍历）
         Column(
             Modifier
                 .width(d(240))
@@ -164,8 +176,21 @@ fun SettingsScreen(
             Spacer(Modifier.height(d(4)))
             Text("偏好会保存在本机", style = MaterialTheme.typography.bodySmall, color = Paper.Tertiary)
             Spacer(Modifier.height(d(24)))
-            SettingsSection.entries.forEach { item ->
-                SectionTab(item, item == section) { section = item }
+            sections.forEachIndexed { index, item ->
+                val atTop = index == 0
+                val atBottom = index == sections.lastIndex
+                SectionTab(
+                    section = item,
+                    selected = item == section,
+                    onClick = { section = item },
+                    // 「设置」按「下」时落在当前分类项上；分类项本身是导轨的焦点入口。
+                    requester = if (item == section) entryFocus else null,
+                    rightFocus = contentFocus,
+                    // 末项按下没有下一个分类，直接交给内容区，避免焦点掉出去。
+                    downFocus = if (atBottom) contentFocus else null,
+                    // 首项按上回到顶栏导航项。
+                    upFocus = if (atTop) upFocus else null,
+                )
             }
             Spacer(Modifier.weight(1f))
             Text("红果 TV · $versionName", style = MaterialTheme.typography.labelSmall, color = Paper.Disabled)
@@ -175,7 +200,12 @@ fun SettingsScreen(
             Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .padding(end = ui.gutter, top = d(96), bottom = d(30)),
+                .padding(end = ui.gutter, top = d(96), bottom = d(30))
+                // 内容区自成焦点组：切换分类时旧行被移除，focusRestorer 会把焦点
+                // 收回到组内仍存在的项，避免「换一栏后光标消失」。
+                .focusRequester(contentFocus)
+                .focusGroup()
+                .focusRestorer(),
         ) {
             Text(
                 section.label,
@@ -949,12 +979,29 @@ private data class ConfirmRequest(
 )
 
 @Composable
-private fun SectionTab(section: SettingsSection, selected: Boolean, onClick: () -> Unit) {
+private fun SectionTab(
+    section: SettingsSection,
+    selected: Boolean,
+    onClick: () -> Unit,
+    requester: FocusRequester? = null,
+    rightFocus: FocusRequester? = null,
+    downFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
+) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     Row(
         Modifier
             .fillMaxWidth()
+            // 焦点属性放在 clickable 之前（官方推荐顺序）。
+            .then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
+            // 显式连线：右/下进入右侧内容区首行，首项向上回到顶栏，末项向下也交给内容区，
+            // 避免几何搜索在「导轨已到底」时找不到目标而导致焦点丢失。
+            .focusProperties {
+                if (rightFocus != null) right = rightFocus
+                if (downFocus != null) down = downFocus
+                if (upFocus != null) up = upFocus
+            }
             .clip(RoundedCornerShape(d(12)))
             .background(
                 when {
