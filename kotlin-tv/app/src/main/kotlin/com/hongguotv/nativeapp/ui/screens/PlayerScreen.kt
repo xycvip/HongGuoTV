@@ -119,7 +119,9 @@ fun PlayerScreen(
     onDanmakuSettings: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    var controlsVisible by remember { mutableStateOf(true) }
+    // 进播放页直接出画面：控制层（进度条 + 底部选项）初始隐藏，不给「先闪一层 UI 再收起」的过程。
+    // 遥控器按确定随时叫出来；此前是 true，开播瞬间会盖住画面底部一大块。
+    var controlsVisible by remember { mutableStateOf(false) }
     var episodesOpen by remember { mutableStateOf(false) }
     var seekHint by remember { mutableStateOf<String?>(null) }
     var hintToken by remember { mutableIntStateOf(0) }
