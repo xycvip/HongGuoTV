@@ -318,7 +318,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val profile = withContext(Dispatchers.IO) { runCatching { jsAccount.profile(credentials) }.getOrNull() }
             val favorites = withContext(Dispatchers.IO) { runCatching { jsAccount.favorites(credentials) }.getOrNull() }
             val history = withContext(Dispatchers.IO) { runCatching { jsAccount.history(credentials) }.getOrNull() }
-            if (profile != null) accountPrefs.edit().putString("nickname", profile.nickname ?: "红果用户").apply()
+            if (profile != null) accountPrefs.edit().putString("nickname", profile.nickname).apply()
             _state.update {
                 it.copy(
                     account = it.account.copy(
