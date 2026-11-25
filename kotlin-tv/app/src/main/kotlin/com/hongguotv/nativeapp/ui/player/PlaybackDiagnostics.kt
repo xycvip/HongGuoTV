@@ -141,7 +141,7 @@ internal object PlaybackDiagnostics {
             obj.put("seq", ++sequence)
             obj.put("session", sessionId)
             obj.put("event", name)
-            obj.put("detail", detail.take(1200))
+            obj.put("detail", sanitize(detail).take(1200))
             fields.forEach { (key, value) -> obj.put(key, value ?: JSONObject.NULL) }
             file.appendText(obj.toString() + "\n", Charsets.UTF_8)
         }
@@ -156,7 +156,7 @@ internal object PlaybackDiagnostics {
     }
 
     private fun safeId(value: String): String = value
-        .replace(Regex("(?i)(token|sign|key|cookie|auth)=[^& ]+"), "$1=<redacted>")
+        .replace(Regex("(?i)(token|sign|key|cookie|auth)=[^& ]+"), "\\$1=<redacted>")
         .take(160)
 
     private fun rotate(dir: File?) {
