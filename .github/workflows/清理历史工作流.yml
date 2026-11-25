@@ -1,0 +1,149 @@
+name: 清理历史工作流
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_latest_success:
+        description: "勾选后，每个工作流只保留最新一次成功记录；不勾选则只删除未成功记录"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: cleanup-workflow-runs
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: 清理历史运行记录
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 清理工作流运行记录
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          KEEP_LATEST_SUCCESS: ${{ inputs.keep_latest_success }}
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          repository = os.environ["REPOSITORY"]
+          token = os.environ["GH_TOKEN"]
+          current_run_id = int(os.environ["CURRENT_RUN_ID"])
+          keep_latest_success = os.environ["KEEP_LATEST_SUCCESS"].lower() == "true"
+          api_root = f"https://api.github.com/repos/{repository}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {token}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "HongGuoTV-Workflow-Cleanup",
+          }
+
+          def request(path, method="GET"):
+              req = urllib.request.Request(api_root + path, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      body = response.read()
+                      return json.loads(body) if body else {}
+              except urllib.error.HTTPError as error:
+                  detail = error.read().decode("utf-8", "replace")
+                  raise RuntimeError(f"GitHub API {method} {path} 失败：HTTP {error.code} {detail}") from error
+
+          # 完整分页，避免只清理最近 100 条记录。
+          runs = []
+          page = 1
+          while True:
+              data = request(f"/actions/runs?per_page=100&page={page}")
+              batch = data.get("workflow_runs", [])
+              runs.extend(batch)
+              if len(batch) < 100 or len(runs) >= data.get("total_count", 0):
+                  break
+              page += 1
+
+          # 只处理已结束的记录；排队中、运行中以及本次清理任务自身绝不删除。
+          completed = [
+              run for run in runs
+              if run.get("status") == "completed"
+              and int(run.get("id", 0)) != current_run_id
+          ]
+
+          keep_ids = set()
+          if keep_latest_success:
+              # 每个 workflow_id 保留最近一次成功记录；没有成功记录的工作流不保留失败记录。
+              latest_success = {}
+              for run in completed:
+                  if run.get("conclusion") != "success":
+                      continue
+                  workflow_id = run.get("workflow_id")
+                  if workflow_id is None:
+                      continue
+                  previous = latest_success.get(workflow_id)
+                  sort_key = (run.get("run_number", 0), run.get("created_at", ""))
+                  if previous is None or sort_key > (
+                      previous.get("run_number", 0), previous.get("created_at", "")
+                  ):
+                      latest_success[workflow_id] = run
+              keep_ids = {int(run["id"]) for run in latest_success.values()}
+              targets = [run for run in completed if int(run["id"]) not in keep_ids]
+              mode = "每个工作流保留最新成功记录"
+          else:
+              # 默认模式：仅删除未成功的已结束记录，成功记录全部保留。
+              targets = [
+                  run for run in completed
+                  if run.get("conclusion") != "success"
+              ]
+              mode = "仅删除未成功记录"
+
+          print(f"清理模式：{mode}")
+          print(f"获取到运行记录：{len(runs)} 条")
+          print(f"本次计划删除：{len(targets)} 条")
+          print(f"保留成功记录：{len(completed) - len(targets)} 条")
+          print("正在逐条删除……")
+
+          deleted = 0
+          failed = []
+          for index, run in enumerate(targets, 1):
+              run_id = int(run["id"])
+              name = run.get("name") or run.get("path") or "未命名工作流"
+              url = run.get("html_url", "")
+              try:
+                  request(f"/actions/runs/{run_id}", method="DELETE")
+                  deleted += 1
+                  print(f"[{index}/{len(targets)}] 已删除：{name} #{run.get('run_number')} ({run_id})")
+              except Exception as error:
+                  failed.append((run_id, str(error)))
+                  print(f"[{index}/{len(targets)}] 删除失败：{name} ({run_id})：{error}")
+              # 避免短时间内大量请求触发 API 限流。
+              time.sleep(0.15)
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as output:
+                  output.write(f"## 历史工作流清理结果\n\n")
+                  output.write(f"- 清理模式：**{mode}**\n")
+                  output.write(f"- 扫描记录：{len(runs)} 条\n")
+                  output.write(f"- 计划删除：{len(targets)} 条\n")
+                  output.write(f"- 成功删除：{deleted} 条\n")
+                  output.write(f"- 删除失败：{len(failed)} 条\n")
+                  output.write(f"- 保留成功记录：{len(completed) - len(targets)} 条\n")
+                  if failed:
+                      output.write("\n### 删除失败的记录\n")
+                      for run_id, error in failed:
+                          output.write(f"- {run_id}: {error}\n")
+
+          if failed:
+              print(f"有 {len(failed)} 条记录删除失败，请查看上方日志。")
+              sys.exit(1)
+          print("清理完成。")
+          PY
