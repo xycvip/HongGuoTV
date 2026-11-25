@@ -178,13 +178,38 @@ class PlayerSession(
         episodeId: String,
         notifyOnFallback: Boolean = true,
     ): PreparedStream {
-        val info = context.playbackStreamSource(client, notifyOnFallback = notifyOnFallback)
-            .stream(episodeKey(episodeId), effectiveQuality)
+        val startedAt = SystemClock.elapsedRealtime()
+        PlaybackDiagnostics.event("STREAM_RESOLVE_BEGIN", "resolve stream", mapOf(
+            "episodeId" to episodeId, "quality" to effectiveQuality,
+            "notifyFallback" to notifyOnFallback,
+        ))
+        val info = try {
+            context.playbackStreamSource(client, notifyOnFallback = notifyOnFallback)
+                .stream(episodeKey(episodeId), effectiveQuality)
+        } catch (failure: Throwable) {
+            PlaybackDiagnostics.event("STREAM_RESOLVE_FAILED", failure.toString(), mapOf(
+                "episodeId" to episodeId, "elapsedMs" to (SystemClock.elapsedRealtime() - startedAt),
+                "failureType" to failure.javaClass.name,
+            ))
+            throw failure
+        }
         val video = RemoteVideo(client, info)
         return try {
+            PlaybackDiagnostics.event("STREAM_RESOLVED", "stream address resolved", mapOf(
+                "episodeId" to episodeId, "quality" to info.quality,
+                "resolveElapsedMs" to (SystemClock.elapsedRealtime() - startedAt),
+            ))
             video.prepare()
+            PlaybackDiagnostics.event("STREAM_PREPARED", "RemoteVideo prepared", mapOf(
+                "episodeId" to episodeId, "quality" to info.quality,
+                "totalElapsedMs" to (SystemClock.elapsedRealtime() - startedAt),
+            ))
             PreparedStream(video, info.quality)
         } catch (failure: Throwable) {
+            PlaybackDiagnostics.event("STREAM_PREPARE_FAILED", failure.toString(), mapOf(
+                "episodeId" to episodeId, "elapsedMs" to (SystemClock.elapsedRealtime() - startedAt),
+                "failureType" to failure.javaClass.name,
+            ))
             runCatching { video.close() }
             throw failure
         }
@@ -587,11 +612,13 @@ class PlayerSession(
      */
     private val memoryCallback = object : ComponentCallbacks2 {
         override fun onTrimMemory(level: Int) {
+            PlaybackDiagnostics.event("MEMORY_TRIM", "onTrimMemory level=$level", mapOf("episodeIndex" to index))
             if (level >= TRIM_MEMORY_RUNNING_CRITICAL_LEVEL) clearStandby("系统内存压力")
         }
 
         @Deprecated("Android 14 and newer use onTrimMemory instead.")
         override fun onLowMemory() {
+            PlaybackDiagnostics.event("LOW_MEMORY", "onLowMemory", mapOf("episodeIndex" to index))
             clearStandby("系统内存不足")
         }
 
