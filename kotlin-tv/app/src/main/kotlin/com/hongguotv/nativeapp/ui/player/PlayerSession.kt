@@ -552,11 +552,12 @@ class PlayerSession(
     }
 
     init {
-        if (!buildPlayer()) return
-        runCatching { context.registerComponentCallbacks(memoryCallback) }
-        // 续播位置必须带进第一次 prepare：之前固定从 0 开始，
-        // 用户从详情页「继续观看」进来也是从头播，看起来就像进度没保存。
-        prepare(index, initialPositionMs.coerceAtLeast(0L))
+        if (buildPlayer()) {
+            runCatching { context.registerComponentCallbacks(memoryCallback) }
+            // 续播位置必须带进第一次 prepare：之前固定从 0 开始，
+            // 用户从详情页「继续观看」进来也是从头播，看起来就像进度没保存。
+            prepare(index, initialPositionMs.coerceAtLeast(0L))
+        }
     }
 
     private fun buildPlayer(): Boolean {
