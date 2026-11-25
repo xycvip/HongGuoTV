@@ -245,6 +245,7 @@ class PlayerSession(
     private var loadGeneration = 0
     private var released = false
     private var lastSavedAt = 0L
+    private var lastDiagnosticPositionAt = 0L
     private val retiredRemotes = mutableListOf<RemoteVideo>()
 
     // ------------------------------------------------------------ 双播放器状态
@@ -330,6 +331,8 @@ class PlayerSession(
                 "durationMs" to owner.duration, "playWhenReady" to owner.playWhenReady,
                 "isPlaying" to owner.isPlaying, "mediaItemCount" to owner.mediaItemCount,
                 "video" to "${owner.videoFormat?.width ?: 0}x${owner.videoFormat?.height ?: 0}",
+                "videoMime" to owner.videoFormat?.sampleMimeType,
+                "videoCodecs" to owner.videoFormat?.codecs,
                 "decoderMode" to if (softwareDecoderForced) "software" else "default",
             ))
             when (playbackState) {
@@ -386,6 +389,7 @@ class PlayerSession(
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (released || owner !== player) return
+            PlaybackDiagnostics.event("IS_PLAYING_CHANGED", "isPlaying=$isPlaying", mapOf("episodeIndex" to index, "positionMs" to owner.currentPosition))
             playing = isPlaying
             // 弹幕跟着播放状态走：暂停时停帧，继续时从当前媒体时间接着滚。
             // 之前没人通知弹幕层，暂停后再播弹幕会卡在暂停那一帧不动。
@@ -555,6 +559,11 @@ class PlayerSession(
         /** 接管后首帧出现：先收掉重叠期的旧层，再等 350ms 稳定窗，避免"画面已出却闪一下转圈"。 */
         override fun onRenderedFirstFrame() {
             if (released || owner !== player) return
+            PlaybackDiagnostics.event("FIRST_FRAME_RENDERED", "main player rendered first frame", mapOf(
+                "episodeIndex" to index, "positionMs" to owner.currentPosition,
+                "video" to "${owner.videoFormat?.width ?: 0}x${owner.videoFormat?.height ?: 0}",
+                "mime" to owner.videoFormat?.sampleMimeType, "codecs" to owner.videoFormat?.codecs,
+            ))
             // 新层真正出画了，旧层可以退场（这是重叠换层的最优退出点，比定时兜底更准）。
             if (overlapOutView != null) finishOverlapSwap("rendered")
             if (!handoffInProgress) return
@@ -1511,6 +1520,11 @@ class PlayerSession(
         val old = player
         val previousRemote = remote
         // 必须在换播放器前保存旧集进度，不能从还没播放的备用实例读取位置。
+        PlaybackDiagnostics.event("DUAL_HANDOFF_BEGIN", "promote standby player", mapOf(
+            "fromIndex" to index, "toIndex" to targetIndex, "standbyReady" to standbyReady,
+            "standbyFirstFrameAt" to standbyFirstFrameAt, "standbyQuality" to standbyQuality,
+            "mainPositionMs" to (player?.currentPosition ?: -1L),
+        ))
         saveLeavingEpisode(targetIndex)
         switchingTo = -1
         index = targetIndex
@@ -1603,6 +1617,7 @@ class PlayerSession(
             if (overlapToken == swapToken) finishOverlapSwap("timeout")
         }, OVERLAP_HOLD_MS)
         PlayerLog.info("promoteStandby -> episode=$targetIndex quality=$standbyQuality")
+        PlaybackDiagnostics.event("DUAL_HANDOFF_END", "standby promoted", mapOf("episodeIndex" to targetIndex, "quality" to standbyQuality))
         return true
     }
 
@@ -1628,6 +1643,7 @@ class PlayerSession(
             return
         }
         PlayerLog.info("clearStandby: $reason")
+        PlaybackDiagnostics.event("STANDBY_CLEAR", reason, mapOf("standbyIndex" to standbyIndex, "standbyReady" to standbyReady, "episodeIndex" to index))
         standbyJob?.cancel()
         standbyJob = null
         val secondary = standbyPlayer
@@ -1847,6 +1863,21 @@ class PlayerSession(
             startDanmaku()
         }
         val now = System.currentTimeMillis()
+        if (now - lastDiagnosticPositionAt >= 15_000L) {
+            lastDiagnosticPositionAt = now
+            PlaybackDiagnostics.event("PLAYBACK_HEARTBEAT", "periodic playback snapshot", mapOf(
+                "episodeIndex" to index, "episodeId" to currentEpisodeId,
+                "positionMs" to position, "durationMs" to duration,
+                "playing" to exo.isPlaying, "playWhenReady" to exo.playWhenReady,
+                "bufferedPositionMs" to exo.bufferedPosition,
+                "bufferedPercent" to exo.bufferedPercentage,
+                "networkMbps" to networkMbps, "quality" to qualityLabel,
+                "video" to "${videoWidth}x${videoHeight}", "bitrate" to videoBitrate,
+                "frameRate" to videoFrameRate, "queueIndex" to queuedIndex,
+                "queuePreparingIndex" to queuePreparingIndex, "standbyIndex" to standbyIndex,
+                "dual" to useDualDecoder,
+            ))
+        }
         if (now - lastSavedAt > 5000 && position > 0 && duration > 0) {
             lastSavedAt = now
             save(completed = false)
