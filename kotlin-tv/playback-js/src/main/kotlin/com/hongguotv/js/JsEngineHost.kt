@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit
  *  - fetch 的 spec 由 bridge 构造：{method,url,headers,body,followRedirects:false,
  *    anyStatus:true,limit,timeoutMs?}，任何状态码都必须返回，不抛业务异常。
  */
+@OptIn(ExperimentalUnsignedTypes::class)
 class JsEngineHost(
     private val http: OkHttpClient,
     private val store: JsKeyValueStore,
