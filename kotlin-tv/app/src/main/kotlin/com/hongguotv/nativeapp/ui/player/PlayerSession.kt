@@ -351,8 +351,15 @@ class PlayerSession(
     private fun mainListenerFor(owner: ExoPlayer): Player.Listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (released || owner !== player) return
-            PlaybackDiagnostics.event("PLAYER_STATE", "state=$playbackState", mapOf(
-                "episodeIndex" to index, "positionMs" to owner.currentPosition,
+            val stateName = when (playbackState) {
+                Player.STATE_IDLE -> "IDLE"
+                Player.STATE_BUFFERING -> "BUFFERING"
+                Player.STATE_READY -> "READY"
+                Player.STATE_ENDED -> "ENDED"
+                else -> "UNKNOWN"
+            }
+            PlaybackDiagnostics.event("PLAYER_STATE", "state=$stateName($playbackState)", mapOf(
+                "stateName" to stateName, "episodeIndex" to index, "positionMs" to owner.currentPosition,
                 "durationMs" to owner.duration, "playWhenReady" to owner.playWhenReady,
                 "isPlaying" to owner.isPlaying, "mediaItemCount" to owner.mediaItemCount,
                 "video" to "${owner.videoFormat?.width ?: 0}x${owner.videoFormat?.height ?: 0}",
@@ -1327,7 +1334,7 @@ class PlayerSession(
         PlaybackDiagnostics.event("STANDBY_PREPARE_REQUEST", "prepare standby player", mapOf(
             "targetIndex" to nextIndex, "currentIndex" to index,
             "standbyIndex" to standbyIndex, "standbyExists" to (standbyPlayer != null),
-            "availableMemoryMB" to (Runtime.getRuntime().maxMemory() / 1048576L),
+            "jvmMaxHeapMB" to (Runtime.getRuntime().maxMemory() / 1048576L),
         ))
         // 已经判定不能并发（或用户自己关了开关）：直接走同实例预载。
         // 用户开关还开着时也要补这一步，否则关了双播放器就真的没有下一集预载了。
