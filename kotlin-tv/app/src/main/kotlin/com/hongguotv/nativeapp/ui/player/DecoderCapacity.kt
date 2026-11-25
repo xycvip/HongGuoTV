@@ -16,18 +16,26 @@ import android.media.MediaFormat
  *
  * 所以在创建第二实例之前先问一遍系统；查不到、报 0、或者只有 1，一律按
  * 「不能并发」处理，走同实例 playlist 预载，功能不丢、只是少了首帧预渲染。
+ *
+ * 探测必须带真实分辨率：`findDecoderForFormat` 是按「编码 + 规格」挑解码器的，
+ * 拿 1920×1080 去问，选中的可能是另一颗（例如 4K/8K 解码器），它报的并发数
+ * 并不属于真正在播的那一颗。误判后第二路一申请就撞系统上限，部分 SoC 在这一步
+ * 是 native abort（SIGABRT），Java 层连 onPlayerError 都收不到。
  */
 internal object DecoderCapacity {
 
-    /** mime → 允许的并发实例数。一台设备同一种编码不会变，缓存住避免每次开播都查。 */
+    /** "mime@宽x高" → 允许的并发实例数。同一台设备同一编码同一规格不会变，缓存住避免每次开播都查。 */
     private val cache = HashMap<String, Int>()
 
-    /** 该视频编码允许同时存在的解码实例数；不是视频 MIME 或查不到时返回 1。 */
-    fun maxInstances(mimeType: String?): Int {
+    /** 该视频编码在该规格下允许同时存在的解码实例数；不是视频 MIME 或查不到时返回 1。 */
+    fun maxInstances(mimeType: String?, width: Int, height: Int): Int {
         val mime = mimeType?.takeIf { it.startsWith("video/", ignoreCase = true) } ?: return 1
-        cache[mime]?.let { return it }
-        val value = runCatching { query(mime) }.getOrDefault(1)
-        cache[mime] = value
+        val w = width.takeIf { it >= 16 } ?: 1280
+        val h = height.takeIf { it >= 16 } ?: 720
+        val key = "$mime@${w}x$h"
+        cache[key]?.let { return it }
+        val value = runCatching { query(mime, w, h) }.getOrDefault(1)
+        cache[key] = value
         return value
     }
 
@@ -36,14 +44,14 @@ internal object DecoderCapacity {
      * 编码类型还没解析出来时（videoFormat 为空）不拦——这时信息不足，
      * 交给运行期的「被抢占就撤」兜底，比一上来就永远禁用双播放器要好。
      */
-    fun canRunTwoDecoders(mimeType: String?): Boolean {
+    fun canRunTwoDecoders(mimeType: String?, width: Int, height: Int): Boolean {
         val mime = mimeType?.takeIf { it.startsWith("video/", ignoreCase = true) } ?: return true
-        return maxInstances(mime) >= 2
+        return maxInstances(mime, width, height) >= 2
     }
 
-    private fun query(mime: String): Int {
-        // 用一个常见规格去问系统「这种编码你会派哪颗解码器」，再读那颗解码器的并发上限。
-        val format = MediaFormat.createVideoFormat(mime, 1920, 1080)
+    private fun query(mime: String, width: Int, height: Int): Int {
+        // 用真实规格去问系统「这种编码你会派哪颗解码器」，再读那颗解码器的并发上限。
+        val format = MediaFormat.createVideoFormat(mime, width, height)
         val list = MediaCodecList(MediaCodecList.REGULAR_CODECS)
         val codecName = list.findDecoderForFormat(format) ?: return 1
         // 注意：MediaCodecList.getCodecCount()/getCodecInfoAt() 是 @hide，

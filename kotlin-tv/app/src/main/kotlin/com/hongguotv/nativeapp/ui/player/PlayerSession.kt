@@ -48,6 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
@@ -216,6 +217,31 @@ class PlayerSession(
     private var standbyFirstFrameAt = 0L
     private var standbyJob: Job? = null
 
+    /** 备用实例最后一次尝试创建的时刻：心跳补建用，避免每 400ms 反复重试。 */
+    private var lastStandbyAttemptAt = 0L
+
+    /**
+     * 重叠换层：接管时只把新层移入，旧层原地保留，等新层真正出画后再移出、解绑、释放。
+     *
+     * 原实现是「同帧移出旧层 + 立即解绑 + 立即 release」，但 translationX 要经过
+     * 下一帧 performTraversals → SurfaceControl.Transaction → vsync 才生效，而解绑与释放是
+     * 当场生效。于是那 1–2 帧里旧层已断流、新层还在屏外，露出根容器的黑底——就是用户说的
+     * 「切换画面那一闪」。重叠期两层同时可见，任何时序下屏幕都有画面。
+     */
+    private var overlapOutView: PlayerView? = null
+    private var overlapOutPlayer: ExoPlayer? = null
+    private var overlapRemote: RemoteVideo? = null
+    private var overlapToken = 0
+
+    /** 已解绑、等待延迟释放的备用实例（不在错误回调栈里同步销毁）。 */
+    private val retiringStandby = mutableListOf<ExoPlayer>()
+
+    /** 等待窗口令牌：任何一次新的 prepare 都会让它作废，避免刚切的集被旧等待覆盖。 */
+    private var standbyWaitToken = 0
+
+    /** 刚刚播完（已写入 completed=true）的集号，防止紧接着的切集把它覆盖成未看完。 */
+    private var completedIndex = -1
+
     /** 接管后的稳定窗内不显示缓冲圈：画面已接上，转圈会闪。 */
     private var suppressBuffering = false
     private var handoffInProgress = false
@@ -256,6 +282,9 @@ class PlayerSession(
                 Player.STATE_ENDED -> {
                     ready = false
                     save(completed = true)
+                    // 这一集已经写成「已看完」：紧接着的自动连播会离开本集，
+                    // 若不做标记，leave 时的 save(completed=false) 会立刻把它抹回未看完。
+                    completedIndex = index
                     playing = false
                     if (library.autoNext && index < episodes.lastIndex) {
                         prepare(index + 1, 0L)
@@ -388,8 +417,10 @@ class PlayerSession(
                 raw.contains("not supported", true)
         }
 
-        /** 接管后首帧出现：再等 350ms 稳定窗，避免"画面已出却闪一下转圈"。 */
+        /** 接管后首帧出现：先收掉重叠期的旧层，再等 350ms 稳定窗，避免"画面已出却闪一下转圈"。 */
         override fun onRenderedFirstFrame() {
+            // 新层真正出画了，旧层可以退场（这是重叠换层的最优退出点，比定时兜底更准）。
+            if (overlapOutView != null) finishOverlapSwap("rendered")
             if (!handoffInProgress) return
             val token = handoffToken
             mainHandler.postDelayed({
@@ -402,10 +433,16 @@ class PlayerSession(
         }
     }
 
-    /** 系统内存吃紧时优先丢弃备用实例，别让第二个解码器把前台播放拖崩。 */
+    /**
+     * 系统内存吃紧时优先丢弃备用实例，别让第二个解码器把前台播放拖崩。
+     *
+     * 门槛从 RUNNING_LOW(10) 提高到 RUNNING_CRITICAL(15)：电视盒子常年停在 LOW 这一档，
+     * 按 LOW 就清会导致「清 codec → 下一个 READY 又建 → 又清」的循环，
+     * 而 codec 在短时间内反复申请/释放正是驱动最容易崩的操作序列。
+     */
     private val memoryCallback = object : ComponentCallbacks2 {
         override fun onTrimMemory(level: Int) {
-            if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) clearStandby("系统内存压力")
+            if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) clearStandby("系统内存压力")
         }
 
         override fun onLowMemory() {
@@ -555,14 +592,73 @@ class PlayerSession(
      * 层级完全交给自然顺序：视频(默认, window 之下) < 弹幕(mediaOverlay) < Compose 控制层。
      */
     private fun applyVideoLayerOrder() {
-        // 足够大，确保整层完全移出屏幕；不改 visibility，surface 才不会被销毁。
-        val offScreenX = 20_000f
         for (slot in 0..1) {
             val pv = playerViews[slot] ?: continue
+            // 重叠期的旧层保持原位：它还在屏上给用户兜着画面，等 finishOverlapSwap 再移出。
+            if (pv === overlapOutView) continue
             val isActive = slot == activeSlot
-            val targetX = if (isActive) 0f else offScreenX
+            val targetX = if (isActive) 0f else offScreenX(pv)
             if (pv.translationX != targetX) pv.translationX = targetX
         }
+    }
+
+    /**
+     * inactive 层的水平偏移：整层右移接近一个屏宽，只在最左侧留 2px 在屏幕内。
+     *
+     * 原来完全移出（x=20000）时 layer 的可见区域为空，SurfaceFlinger 会回收它已排队的
+     * buffer 来省内存——备用层「渲染过首帧」不代表接管瞬间那一帧还在队列里，于是新层移入后
+     * 还要等解码器重新出一帧（30–100ms）。留 2px 让可见区域非空，buffer 不会被丢弃，
+     * 接管瞬间即有画面。2px 在屏幕最左边缘，正常观看不可察。
+     */
+    private fun offScreenX(view: PlayerView): Float {
+        val width = view.width
+        return if (width > 8) width.toFloat() - 2f else 1_918f
+    }
+
+    /**
+     * 结束重叠换层：旧层移出屏幕 → 解绑 → 释放实例 → 关闭旧数据源。
+     *
+     * 顺序不能反：`translationX` 的变更要下一帧才作用到 SurfaceControl 上，而 `player = null`
+     * 与 `release()` 是当场生效的。所以先移出，隔一小段时间再解绑/释放，
+     * 否则「位置还没动、输出面已经断了」又会在屏幕原位露一帧黑。
+     */
+    private fun finishOverlapSwap(trigger: String, scheduleNext: Boolean = true) {
+        val view = overlapOutView
+        val outPlayer = overlapOutPlayer
+        val outRemote = overlapRemote
+        if (view == null && outPlayer == null) return
+        overlapOutView = null
+        overlapOutPlayer = null
+        overlapRemote = null
+        overlapToken += 1
+        // 1) 旧层移出（下一帧生效）。
+        applyVideoLayerOrder()
+        // 2) 位置生效后再解绑输出面。
+        mainHandler.postDelayed({
+            if (view != null) runCatching { view.player = null }
+        }, OVERLAP_UNBIND_DELAY_MS)
+        // 3) 实例本体走统一的延迟释放队列；数据源等实例释放后才真正关闭。
+        if (outPlayer != null) {
+            runCatching { outPlayer.removeListener(mainListener) }
+            retireStandbyInstance(outPlayer)
+        }
+        outRemote?.let(::releaseSoon)
+        lastHandoffAt = SystemClock.elapsedRealtime()
+        PlayerLog.info("overlapSwap out done frame=$trigger")
+        // 交接真正结束（旧实例已进入释放队列）才预渲染再下一集：给 codec 回收与新实例起步留余量。
+        val target = index
+        if (!released && scheduleNext) {
+            mainHandler.postDelayed({
+                if (!released && index == target && player != null && useDualDecoder) {
+                    prepareStandby(target + 1)
+                }
+            }, HANDOFF_WARMUP_MS + 120L)
+        }
+    }
+
+    /** 任何会打断画面的操作（切集/清备用/释放会话）前，先把重叠期收干净。 */
+    private fun settleOverlapNow() {
+        if (overlapOutView != null || overlapOutPlayer != null) finishOverlapSwap("settle")
     }
 
     /**
@@ -583,6 +679,9 @@ class PlayerSession(
         // 显隐只用 translationX 物理移屏，alpha 恒为 1（SurfaceView 的 alpha 不可靠）。
         view.alpha = 1f
         applyVideoLayerOrder()
+        // 首次 attach 时 view 还没测量，width=0 只能退回兜底偏移；布局完成后再按真实屏宽
+        // 重算一次，确保 inactive 层只留最左 2px 在屏幕内（buffer 不会被 SurfaceFlinger 丢掉）。
+        view.post { if (!released) applyVideoLayerOrder() }
         // 会话可能先于画面视图创建：视图加入后补一次「下一集」准备。
         // 双解码器要等 inactive 层挂载，单实例预载不需要，两条路都要补，否则先建会话的情况下
         // 这一集播完就直接停了、没有预载。
@@ -614,15 +713,33 @@ class PlayerSession(
         }
     }
 
-    fun prepare(targetIndex: Int, startMs: Long) {
+    fun prepare(targetIndex: Int, startMs: Long, allowStandbyWait: Boolean = true) {
         if (released) return
         if (targetIndex !in episodes.indices) return
         // 任何一次新的准备都让之前挂着的解码恢复作废，避免它把这次准备覆盖掉。
         recoveryToken += 1
+        // 上一次的「等备用就绪」窗口也一并作废：连按下一集时不能让旧等待把新目标改回去。
+        standbyWaitToken += 1
+        // 上一次重叠换层还没收尾（120ms 内又切集）：先把旧层释放掉，否则连着切会堆实例。
+        settleOverlapNow()
         // 无感连播：目标正是备用播放器准备好的那一集，且已渲染过首帧，直接接管。
         if (startMs == 0L && promoteStandby(targetIndex)) return
         // 关闭开关时：目标正是同一播放器 playlist 里预载好的下一集，直接前进，不重建。
         if (startMs == 0L && switchToQueued(targetIndex)) return
+        // 备用正在为目标集取流/建实例，只差最后一步：给它一个等待窗口，别在「快好了」时推倒重来。
+        // 立刻 clearStandby 再完整重建，等于重新取一次流（又一次 JS runtime + 一次 codec 申请），
+        // 既慢又更容易崩。
+        if (startMs == 0L && allowStandbyWait && standbyIndex == targetIndex &&
+            (standbyJob?.isActive == true || standbyPlayer != null) && !handoffInProgress
+        ) {
+            val token = standbyWaitToken
+            PlayerLog.info("等备用实例就绪 episode=$targetIndex")
+            mainHandler.postDelayed({
+                if (released || standbyWaitToken != token) return@postDelayed
+                prepare(targetIndex, 0L, allowStandbyWait = false)
+            }, STANDBY_WAIT_MS)
+            return
+        }
         // 接管没成功就别让半成品备用实例继续占着解码器，统一走普通流程。
         if (standbyIndex != -1) clearStandby("改用普通播放流程")
         switchingTo = -1
@@ -634,7 +751,7 @@ class PlayerSession(
             failedQualityLabel = ""
             decodeRetries = 0
         }
-        if (index != targetIndex || duration > 0 || position > 0) save(completed = false)
+        if (index != targetIndex || duration > 0 || position > 0) saveLeavingEpisode(targetIndex)
         index = targetIndex
         error = null
         buffering = true
@@ -784,7 +901,7 @@ class PlayerSession(
         if (newIndex !in episodes.indices) return
         switchingTo = -1
         val queued = queuedStream?.takeIf { queuedIndex == newIndex }
-        save(completed = false)
+        saveLeavingEpisode(newIndex)
         val previous = remote
         index = newIndex
         error = null
@@ -871,6 +988,27 @@ class PlayerSession(
     // ------------------------------------------------------------ 备用播放器
 
     /**
+     * 心跳补建：该有备用实例却没有时，自动补一个。
+     *
+     * 备用实例会被内存门槛、Trim、建实例失败、错误回调清掉，而原实现只在 STATE_READY 那一刻
+     * 尝试建一次——一旦被清，这一整集都不会再重建，播完就必然走「重新取流」的长黑。
+     * 这里挂在界面 400ms 的心跳上，最多 3 秒就能补回来，`STATE_ENDED` 到达时通常已就绪。
+     */
+    private fun maybeRestoreStandby() {
+        if (released || !useDualDecoder || !ready || handoffInProgress) return
+        if (index + 1 > episodes.lastIndex) return
+        // 正在为目标集准备 / 已经在等它：交给正常的 prepareStandby 流程，不重复建。
+        if (standbyIndex != -1 || standbyPlayer != null || standbyJob?.isActive == true) return
+        // 交接刚结束的一段时间内不补：旧实例 codec 还没回收，新实例还在爬坡。
+        if (lastHandoffAt > 0L && SystemClock.elapsedRealtime() - lastHandoffAt < HANDOFF_WARMUP_MS) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastStandbyAttemptAt < STANDBY_RETRY_BACKOFF_MS) return
+        lastStandbyAttemptAt = now
+        PlayerLog.info("心跳补建备用实例 episode=${index + 1}")
+        prepareStandby(index + 1)
+    }
+
+    /**
      * 后台准备下一集：独立连接池取流 → 建流 → 第二实例 + 隐藏输出面真正渲染首帧。
      * 任何一步失败都退回 [queueNextEpisode] 的单实例 playlist 预载，不影响正常播放。
      */
@@ -900,9 +1038,14 @@ class PlayerSession(
         }
         // 接着问设备能不能同时跑两路：maxSupportedInstances 不够就根本不申请，
         // 否则第二路一申请，系统会回收正在播的那一路（这正是「播到一半无法解码」的成因）。
+        // 必须用真实的视频尺寸去问：短剧是竖屏 720P，拿 1920×1080 去问会落到另一颗解码器上，
+        // 探到的并发数未必属于真正在播的那一颗，误判后系统直接 native abort。
         val mime = player?.videoFormat?.sampleMimeType
-        if (!DecoderCapacity.canRunTwoDecoders(mime)) {
-            switchToPlaylistPreload("设备并发解码上限 ${DecoderCapacity.maxInstances(mime)} 路（${mime ?: "未知编码"}）")
+        if (!DecoderCapacity.canRunTwoDecoders(mime, videoWidth, videoHeight)) {
+            switchToPlaylistPreload(
+                "设备并发解码上限 ${DecoderCapacity.maxInstances(mime, videoWidth, videoHeight)} 路" +
+                    "（${mime ?: "未知编码"} ${videoWidth}x$videoHeight）",
+            )
             return
         }
         if (standbyIndex == nextIndex && (standbyPlayer != null || standbyJob?.isActive == true)) return
@@ -914,16 +1057,24 @@ class PlayerSession(
         }
         clearStandby("准备新的下一集")
         standbyIndex = nextIndex
+        lastStandbyAttemptAt = SystemClock.elapsedRealtime()
         val targetId = episodes[nextIndex]
         val http = repository.http.newBuilder()
             .dispatcher(Dispatcher())
+            // 独立连接池：closeClient 会 evictAll()，共享池会把主链路正在用的连接一起清掉。
             .connectionPool(ConnectionPool())
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
-            .callTimeout(25, TimeUnit.SECONDS)
+            // 比主链路短：备用取流失败要尽快回落到有画面的通道，而不是陪它等 25 秒。
+            .callTimeout(18, TimeUnit.SECONDS)
             .build()
         standbyHttp = http
         standbyJob = scope.launch {
+            // 错开主链路的 JS 取流窗口：主画面 READY 的同一瞬间再起第二个 QuickJS runtime，
+            // 两个 runtime + 两路 codec 同时到峰值，正是概率性闪退的来源。
+            // 备用有一整集的时间可用，晚 1.2 秒完全无感。
+            delay(STANDBY_STAGGER_MS)
+            if (released || !useDualDecoder || standbyIndex != nextIndex) return@launch
             val prepared = withContext(Dispatchers.IO) {
                 runCatching {
                     // 备用链路独立取流：失败不切换全局线路，避免影响正在播放的这一集。
@@ -954,8 +1105,10 @@ class PlayerSession(
                 .setLoadControl(
                     DefaultLoadControl.Builder()
                         // 接管后前几秒最容易卡：备用阶段就攒够连续播放的数据，而不是只满足首帧。
-                        .setBufferDurationsMs(6_000, 18_000, 1_500, 3_500)
-                        .setTargetBufferBytes(8 * 1024 * 1024)
+                        // 原来只缓到 6 秒，弱网下接管后几秒就吃干，「黑完接着转圈」往往就是它。
+                        // 15 秒 720P 约 4–6MB，8MB 上限够装，不额外增加内存峰值。
+                        .setBufferDurationsMs(15_000, 30_000, 2_500, 5_000)
+                        .setTargetBufferBytes(STANDBY_BUFFER_BYTES)
                         .setPrioritizeTimeOverSizeThresholds(true)
                         .build()
                 )
@@ -966,70 +1119,86 @@ class PlayerSession(
             return
         }
         standbyPlayer = secondary
-        // 备用实例不申请音频焦点：主实例一直持有，接管时也不需要重新走一遍焦点协商，
-        // 否则某些设备上会出现「画面接上了、声音没要回来」。
-        secondary.setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(C.USAGE_MEDIA)
-                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                .build(),
-            false,
-        )
-        secondary.volume = 0f
-        secondary.playWhenReady = false
-        // 备用实例固定绑定到 inactive 层的 PlayerView（alpha=0），在其中渲染首帧。
-        // 这一绑定在整个备用周期内都不再改变；接管时只切两层 alpha，不重新 setPlayer。
-        val backView = inactiveView
-        if (backView == null) {
-            // 没有挂载点就预热不了首帧，留着这个实例只会白占解码器。
-            clearStandby("画面容器尚未就绪")
-            return
-        }
-        if (backView.player !== secondary) backView.player = secondary
-        // 备用层压到 active 之下（不靠 alpha）。首帧 surface 仍存活、正常渲染，只是被盖住。
-        applyVideoLayerOrder()
-        secondary.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                if (standbyPlayer !== secondary || standbyIndex != target) return
-                if (state == Player.STATE_READY) {
-                    // READY 不等于能出画：没有选中视频轨道时直接放弃，别把坏状态交给接管。
-                    if (!secondary.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)) {
-                        clearStandby("备用播放器没有可用视频轨道")
-                        queueNextEpisode(index, force = true)
-                        return
+        // 从这里到 prepare() 全部在保护内：PlayerView.setPlayer() 内部会 addListener，
+        // setMediaSource()/prepare() 在实例已不可用时抛 IllegalStateException——
+        // 这些异常会直接冒到主线程变成闪退。原来 try 只包住了 build()，恰恰把最危险的几行留在了外面。
+        try {
+            // 备用实例不申请音频焦点：主实例一直持有，接管时也不需要重新走一遍焦点协商，
+            // 否则某些设备上会出现「画面接上了、声音没要回来」。
+            secondary.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                false,
+            )
+            secondary.volume = 0f
+            secondary.playWhenReady = false
+            // 备用实例固定绑定到 inactive 层（物理移出屏幕），在其中渲染首帧。
+            // 这一绑定在整个备用周期内都不再改变；接管时只交换两层位置，不重新 setPlayer。
+            val backView = inactiveView
+            if (backView == null) {
+                // 没有挂载点就预热不了首帧，留着这个实例只会白占解码器。
+                clearStandby("画面容器尚未就绪")
+                return
+            }
+            if (backView.player !== secondary) backView.player = secondary
+            applyVideoLayerOrder()
+            secondary.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (standbyPlayer !== secondary || standbyIndex != target) return
+                    if (state == Player.STATE_READY) {
+                        // READY 不等于能出画：没有选中视频轨道时直接放弃，别把坏状态交给接管。
+                        if (!secondary.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)) {
+                            // 不能在播放器回调栈内销毁自己：回调返回后 EventDispatcher 还会访问
+                            // renderer / trackSelector，实例已释放就会抛 IllegalStateException。
+                            mainHandler.post {
+                                if (released || standbyPlayer !== secondary || standbyIndex != target) return@post
+                                clearStandby("备用播放器没有可用视频轨道")
+                                queueNextEpisode(index, force = true)
+                            }
+                            return
+                        }
+                        standbyReady = true
+                    } else if (state == Player.STATE_IDLE && standbyReady) {
+                        standbyReady = false
                     }
-                    standbyReady = true
-                } else if (state == Player.STATE_IDLE && standbyReady) {
-                    standbyReady = false
                 }
-            }
 
-            override fun onRenderedFirstFrame() {
-                if (standbyPlayer === secondary && standbyIndex == target && standbyFirstFrameAt == 0L) {
-                    standbyFirstFrameAt = SystemClock.elapsedRealtime()
+                override fun onRenderedFirstFrame() {
+                    if (standbyPlayer === secondary && standbyIndex == target && standbyFirstFrameAt == 0L) {
+                        standbyFirstFrameAt = SystemClock.elapsedRealtime()
+                    }
                 }
-            }
 
-            override fun onPlayerError(playerError: PlaybackException) {
-                if (standbyPlayer !== secondary || standbyIndex != target) return
-                PlayerLog.error(
-                    "standby onPlayerError ${playerError.errorCode}(${playerError.errorCodeName})" +
-                        " cause=${playerError.cause?.message?.take(160)}",
-                )
-                // 第二实例自己就挂：这台设备/这段编码扛不住并发，本次会话不再开第二解码器。
-                switchToPlaylistPreload("备用播放器准备失败：${playerError.errorCodeName}")
-            }
-        })
-        val id = episodes[target]
-        val item = MediaItem.Builder()
-            .setMediaId(id)
-            .setUri("hongguotv://episode/$id")
-            .setMimeType(MimeTypes.VIDEO_MP4)
-            .build()
-        secondary.setMediaSource(
-            ProgressiveMediaSource.Factory { VideoDataSource(video) { } }.createMediaSource(item)
-        )
-        secondary.prepare()
+                override fun onPlayerError(playerError: PlaybackException) {
+                    if (standbyPlayer !== secondary || standbyIndex != target) return
+                    PlayerLog.error(
+                        "standby onPlayerError ${playerError.errorCode}(${playerError.errorCodeName})" +
+                            " cause=${playerError.cause?.message?.take(160)}",
+                    )
+                    // 第二实例自己就挂：这台设备/这段编码扛不住并发，本次会话不再开第二解码器。
+                    // 必须挪到下一轮消息再销毁，理由同上：不能在错误分发栈内 release 自己。
+                    mainHandler.post {
+                        if (released || standbyPlayer !== secondary || standbyIndex != target) return@post
+                        switchToPlaylistPreload("备用播放器准备失败：${playerError.errorCodeName}")
+                    }
+                }
+            })
+            val id = episodes[target]
+            val item = MediaItem.Builder()
+                .setMediaId(id)
+                .setUri("hongguotv://episode/$id")
+                .setMimeType(MimeTypes.VIDEO_MP4)
+                .build()
+            secondary.setMediaSource(
+                ProgressiveMediaSource.Factory { VideoDataSource(video) { } }.createMediaSource(item)
+            )
+            secondary.prepare()
+        } catch (problem: Throwable) {
+            PlayerLog.error("buildStandbyPlayer 失败：${problem::class.java.simpleName}: ${problem.message}")
+            switchToPlaylistPreload("备用播放器初始化失败：${problem.message}")
+        }
     }
 
     /**
@@ -1058,7 +1227,7 @@ class PlayerSession(
         val old = player
         val previousRemote = remote
         // 必须在换播放器前保存旧集进度，不能从还没播放的备用实例读取位置。
-        save(completed = false)
+        saveLeavingEpisode(targetIndex)
         switchingTo = -1
         index = targetIndex
         error = null
@@ -1076,17 +1245,14 @@ class PlayerSession(
         danmakuLoaded = 0
         qualityLabel = standbyQuality
         discardQueue()
-        // 治本：两层 view 各自固定绑定一个播放器，切集只切 z-order，绝不重新 setPlayer。
-        // inactive 层的 standby 已经渲染好下一集首帧；把它抬到前台、旧层压到后台，
-        // 再交换 activeSlot。整个过程 surface 没被重新设置给任何播放器，因此不闪屏。
+        // 重叠换层：只把新层移入，旧层原地保留（仍绑着旧播放器、仍显示最后一帧）。
+        // 旧层的移出、解绑、释放统一交给 finishOverlapSwap()，等新层真正出画后再做——
+        // 这样无论 surface 位置变更早一帧还是晚一帧，屏幕上都始终有一层画面。
         val outgoingView = playerView
         activeSlot = 1 - activeSlot
-        // 同步切层级：新 active 抬到 mediaOverlay、旧层回到底层。区别于不可靠的 alpha，
-        // z-order 能保证 standby 已渲染的首帧真正显示在最前，画面不再「定格」。
-        applyVideoLayerOrder()
-        // 旧层解绑即将释放的播放器；下一轮 prepareStandby 会把它绑到新的备用实例。
-        // 放在切层级之后，解绑带来的重新布局发生在后台层，不影响刚抬上来的画面。
-        runCatching { outgoingView?.player = null }
+        playerViews[activeSlot]?.let { if (it.translationX != 0f) it.translationX = 0f }
+        // 旧层继续显示但要静音，避免重叠期两层同时出声。
+        runCatching { old?.volume = 0f }
         // 状态引用跟着一起换：player 指向刚抬上来的 standby，它本来就绑在现在的 active 层。
         player = standby
         remote = promotedRemote
@@ -1132,38 +1298,46 @@ class PlayerSession(
                 buffering = player?.playbackState == Player.STATE_BUFFERING
             }
         }, HANDOFF_TIMEOUT_MS)
-        old?.removeListener(mainListener)
-        runCatching { old?.release() }
-        previousRemote?.let { runCatching { it.close() } }
-        lastHandoffAt = SystemClock.elapsedRealtime()
-        PlayerLog.info("promoteStandby -> episode=$targetIndex quality=$standbyQuality")
-        // 接管后再准备下一集，形成连续的预渲染链。
-        // 但必须给交接留出冷却：这一瞬间旧实例刚 release、新实例的 codec 还在爬坡，
-        // 立刻再申请第三路解码器，正是「刚跳到下一集没多久就报无法解码」的触发点。
+        // 重叠期开始：旧层还能兜 120ms 画面，新层一旦出帧就立刻收尾。
+        overlapOutView = outgoingView
+        overlapOutPlayer = old
+        overlapRemote = previousRemote
+        overlapToken += 1
+        val swapToken = overlapToken
         mainHandler.postDelayed({
-            if (!released && index == targetIndex && player === standby) {
-                prepareStandby(targetIndex + 1)
-            }
-        }, HANDOFF_WARMUP_MS + 120L)
+            if (overlapToken == swapToken) finishOverlapSwap("timeout")
+        }, OVERLAP_HOLD_MS)
+        PlayerLog.info("promoteStandby -> episode=$targetIndex quality=$standbyQuality")
         return true
     }
 
-    /** 释放备用播放器及其独立网络会话；不触碰正在播放的主实例。 */
+    /**
+     * 释放备用播放器及其独立网络会话；不触碰正在播放的主实例。
+     *
+     * release() 不再同步执行：这个方法有六个入口（内存门槛、Trim、备用错误回调、切集、
+     * 会话结束、通道切换），其中「备用错误回调」那条位于播放器的事件分发栈内——
+     * 在那里同步 release 自己，回调返回后 EventDispatcher 还会访问 renderer/trackSelector，
+     * 直接 IllegalStateException → 闪退。所以这里立即解绑输出面、清零状态，
+     * 实例本体放到下一轮消息销毁；会话结束（[release]）时统一同步收尾。
+     */
     private fun clearStandby(reason: String) {
-        if (standbyPlayer != null || standbyJob != null) PlayerLog.info("clearStandby: $reason")
+        // 重叠换层期间，inactive 层就是「还停在屏上的旧层」：直接解绑会让它当场断流。
+        // 先把重叠收尾（旧层移出后才会被解绑），再清备用实例。
+        if (overlapOutView != null || overlapOutPlayer != null) finishOverlapSwap("clearStandby", scheduleNext = false)
+        // 幂等：没有备用实例就什么都不做，避免重复清状态把刚建好的重叠换层打断。
+        if (standbyPlayer == null && standbyJob == null && standbyRemote == null &&
+            standbyHttp == null && standbyIndex == -1
+        ) {
+            return
+        }
+        PlayerLog.info("clearStandby: $reason")
         standbyJob?.cancel()
         standbyJob = null
         val secondary = standbyPlayer
         standbyPlayer = null
-        if (secondary != null) {
-            runCatching { secondary.playWhenReady = false }
-            runCatching { secondary.stop() }
-            runCatching { secondary.clearMediaItems() }
-            runCatching { secondary.release() }
-        }
-        // inactive 层不再持有已释放的备用实例；保持压在底层，等下一次 prepareStandby 重新绑定。
+        // inactive 层不再持有即将释放的备用实例（解绑必须立即做，PlayerView 不能留着死引用）。
         inactiveView?.let { view ->
-            if (view.player === secondary || view.player == null) {
+            if (secondary == null || view.player === secondary || view.player == null) {
                 runCatching { view.player = null }
             }
             view.alpha = 1f
@@ -1177,6 +1351,25 @@ class PlayerSession(
         standbyQuality = ""
         standbyReady = false
         standbyFirstFrameAt = 0L
+        if (secondary != null) retireStandbyInstance(secondary)
+    }
+
+    /** 解绑后的实例延后销毁：避免在播放器回调/合成帧里做最重的操作。 */
+    private fun retireStandbyInstance(exo: ExoPlayer) {
+        retiringStandby += exo
+        mainHandler.postDelayed({
+            retiringStandby.remove(exo)
+            releaseStandbyInstance(exo, "retire")
+        }, STANDBY_RETIRE_DELAY_MS)
+    }
+
+    /** 真正销毁一个 ExoPlayer 实例；每步都 runCatching，允许对已部分释放的实例重复调用。 */
+    private fun releaseStandbyInstance(exo: ExoPlayer, reason: String) {
+        runCatching { exo.playWhenReady = false }
+        runCatching { exo.stop() }
+        runCatching { exo.clearMediaItems() }
+        runCatching { exo.release() }
+        PlayerLog.info("standby released ($reason)")
     }
 
     private fun closeClient(client: OkHttpClient?) {
@@ -1274,6 +1467,8 @@ class PlayerSession(
             lastSavedAt = now
             save(completed = false)
         }
+        // 心跳顺带兜住备用实例：被清掉 / 建失败时最多 3 秒补回来，别等到播完才发现没有下一集。
+        maybeRestoreStandby()
     }
 
     fun togglePlay() {
@@ -1324,6 +1519,10 @@ class PlayerSession(
         if (shouldResume && player?.isPlaying != true) {
             runCatching { player?.play() }
         }
+        // 后台期间备用实例可能被系统回收：回前台缓一拍再补建，别和刚恢复的主画面抢资源。
+        mainHandler.postDelayed({
+            if (!released && player?.isPlaying == true) maybeRestoreStandby()
+        }, FOREGROUND_RESTORE_DELAY_MS)
     }
 
     fun seekTo(ms: Long) {
@@ -1408,6 +1607,18 @@ class PlayerSession(
             VideoFrameMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
         }
 
+    /**
+     * 离开当前集之前的进度落盘。
+     * 刚播完的那一集（completedIndex）已经写成「已看完」，这里不能再写 completed=false，
+     * 否则自动连播一切集，「已看完」立刻被抹掉、详情页又显示「继续观看」。
+     *
+     * @param nextIndex 紧接着要进入的集号；只是退出/离开时传 -1。
+     */
+    private fun saveLeavingEpisode(nextIndex: Int = -1) {
+        if (nextIndex != index && index == completedIndex) return
+        save(completed = false)
+    }
+
     fun save(completed: Boolean) {
         if (episodes.isEmpty()) return
         if (position <= 0 && !completed) return
@@ -1428,10 +1639,15 @@ class PlayerSession(
 
     fun release() {
         if (released) return
-        save(completed = false)
+        saveLeavingEpisode()
         released = true
+        // 先收重叠换层的旧实例，再清备用实例：两者都可能在延迟队列里。
+        settleOverlapNow()
         clearStandby("会话结束")
         discardQueue()
+        // 延迟释放队列会被下面的 removeCallbacks 取消，这里同步收尾，防止实例泄漏。
+        retiringStandby.toList().forEach { releaseStandbyInstance(it, "session") }
+        retiringStandby.clear()
         retiredRemotes.forEach { runCatching { it.close() } }
         retiredRemotes.clear()
         handoffToken += 1
@@ -1458,8 +1674,12 @@ class PlayerSession(
         /** 片源不报时长时，弹幕窗口按这个跨度铺开（短剧远达不到 45 分钟）。 */
         const val UNKNOWN_DURATION_MS = 45 * 60_000L
 
-        /** 双播放器硬门槛：可用物理内存低于该值时只用单播放器预解析。 */
-        const val STANDBY_MEMORY_FLOOR_MB = 512L
+        /**
+         * 双播放器硬门槛：可用物理内存低于该值时只用单播放器预解析。
+         * 512MB 对盒子太激进（availMem 常年 300–600 波动，等于经常不启用双播），
+         * 768MB 又保守到几乎不启用；取 640 折中，低端机仍有 [clearStandby] 与 Trim 兜底。
+         */
+        const val STANDBY_MEMORY_FLOOR_MB = 640L
 
         /**
          * 释放解码器后等系统真正归还资源的时间。
@@ -1490,5 +1710,33 @@ class PlayerSession(
 
         /** seek 到队列下一项后迟迟没有过渡回调时的兜底时限。 */
         const val SWITCH_FALLBACK_MS = 1_200L
+
+        /** 备用实例取流前的错峰延迟：避开主链路 JS runtime + codec 的同一峰值窗口。 */
+        const val STANDBY_STAGGER_MS = 1_200L
+
+        /** 备用实例的缓冲上限：15 秒 720P 约 4–6MB，8MB 够装且不抬高内存峰值。 */
+        const val STANDBY_BUFFER_BYTES = 8 * 1024 * 1024
+
+        /**
+         * 重叠换层保持时长：新层已出帧就提前收，最长等这么久。
+         * 只影响旧层的退场时间，不影响播放进度；120ms 内即使新层没出帧，
+         * 旧层也仍显示最后一帧，不会出现黑屏。
+         */
+        const val OVERLAP_HOLD_MS = 120L
+
+        /** 备用实例解绑后多久真正 release：避开播放器事件分发栈与合成帧。 */
+        const val STANDBY_RETIRE_DELAY_MS = 200L
+
+        /** 重叠期旧层移出后多久解绑输出面（约 2–3 帧，够 SurfaceControl 提交）。 */
+        const val OVERLAP_UNBIND_DELAY_MS = 48L
+
+        /** 等待「正在准备的备用实例」的窗口：超时才推倒重来，避免把快好的实例扔掉。 */
+        const val STANDBY_WAIT_MS = 700L
+
+        /** 心跳补建备用实例的退避间隔。 */
+        const val STANDBY_RETRY_BACKOFF_MS = 3_000L
+
+        /** 回前台多久后补建备用实例。 */
+        const val FOREGROUND_RESTORE_DELAY_MS = 1_500L
     }
 }
