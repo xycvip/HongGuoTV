@@ -11,6 +11,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.hongguotv.nativeapp.ui.data.AppViewModel
+import com.hongguotv.nativeapp.ui.player.PlaybackDiagnostics
 import com.hongguotv.nativeapp.ui.theme.HongguoTheme
 
 /**
@@ -23,6 +24,7 @@ class ComposeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PlaybackDiagnostics.initialize(applicationContext)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         applyFullscreen()
         setContent {
