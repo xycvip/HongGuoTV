@@ -325,6 +325,13 @@ class PlayerSession(
     private fun mainListenerFor(owner: ExoPlayer): Player.Listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (released || owner !== player) return
+            PlaybackDiagnostics.event("PLAYER_STATE", "state=$playbackState", mapOf(
+                "episodeIndex" to index, "positionMs" to owner.currentPosition,
+                "durationMs" to owner.duration, "playWhenReady" to owner.playWhenReady,
+                "isPlaying" to owner.isPlaying, "mediaItemCount" to owner.mediaItemCount,
+                "video" to "${owner.videoFormat?.width ?: 0}x${owner.videoFormat?.height ?: 0}",
+                "decoderMode" to if (softwareDecoderForced) "software" else "default",
+            ))
             when (playbackState) {
                 Player.STATE_BUFFERING -> if (!suppressBuffering) buffering = true
                 Player.STATE_READY -> {
@@ -363,6 +370,7 @@ class PlayerSession(
         /** 单实例 playlist 自动/手动过渡到下一集：状态、弹幕、进度都换到新集。 */
         override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
             if (released || owner !== player || useDualDecoder) return
+            PlaybackDiagnostics.event("MEDIA_ITEM_TRANSITION", "reason=$reason mediaId=${mediaItem?.mediaId.orEmpty()}", mapOf("oldIndex" to index))
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
                 reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
             ) return
@@ -386,6 +394,12 @@ class PlayerSession(
 
         override fun onPlayerError(playerError: PlaybackException) {
             if (released || owner !== player) return
+            PlaybackDiagnostics.event("PLAYER_ERROR", "code=${playerError.errorCode} ${playerError.errorCodeName}", mapOf(
+                "episodeIndex" to index, "positionMs" to owner.currentPosition,
+                "message" to (playerError.message ?: "").take(500),
+                "cause" to (playerError.cause?.toString() ?: "").take(500),
+                "video" to "${owner.videoFormat?.width ?: 0}x${owner.videoFormat?.height ?: 0}",
+            ))
             buffering = false
             suppressBuffering = false
             playing = false
@@ -576,6 +590,11 @@ class PlayerSession(
     }
 
     init {
+        PlaybackDiagnostics.beginSession(series.id, currentEpisodeId, index, extras.seamlessPlayback)
+        PlaybackDiagnostics.event("PLAYER_SESSION_INIT", "session initialized", mapOf(
+            "episodeCount" to episodes.size, "quality" to library.maxQuality,
+            "autoNext" to library.autoNext, "seamless" to extras.seamlessPlayback,
+        ))
         if (buildPlayer()) {
             runCatching { context.registerComponentCallbacks(memoryCallback) }
             // 续播位置必须带进第一次 prepare：之前固定从 0 开始，
@@ -816,6 +835,7 @@ class PlayerSession(
      */
     fun attachPlayerView(view: PlayerView, slot: Int) {
         if (slot !in 0..1) return
+        PlaybackDiagnostics.event("SURFACE_ATTACH", "slot=$slot view=${view.javaClass.simpleName}", mapOf("episodeIndex" to index))
         playerViews[slot] = view
         if (slot == activeSlot) {
             if (view.player !== player) view.player = player
@@ -844,6 +864,7 @@ class PlayerSession(
     }
 
     fun detachPlayerView(view: PlayerView, slot: Int) {
+        PlaybackDiagnostics.event("SURFACE_DETACH", "slot=$slot", mapOf("episodeIndex" to index, "matches" to (slot in 0..1 && playerViews[slot] === view)))
         if (slot in 0..1 && playerViews[slot] === view) playerViews[slot] = null
     }
 
@@ -864,6 +885,12 @@ class PlayerSession(
     fun prepare(targetIndex: Int, startMs: Long, allowStandbyWait: Boolean = true) {
         if (released) return
         if (targetIndex !in episodes.indices) return
+        PlaybackDiagnostics.event("PREPARE_BEGIN", "prepare target=${targetIndex + 1}", mapOf(
+            "fromIndex" to index, "targetIndex" to targetIndex, "startMs" to startMs,
+            "allowStandbyWait" to allowStandbyWait, "dual" to useDualDecoder,
+            "queuedIndex" to queuedIndex, "queuePreparingIndex" to queuePreparingIndex,
+            "standbyIndex" to standbyIndex,
+        ))
         // 任何一次新的准备都让之前挂着的解码恢复作废，避免它把这次准备覆盖掉。
         recoveryToken += 1
         // 新 prepare 立即作废上一轮阻塞取流，即使 coroutine cancel 不能中断底层 IO。
@@ -918,9 +945,11 @@ class PlayerSession(
         danmakuLoaded = 0
         // 先停止并清空旧 MediaSource，再关闭其 RemoteVideo，避免旧数据源仍在读取时断流。
         player?.let { exo ->
+            PlaybackDiagnostics.event("PLAYER_CLEAR_BEGIN", "stop and clear before prepare", mapOf("mediaItemCount" to exo.mediaItemCount, "currentMediaItemIndex" to exo.currentMediaItemIndex))
             runCatching { exo.playWhenReady = false }
             runCatching { exo.stop() }
             runCatching { exo.clearMediaItems() }
+            PlaybackDiagnostics.event("PLAYER_CLEAR_END", "media items cleared")
         }
         // clearMediaItems() 会异步释放 MediaSource/DataSource；旧 RemoteVideo 延迟退役，
         // 给正在退出的读取回调留出收尾窗口，避免切集瞬间把旧流强制 close。
@@ -1011,6 +1040,11 @@ class PlayerSession(
      * 双播放器失败时也降级到这里（force = true 绕过开关判断）。
      */
     private fun queueNextEpisode(current: Int, force: Boolean = false) {
+        PlaybackDiagnostics.event("QUEUE_REQUEST", "queue next episode", mapOf(
+            "currentIndex" to current, "nextIndex" to current + 1, "force" to force,
+            "dual" to useDualDecoder, "queuedIndex" to queuedIndex,
+            "preparingIndex" to queuePreparingIndex, "jobActive" to (queueJob?.isActive == true),
+        ))
         if (useDualDecoder && !force) return
         if (released) return
         // 单播放器 playlist 预载是双播放器的降级路径，不受「无感连播」开关限制。
@@ -1027,6 +1061,7 @@ class PlayerSession(
         val targetId = episodes[nextIndex]
         val requestGeneration = ++queueGeneration
         queuePreparingIndex = nextIndex
+        PlaybackDiagnostics.event("QUEUE_START", "fetch next episode", mapOf("targetIndex" to nextIndex, "generation" to requestGeneration))
         queueJob = scope.launch {
             val pending = AtomicReference<PreparedStream?>(null)
             try {
@@ -1041,6 +1076,7 @@ class PlayerSession(
                 if (index != current || (useDualDecoder && !force)) return@launch
                 queuedIndex = nextIndex
                 queuedStream = prepared
+                PlaybackDiagnostics.event("QUEUE_READY", "next episode stream prepared", mapOf("targetIndex" to nextIndex, "quality" to prepared.quality, "autoNext" to library.autoNext))
                 pending.compareAndSet(prepared, null)
                 queuedAppended = false
             // 自动连播开启才加入 playlist。关闭自动连播时仅缓存 RemoteVideo，
@@ -1125,6 +1161,10 @@ class PlayerSession(
     /** 队列过渡完成：把界面状态、进度、弹幕、数据源全部换到新集，并继续预载再下一集。 */
     private fun applyEpisodeTransition(newIndex: Int) {
         if (newIndex !in episodes.indices) return
+        PlaybackDiagnostics.event("EPISODE_TRANSITION_BEGIN", "playlist transition", mapOf(
+            "fromIndex" to index, "toIndex" to newIndex, "queuedIndex" to queuedIndex,
+            "queuePreparingIndex" to queuePreparingIndex, "mediaItemCount" to (player?.mediaItemCount ?: -1),
+        ))
         switchingTo = -1
         val queued = queuedStream?.takeIf { queuedIndex == newIndex }
         saveLeavingEpisode(newIndex)
@@ -1162,6 +1202,7 @@ class PlayerSession(
             buffering = false
             startDanmaku()
         }
+        PlaybackDiagnostics.event("EPISODE_TRANSITION_END", "playlist transition applied", mapOf("episodeIndex" to index, "hasQueuedStream" to (queued != null)))
         queueNextEpisode(newIndex)
     }
 
@@ -1189,10 +1230,13 @@ class PlayerSession(
 
     /** 切集后旧数据源可能仍被上一个 MediaItem 的 MediaSource 引用，延后关闭。 */
     private fun releaseSoon(video: RemoteVideo) {
+        PlaybackDiagnostics.event("REMOTE_RELEASE_SCHEDULED", "remote close scheduled after 800ms", mapOf("delayMs" to 800L, "episodeIndex" to index))
         retiredRemotes += video
         mainHandler.postDelayed({
             retiredRemotes.remove(video)
+            PlaybackDiagnostics.event("REMOTE_RELEASE_BEGIN", "closing retired RemoteVideo")
             closeRemote(video)
+            PlaybackDiagnostics.event("REMOTE_RELEASE_END", "retired RemoteVideo closed")
         }, 800L)
     }
 
@@ -2008,6 +2052,10 @@ class PlayerSession(
 
     fun release() {
         if (released) return
+        PlaybackDiagnostics.event("PLAYER_RELEASE_BEGIN", "PlayerSession release", mapOf(
+            "episodeIndex" to index, "positionMs" to position, "mediaItemCount" to (player?.mediaItemCount ?: -1),
+            "dual" to useDualDecoder, "standbyExists" to (standbyPlayer != null),
+        ))
         saveLeavingEpisode()
         released = true
         // 先收重叠换层的旧实例，再清备用实例：两者都可能在延迟队列里。
@@ -2045,6 +2093,8 @@ class PlayerSession(
         }
         playerViews[0] = null
         playerViews[1] = null
+        PlaybackDiagnostics.event("PLAYER_RELEASE_END", "PlayerSession released")
+        PlaybackDiagnostics.endSession("播放器正常释放")
     }
 
     private companion object {
