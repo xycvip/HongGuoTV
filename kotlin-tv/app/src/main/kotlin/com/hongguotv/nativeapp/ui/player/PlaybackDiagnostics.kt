@@ -155,9 +155,11 @@ internal object PlaybackDiagnostics {
         return "availMB=${info.availMem / 1048576L},totalMB=${info.totalMem / 1048576L},lowMemory=${info.lowMemory},heapUsedMB=${(runtime.totalMemory()-runtime.freeMemory())/1048576L},nativeHeapMB=${Debug.getNativeHeapAllocatedSize()/1048576L}"
     }
 
-    private fun safeId(value: String): String = value
-        .replace(Regex("(?i)(token|sign|key|cookie|auth)=[^& ]+"), "\\$1=<redacted>")
-        .take(160)
+    private fun safeId(value: String): String = sanitize(value).take(160)
+
+    private fun sanitize(value: String): String = Regex("(?i)(token|sign|key|cookie|auth)=[^& ]+").replace(value) { match ->
+        "${match.groupValues[1]}=<redacted>"
+    }.replace(Regex("https?://[^\\s?]+\\?[^\\s]+"), "<url-with-query-redacted>")
 
     private fun rotate(dir: File?) {
         if (dir == null || !dir.exists()) return
