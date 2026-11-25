@@ -166,7 +166,7 @@ private fun BootstrapCard(
                     Spacer(Modifier.height(d(10)))
                     Text(
                         text = if (failed) {
-                            state.error ?: "请检查电视网络后重试"
+                            state.error
                         } else {
                             "红果的数据接口由云端脚本提供，首次启动需要联网下载一次（约 0.5 MB）。以后脚本更新会自动完成，不需要手动操作。"
                         },
