@@ -112,7 +112,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
                 }
                 drawFrame(now)
             }
-            scheduleFrame()
+            if (running && playbackActive && loader != null) scheduleFrame()
         }
     }
 
@@ -129,7 +129,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     override fun surfaceCreated(holder: SurfaceHolder) {
         surfaceAlive = true
         updateMetrics()
-        scheduleFrame()
+        if (running && playbackActive && loader != null) scheduleFrame()
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -154,7 +154,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
 
     /** 向屏幕刷新节奏挂一帧回调；标志防止一帧内重复 post 造成回调叠加。 */
     private fun scheduleFrame() {
-        if (!surfaceAlive || frameScheduled) return
+        if (!surfaceAlive || !running || !playbackActive || loader == null || frameScheduled) return
         frameScheduled = true
         choreographer.postFrameCallback(frameCallback)
     }
@@ -341,6 +341,12 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     fun setPlaybackActive(active: Boolean) {
         if (!running || playbackActive == active) return
         playbackActive = active
+        if (active && loader != null && surfaceAlive) {
+            scheduleFrame()
+        } else {
+            choreographer.removeFrameCallback(frameCallback)
+            frameScheduled = false
+        }
     }
 
     /** 位置按绝对媒体时间计算，seek 后自然落到正确位置，无需清空。 */
@@ -355,6 +361,8 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         needMore = {}
         scheduled = emptyList()
         lastBuffered = -1
+        choreographer.removeFrameCallback(frameCallback)
+        frameScheduled = false
         visibility = GONE
     }
 

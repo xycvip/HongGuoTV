@@ -129,6 +129,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var homeVisible = true
     private var theaterJob: Job? = null
     private var rankingJob: Job? = null
+    private var theaterMoreJob: Job? = null
+    private var rankingMoreJob: Job? = null
+    private var theaterGeneration = 0L
+    private var rankingGeneration = 0L
     /** 加载更多连续失败次数：单次失败不再判到底，连续失败够了才收手。 */
     private var theaterMoreFailures = 0
     private var rankingMoreFailures = 0
@@ -806,6 +810,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val current = _state.value.theater
         val nextType = type ?: current.type
         val selection = if (reset) emptyMap() else current.selection
+        val generation = ++theaterGeneration
+        theaterJob?.cancel()
+        theaterMoreJob?.cancel()
+        theaterMoreJob = null
         _state.update {
             it.copy(
                 theater = it.theater.copy(
@@ -816,6 +824,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     // 旧海报先顶着，新数据回来后整表替换。
                     items = it.theater.items,
                     loading = reset,
+                    loadingMore = false,
                     page = 1,
                     hasMore = true,
                     error = null,
@@ -824,12 +833,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         theaterMoreFailures = 0
         theaterEmptyPages = 0
-        theaterJob?.cancel()
         theaterJob = viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { repository.theater(1, nextType, selection) }
             }
             result.onSuccess { page ->
+                if (generation != theaterGeneration) return@onSuccess
                 _state.update {
                     it.copy(
                         theater = it.theater.copy(
@@ -845,7 +854,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // 这里静默把第二页也取回来，第一屏看完时下一页已经在手里。
                 if (page.catalog.hasMore) loadMoreTheater()
             }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                if (error is kotlinx.coroutines.CancellationException || generation != theaterGeneration) return@onFailure
                 _state.update {
                     it.copy(theater = it.theater.copy(loading = false, error = error.message ?: "剧场加载失败"))
                 }
@@ -868,14 +877,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun loadTheaterWith(selection: Map<String, String>) {
         val type = _state.value.theater.type
+        val generation = ++theaterGeneration
+        theaterJob?.cancel()
+        theaterMoreJob?.cancel()
+        theaterMoreJob = null
         // 保留旧结果：筛选面板展开时整页变成 loading 会闪一下，体验上像「页面被重置」。
         _state.update {
-            it.copy(theater = it.theater.copy(selection = selection, loading = true, page = 1))
+            it.copy(theater = it.theater.copy(selection = selection, loading = true, loadingMore = false, page = 1, hasMore = true))
         }
-        theaterJob?.cancel()
         theaterJob = viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { repository.theater(1, type, selection) } }
             result.onSuccess { page ->
+                if (generation != theaterGeneration) return@onSuccess
                 _state.update {
                     it.copy(
                         theater = it.theater.copy(
@@ -888,7 +901,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                if (error is kotlinx.coroutines.CancellationException || generation != theaterGeneration) return@onFailure
                 _state.update { it.copy(theater = it.theater.copy(loading = false, error = error.message ?: "筛选失败")) }
             }
         }
@@ -897,46 +910,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun loadMoreTheater() {
         val s = _state.value.theater
         if (s.loading || s.loadingMore || !s.hasMore) return
+        val generation = theaterGeneration
+        val next = s.page + 1
         _state.update { it.copy(theater = it.theater.copy(loadingMore = true)) }
-        viewModelScope.launch {
-            val next = s.page + 1
-            val result = withContext(Dispatchers.IO) { runCatching { repository.theater(next, s.type, s.selection) } }
+        theaterMoreJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { repository.theater(next, s.type, s.selection) }
+            }
+            if (generation != theaterGeneration) return@launch
             result.onSuccess { page ->
+                if (generation != theaterGeneration) return@onSuccess
                 theaterMoreFailures = 0
-                // 服务端偶尔会回一页空数据却仍然声称 has_more=true，界面上就停在原地、
-                // 再也拿不到新海报。连续两页都空才认到底，中间自动跳过。
                 val empty = page.catalog.items.isEmpty()
                 theaterEmptyPages = if (empty) theaterEmptyPages + 1 else 0
-                _state.update {
-                    it.copy(
-                        theater = it.theater.copy(
-                            items = (it.theater.items + page.catalog.items).distinctBy { item -> item.id },
-                            hasMore = page.catalog.hasMore && theaterEmptyPages < 2,
-                            loadingMore = false,
-                            page = next,
-                            error = null,
-                        ),
-                    )
+                _state.update { state ->
+                    if (generation != theaterGeneration || state.theater.type != s.type ||
+                        state.theater.selection != s.selection || state.theater.page != s.page
+                    ) state else state.copy(theater = state.theater.copy(
+                        items = (state.theater.items + page.catalog.items).distinctBy { item -> item.id },
+                        hasMore = page.catalog.hasMore && theaterEmptyPages < 2,
+                        loadingMore = false, page = next, error = null,
+                    ))
                 }
-                if (empty && page.catalog.hasMore && theaterEmptyPages < 2) loadMoreTheater()
+                if (empty && page.catalog.hasMore && theaterEmptyPages < 2 && generation == theaterGeneration) loadMoreTheater()
             }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) return@onFailure
-                // 单次网络抖动/游标失效就把 hasMore 置 false，会永久停在「已经到底了」。
-                // 这里保留 hasMore 并自动重试，连续三次失败才认到底。
+                if (error is kotlinx.coroutines.CancellationException || generation != theaterGeneration) return@onFailure
                 theaterMoreFailures++
                 val giveUp = theaterMoreFailures >= MAX_LOAD_MORE_RETRIES
-                _state.update {
-                    it.copy(
-                        theater = it.theater.copy(
-                            loadingMore = false,
-                            hasMore = if (giveUp) false else true,
-                            error = if (giveUp) "加载更多失败，稍后重试" else it.theater.error,
-                        ),
-                    )
+                _state.update { state ->
+                    if (generation != theaterGeneration || state.theater.type != s.type ||
+                        state.theater.selection != s.selection || state.theater.page != s.page
+                    ) state else state.copy(theater = state.theater.copy(
+                        loadingMore = false, hasMore = !giveUp,
+                        error = if (giveUp) "加载更多失败，稍后重试" else state.theater.error,
+                    ))
                 }
-                if (!giveUp) {
+                if (!giveUp && generation == theaterGeneration) {
                     kotlinx.coroutines.delay(1_500)
-                    loadMoreTheater()
+                    if (generation == theaterGeneration) loadMoreTheater()
                 }
             }
         }
@@ -951,6 +962,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         val current = _state.value.ranking
         val nextBoard = board ?: current.board
+        val generation = ++rankingGeneration
+        rankingJob?.cancel()
+        rankingMoreJob?.cancel()
+        rankingMoreJob = null
         _state.update {
             it.copy(
                 ranking = it.ranking.copy(
@@ -968,10 +983,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 切榜要取消上一榜的请求，否则慢返回的旧榜会覆盖新榜。
         rankingMoreFailures = 0
         rankingEmptyPages = 0
-        rankingJob?.cancel()
         rankingJob = viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { repository.ranking(nextBoard, 1) } }
             result.onSuccess { page ->
+                if (generation != rankingGeneration) return@onSuccess
                 _state.update {
                     it.copy(
                         ranking = it.ranking.copy(
@@ -987,7 +1002,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // 榜单同理：首屏之后立刻补一页，避免第一次下滑就撞到加载圈。
                 if (page.hasMore) loadMoreRanking()
             }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                if (error is kotlinx.coroutines.CancellationException || generation != rankingGeneration) return@onFailure
                 _state.update {
                     it.copy(ranking = it.ranking.copy(loading = false, error = error.message ?: "榜单加载失败"))
                 }
@@ -998,43 +1013,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun loadMoreRanking() {
         val s = _state.value.ranking
         if (s.loading || s.loadingMore || !s.hasMore) return
+        val generation = rankingGeneration
+        val next = s.page + 1
         _state.update { it.copy(ranking = it.ranking.copy(loadingMore = true)) }
-        viewModelScope.launch {
-            val next = s.page + 1
-            val result = withContext(Dispatchers.IO) { runCatching { repository.ranking(s.board, next) } }
+        rankingMoreJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { repository.ranking(s.board, next) }
+            }
+            if (generation != rankingGeneration) return@launch
             result.onSuccess { page ->
+                if (generation != rankingGeneration) return@onSuccess
                 rankingMoreFailures = 0
                 val empty = page.items.isEmpty()
                 rankingEmptyPages = if (empty) rankingEmptyPages + 1 else 0
-                _state.update {
-                    it.copy(
-                        ranking = it.ranking.copy(
-                            items = (it.ranking.items + page.items).distinctBy { item -> item.id },
-                            hasMore = page.hasMore && rankingEmptyPages < 2,
-                            loadingMore = false,
-                            page = next,
-                            error = null,
-                        ),
-                    )
+                _state.update { state ->
+                    if (generation != rankingGeneration || state.ranking.board != s.board || state.ranking.page != s.page) {
+                        state
+                    } else state.copy(ranking = state.ranking.copy(
+                        items = (state.ranking.items + page.items).distinctBy { item -> item.id },
+                        hasMore = page.hasMore && rankingEmptyPages < 2,
+                        loadingMore = false, page = next, error = null,
+                    ))
                 }
-                if (empty && page.hasMore && rankingEmptyPages < 2) loadMoreRanking()
+                if (empty && page.hasMore && rankingEmptyPages < 2 && generation == rankingGeneration) loadMoreRanking()
             }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) return@onFailure
-                // 同剧场：失败不再直接判到底，保留 hasMore 自动重试。
+                if (error is kotlinx.coroutines.CancellationException || generation != rankingGeneration) return@onFailure
                 rankingMoreFailures++
                 val giveUp = rankingMoreFailures >= MAX_LOAD_MORE_RETRIES
-                _state.update {
-                    it.copy(
-                        ranking = it.ranking.copy(
-                            loadingMore = false,
-                            hasMore = if (giveUp) false else true,
-                            error = if (giveUp) "加载更多失败，稍后重试" else it.ranking.error,
-                        ),
-                    )
+                _state.update { state ->
+                    if (generation != rankingGeneration || state.ranking.board != s.board || state.ranking.page != s.page) {
+                        state
+                    } else state.copy(ranking = state.ranking.copy(
+                        loadingMore = false, hasMore = !giveUp,
+                        error = if (giveUp) "加载更多失败，稍后重试" else state.ranking.error,
+                    ))
                 }
-                if (!giveUp) {
+                if (!giveUp && generation == rankingGeneration) {
                     kotlinx.coroutines.delay(1_500)
-                    loadMoreRanking()
+                    if (generation == rankingGeneration) loadMoreRanking()
                 }
             }
         }

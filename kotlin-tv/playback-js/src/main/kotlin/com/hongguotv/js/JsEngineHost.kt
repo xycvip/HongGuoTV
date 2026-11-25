@@ -99,7 +99,9 @@ class JsEngineHost(
         }
         val body = spec["body"]?.toString() ?: ""
         val timeoutMs = (spec["timeoutMs"] as? Number)?.toLong() ?: 20_000L
-        val limit = (spec["limit"] as? Number)?.toLong() ?: (24L * 1024 * 1024)
+        // 默认 24 MiB，硬上限 32 MiB，避免脚本请求把内存限额抬到不可控。
+        val limit = ((spec["limit"] as? Number)?.toLong() ?: (24L * 1024 * 1024))
+            .coerceIn(1L, 32L * 1024 * 1024)
         RequestScope.ensureActive()
         val client = http.newBuilder()
             .callTimeout(timeoutMs.coerceIn(1_000L, 60_000L), TimeUnit.MILLISECONDS)
@@ -113,8 +115,28 @@ class JsEngineHost(
         builder.method(method, if (hasBody) body.toRequestBody(contentType) else null)
         val result: Map<String, Any?> = RequestScope.execute(client.newCall(builder.build())) { response ->
             val responseBody = response.body
-            val bytes = responseBody?.bytes() ?: ByteArray(0)
-            if (bytes.size > limit) throw IOException("响应体超过 limit（$limit 字节）")
+            val contentLength = responseBody?.contentLength() ?: 0L
+            if (contentLength > limit) throw IOException("响应体超过 limit（$limit 字节）")
+            val bytes = if (responseBody == null) {
+                ByteArray(0)
+            } else {
+                // 不使用 bytes() 整体读入：按块读取，最多触碰 limit + 1 字节。
+                val output = java.io.ByteArrayOutputStream(minOf(contentLength, limit).toInt().coerceAtLeast(0))
+                val buffer = ByteArray(8 * 1024)
+                var total = 0L
+                responseBody.byteStream().use { input ->
+                    while (true) {
+                        val allowed = (limit - total + 1L).coerceAtMost(buffer.size.toLong()).toInt()
+                        val count = input.read(buffer, 0, allowed)
+                        if (count < 0) break
+                        if (count == 0) continue
+                        total += count
+                        if (total > limit) throw IOException("响应体超过 limit（$limit 字节）")
+                        output.write(buffer, 0, count)
+                    }
+                }
+                output.toByteArray()
+            }
             val outHeaders = linkedMapOf<String, String>()
             response.headers.toMultimap().forEach { (name, values) ->
                 if (values.isNotEmpty()) {
