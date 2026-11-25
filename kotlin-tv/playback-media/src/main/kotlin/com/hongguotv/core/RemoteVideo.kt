@@ -26,6 +26,7 @@ class RemoteVideo(
 
     /** Number of CENC samples prepared for the current media resource. */
     val preparedSampleCount: Int get() = if (::prepared.isInitialized) prepared.samples.size else 0
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
     private val lock=Object()
     private val cache=HashMap<Long,ByteArray>()
     private var fetchingRead=-1L
