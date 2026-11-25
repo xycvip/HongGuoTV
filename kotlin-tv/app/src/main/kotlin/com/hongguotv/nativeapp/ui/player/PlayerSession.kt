@@ -1254,11 +1254,11 @@ class PlayerSession(
             clearStandby("已经是最后一集")
             return
         }
-        // 低内存设备（isLowRamDevice）：解码器和内存都紧张，默认就不并发。
-        // 这条比 maxSupportedInstances 更可靠——很多盒子那项虚标成 4，实际只有一路硬解。
+        // 不再按 isLowRamDevice 一刀切：低内存标记并不等于当前可用内存不足。
+        // 统一按实时可用内存判断，低于 300MB 才退回单播放器。
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        if (activityManager == null || activityManager.isLowRamDevice) {
-            switchToPlaylistPreload("低内存设备或设备信息不可用，不启用双解码器")
+        if (activityManager == null) {
+            switchToPlaylistPreload("无法读取设备内存信息，不启用双解码器")
             return
         }
         // 接着问设备能不能同时跑两路：maxSupportedInstances 不够就根本不申请，
@@ -2047,11 +2047,10 @@ class PlayerSession(
         const val UNKNOWN_DURATION_MS = 45 * 60_000L
 
         /**
-         * 双播放器硬门槛：可用物理内存低于该值时只用单播放器预解析。
-         * 512MB 对盒子太激进（availMem 常年 300–600 波动，等于经常不启用双播），
-         * 768MB 又保守到几乎不启用；取 640 折中，低端机仍有 [clearStandby] 与 Trim 兜底。
+         * 双播放器硬门槛：可用物理内存低于 300MB 时只用单播放器预解析。
+         * 低于 300MB 时禁用双播放器；达到 300MB 即允许尝试，运行中仍由 [clearStandby] 与 Trim 兜底。
          */
-        const val STANDBY_MEMORY_FLOOR_MB = 640L
+        const val STANDBY_MEMORY_FLOOR_MB = 300L
 
         /**
          * 释放解码器后等系统真正归还资源的时间。
