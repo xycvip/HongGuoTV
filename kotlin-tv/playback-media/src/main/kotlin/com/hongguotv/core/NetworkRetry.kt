@@ -22,6 +22,20 @@ class HttpStatusException(
  * A fresh OkHttp Call must be created by [action] for every attempt.
  */
 object NetworkRetry {
+    /** Returns true only for failures safe to retry for an idempotent GET. */
+    fun isRetryable(error: IOException): Boolean = when (error) {
+        is HttpStatusException ->
+            error.status in setOf(408, 500, 502, 503, 504) && error.retryAfter.isNullOrBlank()
+        is EOFException,
+        is SocketException,
+        is UnknownHostException,
+        is NoRouteToHostException,
+        is InterruptedIOException -> true
+        is ProtocolException ->
+            error.message?.contains("unexpected end of stream", ignoreCase = true) == true
+        else -> false
+    }
+
     fun <T> execute(request: Request, action: () -> T): T {
         var retries = 0
         while (true) {
@@ -30,19 +44,7 @@ object NetworkRetry {
                 return action()
             } catch (error: IOException) {
                 RequestScope.ensureActive()
-                val transient = when (error) {
-                    is HttpStatusException ->
-                        error.status in setOf(408, 500, 502, 503, 504) && error.retryAfter.isNullOrBlank()
-                    is EOFException,
-                    is SocketException,
-                    is UnknownHostException,
-                    is NoRouteToHostException,
-                    is InterruptedIOException -> true
-                    is ProtocolException ->
-                        error.message?.contains("unexpected end of stream", ignoreCase = true) == true
-                    else -> false
-                }
-                if (request.method != "GET" || retries >= 2 || !transient) throw error
+                if (request.method != "GET" || retries >= 2 || !isRetryable(error)) throw error
                 val delay = if (retries++ == 0) 300L else 900L
                 var remaining = delay
                 while (remaining > 0) {

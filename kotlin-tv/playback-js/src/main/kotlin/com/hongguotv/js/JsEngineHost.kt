@@ -6,12 +6,17 @@ import com.dokar.quickjs.QuickJs
 import com.dokar.quickjs.binding.define
 import com.dokar.quickjs.binding.function
 import com.dokar.quickjs.binding.toJsObject
+import okhttp3.Dns
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.io.InterruptedIOException
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
+import java.net.UnknownHostException
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.TimeUnit
@@ -106,6 +111,11 @@ class JsEngineHost(
         val client = http.newBuilder()
             .callTimeout(timeoutMs.coerceIn(1_000L, 60_000L), TimeUnit.MILLISECONDS)
             .followRedirects(false)
+            .dns(Dns { hostname ->
+                val addresses = Dns.SYSTEM.lookup(hostname)
+                // Return the validated answers to OkHttp; do not resolve the hostname again.
+                validatePublicDns(hostname, addresses)
+            })
             .build()
         val builder = Request.Builder().url(url)
         headers.forEach { (key, value) -> builder.header(key, value) }
@@ -121,7 +131,8 @@ class JsEngineHost(
                 ByteArray(0)
             } else {
                 // 不使用 bytes() 整体读入：按块读取，最多触碰 limit + 1 字节。
-                val output = java.io.ByteArrayOutputStream(minOf(contentLength, limit).toInt().coerceAtLeast(0))
+                // Avoid allocating an untrusted full Content-Length before data arrives.
+                val output = java.io.ByteArrayOutputStream(minOf(contentLength, 256L * 1024L).toInt().coerceAtLeast(0))
                 val buffer = ByteArray(8 * 1024)
                 var total = 0L
                 responseBody.byteStream().use { input ->
@@ -166,27 +177,64 @@ class JsEngineHost(
         /** 设备身份在 KV store 里的键；设置页「重置设备身份」也是清这个键。 */
         const val DEVICE_IDENTITY_KEY = "__device_identity"
 
-        /** 脚本只应访问公网 HTTPS；阻断 localhost 与内网地址，防脚本被篡改后打内网。 */
+        /** URL 层先拦截明显的本地地址；DNS 层还会校验实际解析结果。 */
         fun isAllowedScriptUrl(url: String): Boolean {
             val uri = runCatching { java.net.URI(url) }.getOrElse { return false }
-            if (uri.scheme?.lowercase() != "https") return false
-            if (uri.userInfo != null) return false
-            val host = uri.host?.lowercase() ?: return false
-            if (host == "localhost" || host.endsWith(".localhost")) return false
-            // 内网 IPv4 字面量（DNS 解析由系统网络层负责，这里只挡字面量，避免每次请求多一次 DNS）。
-            val ipv4 = Regex("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$").find(host) ?: return true
-            val octets = ipv4.groupValues.drop(1).map { it.toInt() }
-            if (octets.any { it > 255 }) return false
-            val (a, b) = octets
-            return when {
-                a == 127 -> false // loopback
-                a == 10 -> false // 10.0.0.0/8
-                a == 192 && b == 168 -> false // 192.168.0.0/16
-                a == 172 && b in 16..31 -> false // 172.16.0.0/12
-                a == 169 && b == 254 -> false // link-local
-                a == 0 -> false
-                else -> true
+            if (uri.scheme?.lowercase() != "https" || uri.userInfo != null) return false
+            val host = uri.host?.trim('[', ']')?.lowercase() ?: return false
+            if (host == "localhost" || host.endsWith(".localhost") ||
+                host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan")) return false
+            val ipv4Literal = Regex("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$").matches(host)
+            if (ipv4Literal || host.contains(':')) {
+                val address = runCatching { InetAddress.getByName(host) }.getOrElse { return false }
+                return isPublicAddress(address)
             }
+            return true
+        }
+
+        /** Validate and return the exact DNS answer that OkHttp will use (no second lookup). */
+        internal fun validatePublicDns(hostname: String, addresses: List<InetAddress>): List<InetAddress> {
+            if (addresses.isEmpty() || addresses.any { !isPublicAddress(it) }) {
+                throw UnknownHostException("host.fetch 拒绝解析到非公网地址：$hostname")
+            }
+            return addresses
+        }
+
+        /** Only globally routable IPv4/IPv6 addresses are accepted for script HTTP requests. */
+        internal fun isPublicAddress(address: InetAddress): Boolean {
+            if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
+                address.isSiteLocalAddress || address.isMulticastAddress) return false
+            val bytes = address.address
+            if (address is Inet4Address) {
+                val a = bytes[0].toInt() and 0xff
+                val b = bytes[1].toInt() and 0xff
+                val c = bytes[2].toInt() and 0xff
+                return when {
+                    a == 0 || a == 10 || a == 127 || a >= 224 -> false
+                    a == 100 && b in 64..127 -> false // carrier-grade NAT
+                    a == 169 && b == 254 -> false
+                    a == 172 && b in 16..31 -> false
+                    a == 192 && (b == 0 || b == 168) -> false
+                    a == 198 && (b == 18 || b == 19 || (b == 51 && c == 100)) -> false
+                    a == 203 && b == 0 && c == 113 -> false
+                    else -> true
+                }
+            }
+            if (address is Inet6Address) {
+                // IPv4-mapped IPv6 inherits the IPv4 policy.
+                if (bytes.take(10).all { it == 0.toByte() } &&
+                    bytes[10] == 0xff.toByte() && bytes[11] == 0xff.toByte()) {
+                    return isPublicAddress(InetAddress.getByAddress(bytes.copyOfRange(12, 16)))
+                }
+                // Only global-unicast 2000::/3 is accepted; exclude transition/documentation ranges.
+                if ((bytes[0].toInt() and 0xe0) != 0x20) return false
+                if (bytes[0] == 0x20.toByte() && bytes[1] == 0x01.toByte() &&
+                    (bytes[2] == 0x00.toByte() || bytes[2] == 0x0d.toByte())) return false // Teredo / documentation
+                if (bytes[0] == 0x20.toByte() && bytes[1] == 0x02.toByte()) return false // 6to4
+                if (bytes[0] == 0x3f.toByte() && bytes[1] == 0xff.toByte()) return false // documentation
+                return true
+            }
+            return false
         }
     }
 }

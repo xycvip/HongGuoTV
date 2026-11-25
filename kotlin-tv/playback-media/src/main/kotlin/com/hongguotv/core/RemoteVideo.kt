@@ -30,6 +30,9 @@ class RemoteVideo(
     private val cache=HashMap<Long,ByteArray>()
     private var fetchingRead=-1L
     private var fetchingAhead=-1L
+    // Failed prefetch offsets are skipped by the worker; the foreground reader can retry them.
+    private val aheadFailed=mutableSetOf<Long>()
+    private val aheadAttempts=HashMap<Long,Int>()
     private var lastRead=0L
     private var aheadThread: Thread?=null
     private var hitChunks=0
@@ -88,7 +91,7 @@ class RemoteVideo(
         }
         try {
             val chunk=fetchChunk(start)
-            synchronized(lock) { if(total==0L) total=chunk.total; if(!closed) cache[start]=chunk.bytes; fetchingRead=-1L; readerChunks++; fetchedBytes+=chunk.bytes.size; lock.notifyAll() }
+            synchronized(lock) { if(total==0L) total=chunk.total; if(!closed) cache[start]=chunk.bytes; aheadFailed.remove(start); aheadAttempts.remove(start); fetchingRead=-1L; readerChunks++; fetchedBytes+=chunk.bytes.size; lock.notifyAll() }
         } catch(e: Throwable) {
             synchronized(lock) { fetchingRead=-1L; lock.notifyAll() }
             throw e
@@ -220,7 +223,7 @@ class RemoteVideo(
         val aheadEnd=if(lastRead>Long.MAX_VALUE-aheadBytes) Long.MAX_VALUE else lastRead+aheadBytes
         val target=minOf(total,aheadEnd)
         var at=lastRead-lastRead%chunkBytes
-        while(at<target) { if(!cache.containsKey(at) && !inFlightLocked(at)) return at; at+=chunkBytes }
+        while(at<target) { if(!cache.containsKey(at) && !inFlightLocked(at) && at !in aheadFailed) return at; at+=chunkBytes }
         return -1
     }
     private fun evictLocked() {
@@ -243,12 +246,21 @@ class RemoteVideo(
             if(next<0) return
             try {
                 val chunk=fetchChunk(next)
-                synchronized(lock) { if(total==0L) total=chunk.total; if(!closed) { cache[next]=chunk.bytes; evictLocked() }; fetchingAhead=-1L; aheadChunks++; fetchedBytes+=chunk.bytes.size; lock.notifyAll() }
+                synchronized(lock) { if(total==0L) total=chunk.total; if(!closed) { cache[next]=chunk.bytes; evictLocked() }; aheadFailed.remove(next); aheadAttempts.remove(next); fetchingAhead=-1L; aheadChunks++; fetchedBytes+=chunk.bytes.size; lock.notifyAll() }
             } catch(e: Throwable) {
-                synchronized(lock) { fetchingAhead=-1L; lock.notifyAll() }
-                // 任何异常都先释放 in-flight 标记；只有网络 I/O 异常允许退避重试。
+                val stopRetry = synchronized(lock) {
+                    fetchingAhead=-1L
+                    val attempts = (aheadAttempts[next] ?: 0) + 1
+                    aheadAttempts[next] = attempts
+                    val permanent = e !is IOException || !NetworkRetry.isRetryable(e) || attempts >= 3
+                    if (permanent) aheadFailed += next
+                    lock.notifyAll()
+                    permanent
+                }
+                // Fatal errors propagate; permanent HTTP/range errors are skipped by read-ahead.
                 if (e !is IOException) throw e
                 if(closed || Thread.currentThread().isInterrupted) return
+                if (stopRetry) continue
                 try { Thread.sleep(1500) } catch(interrupted: InterruptedException) {
                     Thread.currentThread().interrupt()
                     return
