@@ -119,7 +119,7 @@ internal object PlaybackDiagnostics {
         val context = appContext
         val enriched = LinkedHashMap<String, Any?>()
         enriched.putAll(fields)
-        if (name in setOf("PLAYER_STATE", "PLAYER_ERROR", "EPISODE_TRANSITION", "QUEUE_START", "QUEUE_READY", "PLAYER_RELEASE")) {
+        if (name in setOf("PLAYER_STATE", "PLAYER_ERROR", "EPISODE_TRANSITION", "QUEUE_START", "QUEUE_READY", "PLAYER_RELEASE", "PLAYBACK_HEARTBEAT")) {
             if (context != null) enriched["memory"] = memorySnapshot(context)
         }
         appendTo(file, name, detail, enriched)
