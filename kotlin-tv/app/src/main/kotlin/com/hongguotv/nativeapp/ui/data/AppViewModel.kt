@@ -687,6 +687,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------------------------------------------------------- 详情
 
+    /**
+     * 「接着看」直连播放：只取剧集列表，不写 detail 状态。
+     *
+     * 走 openDetail 会在点击的瞬间把路由切到详情页、等数据回来再自动起播，
+     * 用户看到的是「详情页闪一下」；这里刻意绕开它，拿到集号就直接进播放器。
+     * 失败返回 null，由调用方退回详情页。
+     */
+    suspend fun playbackDetail(series: Series): Detail? =
+        withContext(Dispatchers.IO) { runCatching { repository.detail(series.id) }.getOrNull() }
+
+    /**
+     * 首页「接着看」的起播位置：优先上次进度；该集已经看完则从下一集开头开始，
+     * 避免从片尾进入、立刻触发一次「本集结束」。
+     */
+    fun resumePoint(seriesId: String, episodeCount: Int): Pair<Int, Long> {
+        val progress = library.progress(seriesId) ?: return 0 to 0L
+        val last = (episodeCount - 1).coerceAtLeast(0)
+        if (progress.completed && progress.episodeIndex < last) return progress.episodeIndex + 1 to 0L
+        return progress.episodeIndex.coerceIn(0, last) to progress.position
+    }
+
     fun openDetail(series: Series) {
         _state.update {
             it.copy(detail = DetailState(loading = true, series = series, favorite = library.favorite(series.id)))

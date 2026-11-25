@@ -82,6 +82,8 @@ fun HomeScreen(
     progressById: Map<String, BackupProgress>,
     onPlay: (Series) -> Unit,
     onDetail: (Series) -> Unit,
+    /** 「接着看」卡片：按上次进度直接起播，不经过详情页。 */
+    onResume: (Series) -> Unit,
     onFavorite: (Series) -> Unit,
     onCollection: (CollectionKind) -> Unit,
     onRefresh: () -> Unit,
@@ -245,6 +247,7 @@ fun HomeScreen(
                         progressById = progressById,
                         onPlay = onPlay,
                         onDetail = onDetail,
+                        onResume = onResume,
                         onCollection = onCollection,
                         firstFocus = if (index == 0) firstShelfFocus else null,
                     )
@@ -282,6 +285,7 @@ private fun ShelfBlock(
     progressById: Map<String, BackupProgress>,
     onPlay: (Series) -> Unit,
     onDetail: (Series) -> Unit,
+    onResume: (Series) -> Unit,
     onCollection: (CollectionKind) -> Unit,
     firstFocus: FocusRequester? = null,
 ) {
@@ -315,7 +319,7 @@ private fun ShelfBlock(
                         series = entry.series,
                         label = entry.label.orEmpty(),
                         progress = entry.progress ?: 0f,
-                        onClick = { onDetail(entry.series) },
+                        onClick = { onResume(entry.series) },
                         focusRequester = if (index == 0) firstFocus else null,
                     )
                 }

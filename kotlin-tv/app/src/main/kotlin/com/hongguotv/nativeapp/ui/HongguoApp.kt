@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -57,6 +58,7 @@ import com.hongguotv.nativeapp.ui.screens.TheaterScreen
 import java.io.File
 import com.hongguotv.nativeapp.ui.theme.Ink
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -71,6 +73,9 @@ fun HongguoApp(vm: AppViewModel) {
     // 播放页「弹幕设置」入口：先记下要落到的分栏，再切回设置页；SettingsScreen 消费后清空，
     // 避免下次正常进设置还停在弹幕栏。
     var pendingSettingsSection by remember { mutableStateOf<String?>(null) }
+    // 「接着看」直连播放：取剧集列表期间拦住重复点击，避免叠出多次跳转。
+    var resumingSeriesId by remember { mutableStateOf<String?>(null) }
+    val appScope = rememberCoroutineScope()
     val context = LocalContext.current
     val apiStatus by vm.apiStatus.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
@@ -278,6 +283,25 @@ fun HongguoApp(vm: AppViewModel) {
                         onTab = { tab = it },
                         onDetail = { series -> vm.openDetail(series); route = Route.Detail(series.id, series) },
                         onPlay = { series -> vm.openDetail(series); route = Route.Detail(series.id, series, autoplay = true) },
+                        onResume = { series ->
+                            if (resumingSeriesId == null) {
+                                resumingSeriesId = series.id
+                                vm.toast("正在打开上次进度…")
+                                appScope.launch {
+                                    val detail = vm.playbackDetail(series)
+                                    resumingSeriesId = null
+                                    if (detail != null && detail.episodes.isNotEmpty()) {
+                                        val (index, position) = vm.resumePoint(series.id, detail.episodes.size)
+                                        route = Route.Player(detail.series, detail.episodes, index, position)
+                                    } else {
+                                        // 取不到剧集列表时退回详情页，这条路用户至少能重试。
+                                        vm.toast("暂时无法获取剧集，已打开详情页")
+                                        vm.openDetail(series)
+                                        route = Route.Detail(series.id, series)
+                                    }
+                                }
+                            }
+                        },
                         onSearch = { vm.openSearch(); route = Route.Search },
                         onCollection = { kind -> route = Route.Collection(kind) },
                         onApiStatus = { showApiStatus = true },
@@ -484,6 +508,7 @@ private fun MainTabContent(
     onTab: (Tab) -> Unit,
     onDetail: (Series) -> Unit,
     onPlay: (Series) -> Unit,
+    onResume: (Series) -> Unit,
     onSearch: () -> Unit,
     onCollection: (CollectionKind) -> Unit,
     onApiStatus: () -> Unit = {},
@@ -521,6 +546,7 @@ private fun MainTabContent(
             progressById = progressById,
             onPlay = onPlay,
             onDetail = onDetail,
+            onResume = onResume,
             onFavorite = { vm.toggleFavorite(it) },
             onCollection = onCollection,
             onRefresh = { vm.loadHome(refresh = true) },
@@ -555,7 +581,8 @@ private fun MainTabContent(
         Tab.LIBRARY -> LibraryScreen(
             state = state.library,
             onDetail = onDetail,
-            onResume = { progress -> onPlay(progress.series) },
+            // 片单页的「继续观看」与首页「接着看」同一行为：直接续播，不进详情页。
+            onResume = { progress -> onResume(progress.series) },
             onRemoveHistory = vm::removeHistory,
             onClearHistory = vm::clearHistory,
             onToggleFavorite = { vm.toggleFavorite(it) },
