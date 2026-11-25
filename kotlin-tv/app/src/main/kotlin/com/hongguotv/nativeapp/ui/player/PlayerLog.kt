@@ -15,13 +15,16 @@ internal object PlayerLog {
 
     fun info(message: String) {
         runCatching { Log.i(TAG, message) }
+        PlaybackDiagnostics.event("INFO", message)
     }
 
     fun warn(message: String) {
         runCatching { Log.w(TAG, message) }
+        PlaybackDiagnostics.event("WARN", message)
     }
 
     fun error(message: String) {
         runCatching { Log.e(TAG, message) }
+        PlaybackDiagnostics.event("ERROR", message)
     }
 }
