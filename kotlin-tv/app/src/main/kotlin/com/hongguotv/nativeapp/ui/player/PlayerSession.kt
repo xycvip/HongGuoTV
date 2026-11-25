@@ -1196,7 +1196,8 @@ class PlayerSession(
                         // 15 秒 720P 约 4–6MB，8MB 上限够装，不额外增加内存峰值。
                         .setBufferDurationsMs(15_000, 30_000, 2_500, 5_000)
                         .setTargetBufferBytes(STANDBY_BUFFER_BYTES)
-                        .setPrioritizeTimeOverSizeThresholds(true)
+                        // 优先遵守目标缓冲大小，避免 15 秒时间目标压过内存目标。
+                        .setPrioritizeTimeOverSizeThresholds(false)
                         .build()
                 )
                 .build()
@@ -1474,6 +1475,7 @@ class PlayerSession(
 
     private fun closeClient(client: OkHttpClient?) {
         if (client == null) return
+        runCatching { client.dispatcher.cancelAll() }
         runCatching { client.dispatcher.executorService.shutdown() }
         runCatching { client.connectionPool.evictAll() }
         runCatching { client.cache?.close() }
