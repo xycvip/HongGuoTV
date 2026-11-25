@@ -36,7 +36,8 @@ object NetworkRetry {
         else -> false
     }
 
-    fun <T> execute(request: Request, action: () -> T): T {
+    fun <T> execute(request: Request, maxAttempts: Int = 3, action: () -> T): T {
+        require(maxAttempts in 1..3) { "maxAttempts must be between 1 and 3" }
         var retries = 0
         while (true) {
             RequestScope.ensureActive()
@@ -44,7 +45,7 @@ object NetworkRetry {
                 return action()
             } catch (error: IOException) {
                 RequestScope.ensureActive()
-                if (request.method != "GET" || retries >= 2 || !isRetryable(error)) throw error
+                if (request.method != "GET" || retries >= maxAttempts - 1 || !isRetryable(error)) throw error
                 val delay = if (retries++ == 0) 300L else 900L
                 var remaining = delay
                 while (remaining > 0) {
