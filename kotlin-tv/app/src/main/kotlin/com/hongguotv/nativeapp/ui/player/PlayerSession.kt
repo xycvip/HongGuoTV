@@ -898,7 +898,9 @@ class PlayerSession(
             runCatching { exo.stop() }
             runCatching { exo.clearMediaItems() }
         }
-        remote?.let(::closeRemote)
+        // clearMediaItems() 会异步释放 MediaSource/DataSource；旧 RemoteVideo 延迟退役，
+        // 给正在退出的读取回调留出收尾窗口，避免切集瞬间把旧流强制 close。
+        remote?.let(::releaseSoon)
         remote = null
         discardQueue()
         player?.let(::applyPlaylistPolicy)
@@ -963,8 +965,12 @@ class PlayerSession(
             // 不让 IllegalStateException 从主线程直接导致应用闪退。
             runCatching { exo.stop() }
             runCatching { exo.clearMediaItems() }
-            if (remote === prepared) remote = null
-            runCatching { prepared.close() }
+            if (remote === prepared) {
+                remote = null
+                releaseSoon(prepared)
+            } else {
+                runCatching { prepared.close() }
+            }
             buffering = false
             ready = false
             playing = false
