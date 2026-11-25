@@ -99,7 +99,7 @@ internal object PlaybackDiagnostics {
         if (files.isEmpty()) return@synchronized "暂无播放诊断记录"
         files.joinToString("\n\n") { file ->
             runCatching { file.readText(Charsets.UTF_8) }.getOrDefault("[读取失败：${file.name}]")
-        }.takeLast(120_000)
+        }.take(120_000)
     }
 
     fun clear() {
