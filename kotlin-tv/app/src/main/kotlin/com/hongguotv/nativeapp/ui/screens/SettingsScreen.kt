@@ -2,6 +2,8 @@
 package com.hongguotv.nativeapp.ui.screens
 
 import android.content.Context
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 
@@ -102,6 +104,7 @@ import com.hongguotv.nativeapp.ui.data.RemoteKey
 import com.hongguotv.nativeapp.ui.data.ScriptUpdateState
 import com.hongguotv.nativeapp.ui.data.SettingsSnapshot
 import com.hongguotv.nativeapp.ui.data.videoInfoLabel
+import com.hongguotv.nativeapp.ui.player.PlaybackDiagnostics
 import com.hongguotv.nativeapp.ui.theme.Gold
 import com.hongguotv.nativeapp.ui.theme.Ink
 import com.hongguotv.nativeapp.ui.theme.Paper
@@ -143,6 +146,9 @@ fun SettingsScreen(
             onInitialSectionConsumed()
         }
     }
+    val context = LocalContext.current
+    var showPlaybackDiagnostics by remember { mutableStateOf(false) }
+    var diagnosticsText by remember { mutableStateOf("") }
     val apiStatus by vm.apiStatus.collectAsStateWithLifecycle()
     val scriptUpdate by vm.scriptUpdate.collectAsStateWithLifecycle()
     // 冷启动那次检测被系统打断时，进入网络栏补一次。
@@ -229,7 +235,7 @@ fun SettingsScreen(
                         onChoice = { choice = it },
                         onCustomDns = { customDns = true },
                     )
-                    SettingsSection.DATA -> dataPanel(vm, { confirm = it }, { message = it })
+                    SettingsSection.DATA -> dataPanel(vm, { confirm = it }, { message = it }, { diagnosticsText = PlaybackDiagnostics.readAll(); showPlaybackDiagnostics = true })
                     SettingsSection.ABOUT -> aboutPanel(versionName, vm)
                 }
             }
@@ -282,6 +288,44 @@ fun SettingsScreen(
             onDismiss = { customDns = false },
         )
     }
+    if (showPlaybackDiagnostics) {
+        AppDialog(
+            title = "播放诊断记录",
+            message = "仅记录播放器运行现场；若上次未正常结束，会保留最后一段记录。",
+            confirmText = "关闭",
+            dismissText = null,
+            onConfirm = { showPlaybackDiagnostics = false },
+            onDismiss = { showPlaybackDiagnostics = false },
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                LazyColumn(
+                    Modifier.fillMaxWidth().height(d(360)),
+                    verticalArrangement = Arrangement.spacedBy(d(4)),
+                ) {
+                    item {
+                        Text(
+                            diagnosticsText.ifBlank { "暂无播放诊断记录" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Paper.Secondary,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(d(12)))
+                Row(horizontalArrangement = Arrangement.spacedBy(d(10))) {
+                    TvButton("一键复制", onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("播放诊断记录", diagnosticsText))
+                        message = "播放诊断记录已复制"
+                    }, tone = ButtonTone.Primary)
+                    TvButton("清空记录", onClick = {
+                        PlaybackDiagnostics.clear()
+                        diagnosticsText = "暂无播放诊断记录"
+                    }, tone = ButtonTone.Ghost)
+                }
+            }
+        }
+    }
+
     message?.let { text ->
         AppDialog(
             title = "提示",
@@ -882,7 +926,16 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dataPanel(
     vm: AppViewModel,
     onConfirm: (ConfirmRequest) -> Unit,
     onMessage: (String) -> Unit,
+    onPlaybackDiagnostics: () -> Unit,
 ) {
+    item {
+        SettingRow(
+            title = "播放诊断记录",
+            description = "查看播放状态、切集、预载、解码器、Surface、内存与异常中断现场",
+            value = "查看",
+            onClick = onPlaybackDiagnostics,
+        )
+    }
     item {
         SettingRow(
             title = "恢复播放偏好",
