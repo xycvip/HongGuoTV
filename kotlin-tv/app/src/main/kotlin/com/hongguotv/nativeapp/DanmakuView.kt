@@ -2,6 +2,7 @@
 package com.hongguotv.nativeapp
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -18,6 +19,7 @@ import com.hongguotv.core.DanmakuEmoji
 import com.hongguotv.core.DanmakuLoader
 import com.hongguotv.core.DanmakuPrefs
 import kotlin.math.ceil
+import kotlin.math.roundToInt
 
 /**
  * 滚动弹幕覆盖层。
@@ -29,10 +31,15 @@ import kotlin.math.ceil
  *    精度又在 35~45ms 飘，几条弹幕也一顿一顿跳；vsync 回调帧间隔恒定，滚动才丝滑。
  * 2) 【载体】用 SurfaceView 而非普通 View。普通 View 每帧 invalidate 会强制整个 window
  *    重合成；本项目是双播放器叠放，两层全屏视频 SurfaceView 会被一起拖垮（视频卡死/错位）。
- *    SurfaceView 是独立硬件层，弹幕重绘不触发 window 合成，视频完全不受影响。
+ *    SurfaceView 是独立一层，弹幕重绘不触发 window 合成，视频完全不受影响。
+ * 3) 【画布】必须用软件画布 [SurfaceHolder.lockCanvas]，不能用 lockHardwareCanvas。
+ *    硬件画布走 HWUI 的 EGL 上下文，和主窗口 RenderThread 共用资源；切集时视频层重建
+ *    Surface、主窗口 swapBuffers，两边同时抢 buffer 就会 EGL_BAD_ALLOC，RenderThread
+ *    直接 abort 进程（无 Java 栈）。软件画布只走 CPU，不碰 EGL。
+ *    代价是字形要自己光栅化，所以把文字烤成 Bitmap，每帧只 blit。
  *
  * 弹幕一次性预排程：数据每批到来时把已缓冲弹幕排到轨道、算好 startMs/endMs，
- * 每帧只做二分定位可见区间 + drawText，不做逐帧轨道分配/位图烤制。
+ * 每帧只做二分定位可见区间 + 位图 blit，不做逐帧轨道分配。
  */
 class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_000L) :
     SurfaceView(context), SurfaceHolder.Callback {
@@ -49,7 +56,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
             viewportWidth - (viewportWidth + widthPx) * (timeMs - startMs).toFloat() / (endMs - startMs).toFloat()
     }
 
-    // 文字用描边衬底，每帧直接 drawText，不做位图烤制——同屏弹幕就那么几条，成本可忽略。
+    // 描边衬底 + 纯色填充，只在烤位图时用；每帧绘制走 bitmapPaint。
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
         typeface = Typeface.DEFAULT_BOLD
         color = Color.WHITE
@@ -83,7 +90,6 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     private val gapPx = 8f * resources.displayMetrics.density
 
     private var lineHeightPx = 1f
-    private var firstBaseline = 0f
     private var lanes = 0
 
     // SurfaceView 渲染调度：Choreographer 对齐屏幕 vsync，帧间隔恒定。
@@ -92,6 +98,30 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     private var surfaceW = 0
     private var surfaceH = 0
     private var surfaceAlive = false
+
+    // 软件画布下没有 GPU 帮着缓存字形，每帧 drawText 都要重新扫字形再画两遍，
+    // 同屏十几条就顶不住。把「描边 + 填充」首帧烤进一张小 Bitmap，之后每帧只 blit。
+    // key 是文字 + 颜色；字号/描边宽度变了整体失效（updateMetrics 负责清）。
+    private data class TextKey(val text: String, val color: Int)
+
+    private val textCache = object : LinkedHashMap<TextKey, Bitmap>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<TextKey, Bitmap>): Boolean {
+            if (size > TEXT_CACHE_MAX) {
+                eldest.value.recycle()
+                return true
+            }
+            return false
+        }
+    }
+    /** 位图与屏幕 1:1 绘制，不做缩放，所以不加 FILTER——插值只会拖慢且没有收益。 */
+    private val bitmapPaint = Paint()
+    private var cachedTextSize = 0f
+    private var cachedStrokeWidth = 0f
+
+    private var idleCleared = false
+    /** 当前这一集实际用到几条轨道；清屏只清到这里，比整块 lanes 省很多。 */
+    private var contentRows = 0
+    private var frameTick = 0L
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             frameScheduled = false
@@ -110,7 +140,9 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
                     lastPumpAt = tick
                     needMore(now)
                 }
-                drawFrame(now)
+                // 弹幕横向滚动 30fps 足够：隔帧画能把每帧预算从 16.7ms 提到 33ms，
+                // 避免个别帧超时导致整体顿卡；位置按媒体时间算，滚动速度不受影响。
+                if ((frameTick++ and 1L) == 0L) drawFrame(now)
             }
             if (running && playbackActive && loader != null) scheduleFrame()
         }
@@ -135,6 +167,8 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         surfaceW = width
         surfaceH = height
+        // 新 surface 内容是空的，下一帧必须重画一遍清屏。
+        idleCleared = false
         updateMetrics()
         reschedule()
     }
@@ -161,16 +195,22 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
 
     private fun updateMetrics() {
         val textSize = baseTextSize * DanmakuPrefs.fontScale(fontValue)
+        val strokeWidth = ceil(textSize / 12f).coerceAtLeast(1f)
+        // 字号或描边一改，已烤好的位图就失真了，必须整体重烤。
+        if (textSize != cachedTextSize || strokeWidth != cachedStrokeWidth) {
+            clearTextCache()
+            cachedTextSize = textSize
+            cachedStrokeWidth = strokeWidth
+        }
         fill.textSize = textSize
         outline.textSize = textSize
-        outline.strokeWidth = ceil(textSize / 12f).coerceAtLeast(1f)
+        outline.strokeWidth = strokeWidth
         fill.alpha = opacityAlpha
         outline.alpha = opacityAlpha
         travelMs = (baseCrossMs * DanmakuPrefs.speedScale(speedValue)).toLong().coerceAtLeast(1L)
         val metrics = fill.fontMetrics
         val textHeightPx = ceil(metrics.descent - metrics.ascent + outline.strokeWidth).coerceAtLeast(1f)
         lineHeightPx = maxOf(textHeightPx, textSize * 1.55f)
-        firstBaseline = -metrics.ascent + outline.strokeWidth / 2f
         val availableLanes = if (surfaceH <= 0) 0 else (surfaceH / lineHeightPx).toInt()
         lanes = availableLanes.coerceAtMost(maxRows).coerceAtLeast(0)
     }
@@ -198,6 +238,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         val lastOnLane = arrayOfNulls<Scheduled>(lanes)
         val clearanceMs = LongArray(lanes)
         val output = ArrayList<Scheduled>(prepared.size)
+        var maxLane = -1
         for ((text, color, at) in prepared) {
             val widthPx = fill.measureText(text)
             if (widthPx <= 0f) continue
@@ -221,9 +262,13 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
             lastOnLane[bestLane] = item
             clearanceMs[bestLane] = clearance
             output.add(item)
+            if (bestLane > maxLane) maxLane = bestLane
         }
         output.sortBy { it.startMs }
         scheduled = output
+        // 只增不减：reschedule 后行数可能变少，但上一帧画过的高行仍需覆盖，
+        // 所以取历史最大值，等换集时再归零。
+        if (maxLane >= 0) contentRows = maxOf(contentRows, maxLane + 1)
     }
 
     private fun colorOf(comment: Danmaku): Int = when {
@@ -248,47 +293,93 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     }
 
     /**
-     * 在独立 surface 上画一帧。硬件画布由 GPU 合成，CPU 零光栅化，
-     * 且不触发 window 重合成——双播放器视频层完全不受影响。
-     * 调度节奏由 [frameCallback] 的 Choreographer vsync 回调负责，这里只管画。
+     * 在独立 surface 上画一帧，软件画布。
+     *
+     * 必须用软件画布：硬件画布走 HWUI 的 EGL 上下文，与主窗口 RenderThread 共享，
+     * 切集时两边同时抢 buffer 会 `EGL_BAD_ALLOC` 并让 RenderThread abort 整个进程
+     * （T982 实测无 Java 栈）。软件画布只走 CPU，不碰 EGL。
+     * 为抵消软件光栅化的开销，文字已预先烤成 Bitmap，这里只做 blit。
      */
     private fun drawFrame(now: Long) {
         if (!surfaceAlive || surfaceW <= 0 || surfaceH <= 0) return
+
+        // 可见区间：startMs 落在 (now - travelMs, now]。
+        val from = now - travelMs
+        val first = firstStartingAfter(from)
+        val end = firstStartingAfter(now)
+
+        // 空帧且上一帧已清过就不再 lock：省一次 buffer 轮转。
+        val idle = end <= first
+        if (idle && idleCleared) return
+
         val canvas = try {
-            holder.lockHardwareCanvas()
-        } catch (_: Throwable) {
-            // 个别盒子硬件画布不可用，降级软件画布 + 脏区。
-            try {
-                holder.lockCanvas()
-            } catch (_: Exception) {
-                return
-            }
+            holder.lockCanvas()
+        } catch (_: Exception) {
+            null
         } ?: return
         try {
-            // 只清弹幕轨道带，避免每帧清整屏；布局变化时 lastBuffered 重排已覆盖。
-            val clipBottom = (lanes * lineHeightPx).coerceAtMost(surfaceH.toFloat())
+            // 只清实际用到的那几行；弹幕少时往往只占两三行，比清整块 lanes 省大量 memset。
+            val rows = contentRows.coerceAtLeast(1)
+            val clipBottom = (rows * lineHeightPx).coerceAtMost(surfaceH.toFloat())
             canvas.save()
             canvas.clipRect(0f, 0f, surfaceW.toFloat(), clipBottom)
             canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
 
-            // 可见区间：startMs 落在 (now - travelMs, now]。
-            val from = now - travelMs
-            val first = firstStartingAfter(from)
-            val end = firstStartingAfter(now)
+            // 整数坐标 + 无缩放：Skia 对 1:1 blit 有 memcpy 级快路径。
+            // 不透明度 100% 时 paint 传 null，省掉整趟 alpha 调制。
+            bitmapPaint.alpha = opacityAlpha
+            val paint = if (opacityAlpha == 255) null else bitmapPaint
             for (i in first until end) {
                 val item = scheduled[i]
-                val x = item.xAt(now, surfaceW)
-                val y = firstBaseline + item.lane * lineHeightPx
-                fill.color = item.color
-                canvas.drawText(item.text, x, y, outline)
-                canvas.drawText(item.text, x, y, fill)
+                val x = item.xAt(now, surfaceW).roundToInt().toFloat()
+                val top = (item.lane * lineHeightPx).roundToInt().toFloat()
+                canvas.drawBitmap(bitmapFor(item), x, top, paint)
             }
             canvas.restore()
+            idleCleared = idle
         } catch (_: Exception) {
             // surface 尺寸变化/回收时丢掉这一帧即可。
         } finally {
             runCatching { holder.unlockCanvasAndPost(canvas) }
         }
+    }
+
+    /**
+     * 取（或烤）一句弹幕的位图。描边是黑色、填充是本条颜色，两者一起烤进去；
+     * 透明度不烤，留给绘制时 [bitmapPaint].alpha，改偏好不用重烤。
+     */
+    private fun bitmapFor(item: Scheduled): Bitmap {
+        val key = TextKey(item.text, item.color)
+        textCache[key]?.let { return it }
+
+        val metrics = fill.fontMetrics
+        val stroke = outline.strokeWidth
+        val width = ceil(item.widthPx + stroke).toInt().coerceAtLeast(1)
+        val height = ceil(metrics.descent - metrics.ascent + stroke).toInt().coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val baseline = -metrics.ascent + stroke / 2f
+
+        val savedFillAlpha = fill.alpha
+        val savedOutlineAlpha = outline.alpha
+        fill.color = item.color
+        fill.alpha = 255
+        outline.alpha = 255
+        try {
+            canvas.drawText(item.text, stroke / 2f, baseline, outline)
+            canvas.drawText(item.text, stroke / 2f, baseline, fill)
+        } finally {
+            fill.alpha = savedFillAlpha
+            outline.alpha = savedOutlineAlpha
+        }
+        textCache[key] = bitmap
+        return bitmap
+    }
+
+    /** 字号/描边变化会让位图失真，整体重建；换集时也调用，尽早释放。 */
+    private fun clearTextCache() {
+        for (bitmap in textCache.values) runCatching { bitmap.recycle() }
+        textCache.clear()
     }
 
     // ---------------------------------------------------------------- 对外接口（保持兼容）
@@ -328,6 +419,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         lastBuffered = -1
         running = true
         playbackActive = playing
+        idleCleared = false
         visibility = VISIBLE
         updateMetrics()
         reschedule()
@@ -352,6 +444,8 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     /** 位置按绝对媒体时间计算，seek 后自然落到正确位置，无需清空。 */
     fun seekTo(positionMs: Long) {
         lastPumpAt = 0L
+        // seek 后画面跳变，下一帧必须重画（哪怕是空帧），否则残留上一处的内容。
+        idleCleared = false
     }
 
     fun unbind() {
@@ -361,6 +455,9 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         needMore = {}
         scheduled = emptyList()
         lastBuffered = -1
+        contentRows = 0
+        frameTick = 0L
+        clearTextCache()
         choreographer.removeFrameCallback(frameCallback)
         frameScheduled = false
         visibility = GONE
@@ -388,5 +485,10 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         /** 轨道挤满时最多顺延多久，太久就丢弃，避免弹幕远离剧情。 */
         private const val MAX_DELAY_MS = 3_000L
         private const val MAX_TEXT_CHARS = 80
+        /**
+         * 文字位图缓存条数。一条弹幕在屏 9 秒，同屏可见通常二三十条，
+         * 取 64 条既覆盖当前窗口、又不会把整集几千条都烤进内存。
+         */
+        private const val TEXT_CACHE_MAX = 64
     }
 }
