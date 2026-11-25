@@ -46,6 +46,8 @@ internal object DecoderCapacity {
      */
     fun canRunTwoDecoders(mimeType: String?, width: Int, height: Int): Boolean {
         val mime = mimeType?.takeIf { it.startsWith("video/", ignoreCase = true) } ?: return false
+        // MIME 有了但尺寸仍未知时，不能用默认规格冒险判断并发能力。
+        if (width < 16 || height < 16) return false
         return maxInstances(mime, width, height) >= 2
     }
 
