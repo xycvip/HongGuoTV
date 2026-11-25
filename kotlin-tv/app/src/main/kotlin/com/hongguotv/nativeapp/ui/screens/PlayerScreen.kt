@@ -135,6 +135,9 @@ fun PlayerScreen(
     val episodeFirstFocus = remember { FocusRequester() }
     // 面板六行各一个 requester：首尾互相绕回，方向键不会跑到面板背后的播放控件上。
     val danmakuRowFocus = remember { List(6) { FocusRequester() } }
+    // 错误弹窗的首/末按钮：弹窗一出就把焦点拉过来，否则遥控器确定键落在背后的播放键上。
+    val errorPrimaryFocus = remember { FocusRequester() }
+    val errorLastFocus = remember { FocusRequester() }
 
     fun poke() {
         interaction++
@@ -201,9 +204,13 @@ fun PlayerScreen(
     // 焦点跟着画面状态走：控制层可见时落在主播放键上（一进来就能按方向键操作），
     // 隐藏时收回根节点（方向键直接变成快进/快退），选集抽屉打开则进抽屉。
     // 之前焦点永远停在根 Box 上，遥控器看着「完全没反应」，就是缺了这一步。
-    LaunchedEffect(controlsVisible, episodesOpen, danmakuOpen) {
+    // 焦点跟着画面状态走：错误弹窗优先，其次弹幕面板 / 选集抽屉 / 控制层 / 根节点。
+    // 控制层可见时落在主播放键上（一进来就能按方向键操作），隐藏时收回根节点
+    // （方向键直接变成快进/快退）。之前焦点永远停在根 Box 上，遥控器看着「完全没反应」。
+    LaunchedEffect(controlsVisible, episodesOpen, danmakuOpen, session.error) {
         // 选集抽屉里优先落在当前集；当前集不在首屏时退回第一集，保证一定有落点。
         val targets = when {
+            session.error != null -> listOf(errorPrimaryFocus)
             danmakuOpen -> danmakuRowFocus
             episodesOpen -> listOf(episodeFocus, episodeFirstFocus)
             controlsVisible -> listOf(playFocus)
@@ -433,6 +440,7 @@ fun PlayerScreen(
         }
 
         session.error?.let { message ->
+            val canRetryDecode = session.decodeError
             Column(
                 Modifier
                     .align(Alignment.Center)
@@ -440,7 +448,20 @@ fun PlayerScreen(
                     .clip(RoundedCornerShape(d(20)))
                     .background(Color(0xE610131A))
                     .border(d(1f), Color(0x1FFFFFFF), RoundedCornerShape(d(20)))
-                    .padding(d(26)),
+                    .padding(d(26))
+                    // 上下键在弹窗内循环，别再落到背后的播放控制条上。
+                    .onKeyEvent { event ->
+                        if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
+                        when (event.key) {
+                            Key.DirectionUp -> {
+                                errorPrimaryFocus.tryRequestFocus(); true
+                            }
+                            Key.DirectionDown -> {
+                                errorLastFocus.tryRequestFocus(); true
+                            }
+                            else -> false
+                        }
+                    },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("播放遇到问题", style = MaterialTheme.typography.titleLarge, color = Paper.Pure)
@@ -451,17 +472,41 @@ fun PlayerScreen(
                     // 地址/分段类错误走「重新获取地址」：必须让取流缓存失效再拿一条新签名地址，
                     // 原地重开同一条流（原来的做法）只会再报同一个错。
                     if (session.sourceError) {
-                        TvButton("重新获取地址", { session.retryWithFreshUrl() }, tone = ButtonTone.Primary)
+                        TvButton(
+                            "重新获取地址",
+                            { session.retryWithFreshUrl() },
+                            tone = ButtonTone.Primary,
+                            focusRequester = errorPrimaryFocus,
+                            downFocus = if (canRetryDecode) errorLastFocus else null,
+                        )
                     } else {
-                        TvButton("重试", { session.prepare(session.index, session.position) }, tone = ButtonTone.Primary)
+                        TvButton(
+                            "重试",
+                            { session.prepare(session.index, session.position) },
+                            tone = ButtonTone.Primary,
+                            focusRequester = errorPrimaryFocus,
+                            downFocus = if (canRetryDecode) errorLastFocus else null,
+                        )
                     }
-                    TvButton("返回详情", onBack, tone = ButtonTone.Ghost)
+                    TvButton(
+                        "返回详情",
+                        onBack,
+                        tone = ButtonTone.Ghost,
+                        focusRequester = if (canRetryDecode) null else errorLastFocus,
+                        upFocus = errorPrimaryFocus,
+                    )
                 }
                 // 只在解码类错误时提供「兼容模式重试」：它复用同一条流、只换解码器，
                 // 地址失效时点了必然还是同一个错，之前误显示在这里误导过一次。
-                if (session.decodeError) {
+                if (canRetryDecode) {
                     Spacer(Modifier.height(d(12)))
-                    TvButton("兼容模式重试", { session.retryWithoutDualDecoder() }, tone = ButtonTone.Quiet)
+                    TvButton(
+                        "兼容模式重试",
+                        { session.retryWithoutDualDecoder() },
+                        tone = ButtonTone.Quiet,
+                        focusRequester = errorLastFocus,
+                        upFocus = errorPrimaryFocus,
+                    )
                 }
             }
         }
