@@ -813,7 +813,7 @@ class PlayerSession(
             if (released || !ready) return@post
             when {
                 useDualDecoder && standbyIndex == -1 -> prepareStandby(index + 1)
-                !useDualDecoder && extras.seamlessPlayback && queuedIndex == -1 ->
+                !useDualDecoder && queuedIndex == -1 ->
                     queueNextEpisode(index, force = true)
             }
         }
@@ -989,10 +989,8 @@ class PlayerSession(
     private fun queueNextEpisode(current: Int, force: Boolean = false) {
         if (useDualDecoder && !force) return
         if (released) return
-        if (!extras.seamlessPlayback) {
-            discardQueue()
-            return
-        }
+        // 单播放器 playlist 预载是双播放器的降级路径，不受「无感连播」开关限制。
+        // 该开关只决定是否启用第二路解码器；单播放器始终提前准备下一集。
         val nextIndex = current + 1
         if (nextIndex > episodes.lastIndex) {
             discardQueue()
