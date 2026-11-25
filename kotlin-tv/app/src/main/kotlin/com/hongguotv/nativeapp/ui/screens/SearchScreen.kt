@@ -37,12 +37,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Backspace
+import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -372,7 +372,7 @@ private fun IdleSearchBody(
             }
         }
         Column {
-            SectionLabel("大家都在搜", Icons.Rounded.TrendingUp)
+            SectionLabel("大家都在搜", Icons.AutoMirrored.Rounded.TrendingUp)
             Spacer(Modifier.height(d(14)))
             if (state.hot.isEmpty() && state.hotLoading) {
                 LoadingState(Modifier.height(d(220)))
@@ -435,7 +435,7 @@ private fun KeyboardPanel(
         rows.forEachIndexed { rowIndex, row ->
             Row(horizontalArrangement = Arrangement.spacedBy(d(7))) {
                 if (rowIndex == 2) {
-                    KeyboardKey(label = "删除", wide = true, icon = Icons.Rounded.Backspace, onClick = onDelete)
+                    KeyboardKey(label = "删除", wide = true, icon = Icons.AutoMirrored.Rounded.Backspace, onClick = onDelete)
                 }
                 row.forEachIndexed { colIndex, letter ->
                     // 第二行（ASDFGHJKL）正中间第 5 个键 G：rowIndex=1、colIndex=4。
