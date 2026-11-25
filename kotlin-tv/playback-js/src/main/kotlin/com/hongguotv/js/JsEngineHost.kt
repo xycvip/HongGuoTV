@@ -111,10 +111,12 @@ class JsEngineHost(
         val client = http.newBuilder()
             .callTimeout(timeoutMs.coerceIn(1_000L, 60_000L), TimeUnit.MILLISECONDS)
             .followRedirects(false)
-            .dns(Dns { hostname ->
-                val addresses = Dns.SYSTEM.lookup(hostname)
-                // Return the validated answers to OkHttp; do not resolve the hostname again.
-                validatePublicDns(hostname, addresses)
+            .dns(object : Dns {
+                override fun lookup(hostname: String): List<InetAddress> {
+                    val addresses = Dns.SYSTEM.lookup(hostname)
+                    // Return the validated answers to OkHttp; do not resolve the hostname again.
+                    return validatePublicDns(hostname, addresses)
+                }
             })
             .build()
         val builder = Request.Builder().url(url)
