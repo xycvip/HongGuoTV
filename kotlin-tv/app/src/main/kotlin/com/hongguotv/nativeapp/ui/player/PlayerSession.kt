@@ -1040,6 +1040,7 @@ class PlayerSession(
             qualityLabel = queued.quality
             queuedIndex = -1
             queuedStream = null
+            queuedAppended = false
         }
         if (queued == null) remote = null
         previous?.let(::releaseSoon)
