@@ -31,6 +31,19 @@ internal object PlaybackDiagnostics {
         synchronized(lock) {
             if (appContext != null) return
             appContext = context.applicationContext
+            val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+                event(
+                    "JAVA_UNCAUGHT_EXCEPTION",
+                    throwable.toString(),
+                    mapOf("thread" to thread.name, "stack" to throwable.stackTraceToString().take(12_000)),
+                )
+                if (previousHandler != null) previousHandler.uncaughtException(thread, throwable)
+                else {
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                    kotlin.system.exitProcess(10)
+                }
+            }
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val previous = prefs.getString(ACTIVE_FILE, null)
             if (!previous.isNullOrBlank()) {
