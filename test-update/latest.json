@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "645d8c1ca031cc5f9906c823f8ab7a716139ed83",
-  "versionCode": 106,
-  "versionName": "0.0.106",
+  "sourceCommit": "5868984e8fee83f830da82746f88ad682a0c5361",
+  "versionCode": 107,
+  "versionName": "0.0.107",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.106",
+  "tag": "hongguotv-bate-v0.0.107",
   "apk": {
-    "name": "HongguoTV-0.0.106.apk",
+    "name": "HongguoTV-0.0.107.apk",
     "size": 5706146,
-    "sha256": "da6a19995e457fcf3ab473de59ba8e3a4da81427537a24ed7815ed2d870006fc",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.106/HongguoTV-0.0.106.apk"
+    "sha256": "155e587f65a28f09f61ac0ae1efc8d365e88cafbea4d12782ec45b284472eae4",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.107/HongguoTV-0.0.107.apk"
   },
-  "notes": "【播放与播放器】\n- 统一单播放器降级预载入口\n- 修复单播放器模式下下一集预载被开关禁用"
+  "notes": "【播放与播放器】\n- 将双播放器内存门槛调整为300MB\n- 修复播放流准备期间取消导致的资源泄漏\n【网络与接口】\n- 修复 QuickJS 请求取消与分页计数及预读异常处理\n- 修复分类分页竞态并优化网络与弹幕生命周期"
 }
