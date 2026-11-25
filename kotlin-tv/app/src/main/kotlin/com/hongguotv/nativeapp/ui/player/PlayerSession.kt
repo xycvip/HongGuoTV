@@ -552,27 +552,41 @@ class PlayerSession(
     }
 
     init {
-        buildPlayer()
+        if (!buildPlayer()) return
         runCatching { context.registerComponentCallbacks(memoryCallback) }
         // 续播位置必须带进第一次 prepare：之前固定从 0 开始，
         // 用户从详情页「继续观看」进来也是从头播，看起来就像进度没保存。
         prepare(index, initialPositionMs.coerceAtLeast(0L))
     }
 
-    private fun buildPlayer() {
-        val exo = ExoPlayer.Builder(context)
-            // 主播放器原来没开解码器回退：硬解初始化一失败就直接整集报废，
-            // 而备用播放器是开着的——同一台机器上「连播能播、单独点进去不能播」就是这么来的。
-            .setRenderersFactory(renderersFactory())
-            .setBandwidthMeter(bandwidthMeter)
-            .build()
-        exo.setHandleAudioBecomingNoisy(true)
-        exo.playWhenReady = true
-        applyPlaylistPolicy(exo)
-        player = exo
-        val listener = mainListenerFor(exo)
-        activeMainListener = listener
-        exo.addListener(listener)
+    private fun buildPlayer(): Boolean {
+        var created: ExoPlayer? = null
+        return try {
+            val exo = ExoPlayer.Builder(context)
+                // 主播放器原来没开解码器回退：硬解初始化一失败就直接整集报废，
+                // 而备用播放器是开着的——同一台机器上「连播能播、单独点进去不能播」就是这么来的。
+                .setRenderersFactory(renderersFactory())
+                .setBandwidthMeter(bandwidthMeter)
+                .build()
+            created = exo
+            exo.setHandleAudioBecomingNoisy(true)
+            exo.playWhenReady = true
+            applyPlaylistPolicy(exo)
+            val listener = mainListenerFor(exo)
+            exo.addListener(listener)
+            player = exo
+            activeMainListener = listener
+            true
+        } catch (problem: Exception) {
+            created?.let { runCatching { it.release() } }
+            player = null
+            activeMainListener = null
+            buffering = false
+            ready = false
+            error = "播放器初始化失败：${problem.message ?: problem::class.java.simpleName}"
+            PlayerLog.error("buildPlayer 失败：${problem::class.java.simpleName}: ${problem.message}")
+            false
+        }
     }
 
     /** 软解兜底时把系统软解 codec 排到最前；平时保持系统默认优先级。 */
@@ -617,7 +631,7 @@ class PlayerSession(
         PlayerLog.warn("rebuildForDecoderIssue soft=$softwareOnly at=$resumeAt episode=$target")
         mainHandler.postDelayed({
             if (released || recoveryToken != token) return@postDelayed
-            buildPlayer()
+            if (!buildPlayer()) return@postDelayed
             playerView?.player = player
             prepare(target, resumeAt)
         }, DECODER_RELEASE_DELAY_MS)
@@ -923,14 +937,37 @@ class PlayerSession(
     }
 
     private fun attach(prepared: RemoteVideo, targetIndex: Int, startMs: Long) {
-        if (released) return
-        val exo = player ?: return
-        exo.setMediaSource(episodeSource(episodes[targetIndex], prepared))
-        if (startMs > 0L) exo.seekTo(startMs)
-        exo.prepare()
-        exo.playWhenReady = true
-        exo.setPlaybackSpeed(speed)
-        loadingLabel = ""
+        if (released) {
+            runCatching { prepared.close() }
+            return
+        }
+        val exo = player
+        if (exo == null) {
+            runCatching { prepared.close() }
+            buffering = false
+            error = "播放器尚未初始化，请重试"
+            return
+        }
+        try {
+            exo.setMediaSource(episodeSource(episodes[targetIndex], prepared))
+            if (startMs > 0L) exo.seekTo(startMs)
+            exo.prepare()
+            exo.playWhenReady = true
+            exo.setPlaybackSpeed(speed)
+            loadingLabel = ""
+        } catch (problem: Exception) {
+            // MediaSource/Player 可能在切页或重建边界失效；把异常收敛到播放错误状态，
+            // 不让 IllegalStateException 从主线程直接导致应用闪退。
+            runCatching { exo.stop() }
+            runCatching { exo.clearMediaItems() }
+            if (remote === prepared) remote = null
+            runCatching { prepared.close() }
+            buffering = false
+            ready = false
+            playing = false
+            error = "播放器准备失败：${problem.message ?: problem::class.java.simpleName}"
+            PlayerLog.error("attach 失败：${problem::class.java.simpleName}: ${problem.message}")
+        }
     }
 
     // ------------------------------------------------------------ 单实例 playlist 预载
