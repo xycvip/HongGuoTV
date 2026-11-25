@@ -156,6 +156,8 @@ class PlayerSession(
     /** 下一集是否已追加到 ExoPlayer playlist；autoNext 关闭时只缓存流，不允许播放器自动跳集。 */
     private var queuedAppended = false
     private var queueJob: Job? = null
+    /** 单实例预载的 IO 取消令牌，避免旧清晰度/旧目标的结果迟到写入队列。 */
+    private var queueGeneration = 0
 
     private data class PreparedStream(val video: RemoteVideo, val quality: String)
 
@@ -210,6 +212,8 @@ class PlayerSession(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var remote: RemoteVideo? = null
     private var loadJob: Job? = null
+    /** 令阻塞 IO 返回的旧解析结果失效，避免切集/改画质后旧结果覆盖新播放器。 */
+    private var loadGeneration = 0
     private var released = false
     private var lastSavedAt = 0L
     private val retiredRemotes = mutableListOf<RemoteVideo>()
@@ -237,6 +241,8 @@ class PlayerSession(
     private var standbyReady = false
     private var standbyFirstFrameAt = 0L
     private var standbyJob: Job? = null
+    /** 备用 IO 可能无法立即响应 coroutine cancel；generation 防止旧请求污染同一目标集的新请求。 */
+    private var standbyGeneration = 0
 
     /** 备用实例最后一次尝试创建的时刻：心跳补建用，避免每 400ms 反复重试。 */
     private var lastStandbyAttemptAt = 0L
@@ -798,6 +804,10 @@ class PlayerSession(
         if (targetIndex !in episodes.indices) return
         // 任何一次新的准备都让之前挂着的解码恢复作废，避免它把这次准备覆盖掉。
         recoveryToken += 1
+        // 新 prepare 立即作废上一轮阻塞取流，即使 coroutine cancel 不能中断底层 IO。
+        loadGeneration += 1
+        loadJob?.cancel()
+        loadJob = null
         // 上一次的「等备用就绪」窗口也一并作废：连按下一集时不能让旧等待把新目标改回去。
         standbyWaitToken += 1
         // 上一次重叠换层还没收尾（120ms 内又切集）：先把旧层释放掉，否则连着切会堆实例。
@@ -854,6 +864,7 @@ class PlayerSession(
         remote = null
         discardQueue()
         player?.let(::applyPlaylistPolicy)
+        val requestGeneration = loadGeneration
         loadJob = scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
@@ -861,7 +872,7 @@ class PlayerSession(
                     PreparedStream(RemoteVideo(repository.http, info).prepare(), info.quality)
                 }
             }
-            if (released) {
+            if (released || loadGeneration != requestGeneration) {
                 result.getOrNull()?.video?.let { runCatching { it.close() } }
                 return@launch
             }
@@ -924,6 +935,7 @@ class PlayerSession(
         val exo = player ?: return
         discardQueue()
         val targetId = episodes[nextIndex]
+        val requestGeneration = ++queueGeneration
         queueJob = scope.launch {
             val prepared = withContext(Dispatchers.IO) {
                 runCatching {
@@ -931,7 +943,7 @@ class PlayerSession(
                     PreparedStream(RemoteVideo(repository.http, info).prepare(), info.quality)
                 }.getOrNull()
             }
-            if (released || prepared == null) {
+            if (released || queueGeneration != requestGeneration || prepared == null) {
                 prepared?.video?.let { runCatching { it.close() } }
                 return@launch
             }
@@ -1064,6 +1076,7 @@ class PlayerSession(
 
     /** 关闭预载通道：把已追加的下一集从队列里摘掉，再释放它的数据源。 */
     private fun discardQueue() {
+        queueGeneration += 1
         queueJob?.cancel()
         queueJob = null
         val exo = player
@@ -1184,6 +1197,7 @@ class PlayerSession(
             return
         }
         clearStandby("准备新的下一集")
+        val requestGeneration = standbyGeneration
         standbyIndex = nextIndex
         lastStandbyAttemptAt = SystemClock.elapsedRealtime()
         val targetId = episodes[nextIndex]
@@ -1202,7 +1216,9 @@ class PlayerSession(
             // 两个 runtime + 两路 codec 同时到峰值，正是概率性闪退的来源。
             // 备用有一整集的时间可用，晚 1.2 秒完全无感。
             delay(STANDBY_STAGGER_MS)
-            if (released || !useDualDecoder || standbyIndex != nextIndex) return@launch
+            if (released || !useDualDecoder || standbyIndex != nextIndex ||
+                standbyGeneration != requestGeneration
+            ) return@launch
             val prepared = withContext(Dispatchers.IO) {
                 runCatching {
                     // 备用链路独立取流：失败不切换全局线路，避免影响正在播放的这一集。
@@ -1210,7 +1226,9 @@ class PlayerSession(
                     PreparedStream(RemoteVideo(http, info).prepare(), info.quality)
                 }.getOrNull()
             }
-            if (released || !useDualDecoder || standbyIndex != nextIndex) {
+            if (released || !useDualDecoder || standbyIndex != nextIndex ||
+                standbyGeneration != requestGeneration
+            ) {
                 prepared?.video?.let { runCatching { it.close() } }
                 return@launch
             }
@@ -1392,6 +1410,7 @@ class PlayerSession(
         remote = promotedRemote
         standbyPlayer = null
         standbyRemote = null
+        standbyGeneration += 1
         standbyReady = false
         standbyFirstFrameAt = 0L
         standbyIndex = -1
@@ -1455,6 +1474,8 @@ class PlayerSession(
      * 实例本体放到下一轮消息销毁；会话结束（[release]）时统一同步收尾。
      */
     private fun clearStandby(reason: String) {
+        // 取消令牌先递增；底层阻塞请求即使稍后返回，也只能关闭自己的结果。
+        standbyGeneration += 1
         // 重叠换层期间 inactiveView 可能正是仍在屏上的旧层。
         // clearStandby 只清待接管资源，不能结束/解绑由 finishOverlapSwap 管理的旧画面。
         val overlapManagedView = overlapOutView
@@ -1884,6 +1905,9 @@ class PlayerSession(
         mainHandler.removeCallbacksAndMessages(null)
         stopDanmaku()
         runCatching { context.unregisterComponentCallbacks(memoryCallback) }
+        loadGeneration += 1
+        queueGeneration += 1
+        standbyGeneration += 1
         loadJob?.cancel()
         scope.cancel()
         player?.removeListener(mainListener)
