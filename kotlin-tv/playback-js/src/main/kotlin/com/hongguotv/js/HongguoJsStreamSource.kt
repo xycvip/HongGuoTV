@@ -79,6 +79,17 @@ class HongguoJsStreamSource(
         /** 脚本热更新后清空，避免旧线路地址残留。 */
         fun clearCache() = cache.clear()
 
+        /**
+         * 让某一集的地址缓存立即失效。
+         *
+         * 播放到一半出现「分段不可用 / HTTP 403 / 416」时，90 秒的缓存会让「重新取流」拿到
+         * 同一条已经失效的签名地址，于是重试必然再失败一次。清掉这一条再取，才能换到新签名。
+         * 只删当前这一集，不动别的集的预热结果。
+         */
+        fun invalidate(id: String, maxQuality: Int) {
+            cache.remove("$id|$maxQuality")
+        }
+
         fun parseEpisodeId(id: String): Pair<String, String> {
             val cleaned = id.trim().removePrefix("hongguo:")
             val colon = cleaned.lastIndexOf(':')

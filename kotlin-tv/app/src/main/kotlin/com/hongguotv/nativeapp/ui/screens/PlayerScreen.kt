@@ -439,12 +439,21 @@ fun PlayerScreen(
                 Text(message, style = MaterialTheme.typography.bodySmall, color = Paper.Secondary)
                 Spacer(Modifier.height(d(20)))
                 Row(horizontalArrangement = Arrangement.spacedBy(d(12))) {
-                    TvButton("重试", { session.prepare(session.index, session.position) }, tone = ButtonTone.Primary)
+                    // 地址/分段类错误走「重新获取地址」：必须让取流缓存失效再拿一条新签名地址，
+                    // 原地重开同一条流（原来的做法）只会再报同一个错。
+                    if (session.sourceError) {
+                        TvButton("重新获取地址", { session.retryWithFreshUrl() }, tone = ButtonTone.Primary)
+                    } else {
+                        TvButton("重试", { session.prepare(session.index, session.position) }, tone = ButtonTone.Primary)
+                    }
                     TvButton("返回详情", onBack, tone = ButtonTone.Ghost)
                 }
-                // 反复中断多半是这台设备扛不住两路硬解：一键用单解码器重开，不用用户去设置里翻。
-                Spacer(Modifier.height(d(12)))
-                TvButton("兼容模式重试", { session.retryWithoutDualDecoder() }, tone = ButtonTone.Quiet)
+                // 只在解码类错误时提供「兼容模式重试」：它复用同一条流、只换解码器，
+                // 地址失效时点了必然还是同一个错，之前误显示在这里误导过一次。
+                if (session.decodeError) {
+                    Spacer(Modifier.height(d(12)))
+                    TvButton("兼容模式重试", { session.retryWithoutDualDecoder() }, tone = ButtonTone.Quiet)
+                }
             }
         }
 

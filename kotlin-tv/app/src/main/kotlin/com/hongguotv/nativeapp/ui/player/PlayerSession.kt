@@ -38,6 +38,7 @@ import com.hongguotv.core.Series
 import com.hongguotv.core.VideoFrameMode
 import com.hongguotv.js.HongguoJsDanmaku
 import com.hongguotv.js.HongguoJsStore
+import com.hongguotv.js.HongguoJsStreamSource
 import com.hongguotv.nativeapp.DanmakuView
 import com.hongguotv.nativeapp.Library
 import com.hongguotv.nativeapp.PlaybackExtras
@@ -101,6 +102,20 @@ class PlayerSession(
         private set
     var error by mutableStateOf<String?>(null)
         private set
+
+    /**
+     * 错误归属，界面据此给不同的补救动作：
+     * `decode` 解码/分辨率 → 兼容模式重试；`source` 取流与分段 → 重新获取地址；`other` 只重试。
+     * 之前不区分，"片段不可用"也会显示「兼容模式重试」，而那条路复用同一条失效地址，点了必然再错。
+     */
+    var errorKind by mutableStateOf("")
+        private set
+
+    /** 当前错误是「地址/取流」类：界面显示「重新获取地址」。 */
+    val sourceError: Boolean get() = errorKind == ERROR_KIND_SOURCE
+
+    /** 当前错误是解码类：界面才提供「兼容模式重试」。 */
+    val decodeError: Boolean get() = errorKind == ERROR_KIND_DECODE
     var qualityLabel by mutableStateOf("")
         private set
     var speed by mutableFloatStateOf(library.playbackSpeed)
@@ -169,6 +184,9 @@ class PlayerSession(
 
     /** 这一集里解码类错误已经重试过几次，用于避免「降档→同样的错→再降档」死循环。 */
     private var decodeRetries = 0
+
+    /** 这一集里「地址失效/分段读不到」已经自动重新取流几次。 */
+    private var sourceRetries = 0
 
     /** 降档前那一档的档位名，用来判断降档到底有没有换到别的码流。 */
     private var failedQualityLabel = ""
@@ -267,6 +285,9 @@ class PlayerSession(
                     buffering = false
                     suppressBuffering = false
                     ready = true
+                    // 真正播起来了，把「地址失效」的重试额度还回去：同一集后面再出问题还能再救一次。
+                    sourceRetries = 0
+                    errorKind = ""
                     val exo = player ?: return
                     duration = exo.duration.coerceAtLeast(0L)
                     exo.videoFormat?.let { format ->
@@ -323,18 +344,49 @@ class PlayerSession(
             suppressBuffering = false
             playing = false
             val decodeIssue = isDecodeIssue(playerError)
+            val sourceIssue = !decodeIssue && isSourceIssue(playerError)
             PlayerLog.error(
                 "onPlayerError code=${playerError.errorCode}(${playerError.errorCodeName})" +
-                    " decode=$decodeIssue standby=${standbyPlayer != null}" +
+                    " decode=$decodeIssue source=$sourceIssue standby=${standbyPlayer != null}" +
                     " blocked=$dualDecoderBlocked soft=$softwareDecoderForced" +
                     " quality=$qualityLabel/${PlaybackQuality.label(effectiveQuality)}" +
                     " at=$position size=${videoWidth}x$videoHeight" +
                     " cause=${playerError.cause?.let { it::class.java.simpleName + ":" + (it.message ?: "") }?.take(200)}",
             )
             if (!decodeIssue) {
-                error = friendlyError(playerError)
+                // 取流/分段类：签名地址可能在中途失效（过期、CDN 403/416、Range 对不上）。
+                // 原地重开同一条流没用——地址缓存 90 秒内还是同一条死地址，
+                // 必须让它失效后重新取一次。这也是「点兼容模式重试还是同一个错」的原因。
+                if (sourceIssue && sourceRetries < MAX_SOURCE_RETRIES) {
+                    val resumeAt = runCatching { player?.currentPosition ?: position }.getOrDefault(position)
+                    sourceRetries += 1
+                    val token = ++recoveryToken
+                    error = null
+                    errorKind = ""
+                    buffering = true
+                    position = resumeAt
+                    loadingLabel = "播放地址已失效，正在重新获取"
+                    PlayerLog.warn("source retry ${sourceRetries}/$MAX_SOURCE_RETRIES at=$resumeAt episode=$index")
+                    // 重新取流前先让出带宽：备用实例正在下载下一集，两条链路一起抢更容易再失败。
+                    clearStandby("重新获取播放地址")
+                    invalidateStreamAddress()
+                    mainHandler.postDelayed({
+                        if (released || recoveryToken != token) return@postDelayed
+                        prepare(index, resumeAt)
+                    }, SOURCE_RETRY_BASE_MS * sourceRetries)
+                    return
+                }
+                errorKind = if (sourceIssue) ERROR_KIND_SOURCE else ERROR_KIND_OTHER
+                error = when {
+                    playerError.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                        playerError.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+                        "网络连接中断，请检查网络后重试"
+                    sourceIssue -> "播放地址已失效，请重新获取地址后重试"
+                    else -> friendlyError(playerError)
+                }
                 return
             }
+            errorKind = ERROR_KIND_DECODE
             decodeRetries += 1
             // 第一优先：把第二解码器让出去，然后用同一条流原地重开。
             // 电视盒子的 DECODING_FAILED 绝大多数不是这段码流解不了，而是两路硬解抢同一颗 codec，
@@ -415,6 +467,29 @@ class PlayerSession(
                 raw.contains("分辨率", true) ||
                 raw.contains("resolution", true) ||
                 raw.contains("not supported", true)
+        }
+
+        /**
+         * 取流/分段类故障：地址失效、CDN 拒绝、Range 不匹配。
+         *
+         * 这类错误和分辨率、解码器都无关，重新取一条地址往往就恢复了；
+         * 但必须先让地址缓存失效，否则重试拿回的还是同一条。
+         */
+        private fun isSourceIssue(playerError: PlaybackException): Boolean {
+            val raw = (playerError.cause?.message ?: playerError.message).orEmpty()
+            // 切集/退出播放页时我们会主动 close 数据源，会以「播放请求已取消」结束。
+            // 那不是故障，绝不能当成地址失效去重试（否则切集会莫名其妙地重播）。
+            if (raw.contains("已取消") || raw.contains("取消")) return false
+            return when (playerError.errorCode) {
+                PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+                PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+                PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
+                PlaybackException.ERROR_CODE_IO_NO_PERMISSION,
+                -> true
+                else -> raw.contains("分段") || raw.contains("资源已变化")
+            }
         }
 
         /** 接管后首帧出现：先收掉重叠期的旧层，再等 350ms 稳定窗，避免"画面已出却闪一下转圈"。 */
@@ -750,6 +825,8 @@ class PlayerSession(
             qualityOverride = null
             failedQualityLabel = ""
             decodeRetries = 0
+            sourceRetries = 0
+            errorKind = ""
         }
         if (index != targetIndex || duration > 0 || position > 0) saveLeavingEpisode(targetIndex)
         index = targetIndex
@@ -1562,9 +1639,38 @@ class PlayerSession(
         if (released) return
         recoveryToken += 1
         dualDecoderBlocked = true
+        errorKind = ""
         clearStandby("用户选择兼容模式")
         player?.let(::applyPlaylistPolicy)
         retrySameStream(position)
+    }
+
+    /**
+     * 错误卡上的「重新获取地址」：清掉这一集的地址缓存，按当前进度重新取流。
+     *
+     * 和「兼容模式重试」的区别很关键：那个复用同一个 RemoteVideo（同一条 URL、同一份分段缓存），
+     * 只换解码器。地址失效时报的是 IO 错误，换解码器毫无作用，点了还是同一个错——
+     * 这正是「播到一半片段不可用，点兼容模式重试也没用」的原因。
+     */
+    fun retryWithFreshUrl() {
+        if (released) return
+        recoveryToken += 1
+        sourceRetries = 0
+        error = null
+        errorKind = ""
+        buffering = true
+        loadingLabel = "正在重新获取播放地址"
+        clearStandby("重新获取播放地址")
+        invalidateStreamAddress()
+        prepare(index, position)
+    }
+
+    /** 让当前这一集的取流地址缓存立即失效，下一次 stream() 会重新签名。 */
+    private fun invalidateStreamAddress() {
+        runCatching {
+            val videoId = episodes.getOrNull(index) ?: return@runCatching
+            HongguoJsStreamSource.invalidate(episodeKey(videoId), effectiveQuality)
+        }
     }
 
     fun changeQuality(value: Int) {
@@ -1710,6 +1816,15 @@ class PlayerSession(
 
         /** seek 到队列下一项后迟迟没有过渡回调时的兜底时限。 */
         const val SWITCH_FALLBACK_MS = 1_200L
+
+        /** 错误归属：界面据此决定给哪个补救按钮。 */
+        const val ERROR_KIND_DECODE = "decode"
+        const val ERROR_KIND_SOURCE = "source"
+        const val ERROR_KIND_OTHER = "other"
+
+        /** 一集里最多自动重新取流几次，以及第 N 次的退避（800ms / 1600ms）。 */
+        const val MAX_SOURCE_RETRIES = 2
+        const val SOURCE_RETRY_BASE_MS = 800L
 
         /** 备用实例取流前的错峰延迟：避开主链路 JS runtime + codec 的同一峰值窗口。 */
         const val STANDBY_STAGGER_MS = 1_200L
