@@ -45,7 +45,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Speed
@@ -636,7 +636,7 @@ fun PlayerScreen(
                                     poke()
                                 },
                             )
-                            ControlChip("选集", Icons.Rounded.PlaylistPlay) { episodesOpen = true }
+                            ControlChip("选集", Icons.AutoMirrored.Rounded.PlaylistPlay) { episodesOpen = true }
                         }
                         Spacer(Modifier.weight(1f))
                         // 提示文案由设置里的按键映射实时推导，改完设置回播放页就能看到新说明。
@@ -656,7 +656,7 @@ fun PlayerScreen(
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.PlaylistPlay, null, tint = Paper.Secondary, modifier = Modifier.size(d(18)))
+                            Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, null, tint = Paper.Secondary, modifier = Modifier.size(d(18)))
                             Spacer(Modifier.width(d(8)))
                             Column(horizontalAlignment = Alignment.Start) {
                                 remoteHints.forEach { line ->
