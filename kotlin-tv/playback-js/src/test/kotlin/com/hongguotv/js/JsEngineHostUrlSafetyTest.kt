@@ -1,9 +1,11 @@
 package com.hongguotv.js
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
 import java.net.InetAddress
 import java.net.UnknownHostException
 
@@ -38,5 +40,12 @@ class JsEngineHostUrlSafetyTest {
                 // Expected.
             }
         }
+    }
+
+    @Test
+    fun `decodes UTF-8 response using legacy Android compatible overload`() {
+        val output = ByteArrayOutputStream()
+        output.write("红果TV 🌟".toByteArray(Charsets.UTF_8))
+        assertEquals("红果TV 🌟", JsEngineHost.decodeUtf8(output))
     }
 }
