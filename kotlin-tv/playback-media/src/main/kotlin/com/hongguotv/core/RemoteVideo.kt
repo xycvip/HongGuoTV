@@ -244,10 +244,11 @@ class RemoteVideo(
             try {
                 val chunk=fetchChunk(next)
                 synchronized(lock) { if(total==0L) total=chunk.total; if(!closed) { cache[next]=chunk.bytes; evictLocked() }; fetchingAhead=-1L; aheadChunks++; fetchedBytes+=chunk.bytes.size; lock.notifyAll() }
-            } catch(e: IOException) {
+            } catch(e: Throwable) {
                 synchronized(lock) { fetchingAhead=-1L; lock.notifyAll() }
+                // 任何异常都先释放 in-flight 标记；只有网络 I/O 异常允许退避重试。
+                if (e !is IOException) throw e
                 if(closed || Thread.currentThread().isInterrupted) return
-                // 只对可恢复的网络 I/O 失败退避重试；致命 Error 不会被吞掉。
                 try { Thread.sleep(1500) } catch(interrupted: InterruptedException) {
                     Thread.currentThread().interrupt()
                     return
