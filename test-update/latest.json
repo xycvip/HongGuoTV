@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "6631ff535e6f55d4b2dfe5345c31e0b4a81ef5af",
-  "versionCode": 108,
-  "versionName": "0.0.108",
+  "sourceCommit": "037c47dfc92184f819617f1437636804fb92c861",
+  "versionCode": 109,
+  "versionName": "0.0.109",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.108",
+  "tag": "hongguotv-bate-v0.0.109",
   "apk": {
-    "name": "HongguoTV-0.0.108.apk",
+    "name": "HongguoTV-0.0.109.apk",
     "size": 5722518,
-    "sha256": "6b30214a04652377b4e8c82f6c21c96d0c200fe59414df21e0f798342e80178b",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.108/HongguoTV-0.0.108.apk"
+    "sha256": "0f5e76c8d3de98d14100282bb3a20f7d65a8a6c72ae50ce51322727bdc5b599a",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.109/HongguoTV-0.0.109.apk"
   },
-  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
+  "notes": "【播放与播放器】\n- 替换播放页废弃方向图标\n【界面与交互】\n- 替换 Cast 页面废弃方向图标\n【其他功能与问题修复】\n- 替换搜索页废弃方向图标\n- 兼容新版 Android 内存回调并清理废弃常量\n- 清理旧版系统栏 API 警告"
 }
