@@ -1988,10 +1988,6 @@ class PlayerSession(
         // 延迟释放队列会被下面的 removeCallbacks 取消，这里同步收尾，防止实例泄漏。
         retiringStandby.toList().forEach { releaseStandbyInstance(it, "session") }
         retiringStandby.clear()
-        retiredRemotes.toList().forEach(::closeRemote)
-        retiredRemotes.clear()
-        remoteClients.values.toList().forEach(::closeClient)
-        remoteClients.clear()
         handoffToken += 1
         handoffInProgress = false
         mainHandler.removeCallbacksAndMessages(null)
@@ -2004,10 +2000,16 @@ class PlayerSession(
         scope.cancel()
         activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }
         activeMainListener = null
+        // 主播放器仍可能持有当前 RemoteVideo/HTTP DataSource：先 release 播放器，
+        // 再关闭视频流及其专属客户端，不能在会话退出时提前掐断正在使用的网络源。
         runCatching { player?.release() }
         player = null
-        remote?.let { runCatching { it.close() } }
+        remote?.let(::closeRemote)
         remote = null
+        retiredRemotes.toList().forEach(::closeRemote)
+        retiredRemotes.clear()
+        remoteClients.values.toList().forEach(::closeClient)
+        remoteClients.clear()
         // 两层 view 都解绑播放器（view 本身由 Compose 负责销毁）。
         playerViews.forEach { view ->
             runCatching { view?.player = null }
