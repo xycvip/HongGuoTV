@@ -1225,7 +1225,7 @@ class PlayerSession(
         // 已经判定不能并发（或用户自己关了开关）：直接走同实例预载。
         // 用户开关还开着时也要补这一步，否则关了双播放器就真的没有下一集预载了。
         if (!useDualDecoder) {
-            if (extras.seamlessPlayback) queueNextEpisode(index, force = true)
+            queueNextEpisode(index, force = true)
             return
         }
         // 没有 inactive 画面层就没有预渲染输出面，等两层 PlayerView 挂载后由 attachPlayerView 再触发。
