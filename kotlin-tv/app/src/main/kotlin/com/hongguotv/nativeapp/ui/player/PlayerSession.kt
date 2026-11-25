@@ -56,6 +56,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import java.util.IdentityHashMap
 import java.util.concurrent.TimeUnit
 
 /**
@@ -91,6 +92,9 @@ class PlayerSession(
 
     var player by mutableStateOf<ExoPlayer?>(null)
         private set
+    /** 当前主监听器的播放器身份；拦截已经排队但在接管后才到达的旧播放器事件。 */
+    /** 只保存当前主实例对应的监听器；每个 listener 捕获自己的 ExoPlayer。 */
+    private var activeMainListener: Player.Listener? = null
     var playing by mutableStateOf(false)
         private set
     var buffering by mutableStateOf(true)
@@ -153,7 +157,13 @@ class PlayerSession(
     /** 关闭无感连播时的单实例 playlist 预载：已经追加进队列的下一集。 */
     private var queuedIndex = -1
     private var queuedStream: PreparedStream? = null
+    /** 下一集是否已追加到 ExoPlayer playlist；autoNext 关闭时只缓存流，不允许播放器自动跳集。 */
+    private var queuedAppended = false
+    /** 取流仍在进行的目标集；STATE_READY/重新缓冲回调重复到达时不得取消并重开同一预载。 */
+    private var queuePreparingIndex = -1
     private var queueJob: Job? = null
+    /** 单实例预载的 IO 取消令牌，避免旧清晰度/旧目标的结果迟到写入队列。 */
+    private var queueGeneration = 0
 
     private data class PreparedStream(val video: RemoteVideo, val quality: String)
 
@@ -208,6 +218,8 @@ class PlayerSession(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var remote: RemoteVideo? = null
     private var loadJob: Job? = null
+    /** 令阻塞 IO 返回的旧解析结果失效，避免切集/改画质后旧结果覆盖新播放器。 */
+    private var loadGeneration = 0
     private var released = false
     private var lastSavedAt = 0L
     private val retiredRemotes = mutableListOf<RemoteVideo>()
@@ -235,6 +247,8 @@ class PlayerSession(
     private var standbyReady = false
     private var standbyFirstFrameAt = 0L
     private var standbyJob: Job? = null
+    /** 备用 IO 可能无法立即响应 coroutine cancel；generation 防止旧请求污染同一目标集的新请求。 */
+    private var standbyGeneration = 0
 
     /** 备用实例最后一次尝试创建的时刻：心跳补建用，避免每 400ms 反复重试。 */
     private var lastStandbyAttemptAt = 0L
@@ -252,8 +266,16 @@ class PlayerSession(
     private var overlapRemote: RemoteVideo? = null
     private var overlapToken = 0
 
-    /** 已解绑、等待延迟释放的备用实例（不在错误回调栈里同步销毁）。 */
-    private val retiringStandby = mutableListOf<ExoPlayer>()
+    /** 已解绑、等待延迟释放的备用资源组；播放器释放后才能关闭它实际使用的数据源和 HTTP 会话。 */
+    private data class RetiringStandby(
+        val player: ExoPlayer,
+        val remote: RemoteVideo?,
+        val http: OkHttpClient?,
+    )
+    private val retiringStandby = mutableListOf<RetiringStandby>()
+
+    /** 已接管的备用 RemoteVideo 仍由独立 HTTP 客户端供数；直到该流退役才关闭客户端。 */
+    private val remoteClients = IdentityHashMap<RemoteVideo, OkHttpClient>()
 
     /** 等待窗口令牌：任何一次新的 prepare 都会让它作废，避免刚切的集被旧等待覆盖。 */
     private var standbyWaitToken = 0
@@ -277,9 +299,9 @@ class PlayerSession(
 
     private val bandwidthMeter = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.Builder(context).build()
 
-    private val mainListener = object : Player.Listener {
+    private fun mainListenerFor(owner: ExoPlayer): Player.Listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (released) return
+            if (released || owner !== player) return
             when (playbackState) {
                 Player.STATE_BUFFERING -> if (!suppressBuffering) buffering = true
                 Player.STATE_READY -> {
@@ -317,7 +339,7 @@ class PlayerSession(
 
         /** 单实例 playlist 自动/手动过渡到下一集：状态、弹幕、进度都换到新集。 */
         override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
-            if (released || useDualDecoder) return
+            if (released || owner !== player || useDualDecoder) return
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
                 reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
             ) return
@@ -332,7 +354,7 @@ class PlayerSession(
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (released) return
+            if (released || owner !== player) return
             playing = isPlaying
             // 弹幕跟着播放状态走：暂停时停帧，继续时从当前媒体时间接着滚。
             // 之前没人通知弹幕层，暂停后再播弹幕会卡在暂停那一帧不动。
@@ -340,7 +362,7 @@ class PlayerSession(
         }
 
         override fun onPlayerError(playerError: PlaybackException) {
-            if (released) return
+            if (released || owner !== player) return
             buffering = false
             suppressBuffering = false
             playing = false
@@ -495,6 +517,7 @@ class PlayerSession(
 
         /** 接管后首帧出现：先收掉重叠期的旧层，再等 350ms 稳定窗，避免"画面已出却闪一下转圈"。 */
         override fun onRenderedFirstFrame() {
+            if (released || owner !== player) return
             // 新层真正出画了，旧层可以退场（这是重叠换层的最优退出点，比定时兜底更准）。
             if (overlapOutView != null) finishOverlapSwap("rendered")
             if (!handoffInProgress) return
@@ -529,25 +552,42 @@ class PlayerSession(
     }
 
     init {
-        buildPlayer()
-        runCatching { context.registerComponentCallbacks(memoryCallback) }
-        // 续播位置必须带进第一次 prepare：之前固定从 0 开始，
-        // 用户从详情页「继续观看」进来也是从头播，看起来就像进度没保存。
-        prepare(index, initialPositionMs.coerceAtLeast(0L))
+        if (buildPlayer()) {
+            runCatching { context.registerComponentCallbacks(memoryCallback) }
+            // 续播位置必须带进第一次 prepare：之前固定从 0 开始，
+            // 用户从详情页「继续观看」进来也是从头播，看起来就像进度没保存。
+            prepare(index, initialPositionMs.coerceAtLeast(0L))
+        }
     }
 
-    private fun buildPlayer() {
-        val exo = ExoPlayer.Builder(context)
-            // 主播放器原来没开解码器回退：硬解初始化一失败就直接整集报废，
-            // 而备用播放器是开着的——同一台机器上「连播能播、单独点进去不能播」就是这么来的。
-            .setRenderersFactory(renderersFactory())
-            .setBandwidthMeter(bandwidthMeter)
-            .build()
-        exo.setHandleAudioBecomingNoisy(true)
-        exo.playWhenReady = true
-        applyPlaylistPolicy(exo)
-        exo.addListener(mainListener)
-        player = exo
+    private fun buildPlayer(): Boolean {
+        var created: ExoPlayer? = null
+        return try {
+            val exo = ExoPlayer.Builder(context)
+                // 主播放器原来没开解码器回退：硬解初始化一失败就直接整集报废，
+                // 而备用播放器是开着的——同一台机器上「连播能播、单独点进去不能播」就是这么来的。
+                .setRenderersFactory(renderersFactory())
+                .setBandwidthMeter(bandwidthMeter)
+                .build()
+            created = exo
+            exo.setHandleAudioBecomingNoisy(true)
+            exo.playWhenReady = true
+            applyPlaylistPolicy(exo)
+            val listener = mainListenerFor(exo)
+            exo.addListener(listener)
+            player = exo
+            activeMainListener = listener
+            true
+        } catch (problem: Exception) {
+            created?.let { runCatching { it.release() } }
+            player = null
+            activeMainListener = null
+            buffering = false
+            ready = false
+            error = "播放器初始化失败：${problem.message ?: problem::class.java.simpleName}"
+            PlayerLog.error("buildPlayer 失败：${problem::class.java.simpleName}: ${problem.message}")
+            false
+        }
     }
 
     /** 软解兜底时把系统软解 codec 排到最前；平时保持系统默认优先级。 */
@@ -582,6 +622,10 @@ class PlayerSession(
         dualDecoderBlocked = true
         // 先彻底释放：同一颗解码器在旧实例刚 release 时立刻被新实例申请，成功率很低，
         // 尤其是设备本来就在资源紧张状态。这里让系统先回收，再建新实例。
+        activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }
+        activeMainListener = null
+        // 重建前先让 PlayerView 脱离旧实例；若新实例构建失败，View 也不会继续持有已 release 的播放器。
+        runCatching { playerView?.player = null }
         runCatching { player?.release() }
         player = null
         error = null
@@ -590,7 +634,7 @@ class PlayerSession(
         PlayerLog.warn("rebuildForDecoderIssue soft=$softwareOnly at=$resumeAt episode=$target")
         mainHandler.postDelayed({
             if (released || recoveryToken != token) return@postDelayed
-            buildPlayer()
+            if (!buildPlayer()) return@postDelayed
             playerView?.player = player
             prepare(target, resumeAt)
         }, DECODER_RELEASE_DELAY_MS)
@@ -633,6 +677,7 @@ class PlayerSession(
             // 否则用户按「下一集」会指向一个已经不存在的媒体项。
             queuedIndex = -1
             queuedStream = null
+            queuedAppended = false
             if (index + 1 < episodes.size) queueNextEpisode(index, force = true)
         }
         PlayerLog.warn("retrySameStream at=$atMs episode=$target")
@@ -687,8 +732,11 @@ class PlayerSession(
      * 接管瞬间即有画面。2px 在屏幕最左边缘，正常观看不可察。
      */
     private fun offScreenX(view: PlayerView): Float {
-        val width = view.width
-        return if (width > 8) width.toFloat() - 2f else 1_918f
+        val width = view.width.takeIf { it > 8 }
+            ?: view.rootView.width.takeIf { it > 8 }
+            ?: view.resources.displayMetrics.widthPixels
+        // 优先用已测量宽度；首次布局用屏幕真实像素宽度兜底，避免固定 1918px 或极大平移值。
+        return if (width > 8) width.toFloat() - 2f else 1_920f
     }
 
     /**
@@ -715,7 +763,7 @@ class PlayerSession(
         }, OVERLAP_UNBIND_DELAY_MS)
         // 3) 实例本体走统一的延迟释放队列；数据源等实例释放后才真正关闭。
         if (outPlayer != null) {
-            runCatching { outPlayer.removeListener(mainListener) }
+            // 主监听器已在 promoteStandby 中从旧实例移除；旧实例只保留无状态的生命周期释放。
             retireStandbyInstance(outPlayer)
         }
         outRemote?.let(::releaseSoon)
@@ -794,6 +842,10 @@ class PlayerSession(
         if (targetIndex !in episodes.indices) return
         // 任何一次新的准备都让之前挂着的解码恢复作废，避免它把这次准备覆盖掉。
         recoveryToken += 1
+        // 新 prepare 立即作废上一轮阻塞取流，即使 coroutine cancel 不能中断底层 IO。
+        loadGeneration += 1
+        loadJob?.cancel()
+        loadJob = null
         // 上一次的「等备用就绪」窗口也一并作废：连按下一集时不能让旧等待把新目标改回去。
         standbyWaitToken += 1
         // 上一次重叠换层还没收尾（120ms 内又切集）：先把旧层释放掉，否则连着切会堆实例。
@@ -840,12 +892,19 @@ class PlayerSession(
         loadJob?.cancel()
         stopDanmaku()
         danmakuLoaded = 0
-        remote?.let { runCatching { it.close() } }
+        // 先停止并清空旧 MediaSource，再关闭其 RemoteVideo，避免旧数据源仍在读取时断流。
+        player?.let { exo ->
+            runCatching { exo.playWhenReady = false }
+            runCatching { exo.stop() }
+            runCatching { exo.clearMediaItems() }
+        }
+        // clearMediaItems() 会异步释放 MediaSource/DataSource；旧 RemoteVideo 延迟退役，
+        // 给正在退出的读取回调留出收尾窗口，避免切集瞬间把旧流强制 close。
+        remote?.let(::releaseSoon)
         remote = null
-        player?.stop()
-        player?.clearMediaItems()
         discardQueue()
         player?.let(::applyPlaylistPolicy)
+        val requestGeneration = loadGeneration
         loadJob = scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
@@ -853,7 +912,7 @@ class PlayerSession(
                     PreparedStream(RemoteVideo(repository.http, info).prepare(), info.quality)
                 }
             }
-            if (released) {
+            if (released || loadGeneration != requestGeneration) {
                 result.getOrNull()?.video?.let { runCatching { it.close() } }
                 return@launch
             }
@@ -883,14 +942,41 @@ class PlayerSession(
     }
 
     private fun attach(prepared: RemoteVideo, targetIndex: Int, startMs: Long) {
-        if (released) return
-        val exo = player ?: return
-        exo.setMediaSource(episodeSource(episodes[targetIndex], prepared))
-        if (startMs > 0L) exo.seekTo(startMs)
-        exo.prepare()
-        exo.playWhenReady = true
-        exo.setPlaybackSpeed(speed)
-        loadingLabel = ""
+        if (released) {
+            runCatching { prepared.close() }
+            return
+        }
+        val exo = player
+        if (exo == null) {
+            runCatching { prepared.close() }
+            buffering = false
+            error = "播放器尚未初始化，请重试"
+            return
+        }
+        try {
+            exo.setMediaSource(episodeSource(episodes[targetIndex], prepared))
+            if (startMs > 0L) exo.seekTo(startMs)
+            exo.prepare()
+            exo.playWhenReady = true
+            exo.setPlaybackSpeed(speed)
+            loadingLabel = ""
+        } catch (problem: Exception) {
+            // MediaSource/Player 可能在切页或重建边界失效；把异常收敛到播放错误状态，
+            // 不让 IllegalStateException 从主线程直接导致应用闪退。
+            runCatching { exo.stop() }
+            runCatching { exo.clearMediaItems() }
+            if (remote === prepared) {
+                remote = null
+                releaseSoon(prepared)
+            } else {
+                runCatching { prepared.close() }
+            }
+            buffering = false
+            ready = false
+            playing = false
+            error = "播放器准备失败：${problem.message ?: problem::class.java.simpleName}"
+            PlayerLog.error("attach 失败：${problem::class.java.simpleName}: ${problem.message}")
+        }
     }
 
     // ------------------------------------------------------------ 单实例 playlist 预载
@@ -903,8 +989,7 @@ class PlayerSession(
     private fun queueNextEpisode(current: Int, force: Boolean = false) {
         if (useDualDecoder && !force) return
         if (released) return
-        // 用户关掉「自动连播」时不应在播完后自动前进，这里就不排下一集。
-        if (!library.autoNext) {
+        if (!extras.seamlessPlayback) {
             discardQueue()
             return
         }
@@ -914,9 +999,12 @@ class PlayerSession(
             return
         }
         if (queuedIndex == nextIndex && queuedStream != null) return
+        if (queuePreparingIndex == nextIndex && queueJob?.isActive == true) return
         val exo = player ?: return
         discardQueue()
         val targetId = episodes[nextIndex]
+        val requestGeneration = ++queueGeneration
+        queuePreparingIndex = nextIndex
         queueJob = scope.launch {
             val prepared = withContext(Dispatchers.IO) {
                 runCatching {
@@ -924,10 +1012,12 @@ class PlayerSession(
                     PreparedStream(RemoteVideo(repository.http, info).prepare(), info.quality)
                 }.getOrNull()
             }
-            if (released || prepared == null) {
+            if (released || queueGeneration != requestGeneration || prepared == null) {
                 prepared?.video?.let { runCatching { it.close() } }
+                if (queueGeneration == requestGeneration) queuePreparingIndex = -1
                 return@launch
             }
+            queuePreparingIndex = -1
             // 预载期间用户已经切集 / 改清晰度 / 打开双播放器：这份流作废。
             if (index != current || (useDualDecoder && !force)) {
                 runCatching { prepared.video.close() }
@@ -935,15 +1025,23 @@ class PlayerSession(
             }
             queuedIndex = nextIndex
             queuedStream = prepared
-            // 自动连播链上队列会一直往后长：加新项前把当前集之前的旧项摘掉。
-            runCatching { exo.removeMediaItems(0, exo.currentMediaItemIndex) }
-            if (force) runCatching { exo.setPreloadConfiguration(ExoPlayer.PreloadConfiguration(PLAYLIST_PRELOAD_US)) }
-            runCatching { exo.addMediaSource(episodeSource(targetId, prepared.video)) }
-                .onFailure {
-                    queuedIndex = -1
-                    queuedStream = null
-                    runCatching { prepared.video.close() }
+            queuedAppended = false
+            // 自动连播开启才加入 playlist。关闭自动连播时仅缓存 RemoteVideo，
+            // 手动按「下一集」仍可直接复用预载，但播放器不会自己跳集。
+            if (library.autoNext) {
+                runCatching { exo.removeMediaItems(0, exo.currentMediaItemIndex) }
+                if (force) runCatching {
+                    exo.setPreloadConfiguration(ExoPlayer.PreloadConfiguration(PLAYLIST_PRELOAD_US))
                 }
+                runCatching { exo.addMediaSource(episodeSource(targetId, prepared.video)) }
+                    .onSuccess { queuedAppended = true }
+                    .onFailure {
+                        queuedIndex = -1
+                        queuedStream = null
+                        queuedAppended = false
+                        runCatching { prepared.video.close() }
+                    }
+            }
         }
     }
 
@@ -951,10 +1049,41 @@ class PlayerSession(
     private fun switchToQueued(targetIndex: Int): Boolean {
         if (useDualDecoder) return false
         val exo = player ?: return false
-        // 连按「下一集」时第一次已经发起 seek，第二次不能因为 index 还没更新就重建数据源，
-        // 否则会把当前集重新准备一遍——用户看到的就是「下一集还是这一集」。
         if (switchingTo == targetIndex && SystemClock.elapsedRealtime() - switchingAt < SWITCH_GUARD_MS) return true
         if (queuedIndex != targetIndex || queuedStream == null) return false
+
+        // autoNext 关闭时只做预解析缓存，不追加 playlist；手动切集直接消费缓存流。
+        if (!queuedAppended) {
+            val prepared = queuedStream ?: return false
+            queuedStream = null
+            queuedIndex = -1
+            queuedAppended = false
+            switchingTo = -1
+            saveLeavingEpisode(targetIndex)
+            val previous = remote
+            index = targetIndex
+            error = null
+            errorKind = ""
+            position = 0L
+            duration = 0L
+            buffering = true
+            ready = false
+            loadingLabel = "正在切换第 ${targetIndex + 1} 集"
+            loadJob?.cancel()
+            stopDanmaku()
+            danmakuLoaded = 0
+            runCatching { exo.playWhenReady = false }
+            runCatching { exo.stop() }
+            runCatching { exo.clearMediaItems() }
+            discardQueue()
+            remote = prepared.video
+            qualityLabel = prepared.quality
+            previous?.let(::releaseSoon)
+            applyPlaylistPolicy(exo)
+            attach(prepared.video, targetIndex, 0L)
+            return true
+        }
+
         val nextItem = exo.currentMediaItemIndex + 1
         if (nextItem >= exo.mediaItemCount) return false
         if (exo.getMediaItemAt(nextItem).mediaId != episodes[targetIndex]) return false
@@ -964,7 +1093,6 @@ class PlayerSession(
             switchingTo = -1
             return false
         }
-        // seek 没落到新集（播放器正好停在 IDLE 等边界状态）时兜底重建，避免看起来「按了没反应」。
         mainHandler.postDelayed({
             if (!released && switchingTo == targetIndex && index != targetIndex) {
                 switchingTo = -1
@@ -995,6 +1123,7 @@ class PlayerSession(
             qualityLabel = queued.quality
             queuedIndex = -1
             queuedStream = null
+            queuedAppended = false
         }
         if (queued == null) remote = null
         previous?.let(::releaseSoon)
@@ -1018,12 +1147,14 @@ class PlayerSession(
 
     /** 关闭预载通道：把已追加的下一集从队列里摘掉，再释放它的数据源。 */
     private fun discardQueue() {
+        queueGeneration += 1
         queueJob?.cancel()
         queueJob = null
+        queuePreparingIndex = -1
         val exo = player
         val targetId = episodes.getOrNull(queuedIndex)
-        // 队列里那一项必须先移除：留着它而提前关闭数据源，用户切过去会直接播失败。
-        if (exo != null && targetId != null) {
+        // 只有实际追加进 playlist 的项目才需要摘除；未追加的缓存仅释放数据源。
+        if (queuedAppended && exo != null && targetId != null) {
             for (i in exo.mediaItemCount - 1 downTo 0) {
                 if (i != exo.currentMediaItemIndex && exo.getMediaItemAt(i).mediaId == targetId) {
                     runCatching { exo.removeMediaItem(i) }
@@ -1031,6 +1162,7 @@ class PlayerSession(
             }
         }
         queuedIndex = -1
+        queuedAppended = false
         queuedStream?.video?.let(::releaseSoon)
         queuedStream = null
     }
@@ -1040,7 +1172,7 @@ class PlayerSession(
         retiredRemotes += video
         mainHandler.postDelayed({
             retiredRemotes.remove(video)
-            runCatching { video.close() }
+            closeRemote(video)
         }, 800L)
     }
 
@@ -1110,8 +1242,8 @@ class PlayerSession(
         // 低内存设备（isLowRamDevice）：解码器和内存都紧张，默认就不并发。
         // 这条比 maxSupportedInstances 更可靠——很多盒子那项虚标成 4，实际只有一路硬解。
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        if (activityManager?.isLowRamDevice == true) {
-            switchToPlaylistPreload("低内存设备，不启用双解码器")
+        if (activityManager == null || activityManager.isLowRamDevice) {
+            switchToPlaylistPreload("低内存设备或设备信息不可用，不启用双解码器")
             return
         }
         // 接着问设备能不能同时跑两路：maxSupportedInstances 不够就根本不申请，
@@ -1128,12 +1260,16 @@ class PlayerSession(
         }
         if (standbyIndex == nextIndex && (standbyPlayer != null || standbyJob?.isActive == true)) return
         val availableMb = availableMemoryMb()
-        if (availableMb in 0..(STANDBY_MEMORY_FLOOR_MB - 1)) {
-            clearStandby("可用内存不足（${availableMb}MB）")
-            queueNextEpisode(index, force = true)
+        if (availableMb < STANDBY_MEMORY_FLOOR_MB) {
+            // -1 代表无法读取内存，不是「内存无限充足」；未知状态一律退回单播放器。
+            switchToPlaylistPreload(
+                if (availableMb < 0) "无法读取可用内存，不启用双解码器"
+                else "可用内存不足（${availableMb}MB）",
+            )
             return
         }
         clearStandby("准备新的下一集")
+        val requestGeneration = standbyGeneration
         standbyIndex = nextIndex
         lastStandbyAttemptAt = SystemClock.elapsedRealtime()
         val targetId = episodes[nextIndex]
@@ -1152,7 +1288,9 @@ class PlayerSession(
             // 两个 runtime + 两路 codec 同时到峰值，正是概率性闪退的来源。
             // 备用有一整集的时间可用，晚 1.2 秒完全无感。
             delay(STANDBY_STAGGER_MS)
-            if (released || !useDualDecoder || standbyIndex != nextIndex) return@launch
+            if (released || !useDualDecoder || standbyIndex != nextIndex ||
+                standbyGeneration != requestGeneration
+            ) return@launch
             val prepared = withContext(Dispatchers.IO) {
                 runCatching {
                     // 备用链路独立取流：失败不切换全局线路，避免影响正在播放的这一集。
@@ -1160,7 +1298,9 @@ class PlayerSession(
                     PreparedStream(RemoteVideo(http, info).prepare(), info.quality)
                 }.getOrNull()
             }
-            if (released || !useDualDecoder || standbyIndex != nextIndex) {
+            if (released || !useDualDecoder || standbyIndex != nextIndex ||
+                standbyGeneration != requestGeneration
+            ) {
                 prepared?.video?.let { runCatching { it.close() } }
                 return@launch
             }
@@ -1187,12 +1327,13 @@ class PlayerSession(
                         // 15 秒 720P 约 4–6MB，8MB 上限够装，不额外增加内存峰值。
                         .setBufferDurationsMs(15_000, 30_000, 2_500, 5_000)
                         .setTargetBufferBytes(STANDBY_BUFFER_BYTES)
-                        .setPrioritizeTimeOverSizeThresholds(true)
+                        // 优先遵守目标缓冲大小，避免 15 秒时间目标压过内存目标。
+                        .setPrioritizeTimeOverSizeThresholds(false)
                         .build()
                 )
                 .build()
-        } catch (problem: Throwable) {
-            // 连实例都建不起来：这台设备的解码资源确实不够并发，本次会话不再尝试。
+        } catch (problem: Exception) {
+            // 只处理可恢复的初始化异常；不要吞掉 OutOfMemoryError / ThreadDeath 等 VM 级错误后继续分配。
             switchToPlaylistPreload("第二播放器创建失败：${problem.message}")
             return
         }
@@ -1273,7 +1414,7 @@ class PlayerSession(
                 ProgressiveMediaSource.Factory { VideoDataSource(video) { } }.createMediaSource(item)
             )
             secondary.prepare()
-        } catch (problem: Throwable) {
+        } catch (problem: Exception) {
             PlayerLog.error("buildStandbyPlayer 失败：${problem::class.java.simpleName}: ${problem.message}")
             switchToPlaylistPreload("备用播放器初始化失败：${problem.message}")
         }
@@ -1327,22 +1468,33 @@ class PlayerSession(
         // 旧层的移出、解绑、释放统一交给 finishOverlapSwap()，等新层真正出画后再做——
         // 这样无论 surface 位置变更早一帧还是晚一帧，屏幕上都始终有一层画面。
         val outgoingView = playerView
+        // 在全局 player 引用切换前隔离旧播放器，防止旧集事件误操作新集状态。
+        old?.let { outgoing ->
+            activeMainListener?.let { listener -> runCatching { outgoing.removeListener(listener) } }
+            activeMainListener = null
+            runCatching { outgoing.playWhenReady = false }
+            runCatching { outgoing.volume = 0f }
+        }
         activeSlot = 1 - activeSlot
         playerViews[activeSlot]?.let { if (it.translationX != 0f) it.translationX = 0f }
-        // 旧层继续显示但要静音，避免重叠期两层同时出声。
-        runCatching { old?.volume = 0f }
+        // 旧层已暂停并移除主监听器；Surface 保留最后一帧作为新层出画前的兜底。
         // 状态引用跟着一起换：player 指向刚抬上来的 standby，它本来就绑在现在的 active 层。
         player = standby
+        val promotedListener = mainListenerFor(standby)
+        activeMainListener = promotedListener
         remote = promotedRemote
         standbyPlayer = null
         standbyRemote = null
+        standbyGeneration += 1
         standbyReady = false
         standbyFirstFrameAt = 0L
         standbyIndex = -1
         standbyJob = null
-        standbyHttp?.let(::closeClient)
+        // 接管不等于资源退役：新主播放器仍通过 RemoteVideo 使用这个独立 HTTP 客户端。
+        // 将客户端所有权转交给 RemoteVideo，等该流真正退役后再关闭。
+        standbyHttp?.let { remoteClients[promotedRemote] = it }
         standbyHttp = null
-        standby.addListener(mainListener)
+        standby.addListener(promotedListener)
         // 预渲染阶段音量为 0（避免和第二实例抢声音），接管时必须恢复，
         // 否则下一集只有画面没有声音。
         standby.volume = 1f
@@ -1399,9 +1551,11 @@ class PlayerSession(
      * 实例本体放到下一轮消息销毁；会话结束（[release]）时统一同步收尾。
      */
     private fun clearStandby(reason: String) {
-        // 重叠换层期间，inactive 层就是「还停在屏上的旧层」：直接解绑会让它当场断流。
-        // 先把重叠收尾（旧层移出后才会被解绑），再清备用实例。
-        if (overlapOutView != null || overlapOutPlayer != null) finishOverlapSwap("clearStandby", scheduleNext = false)
+        // 取消令牌先递增；底层阻塞请求即使稍后返回，也只能关闭自己的结果。
+        standbyGeneration += 1
+        // 重叠换层期间 inactiveView 可能正是仍在屏上的旧层。
+        // clearStandby 只清待接管资源，不能结束/解绑由 finishOverlapSwap 管理的旧画面。
+        val overlapManagedView = overlapOutView
         // 幂等：没有备用实例就什么都不做，避免重复清状态把刚建好的重叠换层打断。
         if (standbyPlayer == null && standbyJob == null && standbyRemote == null &&
             standbyHttp == null && standbyIndex == -1
@@ -1415,43 +1569,73 @@ class PlayerSession(
         standbyPlayer = null
         // inactive 层不再持有即将释放的备用实例（解绑必须立即做，PlayerView 不能留着死引用）。
         inactiveView?.let { view ->
-            if (secondary == null || view.player === secondary || view.player == null) {
+            if (view !== overlapManagedView &&
+                (secondary == null || view.player === secondary || view.player == null)
+            ) {
                 runCatching { view.player = null }
             }
             view.alpha = 1f
         }
+        // 先停止备用播放器并清空 source，再关闭 RemoteVideo / 独立 HTTP 客户端。
+        secondary?.let { exo ->
+            runCatching { exo.playWhenReady = false }
+            runCatching { exo.stop() }
+            runCatching { exo.clearMediaItems() }
+        }
         applyVideoLayerOrder()
-        standbyRemote?.let { runCatching { it.close() } }
+        val standbyVideo = standbyRemote
+        val standbyClient = standbyHttp
         standbyRemote = null
-        closeClient(standbyHttp)
         standbyHttp = null
         standbyIndex = -1
         standbyQuality = ""
         standbyReady = false
         standbyFirstFrameAt = 0L
-        if (secondary != null) retireStandbyInstance(secondary)
+        if (secondary != null) {
+            // stop/clear 只是请求停止，不代表 MediaSource/DataSource 已完成释放。
+            // RemoteVideo 与独立 HTTP 客户端必须跟播放器一起延迟退役，不能在这里抢先 close。
+            retireStandbyInstance(secondary, standbyVideo, standbyClient)
+        } else {
+            standbyVideo?.let(::closeRemote)
+            closeClient(standbyClient)
+        }
     }
 
-    /** 解绑后的实例延后销毁：避免在播放器回调/合成帧里做最重的操作。 */
-    private fun retireStandbyInstance(exo: ExoPlayer) {
-        retiringStandby += exo
+    /** 解绑后的资源组延后销毁：先 release ExoPlayer，再关闭其 RemoteVideo 与独立 HTTP 会话。 */
+    private fun retireStandbyInstance(
+        exo: ExoPlayer,
+        video: RemoteVideo? = null,
+        http: OkHttpClient? = null,
+    ) {
+        val retiring = RetiringStandby(exo, video, http)
+        retiringStandby += retiring
         mainHandler.postDelayed({
-            retiringStandby.remove(exo)
-            releaseStandbyInstance(exo, "retire")
+            retiringStandby.remove(retiring)
+            releaseStandbyInstance(retiring, "retire")
         }, STANDBY_RETIRE_DELAY_MS)
     }
 
-    /** 真正销毁一个 ExoPlayer 实例；每步都 runCatching，允许对已部分释放的实例重复调用。 */
-    private fun releaseStandbyInstance(exo: ExoPlayer, reason: String) {
+    /** 真正销毁一个备用资源组；每步都 runCatching，允许对已部分释放的实例重复调用。 */
+    private fun releaseStandbyInstance(retiring: RetiringStandby, reason: String) {
+        val exo = retiring.player
         runCatching { exo.playWhenReady = false }
         runCatching { exo.stop() }
         runCatching { exo.clearMediaItems() }
         runCatching { exo.release() }
+        retiring.remote?.let(::closeRemote)
+        closeClient(retiring.http)
         PlayerLog.info("standby released ($reason)")
+    }
+
+    /** 关闭流并关闭该流专属的客户端；主链路共享 repository.http，不会登记在此表。 */
+    private fun closeRemote(video: RemoteVideo) {
+        runCatching { video.close() }
+        remoteClients.remove(video)?.let(::closeClient)
     }
 
     private fun closeClient(client: OkHttpClient?) {
         if (client == null) return
+        runCatching { client.dispatcher.cancelAll() }
         runCatching { client.dispatcher.executorService.shutdown() }
         runCatching { client.connectionPool.evictAll() }
         runCatching { client.cache?.close() }
@@ -1460,8 +1644,10 @@ class PlayerSession(
     private fun availableMemoryMb(): Long {
         val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return -1L
         val info = ActivityManager.MemoryInfo()
-        manager.getMemoryInfo(info)
-        return info.availMem / (1024L * 1024L)
+        return runCatching {
+            manager.getMemoryInfo(info)
+            if (info.lowMemory) 0L else info.availMem / (1024L * 1024L)
+        }.getOrDefault(-1L)
     }
 
     // ---------------------------------------------------------------- 弹幕
@@ -1810,20 +1996,28 @@ class PlayerSession(
         // 延迟释放队列会被下面的 removeCallbacks 取消，这里同步收尾，防止实例泄漏。
         retiringStandby.toList().forEach { releaseStandbyInstance(it, "session") }
         retiringStandby.clear()
-        retiredRemotes.forEach { runCatching { it.close() } }
-        retiredRemotes.clear()
         handoffToken += 1
         handoffInProgress = false
         mainHandler.removeCallbacksAndMessages(null)
         stopDanmaku()
         runCatching { context.unregisterComponentCallbacks(memoryCallback) }
+        loadGeneration += 1
+        queueGeneration += 1
+        standbyGeneration += 1
         loadJob?.cancel()
         scope.cancel()
-        player?.removeListener(mainListener)
+        activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }
+        activeMainListener = null
+        // 主播放器仍可能持有当前 RemoteVideo/HTTP DataSource：先 release 播放器，
+        // 再关闭视频流及其专属客户端，不能在会话退出时提前掐断正在使用的网络源。
         runCatching { player?.release() }
         player = null
-        remote?.let { runCatching { it.close() } }
+        remote?.let(::closeRemote)
         remote = null
+        retiredRemotes.toList().forEach(::closeRemote)
+        retiredRemotes.clear()
+        remoteClients.values.toList().forEach(::closeClient)
+        remoteClients.clear()
         // 两层 view 都解绑播放器（view 本身由 Compose 负责销毁）。
         playerViews.forEach { view ->
             runCatching { view?.player = null }
