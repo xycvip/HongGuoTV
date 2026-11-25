@@ -19,6 +19,7 @@ import java.util.UUID
 internal object PlaybackDiagnostics {
     private const val PREFS = "playback_diagnostics"
     private const val ACTIVE_FILE = "active_session"
+    private const val ACTIVE_SESSION_ID = "active_session_id"
     private const val MAX_FILES = 3
     private const val MAX_BYTES = 1024L * 1024L
     private val lock = Any()
@@ -48,8 +49,12 @@ internal object PlaybackDiagnostics {
             val previous = prefs.getString(ACTIVE_FILE, null)
             if (!previous.isNullOrBlank()) {
                 val file = File(context.filesDir, "playback-diagnostics/$previous")
+                val previousSessionId = prefs.getString(ACTIVE_SESSION_ID, "").orEmpty()
+                val currentSessionId = sessionId
+                sessionId = previousSessionId
                 appendTo(file, "PROCESS_INTERRUPTED", "上次播放会话未正常结束；可能是闪退、系统回收或强制停止", emptyMap())
-                prefs.edit().remove(ACTIVE_FILE).commit()
+                sessionId = currentSessionId
+                prefs.edit().remove(ACTIVE_FILE).remove(ACTIVE_SESSION_ID).commit()
             }
         }
     }
@@ -63,7 +68,7 @@ internal object PlaybackDiagnostics {
             sequence = 0L
             sessionFile = File(dir, "playback-$sessionId.log")
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit().putString(ACTIVE_FILE, sessionFile?.name).commit()
+                .edit().putString(ACTIVE_FILE, sessionFile?.name).putString(ACTIVE_SESSION_ID, sessionId).commit()
             recordLocked("SESSION_START", "播放会话开始", mapOf(
                 "series" to safeId(seriesId), "episode" to safeId(episodeId),
                 "episodeIndex" to episodeIndex, "dualPlayer" to dual,
@@ -82,7 +87,7 @@ internal object PlaybackDiagnostics {
     fun endSession(reason: String) {
         synchronized(lock) {
             recordLocked("SESSION_END", reason, emptyMap())
-            appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(ACTIVE_FILE)?.commit()
+            appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(ACTIVE_FILE)?.remove(ACTIVE_SESSION_ID)?.commit()
             sessionId = ""
             sessionFile = null
         }
@@ -142,7 +147,10 @@ internal object PlaybackDiagnostics {
             obj.put("session", sessionId)
             obj.put("event", name)
             obj.put("detail", sanitize(detail).take(1200))
-            fields.forEach { (key, value) -> obj.put(key, value ?: JSONObject.NULL) }
+            fields.forEach { (key, value) ->
+                val safeValue = if (value is String) sanitize(value).take(4_000) else value ?: JSONObject.NULL
+                obj.put(key, safeValue)
+            }
             file.appendText(obj.toString() + "\n", Charsets.UTF_8)
         }
     }
