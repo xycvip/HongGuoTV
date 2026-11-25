@@ -110,7 +110,6 @@ internal object PlaybackDiagnostics {
             dir.listFiles()?.filter { it.isFile && it.name.endsWith(".log") && it != active }?.forEach { it.delete() }
             if (active != null) {
                 active.writeText("", Charsets.UTF_8)
-                recordLocked("RECORDS_CLEARED", "用户清空了播放诊断记录", emptyMap())
             } else {
                 sessionFile = null
                 sessionId = ""
