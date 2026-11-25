@@ -56,6 +56,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import java.util.IdentityHashMap
 import java.util.concurrent.TimeUnit
 
 /**
@@ -265,8 +266,16 @@ class PlayerSession(
     private var overlapRemote: RemoteVideo? = null
     private var overlapToken = 0
 
-    /** 已解绑、等待延迟释放的备用实例（不在错误回调栈里同步销毁）。 */
-    private val retiringStandby = mutableListOf<ExoPlayer>()
+    /** 已解绑、等待延迟释放的备用资源组；播放器释放后才能关闭它实际使用的数据源和 HTTP 会话。 */
+    private data class RetiringStandby(
+        val player: ExoPlayer,
+        val remote: RemoteVideo?,
+        val http: OkHttpClient?,
+    )
+    private val retiringStandby = mutableListOf<RetiringStandby>()
+
+    /** 已接管的备用 RemoteVideo 仍由独立 HTTP 客户端供数；直到该流退役才关闭客户端。 */
+    private val remoteClients = IdentityHashMap<RemoteVideo, OkHttpClient>()
 
     /** 等待窗口令牌：任何一次新的 prepare 都会让它作废，避免刚切的集被旧等待覆盖。 */
     private var standbyWaitToken = 0
@@ -872,7 +881,7 @@ class PlayerSession(
             runCatching { exo.stop() }
             runCatching { exo.clearMediaItems() }
         }
-        remote?.let { runCatching { it.close() } }
+        remote?.let(::closeRemote)
         remote = null
         discardQueue()
         player?.let(::applyPlaylistPolicy)
@@ -1117,7 +1126,7 @@ class PlayerSession(
         retiredRemotes += video
         mainHandler.postDelayed({
             retiredRemotes.remove(video)
-            runCatching { video.close() }
+            closeRemote(video)
         }, 800L)
     }
 
@@ -1435,7 +1444,9 @@ class PlayerSession(
         standbyFirstFrameAt = 0L
         standbyIndex = -1
         standbyJob = null
-        standbyHttp?.let(::closeClient)
+        // 接管不等于资源退役：新主播放器仍通过 RemoteVideo 使用这个独立 HTTP 客户端。
+        // 将客户端所有权转交给 RemoteVideo，等该流真正退役后再关闭。
+        standbyHttp?.let { remoteClients[promotedRemote] = it }
         standbyHttp = null
         standby.addListener(promotedListener)
         // 预渲染阶段音量为 0（避免和第二实例抢声音），接管时必须恢复，
@@ -1526,33 +1537,54 @@ class PlayerSession(
             runCatching { exo.clearMediaItems() }
         }
         applyVideoLayerOrder()
-        standbyRemote?.let { runCatching { it.close() } }
+        val standbyVideo = standbyRemote
+        val standbyClient = standbyHttp
         standbyRemote = null
-        closeClient(standbyHttp)
         standbyHttp = null
         standbyIndex = -1
         standbyQuality = ""
         standbyReady = false
         standbyFirstFrameAt = 0L
-        if (secondary != null) retireStandbyInstance(secondary)
+        if (secondary != null) {
+            // stop/clear 只是请求停止，不代表 MediaSource/DataSource 已完成释放。
+            // RemoteVideo 与独立 HTTP 客户端必须跟播放器一起延迟退役，不能在这里抢先 close。
+            retireStandbyInstance(secondary, standbyVideo, standbyClient)
+        } else {
+            standbyVideo?.let(::closeRemote)
+            closeClient(standbyClient)
+        }
     }
 
-    /** 解绑后的实例延后销毁：避免在播放器回调/合成帧里做最重的操作。 */
-    private fun retireStandbyInstance(exo: ExoPlayer) {
-        retiringStandby += exo
+    /** 解绑后的资源组延后销毁：先 release ExoPlayer，再关闭其 RemoteVideo 与独立 HTTP 会话。 */
+    private fun retireStandbyInstance(
+        exo: ExoPlayer,
+        video: RemoteVideo? = null,
+        http: OkHttpClient? = null,
+    ) {
+        val retiring = RetiringStandby(exo, video, http)
+        retiringStandby += retiring
         mainHandler.postDelayed({
-            retiringStandby.remove(exo)
-            releaseStandbyInstance(exo, "retire")
+            retiringStandby.remove(retiring)
+            releaseStandbyInstance(retiring, "retire")
         }, STANDBY_RETIRE_DELAY_MS)
     }
 
-    /** 真正销毁一个 ExoPlayer 实例；每步都 runCatching，允许对已部分释放的实例重复调用。 */
-    private fun releaseStandbyInstance(exo: ExoPlayer, reason: String) {
+    /** 真正销毁一个备用资源组；每步都 runCatching，允许对已部分释放的实例重复调用。 */
+    private fun releaseStandbyInstance(retiring: RetiringStandby, reason: String) {
+        val exo = retiring.player
         runCatching { exo.playWhenReady = false }
         runCatching { exo.stop() }
         runCatching { exo.clearMediaItems() }
         runCatching { exo.release() }
+        retiring.remote?.let(::closeRemote)
+        closeClient(retiring.http)
         PlayerLog.info("standby released ($reason)")
+    }
+
+    /** 关闭流并关闭该流专属的客户端；主链路共享 repository.http，不会登记在此表。 */
+    private fun closeRemote(video: RemoteVideo) {
+        runCatching { video.close() }
+        remoteClients.remove(video)?.let(::closeClient)
     }
 
     private fun closeClient(client: OkHttpClient?) {
@@ -1918,8 +1950,10 @@ class PlayerSession(
         // 延迟释放队列会被下面的 removeCallbacks 取消，这里同步收尾，防止实例泄漏。
         retiringStandby.toList().forEach { releaseStandbyInstance(it, "session") }
         retiringStandby.clear()
-        retiredRemotes.forEach { runCatching { it.close() } }
+        retiredRemotes.toList().forEach(::closeRemote)
         retiredRemotes.clear()
+        remoteClients.values.toList().forEach(::closeClient)
+        remoteClients.clear()
         handoffToken += 1
         handoffInProgress = false
         mainHandler.removeCallbacksAndMessages(null)
