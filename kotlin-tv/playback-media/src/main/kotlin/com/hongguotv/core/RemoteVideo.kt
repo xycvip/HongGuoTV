@@ -21,7 +21,7 @@ class RemoteVideo(
     @Volatile private var closed=false
     private val calls=mutableSetOf<Call>()
     data class Range(val bytes: ByteArray,val total: Long)
-    var total: Long=0; private set
+    @Volatile var total: Long=0; private set
     private lateinit var prepared: MediaCrypto.Prepared
 
     /** Number of CENC samples prepared for the current media resource. */
