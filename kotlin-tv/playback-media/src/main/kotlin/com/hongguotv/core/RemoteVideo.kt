@@ -255,7 +255,10 @@ class RemoteVideo(
             try {
                 val chunk=fetchChunk(next,maxAttempts=1)
                 synchronized(lock) { if(total==0L) total=chunk.total; if(!closed) { cache[next]=chunk.bytes; evictLocked() }; aheadFailed.remove(next); aheadAttempts.remove(next); fetchingAhead=-1L; aheadChunks++; fetchedBytes+=chunk.bytes.size; lock.notifyAll() }
-            } catch(e: Throwable) {
+            } catch(e: Exception) {
+                // Runtime/parse errors from a malformed response must not escape this
+                // daemon worker as an uncaught exception and crash the whole process.
+                // They are marked permanent for this offset; foreground reads can retry.
                 val stopRetry = synchronized(lock) {
                     fetchingAhead=-1L
                     val attempts = (aheadAttempts[next] ?: 0) + 1
@@ -265,8 +268,6 @@ class RemoteVideo(
                     lock.notifyAll()
                     permanent
                 }
-                // Fatal errors propagate; permanent HTTP/range errors are skipped by read-ahead.
-                if (e !is IOException) throw e
                 if(closed || Thread.currentThread().isInterrupted) return
                 if (stopRetry) continue
                 try { Thread.sleep(1500) } catch(interrupted: InterruptedException) {
