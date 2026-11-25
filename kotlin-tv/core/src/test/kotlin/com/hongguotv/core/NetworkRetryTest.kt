@@ -3,10 +3,14 @@ package com.hongguotv.core
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.EOFException
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.SocketException
+import java.net.SocketTimeoutException
 
 class NetworkRetryTest {
     private val get=Request.Builder().url("https://example.com/video.mp4").build()
@@ -52,5 +56,10 @@ class NetworkRetryTest {
             }
         } catch(_: IOException) {}
         assertEquals(1,attempts)
+    }
+
+    @Test fun retriesSocketTimeoutButNeverGenericInterruption() {
+        assertTrue(NetworkRetry.isRetryable(SocketTimeoutException("read timed out")))
+        assertFalse(NetworkRetry.isRetryable(InterruptedIOException("request cancelled")))
     }
 }
