@@ -31,8 +31,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material.icons.rounded.AspectRatio
@@ -83,6 +85,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.hongguotv.core.DanmakuPrefs
 import com.hongguotv.core.PlaybackQuality
 import com.hongguotv.core.PlaybackSpeed
 import com.hongguotv.core.VideoFrameMode
@@ -124,10 +127,14 @@ fun PlayerScreen(
     var qualityDialog by remember { mutableStateOf(false) }
     var speedDialog by remember { mutableStateOf(false) }
     var frameDialog by remember { mutableStateOf(false) }
+    // 弹幕设置：在播放页内联弹出，不再跳去设置页（跳走会把播放会话一起销毁）。
+    var danmakuOpen by remember { mutableStateOf(false) }
     val playFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     val episodeFocus = remember { FocusRequester() }
     val episodeFirstFocus = remember { FocusRequester() }
+    // 面板六行各一个 requester：首尾互相绕回，方向键不会跑到面板背后的播放控件上。
+    val danmakuRowFocus = remember { List(6) { FocusRequester() } }
 
     fun poke() {
         interaction++
@@ -180,11 +187,11 @@ fun PlayerScreen(
         if (revealControls) poke() else interaction++
     }
 
-    // 5 秒无操作自动收起控制层；暂停、缓冲、选集时保持显示。
-    LaunchedEffect(interaction, session.playing, session.buffering, episodesOpen) {
+    // 5 秒无操作自动收起控制层；暂停、缓冲、选集、弹幕面板打开时保持显示。
+    LaunchedEffect(interaction, session.playing, session.buffering, episodesOpen, danmakuOpen) {
         if (!controlsVisible) return@LaunchedEffect
         delay(5000)
-        if (session.playing && !session.buffering && !episodesOpen) controlsVisible = false
+        if (session.playing && !session.buffering && !episodesOpen && !danmakuOpen) controlsVisible = false
     }
     LaunchedEffect(hintToken) {
         if (hintToken == 0) return@LaunchedEffect
@@ -194,9 +201,10 @@ fun PlayerScreen(
     // 焦点跟着画面状态走：控制层可见时落在主播放键上（一进来就能按方向键操作），
     // 隐藏时收回根节点（方向键直接变成快进/快退），选集抽屉打开则进抽屉。
     // 之前焦点永远停在根 Box 上，遥控器看着「完全没反应」，就是缺了这一步。
-    LaunchedEffect(controlsVisible, episodesOpen) {
+    LaunchedEffect(controlsVisible, episodesOpen, danmakuOpen) {
         // 选集抽屉里优先落在当前集；当前集不在首屏时退回第一集，保证一定有落点。
         val targets = when {
+            danmakuOpen -> danmakuRowFocus
             episodesOpen -> listOf(episodeFocus, episodeFirstFocus)
             controlsVisible -> listOf(playFocus)
             else -> listOf(rootFocus)
@@ -218,6 +226,7 @@ fun PlayerScreen(
     // 之前控制层可见时直接 onBack()，用户只是想收起进度条，结果一脚踹回详情页。
     BackHandler {
         when {
+            danmakuOpen -> danmakuOpen = false
             episodesOpen -> episodesOpen = false
             qualityDialog -> qualityDialog = false
             speedDialog -> speedDialog = false
@@ -575,7 +584,10 @@ fun PlayerScreen(
                                 badge = Icons.Rounded.Settings,
                                 badgeTint = Rouge.Bright,
                                 description = "弹幕设置",
-                                onClick = onDanmakuSettings,
+                                onClick = {
+                                    danmakuOpen = true
+                                    poke()
+                                },
                             )
                             ControlChip("选集", Icons.Rounded.PlaylistPlay) { episodesOpen = true }
                         }
@@ -683,6 +695,119 @@ fun PlayerScreen(
                             },
                         )
                     }
+                }
+            }
+        }
+
+        // 弹幕设置面板：盖在画面上，调完即生效、不离开播放页。
+        // 每行左右键直接调档（遥控器最省事），确定键等于「加一档」。
+        if (danmakuOpen) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x99000000))
+                    // 用 pointerInput 而不是 clickable：遮罩只需要吃掉点击，不能成为可聚焦节点，
+                    // 否则方向键会从面板跑到遮罩上。
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { danmakuOpen = false })
+                    },
+            )
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .width(d(600))
+                    .clip(RoundedCornerShape(d(22)))
+                    .background(Color(0xF20B0E14))
+                    .border(d(1f), Color(0x1FFFFFFF), RoundedCornerShape(d(22)))
+                    .padding(d(22)),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Subtitles, null, tint = Rouge.Bright, modifier = Modifier.size(d(20)))
+                    Spacer(Modifier.width(d(10)))
+                    Text("弹幕设置", style = MaterialTheme.typography.headlineSmall, color = Paper.Pure, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    CircleAction(Icons.Rounded.Close, "关闭", d(38)) { danmakuOpen = false }
+                }
+                Spacer(Modifier.height(d(6)))
+                Text("左右键调整，调完立即生效", style = MaterialTheme.typography.labelSmall, color = Paper.Tertiary)
+                Spacer(Modifier.height(d(12)))
+                Column(
+                    Modifier
+                        .height(d(430))
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(d(8)),
+                ) {
+                    DanmakuStepperRow(
+                        title = "显示弹幕",
+                        description = "关闭后本集与后续剧集都不叠加弹幕",
+                        value = if (session.danmakuEnabled) "开启" else "关闭",
+                        focusRequester = danmakuRowFocus[0],
+                        // 两档开关，左右和确定都给「切一下」，避免按左在关闭态下无反应。
+                        onLeft = { session.toggleDanmaku() },
+                        onRight = { session.toggleDanmaku() },
+                        onUp = { danmakuRowFocus[5].tryRequestFocus() },
+                    )
+                    DanmakuStepperRow(
+                        title = "不透明度",
+                        description = "太高会挡住字幕，太低在亮场景看不清",
+                        value = "${session.danmakuOpacity}%",
+                        onLeft = { session.changeDanmakuOpacity(stepOpacity(session.danmakuOpacity, -5)) },
+                        onRight = { session.changeDanmakuOpacity(stepOpacity(session.danmakuOpacity, 5)) },
+                    )
+                    DanmakuStepperRow(
+                        title = "字号",
+                        description = "电视距离远，可以适当调大",
+                        value = DanmakuPrefs.fontLabel(session.danmakuFont),
+                        onLeft = { session.changeDanmakuFont(session.danmakuFont - 1) },
+                        onRight = { session.changeDanmakuFont(session.danmakuFont + 1) },
+                    )
+                    DanmakuStepperRow(
+                        title = "颜色",
+                        description = "默认保留接口原色，也可以统一成一种颜色",
+                        value = danmakuColorName(session.danmakuColor),
+                        onLeft = { session.changeDanmakuColor(stepColor(session.danmakuColor, -1)) },
+                        onRight = { session.changeDanmakuColor(stepColor(session.danmakuColor, 1)) },
+                    )
+                    DanmakuStepperRow(
+                        title = "移动速度",
+                        description = "太快来不及看，太慢会堆在一起",
+                        value = DanmakuPrefs.speedLabel(session.danmakuSpeed),
+                        onLeft = { session.changeDanmakuSpeed(session.danmakuSpeed - 1) },
+                        onRight = { session.changeDanmakuSpeed(session.danmakuSpeed + 1) },
+                    )
+                    DanmakuStepperRow(
+                        title = "展示行数",
+                        description = "同时在屏幕上滚动的轨道数量",
+                        value = "${session.danmakuRows} 行",
+                        focusRequester = danmakuRowFocus[5],
+                        onLeft = { session.changeDanmakuRows(session.danmakuRows - 1) },
+                        onRight = { session.changeDanmakuRows(session.danmakuRows + 1) },
+                    )
+                }
+                Spacer(Modifier.height(d(14)))
+                Row(
+                    // 底部按钮向下绕回首行，避免焦点掉到面板背后的播放控制条上。
+                    modifier = Modifier.onKeyEvent { event ->
+                        if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
+                            event.key == Key.DirectionDown
+                        ) {
+                            danmakuRowFocus[0].tryRequestFocus()
+                            true
+                        } else false
+                    },
+                    horizontalArrangement = Arrangement.spacedBy(d(10)),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TvButton("恢复默认", { session.resetDanmakuStyle() }, tone = ButtonTone.Quiet)
+                    // 屏蔽词与热更新脚本仍留在设置页：那个入口是次要路径，点了会离开播放页。
+                    TvButton(
+                        "更多设置",
+                        {
+                            danmakuOpen = false
+                            onDanmakuSettings()
+                        },
+                        tone = ButtonTone.Ghost,
+                    )
                 }
             }
         }
@@ -800,6 +925,86 @@ private fun DanmakuBadgeChip(
             }
         }
     }
+}
+
+/** 弹幕面板的一行：左右键直接调档，确定键等价于「加一档」。 */
+@Composable
+private fun DanmakuStepperRow(
+    title: String,
+    description: String,
+    value: String,
+    focusRequester: FocusRequester? = null,
+    onLeft: () -> Unit,
+    onRight: () -> Unit,
+    onUp: (() -> Unit)? = null,
+    onDown: (() -> Unit)? = null,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(d(12)))
+            .background(if (focused) Color(0x1FFFFFFF) else Color(0x0AFFFFFF))
+            .border(d(1.2f), if (focused) Rouge.Bright else Color(0x12FFFFFF), RoundedCornerShape(d(12)))
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            // onKeyEvent 必须在 focusable 之前：这样它包住焦点节点，方向键先到这里，
+            // 被消费后就不会再触发 Compose 的焦点移动。
+            .onKeyEvent { event ->
+                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> {
+                        onLeft(); true
+                    }
+                    Key.DirectionRight, Key.DirectionCenter, Key.Enter -> {
+                        onRight(); true
+                    }
+                    Key.DirectionUp -> {
+                        if (onUp == null) false else { onUp(); true }
+                    }
+                    Key.DirectionDown -> {
+                        if (onDown == null) false else { onDown(); true }
+                    }
+                    else -> false
+                }
+            }
+            .focusable(interactionSource = interaction)
+            .padding(horizontal = d(16), vertical = d(12)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (focused) Color.White else Paper.Primary,
+            )
+            Text(
+                description,
+                style = MaterialTheme.typography.labelSmall,
+                color = Paper.Tertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(d(12)))
+        Text(
+            if (focused) "‹  $value  ›" else value,
+            style = MaterialTheme.typography.titleSmall,
+            color = if (focused) Rouge.Bright else Paper.Secondary,
+            maxLines = 1,
+        )
+    }
+}
+
+private fun stepOpacity(current: Int, delta: Int): Int = (current + delta).coerceIn(25, 100)
+
+private fun stepColor(current: Int, delta: Int): Int = ((current + delta) % 10 + 10) % 10
+
+private fun danmakuColorName(mode: Int): String = when (mode) {
+    0 -> "默认"
+    1 -> "多彩"
+    else -> listOf("白色", "红色", "橙色", "黄色", "绿色", "青色", "蓝色", "紫色")
+        .getOrElse(mode - 2) { "默认" }
 }
 
 @Composable

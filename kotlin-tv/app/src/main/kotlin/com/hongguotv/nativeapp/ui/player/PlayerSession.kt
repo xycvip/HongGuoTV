@@ -32,6 +32,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.hongguotv.core.ContentRepository
 import com.hongguotv.core.DanmakuLoader
+import com.hongguotv.core.DanmakuPrefs
 import com.hongguotv.core.RemoteVideo
 import com.hongguotv.core.PlaybackQuality
 import com.hongguotv.core.Series
@@ -1484,6 +1485,61 @@ class PlayerSession(
         val view = danmakuView ?: return
         view.applyPrefs(library.danmakuOpacity, library.danmakuFont, library.danmakuSpeed, library.danmakuRows)
         view.setColorMode(extras.danmakuColorMode)
+    }
+
+    // --- 播放页内联弹幕面板 ---
+    // 面板就在画面里调，不再把用户甩到设置页：数值写回 library/extras（与设置页同一份偏好、
+    // 同样落盘），再立刻 applyDanmakuPrefs()，本集画面马上跟着变。
+    // 镜像成 Compose state，左右键改完面板上的数字才能即时刷新。
+
+    var danmakuOpacity by mutableIntStateOf(library.danmakuOpacity)
+        private set
+    var danmakuFont by mutableIntStateOf(library.danmakuFont)
+        private set
+    var danmakuSpeed by mutableIntStateOf(library.danmakuSpeed)
+        private set
+    var danmakuRows by mutableIntStateOf(library.danmakuRows)
+        private set
+    var danmakuColor by mutableIntStateOf(extras.danmakuColorMode)
+        private set
+
+    fun changeDanmakuOpacity(value: Int) {
+        danmakuOpacity = DanmakuPrefs.opacity(value)
+        library.danmakuOpacity = danmakuOpacity
+        applyDanmakuPrefs()
+    }
+
+    fun changeDanmakuFont(value: Int) {
+        danmakuFont = DanmakuPrefs.font(value)
+        library.danmakuFont = danmakuFont
+        applyDanmakuPrefs()
+    }
+
+    fun changeDanmakuSpeed(value: Int) {
+        danmakuSpeed = DanmakuPrefs.speed(value)
+        library.danmakuSpeed = danmakuSpeed
+        applyDanmakuPrefs()
+    }
+
+    fun changeDanmakuRows(value: Int) {
+        danmakuRows = DanmakuPrefs.rows(value)
+        library.danmakuRows = danmakuRows
+        applyDanmakuPrefs()
+    }
+
+    /** 颜色取值 0=默认、1=多彩、2..9=八种单色，与设置页同一套编号。 */
+    fun changeDanmakuColor(value: Int) {
+        danmakuColor = value.coerceIn(0, 9)
+        extras.danmakuColorMode = danmakuColor
+        applyDanmakuPrefs()
+    }
+
+    fun resetDanmakuStyle() {
+        changeDanmakuOpacity(DanmakuPrefs.OPACITY_DEFAULT)
+        changeDanmakuFont(DanmakuPrefs.FONT_DEFAULT)
+        changeDanmakuSpeed(DanmakuPrefs.SPEED_DEFAULT)
+        changeDanmakuRows(DanmakuPrefs.ROWS_DEFAULT)
+        changeDanmakuColor(0)
     }
 
     private fun startDanmaku() {
