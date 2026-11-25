@@ -170,7 +170,7 @@ jobs:
             exit 1
           fi
           echo "正式版差异基线：$BASE_COMMIT"
-          COMMITS="$(git log "$BASE_COMMIT..HEAD" --no-merges --format='%s' -- kotlin-tv/app/src)"
+          COMMITS="$(git log "$BASE_COMMIT..HEAD" --no-merges --format='%s' -- kotlin-tv)"
           NOTES="$(COMMITS="$COMMITS" python3 - <<'PY'
           import os, re
           lines = [x.strip() for x in os.environ.get("COMMITS", "").splitlines() if x.strip()]
@@ -180,6 +180,7 @@ jobs:
               if any(word.lower() in line.lower() for word in ignored):
                   continue
               line = re.sub(r"^(feat|fix|refactor|perf|style|chore|build|docs|test)(\([^)]*\))?:\s*", "", line, flags=re.I)
+              line = re.sub(r"[A-Za-z][A-Za-z0-9_.+-]*", "", line)
               if not any(0x4e00 <= ord(ch) <= 0x9fff for ch in line):
                   continue
               line = re.sub(r"\s+", " ", line).strip(" -:：")
