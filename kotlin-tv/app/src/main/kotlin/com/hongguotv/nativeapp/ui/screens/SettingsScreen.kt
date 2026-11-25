@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -298,13 +299,15 @@ fun SettingsScreen(
             onDismiss = { showPlaybackDiagnostics = false },
         ) {
             Column(Modifier.fillMaxWidth()) {
+                val diagnosticLines = remember(diagnosticsText) { diagnosticsText.lineSequence().toList() }
                 LazyColumn(
                     Modifier.fillMaxWidth().height(d(360)),
                     verticalArrangement = Arrangement.spacedBy(d(4)),
                 ) {
-                    item {
+                    items(diagnosticLines.size) { lineIndex ->
                         Text(
-                            diagnosticsText.ifBlank { "暂无播放诊断记录" },
+                            diagnosticLines[lineIndex],
+                            modifier = Modifier.fillMaxWidth().focusable(),
                             style = MaterialTheme.typography.bodySmall,
                             color = Paper.Secondary,
                         )
@@ -315,6 +318,7 @@ fun SettingsScreen(
                     TvButton("一键复制", onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                         clipboard?.setPrimaryClip(ClipData.newPlainText("播放诊断记录", diagnosticsText))
+                        showPlaybackDiagnostics = false
                         message = "播放诊断记录已复制"
                     }, tone = ButtonTone.Primary)
                     TvButton("清空记录", onClick = {
