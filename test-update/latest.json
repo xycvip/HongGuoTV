@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "de47492f31747e1bc3c683983a82cef3b9e3690b",
-  "versionCode": 110,
-  "versionName": "0.0.110",
+  "sourceCommit": "750b638b200a4dc12a25cee132140c9631818cb5",
+  "versionCode": 111,
+  "versionName": "0.0.111",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.110",
+  "tag": "hongguotv-bate-v0.0.111",
   "apk": {
-    "name": "HongguoTV-0.0.110.apk",
+    "name": "HongguoTV-0.0.111.apk",
     "size": 5722518,
-    "sha256": "6e5a26164a651dcbf5c9ccbdd21fc1e0a314a313e1c03175f1cb8e4a7b58c2d1",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.110/HongguoTV-0.0.110.apk"
+    "sha256": "b5d66b0c2883d36b53e9b18efeb84f7ddf8b444ee39833dc255ccac55894a6e6",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.111/HongguoTV-0.0.111.apk"
   },
-  "notes": "本次未检测到相对上一个测试版新增的应用源码功能或修复。"
+  "notes": "【其他功能与问题修复】\n- Remove redundant script error fallback\n- Clean PushShare override and nullability warnings\n- Remove redundant nullable fallback in account nickname"
 }
