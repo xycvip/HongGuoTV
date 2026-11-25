@@ -1277,8 +1277,8 @@ class PlayerSession(
                         .build()
                 )
                 .build()
-        } catch (problem: Throwable) {
-            // 连实例都建不起来：这台设备的解码资源确实不够并发，本次会话不再尝试。
+        } catch (problem: Exception) {
+            // 只处理可恢复的初始化异常；不要吞掉 OutOfMemoryError / ThreadDeath 等 VM 级错误后继续分配。
             switchToPlaylistPreload("第二播放器创建失败：${problem.message}")
             return
         }
@@ -1359,7 +1359,7 @@ class PlayerSession(
                 ProgressiveMediaSource.Factory { VideoDataSource(video) { } }.createMediaSource(item)
             )
             secondary.prepare()
-        } catch (problem: Throwable) {
+        } catch (problem: Exception) {
             PlayerLog.error("buildStandbyPlayer 失败：${problem::class.java.simpleName}: ${problem.message}")
             switchToPlaylistPreload("备用播放器初始化失败：${problem.message}")
         }
@@ -1568,7 +1568,7 @@ class PlayerSession(
         val info = ActivityManager.MemoryInfo()
         return runCatching {
             manager.getMemoryInfo(info)
-            info.availMem / (1024L * 1024L)
+            if (info.lowMemory) 0L else info.availMem / (1024L * 1024L)
         }.getOrDefault(-1L)
     }
 
