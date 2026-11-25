@@ -60,6 +60,10 @@ import java.util.IdentityHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
+// Android 14 及以下仍会回调 RUNNING_CRITICAL；Android 14 起系统不再发送该级别。
+// 保留其历史数值，避免引用 Android 15 已废弃的 SDK 常量。
+private const val TRIM_MEMORY_RUNNING_CRITICAL_LEVEL = 15
+
 /**
  * 一次播放会话：负责解析地址、准备加密数据源、驱动 ExoPlayer、记录进度。
  * 界面层只读这里的状态，所有网络与解密工作都在 IO 线程完成。
@@ -560,9 +564,10 @@ class PlayerSession(
      */
     private val memoryCallback = object : ComponentCallbacks2 {
         override fun onTrimMemory(level: Int) {
-            if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) clearStandby("系统内存压力")
+            if (level >= TRIM_MEMORY_RUNNING_CRITICAL_LEVEL) clearStandby("系统内存压力")
         }
 
+        @Deprecated("Android 14 and newer use onTrimMemory instead.")
         override fun onLowMemory() {
             clearStandby("系统内存不足")
         }
