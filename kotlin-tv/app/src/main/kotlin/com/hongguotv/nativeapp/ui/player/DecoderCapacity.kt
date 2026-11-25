@@ -41,11 +41,11 @@ internal object DecoderCapacity {
 
     /**
      * 能不能安全地再开第二路硬件解码器。
-     * 编码类型还没解析出来时（videoFormat 为空）不拦——这时信息不足，
-     * 交给运行期的「被抢占就撤」兜底，比一上来就永远禁用双播放器要好。
+     * 未知 MIME 不能证明设备支持并发；双解码可能导致系统回收主 codec，
+     * 个别电视盒子甚至在 native 层直接 abort。未知时保守退回单播放器预载。
      */
     fun canRunTwoDecoders(mimeType: String?, width: Int, height: Int): Boolean {
-        val mime = mimeType?.takeIf { it.startsWith("video/", ignoreCase = true) } ?: return true
+        val mime = mimeType?.takeIf { it.startsWith("video/", ignoreCase = true) } ?: return false
         return maxInstances(mime, width, height) >= 2
     }
 
