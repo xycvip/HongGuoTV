@@ -146,7 +146,7 @@ class JsEngineHost(
                         output.write(buffer, 0, count)
                     }
                 }
-                output.toString(Charsets.UTF_8)
+                decodeUtf8(output)
             }
             val outHeaders = linkedMapOf<String, String>()
             response.headers.toMultimap().forEach { (name, values) ->
@@ -174,6 +174,18 @@ class JsEngineHost(
     }
 
     companion object {
+        /**
+         * Use the charset-name overload (API 1) instead of toString(Charset) (API 33).
+         * UTF-8 is required by Android; this also avoids a separate full-size
+         * toByteArray() copy before decoding.
+         */
+        internal fun decodeUtf8(output: java.io.ByteArrayOutputStream): String =
+            try {
+                output.toString("UTF-8")
+            } catch (error: java.io.UnsupportedEncodingException) {
+                throw IOException("平台不支持 UTF-8 解码", error)
+            }
+
         /** 设备身份在 KV store 里的键；设置页「重置设备身份」也是清这个键。 */
         const val DEVICE_IDENTITY_KEY = "__device_identity"
 
