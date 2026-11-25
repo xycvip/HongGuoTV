@@ -162,10 +162,10 @@ jobs:
         id: notes
         shell: bash
         env:
-          BASE_COMMIT: \${{ steps.version.outputs.base_commit }}
+          BASE_COMMIT: ${{ steps.version.outputs.base_commit }}
         run: |
           set -euo pipefail
-          if ! git cat-file -e "\${BASE_COMMIT}^{commit}" 2>/dev/null; then
+          if ! git cat-file -e "${BASE_COMMIT}^{commit}" 2>/dev/null; then
             echo "::error::上一个正式版对应的源码提交不在当前仓库历史中，无法准确比较"
             exit 1
           fi
