@@ -158,6 +158,8 @@ class PlayerSession(
     private var queuedStream: PreparedStream? = null
     /** 下一集是否已追加到 ExoPlayer playlist；autoNext 关闭时只缓存流，不允许播放器自动跳集。 */
     private var queuedAppended = false
+    /** 取流仍在进行的目标集；STATE_READY/重新缓冲回调重复到达时不得取消并重开同一预载。 */
+    private var queuePreparingIndex = -1
     private var queueJob: Job? = null
     /** 单实例预载的 IO 取消令牌，避免旧清晰度/旧目标的结果迟到写入队列。 */
     private var queueGeneration = 0
@@ -649,6 +651,7 @@ class PlayerSession(
             // 否则用户按「下一集」会指向一个已经不存在的媒体项。
             queuedIndex = -1
             queuedStream = null
+            queuedAppended = false
             if (index + 1 < episodes.size) queueNextEpisode(index, force = true)
         }
         PlayerLog.warn("retrySameStream at=$atMs episode=$target")
@@ -703,10 +706,11 @@ class PlayerSession(
      * 接管瞬间即有画面。2px 在屏幕最左边缘，正常观看不可察。
      */
     private fun offScreenX(view: PlayerView): Float {
-        val width = view.width.takeIf { it > 8 } ?: view.rootView.width
-        // 首次布局尚未测量时先彻底移出，布局完成后 applyVideoLayerOrder 会按真实宽度
-        // 调整为只留 2px 的缓冲保留区；不能用固定 1918px（宽屏会露出备用画面）。
-        return if (width > 8) width.toFloat() - 2f else 100_000f
+        val width = view.width.takeIf { it > 8 }
+            ?: view.rootView.width.takeIf { it > 8 }
+            ?: view.resources.displayMetrics.widthPixels
+        // 优先用已测量宽度；首次布局用屏幕真实像素宽度兜底，避免固定 1918px 或极大平移值。
+        return if (width > 8) width.toFloat() - 2f else 1_920f
     }
 
     /**
@@ -940,10 +944,12 @@ class PlayerSession(
             return
         }
         if (queuedIndex == nextIndex && queuedStream != null) return
+        if (queuePreparingIndex == nextIndex && queueJob?.isActive == true) return
         val exo = player ?: return
         discardQueue()
         val targetId = episodes[nextIndex]
         val requestGeneration = ++queueGeneration
+        queuePreparingIndex = nextIndex
         queueJob = scope.launch {
             val prepared = withContext(Dispatchers.IO) {
                 runCatching {
@@ -953,8 +959,10 @@ class PlayerSession(
             }
             if (released || queueGeneration != requestGeneration || prepared == null) {
                 prepared?.video?.let { runCatching { it.close() } }
+                if (queueGeneration == requestGeneration) queuePreparingIndex = -1
                 return@launch
             }
+            queuePreparingIndex = -1
             // 预载期间用户已经切集 / 改清晰度 / 打开双播放器：这份流作废。
             if (index != current || (useDualDecoder && !force)) {
                 runCatching { prepared.video.close() }
@@ -1087,6 +1095,7 @@ class PlayerSession(
         queueGeneration += 1
         queueJob?.cancel()
         queueJob = null
+        queuePreparingIndex = -1
         val exo = player
         val targetId = episodes.getOrNull(queuedIndex)
         // 只有实际追加进 playlist 的项目才需要摘除；未追加的缓存仅释放数据源。
