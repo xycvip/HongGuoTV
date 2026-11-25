@@ -6,6 +6,7 @@ import com.hongguotv.core.RequestScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -63,10 +64,18 @@ class JsScriptRunner(
         val requestScope = RequestScope.currentScope()
         return try {
             withTimeout(timeoutMillis) {
-                withContext(jobDispatcher) {
-                    runtimePermits.withPermit {
-                        invokeLocked(function, argsJson)
+                val timeoutJob = currentCoroutineContext()[kotlinx.coroutines.Job]
+                val timeoutCancellation = if (requestScope != null && timeoutJob != null) {
+                    requestScope.cancelOnCancellation(timeoutJob)
+                } else null
+                try {
+                    withContext(jobDispatcher) {
+                        runtimePermits.withPermit {
+                            invokeLocked(function, argsJson)
+                        }
                     }
+                } finally {
+                    timeoutCancellation?.dispose()
                 }
             }
         } catch (error: TimeoutCancellationException) {

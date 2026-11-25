@@ -4,6 +4,10 @@ import com.hongguotv.core.RequestScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
@@ -53,6 +57,39 @@ class RequestScopeCoroutineTest {
         job.cancel()
         assertTrue("RequestScope did not cancel the active Call", call.cancelled.await(2, TimeUnit.SECONDS))
         job.join()
+    }
+
+    @Test
+    fun `timeout child job cancels synchronous okhttp call immediately`() = runBlocking {
+        val scope = RequestScope()
+        val call = BlockingCall()
+        val job = launch(Dispatchers.Default) {
+            try {
+                scope.runSuspending {
+                    withTimeout(250) {
+                        val timeoutJob = currentCoroutineContext()[Job]!!
+                        val handle = scope.cancelOnCancellation(timeoutJob)
+                        try {
+                            withContext(Dispatchers.IO) {
+                                runCatching {
+                                    RequestScope.execute(call) {
+                                        error("timed out call must not return a response")
+                                    }
+                                }
+                            }
+                        } finally {
+                            handle.dispose()
+                        }
+                    }
+                }
+            } catch (_: TimeoutCancellationException) {
+                // Expected: the timeout cancels the scope and unblocks the synchronous Call.
+            }
+        }
+
+        assertTrue("OkHttp call did not start", call.entered.await(2, TimeUnit.SECONDS))
+        job.join()
+        assertTrue("Timeout did not cancel the active Call", call.cancelled.await(2, TimeUnit.SECONDS))
     }
 
     private class BlockingCall : Call {

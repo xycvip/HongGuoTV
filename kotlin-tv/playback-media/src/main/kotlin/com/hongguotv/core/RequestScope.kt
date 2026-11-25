@@ -57,12 +57,7 @@ class RequestScope :
     @OptIn(InternalCoroutinesApi::class)
     suspend fun <T> runSuspending(action: suspend () -> T): T {
         val job = currentCoroutineContext()[Job]
-        val cancellation: DisposableHandle? = job?.invokeOnCompletion(
-            onCancelling = true,
-            invokeImmediately = true,
-        ) { cause ->
-            if (cause != null) cancel()
-        }
+        val cancellation: DisposableHandle? = job?.let(::cancelOnCancellation)
         return try {
             withContext(this) {
                 synchronized(this@RequestScope) {
@@ -74,6 +69,15 @@ class RequestScope :
             cancellation?.dispose()
         }
     }
+
+    @OptIn(InternalCoroutinesApi::class)
+    fun cancelOnCancellation(job: Job): DisposableHandle =
+        job.invokeOnCompletion(
+            onCancelling = true,
+            invokeImmediately = true,
+        ) { cause ->
+            if (cause != null) cancel()
+        }
 
     override fun updateThreadContext(context: CoroutineContext): RequestScope? {
         val previous = current.get()
