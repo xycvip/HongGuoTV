@@ -14,10 +14,6 @@ on:
         required: false
         type: string
         default: ''
-      release_notes:
-        description: 本次正式版更新说明（支持多行，将原样用于各发布页面）
-        required: true
-        type: string
       skip_file_check:
         description: 跳过APK文件存在性检查（签名校验始终执行）
         required: true
@@ -149,12 +145,72 @@ jobs:
           fi
           TAG="hongguotv-v$NEXT_NAME"
 
+          OLD_SOURCE_COMMIT="$(jq -r '.sourceCommit // empty' "$RUNNER_TEMP/latest.json")"
+          if [ -z "$OLD_SOURCE_COMMIT" ]; then
+            echo "::error::上一个正式版清单缺少源码提交记录，无法准确生成版本差异说明"
+            exit 1
+          fi
           echo "version_name=$NEXT_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$NEXT_CODE" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "base_commit=$OLD_SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "上一个正式版：$OLD_NAME（versionCode：$OLD_CODE）"
           echo "本次正式版：$NEXT_NAME（versionCode：$NEXT_CODE）"
           echo "版本号由AppDownload最新清单递增生成，不使用工作流运行编号"
+
+      - name: 对比上一个正式版并自动生成更新说明
+        id: notes
+        shell: bash
+        env:
+          BASE_COMMIT: \${{ steps.version.outputs.base_commit }}
+        run: |
+          set -euo pipefail
+          if ! git cat-file -e "\${BASE_COMMIT}^{commit}" 2>/dev/null; then
+            echo "::error::上一个正式版对应的源码提交不在当前仓库历史中，无法准确比较"
+            exit 1
+          fi
+          echo "正式版差异基线：$BASE_COMMIT"
+          COMMITS="$(git log "$BASE_COMMIT..HEAD" --no-merges --format='%s' -- kotlin-tv/app/src)"
+          NOTES="$(COMMITS="$COMMITS" python3 - <<'PY'
+          import os, re
+          lines = [x.strip() for x in os.environ.get("COMMITS", "").splitlines() if x.strip()]
+          ignored = ("测试", "单元测试", "工作流", "发布", "版本号", "版本信息", "构建", "依赖", "格式", "换行", "注释", "文档", "readme", "gradle", "lint", "ci:", "chore:", "test:", "build:", "docs:")
+          cleaned, seen = [], set()
+          for line in lines:
+              if any(word.lower() in line.lower() for word in ignored):
+                  continue
+              line = re.sub(r"^(feat|fix|refactor|perf|style|chore|build|docs|test)(\([^)]*\))?:\s*", "", line, flags=re.I)
+              if not any(0x4e00 <= ord(ch) <= 0x9fff for ch in line):
+                  continue
+              line = re.sub(r"\s+", " ", line).strip(" -:：")
+              if line and line not in seen:
+                  cleaned.append(line)
+                  seen.add(line)
+          groups = [
+              ("播放体验", ("播放", "播放器", "解码", "首帧", "缓冲", "切集", "续播", "音频", "视频", "画质")),
+              ("页面与操作", ("界面", "页面", "导航", "设置", "主题", "弹窗", "布局", "显示", "焦点", "遥控器", "按键")),
+              ("搜索与内容", ("搜索", "详情", "排行榜", "剧场", "短剧", "片源", "收藏", "历史", "分类")),
+              ("网络与稳定性", ("网络", "接口", "请求", "连接", "超时", "闪退", "崩溃", "异常", "修复")),
+              ("其他功能", ())
+          ]
+          assigned, output = set(), []
+          for title, words in groups:
+              matched = [line for line in cleaned if line not in assigned and (not words or any(word in line for word in words))]
+              if matched:
+                  output.append("【" + title + "】")
+                  output.extend("- " + line for line in matched)
+                  assigned.update(matched)
+          print("\n".join(output) if output else "优化使用体验")
+          PY
+          )"
+          DELIMITER="OFFICIAL_RELEASE_NOTES_$(date +%s)_$RANDOM"
+          {
+            echo "release_notes<<$DELIMITER"
+            printf '%s\n' "$NOTES"
+            echo "$DELIMITER"
+          } >> "$GITHUB_OUTPUT"
+          echo "本次正式版更新说明："
+          printf '%s\n' "$NOTES"
 
       - name: 构建正式版APK
         working-directory: kotlin-tv
@@ -214,20 +270,16 @@ jobs:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
           APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
-          RELEASE_NOTES_INPUT: ${{ inputs.release_notes }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.release_notes }}
         run: |
           set -euo pipefail
           APK="$RUNNER_TEMP/release/HongguoTV-$VERSION_NAME.apk"
           SOURCE_COMMIT="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
 
-          # 正式版发布说明由手动触发工作流时填写，不再自动分析提交记录。
-          if [ -z "$(printf '%s' "$RELEASE_NOTES_INPUT" | tr -d '[:space:]')" ]; then
-            echo "::error::请在运行工作流时填写本次正式版更新说明"
-            exit 1
+          # 更新说明已在前置步骤中按上一个正式版与当前源码差异自动生成。
+          if [ -z "$(printf '%s' "$RELEASE_NOTES" | tr -d '[:space:]')" ]; then
+            RELEASE_NOTES="优化使用体验"
           fi
-          # GitHub workflow_dispatch 的 string 输入框是单行控件；若粘贴后换行被压平，
-          # 将连续的“ - ”列表分隔符恢复为 Markdown 项目符号换行。
-          RELEASE_NOTES="$(printf '%s' "$RELEASE_NOTES_INPUT" | python3 -c 'import re,sys; s=sys.stdin.read().replace("\r\n", "\n").replace("\r", "\n"); s=re.sub(r"\s+-\s+", "\n- ", s) if "\n" not in s else s; sys.stdout.write(s.strip())')"
           printf '%s\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes-final.txt"
           echo "本次正式版更新说明："
           cat "$RUNNER_TEMP/release-notes-final.txt"
