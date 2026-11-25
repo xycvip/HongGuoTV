@@ -168,7 +168,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          ./gradlew --no-daemon --warning-mode all :app:assembleRelease
           APK="app/build/outputs/apk/release/app-release.apk"
           # Gradle构建结束后立即校验签名，早于复制、文件检查及其他APK信息检查。
           APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
