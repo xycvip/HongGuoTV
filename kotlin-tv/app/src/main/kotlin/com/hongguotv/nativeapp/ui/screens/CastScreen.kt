@@ -40,7 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -676,7 +676,7 @@ private fun CandidateRow(series: Series, onClick: () -> Unit) {
             )
         }
         Icon(
-            Icons.Rounded.KeyboardArrowRight,
+            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             null,
             tint = if (focused) Gold.Core else Paper.Disabled,
             modifier = Modifier.size(d(18)),
