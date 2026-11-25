@@ -58,6 +58,7 @@ import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.IdentityHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 一次播放会话：负责解析地址、准备加密数据源、驱动 ExoPlayer、记录进度。
@@ -166,6 +167,24 @@ class PlayerSession(
     private var queueGeneration = 0
 
     private data class PreparedStream(val video: RemoteVideo, val quality: String)
+
+    /** Closes a partially prepared stream if parsing or preparation fails. */
+    private fun createPreparedStream(
+        client: OkHttpClient,
+        episodeId: String,
+        notifyOnFallback: Boolean = true,
+    ): PreparedStream {
+        val info = context.playbackStreamSource(client, notifyOnFallback = notifyOnFallback)
+            .stream(episodeKey(episodeId), effectiveQuality)
+        val video = RemoteVideo(client, info)
+        return try {
+            video.prepare()
+            PreparedStream(video, info.quality)
+        } catch (failure: Throwable) {
+            runCatching { video.close() }
+            throw failure
+        }
+    }
 
     /**
      * 解码器报「不支持该分辨率」时的一次性降档：不改用户的清晰度设置，
@@ -906,37 +925,37 @@ class PlayerSession(
         player?.let(::applyPlaylistPolicy)
         val requestGeneration = loadGeneration
         loadJob = scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val info = context.playbackStreamSource(repository.http).stream(episodeKey(episodeId), effectiveQuality)
-                    PreparedStream(RemoteVideo(repository.http, info).prepare(), info.quality)
+            // Retain ownership outside withContext: cancellation may win during dispatch back to Main.
+            val pending = AtomicReference<PreparedStream?>(null)
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { createPreparedStream(repository.http, episodeId).also(pending::set) }
                 }
-            }
-            if (released || loadGeneration != requestGeneration) {
-                result.getOrNull()?.video?.let { runCatching { it.close() } }
-                return@launch
-            }
-            result.onSuccess { preparedStream ->
-                qualityLabel = preparedStream.quality
-                // 降档后拿回来的还是同一档：说明这一集平台只产出了一路编码，
-                // 再重试只会「同样的错→再降一档→同样的错」。别白等它挂一次，直接换软解。
-                if (autoDowngraded && !softwareDecoderForced &&
-                    failedQualityLabel.isNotEmpty() && preparedStream.quality == failedQualityLabel
-                ) {
-                    PlayerLog.warn("降档未换流（${preparedStream.quality}），直接切软解")
-                    runCatching { preparedStream.video.close() }
-                    rebuildForDecoderIssue(softwareOnly = true)
-                    return@onSuccess
+                if (released || loadGeneration != requestGeneration) return@launch
+                result.onSuccess { preparedStream ->
+                    qualityLabel = preparedStream.quality
+                    if (autoDowngraded && !softwareDecoderForced &&
+                        failedQualityLabel.isNotEmpty() && preparedStream.quality == failedQualityLabel
+                    ) {
+                        PlayerLog.warn("降档未换流（${preparedStream.quality}），直接切软解")
+                        pending.compareAndSet(preparedStream, null)
+                        runCatching { preparedStream.video.close() }
+                        rebuildForDecoderIssue(softwareOnly = true)
+                        return@onSuccess
+                    }
+                    remote = preparedStream.video
+                    pending.compareAndSet(preparedStream, null)
+                    attach(preparedStream.video, targetIndex, startMs)
+                }.onFailure { failure ->
+                    buffering = false
+                    error = when {
+                        failure.message?.contains("不支持", true) == true -> failure.message.orEmpty()
+                        failure.message?.contains("解码", true) == true -> failure.message.orEmpty()
+                        else -> "无法获取播放地址：${failure.message ?: "未知错误"}"
+                    }
                 }
-                remote = preparedStream.video
-                attach(preparedStream.video, targetIndex, startMs)
-            }.onFailure { failure ->
-                buffering = false
-                error = when {
-                    failure.message?.contains("不支持", true) == true -> failure.message.orEmpty()
-                    failure.message?.contains("解码", true) == true -> failure.message.orEmpty()
-                    else -> "无法获取播放地址：${failure.message ?: "未知错误"}"
-                }
+            } finally {
+                pending.getAndSet(null)?.video?.let { runCatching { it.close() } }
             }
         }
     }
@@ -1004,26 +1023,21 @@ class PlayerSession(
         val requestGeneration = ++queueGeneration
         queuePreparingIndex = nextIndex
         queueJob = scope.launch {
-            val prepared = withContext(Dispatchers.IO) {
-                runCatching {
-                    val info = context.playbackStreamSource(repository.http).stream(episodeKey(targetId), effectiveQuality)
-                    PreparedStream(RemoteVideo(repository.http, info).prepare(), info.quality)
-                }.getOrNull()
-            }
-            if (released || queueGeneration != requestGeneration || prepared == null) {
-                prepared?.video?.let { runCatching { it.close() } }
-                if (queueGeneration == requestGeneration) queuePreparingIndex = -1
-                return@launch
-            }
-            queuePreparingIndex = -1
-            // 预载期间用户已经切集 / 改清晰度 / 打开双播放器：这份流作废。
-            if (index != current || (useDualDecoder && !force)) {
-                runCatching { prepared.video.close() }
-                return@launch
-            }
-            queuedIndex = nextIndex
-            queuedStream = prepared
-            queuedAppended = false
+            val pending = AtomicReference<PreparedStream?>(null)
+            try {
+                val prepared = withContext(Dispatchers.IO) {
+                    runCatching { createPreparedStream(repository.http, targetId).also(pending::set) }.getOrNull()
+                }
+                if (released || queueGeneration != requestGeneration || prepared == null) {
+                    if (queueGeneration == requestGeneration) queuePreparingIndex = -1
+                    return@launch
+                }
+                queuePreparingIndex = -1
+                if (index != current || (useDualDecoder && !force)) return@launch
+                queuedIndex = nextIndex
+                queuedStream = prepared
+                pending.compareAndSet(prepared, null)
+                queuedAppended = false
             // 自动连播开启才加入 playlist。关闭自动连播时仅缓存 RemoteVideo，
             // 手动按「下一集」仍可直接复用预载，但播放器不会自己跳集。
             if (library.autoNext) {
@@ -1039,6 +1053,9 @@ class PlayerSession(
                         queuedAppended = false
                         runCatching { prepared.video.close() }
                     }
+            }
+            } finally {
+                pending.getAndSet(null)?.video?.let { runCatching { it.close() } }
             }
         }
     }
@@ -1289,27 +1306,28 @@ class PlayerSession(
             if (released || !useDualDecoder || standbyIndex != nextIndex ||
                 standbyGeneration != requestGeneration
             ) return@launch
-            val prepared = withContext(Dispatchers.IO) {
-                runCatching {
-                    // 备用链路独立取流：失败不切换全局线路，避免影响正在播放的这一集。
-                    val info = context.playbackStreamSource(http, notifyOnFallback = false).stream(episodeKey(targetId), effectiveQuality)
-                    PreparedStream(RemoteVideo(http, info).prepare(), info.quality)
-                }.getOrNull()
+            val pending = AtomicReference<PreparedStream?>(null)
+            try {
+                val prepared = withContext(Dispatchers.IO) {
+                    runCatching {
+                        createPreparedStream(http, targetId, notifyOnFallback = false).also(pending::set)
+                    }.getOrNull()
+                }
+                if (released || !useDualDecoder || standbyIndex != nextIndex ||
+                    standbyGeneration != requestGeneration
+                ) return@launch
+                if (prepared == null) {
+                    clearStandby("下一集资源解析失败")
+                    queueNextEpisode(index, force = true)
+                    return@launch
+                }
+                standbyRemote = prepared.video
+                standbyQuality = prepared.quality
+                pending.compareAndSet(prepared, null)
+                buildStandbyPlayer(prepared.video, nextIndex)
+            } finally {
+                pending.getAndSet(null)?.video?.let { runCatching { it.close() } }
             }
-            if (released || !useDualDecoder || standbyIndex != nextIndex ||
-                standbyGeneration != requestGeneration
-            ) {
-                prepared?.video?.let { runCatching { it.close() } }
-                return@launch
-            }
-            if (prepared == null) {
-                clearStandby("下一集资源解析失败")
-                queueNextEpisode(index, force = true)
-                return@launch
-            }
-            standbyRemote = prepared.video
-            standbyQuality = prepared.quality
-            buildStandbyPlayer(prepared.video, nextIndex)
         }
     }
 
