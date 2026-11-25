@@ -1324,6 +1324,11 @@ class PlayerSession(
      */
     private fun prepareStandby(nextIndex: Int) {
         if (released) return
+        PlaybackDiagnostics.event("STANDBY_PREPARE_REQUEST", "prepare standby player", mapOf(
+            "targetIndex" to nextIndex, "currentIndex" to index,
+            "standbyIndex" to standbyIndex, "standbyExists" to (standbyPlayer != null),
+            "availableMemoryMB" to (Runtime.getRuntime().maxMemory() / 1048576L),
+        ))
         // 已经判定不能并发（或用户自己关了开关）：直接走同实例预载。
         // 用户开关还开着时也要补这一步，否则关了双播放器就真的没有下一集预载了。
         if (!useDualDecoder) {
@@ -1480,6 +1485,13 @@ class PlayerSession(
                             return
                         }
                         standbyReady = true
+                PlaybackDiagnostics.event("STANDBY_PLAYER_READY", "standby player reached READY", mapOf(
+                    "targetIndex" to target, "quality" to standbyQuality,
+                    "positionMs" to secondary.currentPosition,
+                    "video" to "${secondary.videoFormat?.width ?: 0}x${secondary.videoFormat?.height ?: 0}",
+                    "mime" to secondary.videoFormat?.sampleMimeType,
+                    "codecs" to secondary.videoFormat?.codecs,
+                ))
                     } else if (state == Player.STATE_IDLE && standbyReady) {
                         standbyReady = false
                     }
@@ -1488,6 +1500,10 @@ class PlayerSession(
                 override fun onRenderedFirstFrame() {
                     if (standbyPlayer === secondary && standbyIndex == target && standbyFirstFrameAt == 0L) {
                         standbyFirstFrameAt = SystemClock.elapsedRealtime()
+                    PlaybackDiagnostics.event("STANDBY_FIRST_FRAME", "standby first frame rendered", mapOf(
+                        "targetIndex" to target, "quality" to standbyQuality,
+                        "readyElapsedMs" to (standbyFirstFrameAt - standbyCreatedAt),
+                    ))
                     }
                 }
 
