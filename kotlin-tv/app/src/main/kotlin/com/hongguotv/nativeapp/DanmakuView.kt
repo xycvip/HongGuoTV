@@ -41,7 +41,12 @@ import kotlin.math.roundToInt
  * 弹幕一次性预排程：数据每批到来时把已缓冲弹幕排到轨道、算好 startMs/endMs，
  * 每帧只做二分定位可见区间 + 位图 blit，不做逐帧轨道分配。
  */
-class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_000L) :
+class DanmakuView(
+    context: Context,
+    textSizeSp: Float = 20f,
+    crossMs: Long = 9_000L,
+    private val frameRateMode: Int = FRAME_RATE_VSYNC,
+) :
     SurfaceView(context), SurfaceHolder.Callback, DanmakuRenderer {
     private data class Scheduled(
         val text: String,
@@ -146,9 +151,9 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
                     lastPumpAt = tick
                     needMore(now)
                 }
-                // 弹幕横向滚动 30fps 足够：隔帧画能把每帧预算从 16.7ms 提到 33ms，
-                // 避免个别帧超时导致整体顿卡；位置按媒体时间算，滚动速度不受影响。
-                if ((frameTick++ and 1L) == 0L) drawFrame(now)
+                // 逐帧模式每个 VSync 都提交一帧；省资源模式保留原来的隔帧绘制。
+                val shouldDraw = frameRateMode != FRAME_RATE_30 || (frameTick++ and 1L) == 0L
+                if (shouldDraw) drawFrame(now)
             }
             if (running && playbackActive && loader != null) scheduleFrame()
         }
@@ -339,7 +344,8 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
             val paint = if (opacityAlpha == 255) null else bitmapPaint
             for (i in first until end) {
                 val item = scheduled[i]
-                val x = item.xAt(now, surfaceW).roundToInt().toFloat()
+                // 保留亚像素坐标，避免整数像素取整造成移动时的跳格。
+                val x = item.xAt(now, surfaceW)
                 val top = (item.lane * lineHeightPx).roundToInt().toFloat()
                 canvas.drawBitmap(bitmapFor(item), x, top, paint)
             }
@@ -475,6 +481,8 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     }
 
     companion object {
+        const val FRAME_RATE_30 = 0
+        const val FRAME_RATE_VSYNC = 1
         const val COLOR_MODE_DEFAULT = 0
         const val COLOR_MODE_COLORFUL = 1
         const val COLOR_MODE_FIRST = 2
