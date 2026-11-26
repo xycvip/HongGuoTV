@@ -101,7 +101,19 @@ class Library(context: Context) {
                 if (!libraryWritesReady || !homeWritesReady) {
                     Log.w("HongGuoTV", "Previous library checkpoint is still pending; continuing startup")
                 }
-                val values = prefs.all
+                // A failed previous-session commit may still be in flight after the bounded
+                // wait. Overlay its newest immutable snapshot so this launch never initializes
+                // from stale disk data and then overwrites the user's last changes.
+                val values = prefs.all.toMutableMap()
+                writes.snapshotPending().forEach { (key, encode) ->
+                    val value = encode()
+                    if (value == null) values.remove(key) else values[key] = value
+                }
+                val homeValues = homePrefs.all.toMutableMap()
+                homeWrites.snapshotPending().forEach { (key, encode) ->
+                    val value = encode()
+                    if (value == null) homeValues.remove(key) else homeValues[key] = value
+                }
                 val loaded = LibraryDisk.decode(values)
                 val now = System.currentTimeMillis()
                 val cached = mutableMapOf<ContentType, CatalogPage>()
@@ -111,11 +123,11 @@ class Library(context: Context) {
                 ContentType.entries.forEach { type ->
                     val key = "home-${type.storedValue}"
                     val legacy = values[key] as? String
-                    val raw = homePrefs.getString(key, null) ?: legacy.orEmpty()
+                    val raw = (homeValues[key] as? String) ?: legacy.orEmpty()
                     CatalogSnapshot.decode(raw, now)?.let { page ->
                         cached[type] = page
                         stamps[type] = org.json.JSONObject(raw).getLong("savedAt")
-                        if (!homePrefs.contains(key)) migration.putString(key, raw)
+                        if (!homeValues.containsKey(key)) migration.putString(key, raw)
                     }
                     if (legacy != null) oldKeys += key
                 }
