@@ -179,7 +179,10 @@ fun HomeScreen(
                                   if (focus.hasFocus && listState.firstVisibleItemIndex > 0) {
                                       scope.launch { listState.animateScrollToItem(0) }
                                   }
-                              },
+                              }
+                              // 把浏览锚点与三个操作按钮作为同一焦点组观察，
+                              // 确保组内任一子项获得焦点时都暂停自动轮播。
+                              .focusGroup(),
                       ) {
                         // 缩放相位提到切换动画外面：新旧两张海报共用同一个缩放值，
                         // 交叉淡入时才不会一张在放大、另一张在缩小——那看着就是整幅画面在抖。
