@@ -105,7 +105,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val update: StateFlow<UpdateUiState> = _update.asStateFlow()
     private var updateJob: Job? = null
     @Volatile private var activeUpdateRepository: AppUpdateRepository? = null
-    private var updateGeneration = 0L
+    @Volatile private var updateGeneration = 0L
 
     /** 数据脚本热更新状态：设置页只读展示，更新过程完全自动。 */
     private val _scriptUpdate = MutableStateFlow(ScriptUpdateState())
