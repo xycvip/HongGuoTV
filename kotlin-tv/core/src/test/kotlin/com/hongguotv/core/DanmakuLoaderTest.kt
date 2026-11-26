@@ -122,6 +122,33 @@ class DanmakuLoaderTest {
         assertEquals(4_000, loader.buffered)
     }
 
+    @Test fun overlappingWindowsRemainSortedForBinarySearch() {
+        val (loader, _) = loader(90_000, leadMs = 60_000) { start ->
+            when (start) {
+                0L -> DanmakuWindow(
+                    comments = listOf(
+                        Danmaku(id = "a", offsetMs = 0, text = "a"),
+                        Danmaku(id = "c", offsetMs = 3_000, text = "c"),
+                    ),
+                    nextStartMs = 30_000,
+                )
+                30_000L -> DanmakuWindow(
+                    comments = listOf(
+                        Danmaku(id = "b", offsetMs = 1_000, text = "b"),
+                        Danmaku(id = "d", offsetMs = 4_000, text = "d"),
+                    ),
+                    nextStartMs = 60_000,
+                )
+                else -> DanmakuWindow(
+                    comments = listOf(Danmaku(id = "e", offsetMs = 2_000, text = "e")),
+                    nextStartMs = 90_000,
+                )
+            }
+        }
+        loader.loadUpTo(0)
+        assertEquals(listOf("a", "b", "e", "c", "d"), loader.between(0, 5_000).map { it.text })
+    }
+
     @Test fun unknownDurationWaitsForMetadata() {
         val (loader, requested) = loader(0) { start -> window(start, start + 30_000, emptyList()) }
         loader.loadUpTo(0)
