@@ -181,8 +181,16 @@ fun HomeScreen(
                                   heroFocused = focus.hasFocus
                                   // 焦点从「接着看」回到主视觉时，列表往往还停在 hero 被顶出屏幕的位置，
                                   // 聚焦元素只保证自身可见，hero 顶部仍在屏外。这里主动把首项拉回顶部。
-                                  if (focus.hasFocus && listState.firstVisibleItemIndex > 0) {
-                                      scope.launch { listState.animateScrollToItem(0) }
+                                  if (
+                                      focus.hasFocus &&
+                                      (listState.firstVisibleItemIndex != 0 ||
+                                          listState.firstVisibleItemScrollOffset != 0)
+                                  ) {
+                                      // Hero 高度可能超过当前可视区域。子按钮获焦时，
+                                      // BringIntoView 会把按钮滚入屏幕，导致 Hero 顶部被推出去。
+                                      // 无论列表停在后续 item，还是停在第 0 项的中途，都强制回到完整首屏。
+                                      // scrollToItem 会取消正在进行的滚动，避免与焦点自动滚动互相拉扯。
+                                      scope.launch { listState.scrollToItem(0) }
                                   }
                               }
                               // 把浏览锚点与三个操作按钮作为同一焦点组观察，
