@@ -97,13 +97,14 @@ fun HongguoApp(vm: AppViewModel) {
     val rankEntry = remember { FocusRequester() }
     val libraryEntry = remember { FocusRequester() }
     val settingsEntry = remember { FocusRequester() }
+    val accountEntry = remember { FocusRequester() }
     fun entryOf(target: Tab): FocusRequester? = when (target) {
         Tab.HOME -> homeEntry
         Tab.THEATER -> theaterEntry
         Tab.RANK -> rankEntry
         Tab.LIBRARY -> libraryEntry
         Tab.SETTINGS -> settingsEntry
-        Tab.ACCOUNT -> null
+        Tab.ACCOUNT -> accountEntry
     }
     // 导航项各自的锚点。切页、返回首页时把光标钉在「下划线所在的那一项」上，
     // 而不是散落在上一页残留的位置——这是「红线到首页、光标还在设置」的修法。
@@ -118,7 +119,7 @@ fun HongguoApp(vm: AppViewModel) {
         Tab.LIBRARY -> state.library.favorites.isNotEmpty() || state.library.history.isNotEmpty() || state.library.later.isNotEmpty()
         // 设置页是静态布局，只要有快照就一定有可聚焦项（分类导轨）。
         Tab.SETTINGS -> snapshot != null
-        else -> false
+        Tab.ACCOUNT -> true
     }
 
     LaunchedEffect(Unit) {
@@ -313,6 +314,7 @@ fun HongguoApp(vm: AppViewModel) {
                         rankEntry = rankEntry,
                         libraryEntry = libraryEntry,
                         settingsEntry = settingsEntry,
+                        accountEntry = accountEntry,
                         upFocus = tabAnchors[tab],
                         initialSettingsSection = pendingSettingsSection,
                         onSettingsSectionConsumed = { pendingSettingsSection = null },
@@ -514,6 +516,7 @@ private fun MainTabContent(
     rankEntry: FocusRequester? = null,
     libraryEntry: FocusRequester? = null,
     settingsEntry: FocusRequester? = null,
+    accountEntry: FocusRequester? = null,
     upFocus: FocusRequester? = null,
     initialSettingsSection: String? = null,
     onSettingsSectionConsumed: () -> Unit = {},
@@ -613,6 +616,7 @@ private fun MainTabContent(
             onSendCode = vm::sendLoginCode,
             onVerify = vm::verifyLoginCode,
             onResetPhone = vm::resetLoginPhone,
+            entryFocus = accountEntry,
         )
     }
 }
