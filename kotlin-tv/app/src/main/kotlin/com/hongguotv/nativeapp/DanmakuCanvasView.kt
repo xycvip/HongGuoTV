@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PorterDuff
 import android.graphics.Typeface
 import android.os.SystemClock
 import android.util.TypedValue
@@ -276,6 +277,7 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
         val clipBottom = (contentRows.coerceAtLeast(1) * lineHeightPx).coerceAtMost(surfaceH.toFloat())
         canvas.save()
         canvas.clipRect(0f, 0f, surfaceW.toFloat(), clipBottom)
+        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
         bitmapPaint.alpha = opacityAlpha
         val paint = if (opacityAlpha == 255) null else bitmapPaint
         for (i in first until end) {
