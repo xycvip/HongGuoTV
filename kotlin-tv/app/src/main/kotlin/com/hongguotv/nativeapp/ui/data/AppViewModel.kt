@@ -1640,6 +1640,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         danmakuFont = library.danmakuFont,
         danmakuSpeed = library.danmakuSpeed,
         danmakuRows = library.danmakuRows,
+        danmakuRendererMode = library.danmakuRendererMode,
         danmakuColor = extras.danmakuColorMode,
         blockedWords = extras.blockedWords.sorted(),
         startupAutoplay = extras.startupAutoplay,
@@ -1684,6 +1685,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setDanmaku(value: Boolean) {
         library.danmaku = value
         toast(if (value) "弹幕已开启" else "弹幕已关闭")
+    }
+
+    fun setDanmakuRendererMode(value: Int) {
+        library.danmakuRendererMode = value.coerceIn(0, 2)
+        touchSettings()
+        toast("弹幕渲染方式 · " + listOf("自动（兼容优先）", "普通 View（实验）", "SurfaceView（原版）")[library.danmakuRendererMode])
     }
 
     fun setShowClock(value: Boolean) {
