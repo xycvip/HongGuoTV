@@ -1717,7 +1717,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun clearAllData() {
         val app = getApplication<Application>()
-        toast("正在安全停止本地写入…")
+        toast("正在保存尚未落盘的数据，请稍候…")
 
         // Stop all ViewModel-owned jobs before touching storage. The dedicated reset thread
         // survives scope cancellation and waits for the loader plus both process-wide writers.
@@ -1740,6 +1740,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 restartProcess()
                 return@Thread
             }
+
+            // Both persistence queues are fully drained: the pending local changes are now
+            // safely on disk, so tell the user before the destructive reset starts.
+            toast("数据已保存，正在清除本机数据…")
 
             val prefNames = listOf(
                 "native-library-v1", "native-home-cache-v1", "startup_playback",
