@@ -217,9 +217,9 @@ fun HongguoApp(vm: AppViewModel) {
         }
     }
 
-    // 导航项按「下」进入内容：非当前项先切页；当前项若内容还在转圈则记下意图。
-    // contentReady 作为关键依赖：内容未就绪时保持意图、不清除，等数据到了自动精确进入，
-    // 这样用户按一次「下」就够了，不必等转圈结束再按一次，也不会 fallback 到几何搜索乱跳。
+    // 导航栏按「下」只进入当前选中页，不根据焦点所在的导航项切页。
+    // 即时请求失败或页面尚未就绪时，保留意图并在入口 attach 后重试，
+    // 避免几何搜索把焦点送到其他页面。
     LaunchedEffect(pendingContent, tab, route, state.booted, contentReady) {
         val target = pendingContent ?: return@LaunchedEffect
         if (route != Route.Main || !state.booted) return@LaunchedEffect
