@@ -460,7 +460,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Hero 直接从首页推荐池中挑选；首页热门横排必须排除已进入 Hero 的剧，
         // 否则同一部剧会在首屏主视觉和下方热门区域重复出现。
         // 去重只作用于首页横排，查看全部仍使用完整 homeShort/homeComic/homeAi。
-        val heroIds = hero.mapTo(mutableSetOf()) { it.id }
+        val hero = buildList {
+            addAll(short.take(3))
+            addAll(comic.take(2))
+            addAll(ai.take(2))
+        }.filter { it.cover.isNotBlank() }.distinctBy { it.id }.take(6)
+        // 新推荐暂时为空时，界面会沿用上一批 Hero；去重也必须按实际显示的 Hero 计算。
+        val displayedHero = hero.ifEmpty { _state.value.home.hero }
+        val heroIds = displayedHero.mapTo(mutableSetOf()) { it.id }
         val shelfShort = short.filterNot { it.id in heroIds }
         val shelfComic = comic.filterNot { it.id in heroIds }
         val shelfAi = ai.filterNot { it.id in heroIds }
@@ -542,18 +549,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
         }
-        val hero = buildList {
-            addAll(short.take(3))
-            addAll(comic.take(2))
-            addAll(ai.take(2))
-        }.filter { it.cover.isNotBlank() }.distinctBy { it.id }.take(6)
         _state.update {
             it.copy(
                 home = it.home.copy(
                     loading = loading,
                     refreshing = false,
                     error = error,
-                    hero = if (hero.isNotEmpty()) hero else it.home.hero,
+                    hero = displayedHero,
                     shelves = shelves,
                     updatedAt = System.currentTimeMillis(),
                 ),
