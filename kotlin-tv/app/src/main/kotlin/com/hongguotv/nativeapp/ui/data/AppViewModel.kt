@@ -456,6 +456,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val short = homeShort.filterNot { it.id in hidden }
         val comic = homeComic.filterNot { it.id in hidden }
         val ai = homeAi.filterNot { it.id in hidden }
+
+        // Hero 直接从首页推荐池中挑选；首页热门横排必须排除已进入 Hero 的剧，
+        // 否则同一部剧会在首屏主视觉和下方热门区域重复出现。
+        // 去重只作用于首页横排，查看全部仍使用完整 homeShort/homeComic/homeAi。
+        val heroIds = hero.mapTo(mutableSetOf()) { it.id }
+        val shelfShort = short.filterNot { it.id in heroIds }
+        val shelfComic = comic.filterNot { it.id in heroIds }
+        val shelfAi = ai.filterNot { it.id in heroIds }
+
         val history = library.history().filterNot { library.watched(it.series.id) }
         val updates = library.favorites().filter { library.favoriteUpdate(it.id)?.hasUpdate == true }
         val later = library.later()
@@ -500,35 +509,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     ),
                 )
             }
-            if (short.isNotEmpty()) {
+            if (shelfShort.isNotEmpty()) {
                 add(
                     Shelf(
                         key = "hot-short",
                         title = "热门短剧",
                         subtitle = "今天大家都在追",
                         collection = CollectionKind.HOT_SHORT,
-                        entries = short.take(12).map { ShelfEntry(it, it.badge.ifBlank { it.tags.take(12) }) },
+                        entries = shelfShort.take(12).map { ShelfEntry(it, it.badge.ifBlank { it.tags.take(12) }) },
                     ),
                 )
             }
-            if (comic.isNotEmpty()) {
+            if (shelfComic.isNotEmpty()) {
                 add(
                     Shelf(
                         key = "hot-comic",
                         title = "热门漫剧",
                         collection = CollectionKind.HOT_COMIC,
-                        entries = comic.take(12).map { ShelfEntry(it, it.badge.ifBlank { it.tags.take(12) }) },
+                        entries = shelfComic.take(12).map { ShelfEntry(it, it.badge.ifBlank { it.tags.take(12) }) },
                     ),
                 )
             }
-            if (ai.isNotEmpty()) {
+            if (shelfAi.isNotEmpty()) {
                 add(
                     Shelf(
                         key = "hot-ai",
                         title = "AI 剧场",
                         subtitle = "新形态的短剧体验",
                         collection = CollectionKind.HOT_AI,
-                        entries = ai.take(12).map { ShelfEntry(it, it.badge.ifBlank { it.tags.take(12) }) },
+                        entries = shelfAi.take(12).map { ShelfEntry(it, it.badge.ifBlank { it.tags.take(12) }) },
                     ),
                 )
             }
