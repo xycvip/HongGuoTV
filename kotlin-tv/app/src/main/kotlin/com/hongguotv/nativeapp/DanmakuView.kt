@@ -127,10 +127,8 @@ class DanmakuView(
     private var idleCleared = false
     /** 当前这一集实际用到几条轨道；清屏只清到这里，比整块 lanes 省很多。 */
     private var contentRows = 0
-    private var frameTick = 0L
-    private var frameRateModeValue = frameRateMode.coerceIn(0, 2)
     private var lastVsyncNanos = 0L
-    private var highRateAccumulatorNanos = 0.0
+    private var frameRateAccumulatorNanos = 0.0
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             frameScheduled = false
@@ -156,21 +154,24 @@ class DanmakuView(
                 }
                 val deltaNanos = if (lastVsyncNanos == 0L) 0L else (frameTimeNanos - lastVsyncNanos).coerceAtLeast(0L)
                 lastVsyncNanos = frameTimeNanos
-                val shouldDraw = when (frameRateModeValue) {
-                    0 -> (frameTick++ and 1L) == 0L // 标准：约为屏幕刷新率的一半
-                    1 -> { // 高帧率：目标约60fps；高刷新率屏幕按时间累积节奏抽帧
-                        if (deltaNanos == 0L) {
-                            true
-                        } else {
-                            highRateAccumulatorNanos += deltaNanos.toDouble()
-                            val targetPeriod = 1_000_000_000.0 / 60.0
-                            if (highRateAccumulatorNanos >= targetPeriod) {
-                                highRateAccumulatorNanos %= targetPeriod
-                                true
-                            } else false
-                        }
+                val drawRatio = when (frameRateModeValue) {
+                    0 -> 0.5 // 标准：隔帧，约为屏幕刷新率的 50%
+                    1 -> 0.75 // 高帧率：隔半帧，约为屏幕刷新率的 75%
+                    else -> 1.0 // 超帧率：逐帧，跟随屏幕原生刷新率
+                }
+                val shouldDraw = if (deltaNanos == 0L) {
+                    true
+                } else {
+                    // 按当前 VSync 间隔换算目标绘制周期，再用时间累积做分数帧率调度。
+                    // 例如 90Hz × 0.75 = 67.5fps，无需取整；长时间平均帧率保持目标比例。
+                    frameRateAccumulatorNanos += deltaNanos.toDouble()
+                    val targetPeriodNanos = deltaNanos.toDouble() / drawRatio
+                    if (frameRateAccumulatorNanos >= targetPeriodNanos) {
+                        frameRateAccumulatorNanos %= targetPeriodNanos
+                        true
+                    } else {
+                        false
                     }
-                    else -> true // 超帧率：每个屏幕 VSync 都绘制，受屏幕刷新率上限限制
                 }
                 if (shouldDraw) drawFrame(now)
             }
@@ -492,9 +493,9 @@ class DanmakuView(
         scheduleAnchorMs = 0L
         positionProvider = { 0L }
         contentRows = 0
-        frameTick = 0L
         lastVsyncNanos = 0L
-        highRateAccumulatorNanos = 0.0
+        lastVsyncNanos = 0L
+        frameRateAccumulatorNanos = 0.0
         clearTextCache()
         choreographer.removeFrameCallback(frameCallback)
         frameScheduled = false
