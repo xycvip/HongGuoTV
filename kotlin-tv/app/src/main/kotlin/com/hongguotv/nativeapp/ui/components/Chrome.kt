@@ -161,10 +161,12 @@ fun TopBar(
                     tab = tab,
                     selected = tab == current,
                     onClick = { onSelect(tab) },
-                    downEntry = if (tab == current) contentEntry else null,
+                    // 无论焦点停在哪个导航项，「下」都进入当前已选页面，
+                    // 不把焦点所在项误当成页面切换指令。
+                    downEntry = contentEntry,
                     requester = tabFocus[tab],
                     onLeftEdge = if (index == 0) ({ reachLogo() }) else null,
-                    onEnter = { onEnterContent(tab) },
+                    onEnter = { onEnterContent(current) },
                 )
             }
         }
@@ -224,25 +226,15 @@ private fun NavItem(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
-                    // 选中项按「下」直接跳到页面首个可聚焦元素。默认几何搜索在 hero 这类
-                    // 大块内容前经常落空，表现就是「焦点卡在导航栏」。
-                    // 精确 requester 失败时再交给焦点管理器做几何搜索，双保险。
+                    // 「下」始终进入当前已选页面，而不是焦点所在的导航项对应页面。
+                    // 因此即使焦点误落到其他导航项，也不会悄悄切换顶部导航。
                     Key.DirectionDown -> {
-                        // 只有「当前选中项」（页面就是它）按「下」才进入内容区。
-                        // 光标停在别的导航项上时，「下」必须无动作：既不切页、也不进内容，
-                        // 否则就是「光标在 A 上按一下，却跑进了 B 页」的越界。
-                        // 切页统一交给 OK/确定（clickable onClick）：选中后它成为当前项，再按下才进内容。
-                        if (!selected) {
-                            true
-                        } else if (downEntry != null) {
-                            // 内容已就绪：精确落到内容落点。无论成功与否都吞掉事件——
-                            // 失败时若回退几何搜索，焦点会落到 hero、页脚等不确定位置。
+                        if (downEntry != null) {
+                            // 当前页面内容已就绪：精确请求当前页入口，避免几何搜索跳错页面。
                             downEntry.tryRequestFocus()
                             true
                         } else {
-                            // 内容还没就绪（首屏转圈，contentReady=false → contentEntry 为 null）。
-                            // 绝不能交给系统几何搜索：加载占位/空列表里没有可靠落点，焦点会乱跳。
-                            // 吞掉事件，并通知上层记住「按过下」的意图，等数据到了自动精确进入。
+                            // 当前页面尚未就绪：记录当前页的进入意图，待内容 attach 后再落焦点。
                             onEnter?.invoke()
                             true
                         }
