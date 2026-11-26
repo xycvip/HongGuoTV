@@ -355,6 +355,7 @@ fun HomeScreen(
                         onResume = onResume,
                         onCollection = onCollection,
                         firstFocus = if (index == 0) firstShelfFocus else null,
+                        upFocus = if (index == 0) heroBrowseFocus else null,
                     )
                 }
                 item(key = "footer") {
@@ -393,6 +394,7 @@ private fun ShelfBlock(
     onResume: (Series) -> Unit,
     onCollection: (CollectionKind) -> Unit,
     firstFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(d(16))) {
         Row(
@@ -426,6 +428,7 @@ private fun ShelfBlock(
                         progress = entry.progress ?: 0f,
                         onClick = { onResume(entry.series) },
                         focusRequester = if (index == 0) firstFocus else null,
+                        upFocus = upFocus,
                     )
                 }
             }
@@ -443,6 +446,7 @@ private fun ShelfBlock(
                         rank = entry.rank,
                         width = shelfCardWidth(posterColumns),
                         focusRequester = if (index == 0) firstFocus else null,
+                        upFocus = upFocus,
                     )
                 }
             }
