@@ -286,7 +286,8 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
         val paint = if (opacityAlpha == 255) null else bitmapPaint
         for (i in first until end) {
             val item = scheduled[i]
-            val x = item.xAt(now, surfaceW).roundToInt().toFloat()
+            // 保留亚像素坐标，避免整数像素取整造成移动时的跳格。
+            val x = item.xAt(now, surfaceW)
             val top = (item.lane * lineHeightPx).roundToInt().toFloat()
             canvas.drawBitmap(bitmapFor(item), x, top, paint)
         }
