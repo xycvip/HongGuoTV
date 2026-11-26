@@ -111,11 +111,12 @@ fun TopBar(
         if (logoReachable) return
         logoReachable = true
         scope.launch {
-            // canFocus 变更要经过一次组合 + 布局才生效，多等几帧再请求，避免请求落空。
+            // canFocus 变更要经过组合 + 布局才生效；失败时恢复状态，允许用户再次尝试。
             repeat(8) {
                 withFrameNanos { }
                 if (logoFocus.tryRequestFocus()) return@launch
             }
+            logoReachable = false
         }
     }
 
@@ -134,8 +135,18 @@ fun TopBar(
         Box(
             Modifier.onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
-                    val target = tabFocus[Tab.entries.first { it.inTopBar }]
-                    target?.tryRequestFocus() ?: false
+                    val target = tabFocus[current]
+                    if (target != null) {
+                        scope.launch {
+                            repeat(8) {
+                                if (target.tryRequestFocus()) return@launch
+                                withFrameNanos { }
+                            }
+                        }
+                        true
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 }
@@ -176,8 +187,10 @@ fun TopBar(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown && contentEntry != null) {
-                    contentEntry.tryRequestFocus()
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                    val moved = contentEntry?.tryRequestFocus() == true
+                    if (!moved) onEnterContent(current)
+                    true
                 } else {
                     false
                 }
@@ -229,15 +242,13 @@ private fun NavItem(
                     // 「下」始终进入当前已选页面，而不是焦点所在的导航项对应页面。
                     // 因此即使焦点误落到其他导航项，也不会悄悄切换顶部导航。
                     Key.DirectionDown -> {
-                        if (downEntry != null) {
-                            // 当前页面内容已就绪：精确请求当前页入口，避免几何搜索跳错页面。
-                            downEntry.tryRequestFocus()
-                            true
-                        } else {
-                            // 当前页面尚未就绪：记录当前页的进入意图，待内容 attach 后再落焦点。
+                        val moved = downEntry?.tryRequestFocus() == true
+                        if (!moved) {
+                            // requester 暂时未 attach / 请求失败时交给上层重试，
+                            // 不放行给 Compose 几何搜索，避免焦点跳到别页。
                             onEnter?.invoke()
-                            true
                         }
+                        true
                     }
                     // 最左侧再按一次左键才进 logo（见 TopBar 里的 logoReachable）。
                     Key.DirectionLeft -> if (onLeftEdge != null) { onLeftEdge(); true } else false
