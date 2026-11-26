@@ -18,6 +18,7 @@ class LatestWriteQueue<K, V>(
     private val pending = linkedMapOf<K, V>()
     private var scheduled: ScheduledFuture<*>? = null
     private var closed = false
+    private var writing = false
     private var retries = 0
 
     @Synchronized fun submit(values: Map<K, V>) {
@@ -43,10 +44,12 @@ class LatestWriteQueue<K, V>(
                 if (closed) worker.shutdown()
                 return
             }
+            writing = true
             pending.toMap().also { pending.clear() }
         }
         val success = runCatching { write(batch) }.getOrDefault(false)
         synchronized(this) {
+            writing = false
             if (success) {
                 retries = 0
             } else {
@@ -83,6 +86,27 @@ class LatestWriteQueue<K, V>(
         scheduled?.cancel(false)
         scheduled = null
         schedule(0)
+    }
+
+    /**
+     * Waits for the current pending batch to become idle without shutting the queue down.
+     * Used by a replacement Library instance to get a fresh snapshot while keeping the
+     * process-wide writer reusable for subsequent sessions.
+     */
+    fun awaitIdle(timeout: Long, unit: TimeUnit): Boolean {
+        val deadline = System.nanoTime() + unit.toNanos(timeout)
+        while (true) {
+            val idle = synchronized(this) { pending.isEmpty() && scheduled == null && !writing }
+            if (idle) return true
+            val remaining = deadline - System.nanoTime()
+            if (remaining <= 0L) return false
+            try {
+                TimeUnit.NANOSECONDS.sleep(minOf(remaining, TimeUnit.MILLISECONDS.toNanos(20)))
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
     }
 
     /** True only when the worker has terminated and no uncommitted values remain. */
