@@ -50,6 +50,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
@@ -85,6 +87,7 @@ fun AccountScreen(
     onVerify: () -> Unit,
     onResetPhone: () -> Unit,
     modifier: Modifier = Modifier,
+    entryFocus: FocusRequester? = null,
 ) {
     Row(
         modifier
@@ -102,6 +105,7 @@ fun AccountScreen(
             onSendCode = onSendCode,
             onVerify = onVerify,
             onResetPhone = onResetPhone,
+            entryFocus = entryFocus.takeIf { !state.signedIn },
         )
 
         AccountIntro(
@@ -109,6 +113,7 @@ fun AccountScreen(
             onLogin = onLogin,
             onSignOut = onSignOut,
             modifier = Modifier.weight(1f),
+            entryFocus = entryFocus.takeIf { state.signedIn },
         )
     }
 }
@@ -125,6 +130,7 @@ private fun LoginCard(
     onSendCode: () -> Unit,
     onVerify: () -> Unit,
     onResetPhone: () -> Unit,
+    entryFocus: FocusRequester? = null,
 ) {
     val phoneMode = state.mode == LoginMode.PHONE
     val cardWidth by animateDpAsState(
@@ -181,7 +187,7 @@ private fun LoginCard(
                 )
                 Spacer(Modifier.weight(1f))
                 if (!state.signedIn) {
-                    ModeSwitch(state.mode, onSwitchMode)
+                    ModeSwitch(state.mode, onSwitchMode, entryFocus)
                 }
             }
             Spacer(Modifier.height(d(18)))
@@ -204,20 +210,30 @@ private fun LoginCard(
 }
 
 @Composable
-private fun ModeSwitch(mode: LoginMode, onSwitchMode: (LoginMode) -> Unit) {
+private fun ModeSwitch(
+    mode: LoginMode,
+    onSwitchMode: (LoginMode) -> Unit,
+    entryFocus: FocusRequester? = null,
+) {
     Row(horizontalArrangement = Arrangement.spacedBy(d(6))) {
-        ModeTab("扫码", mode == LoginMode.QR) { onSwitchMode(LoginMode.QR) }
+        ModeTab("扫码", mode == LoginMode.QR, entryFocus) { onSwitchMode(LoginMode.QR) }
         ModeTab("手机号", mode == LoginMode.PHONE) { onSwitchMode(LoginMode.PHONE) }
     }
 }
 
 @Composable
-private fun ModeTab(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ModeTab(
+    label: String,
+    selected: Boolean,
+    focusRequester: FocusRequester? = null,
+    onClick: () -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(999.dp)
     Box(
         Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clip(shape)
             .background(
                 when {
@@ -612,6 +628,7 @@ private fun AccountIntro(
     onLogin: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
+    entryFocus: FocusRequester? = null,
 ) {
     val phoneMode = state.mode == LoginMode.PHONE
     Column(modifier, verticalArrangement = Arrangement.spacedBy(d(16))) {
@@ -638,7 +655,12 @@ private fun AccountIntro(
         }
         Spacer(Modifier.height(d(10)))
         if (state.signedIn) {
-            TvButton("退出登录", onSignOut, tone = ButtonTone.Ghost)
+            TvButton(
+                "退出登录",
+                onSignOut,
+                tone = ButtonTone.Ghost,
+                focusRequester = entryFocus,
+            )
         } else if (!phoneMode) {
             TvButton("扫码登录", onLogin, tone = ButtonTone.Primary)
         }
