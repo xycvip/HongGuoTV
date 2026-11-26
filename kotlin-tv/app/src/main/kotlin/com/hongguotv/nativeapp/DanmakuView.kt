@@ -45,7 +45,6 @@ class DanmakuView(
     context: Context,
     textSizeSp: Float = 20f,
     crossMs: Long = 9_000L,
-    private val frameRateMode: Int = FRAME_RATE_VSYNC,
 ) :
     SurfaceView(context), SurfaceHolder.Callback, DanmakuRenderer {
     private data class Scheduled(
@@ -151,9 +150,8 @@ class DanmakuView(
                     lastPumpAt = tick
                     needMore(now)
                 }
-                // 逐帧模式每个 VSync 都提交一帧；省资源模式保留原来的隔帧绘制。
-                val shouldDraw = frameRateMode != FRAME_RATE_30 || (frameTick++ and 1L) == 0L
-                if (shouldDraw) drawFrame(now)
+                // 固定隔一个 VSync 绘制一次：60Hz 屏幕约30fps，120Hz 屏幕约60fps。
+                if ((frameTick++ and 1L) == 0L) drawFrame(now)
             }
             if (running && playbackActive && loader != null) scheduleFrame()
         }
@@ -481,8 +479,6 @@ class DanmakuView(
     }
 
     companion object {
-        const val FRAME_RATE_30 = 0
-        const val FRAME_RATE_VSYNC = 1
         const val COLOR_MODE_DEFAULT = 0
         const val COLOR_MODE_COLORFUL = 1
         const val COLOR_MODE_FIRST = 2
