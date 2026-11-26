@@ -338,10 +338,11 @@ class Library(context: Context) {
 
     /** Close and wait for queued library writes before an all-data reset removes storage. */
     fun closeAndAwait(timeoutSeconds: Long = 15): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
         close()
         val loaderDone = loader.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
-        val writesDone = writes.awaitIdle(timeoutSeconds, TimeUnit.SECONDS)
+        val afterLoader = (deadline - System.nanoTime()).coerceAtLeast(0L)
+        val writesDone = writes.awaitIdle(afterLoader, TimeUnit.NANOSECONDS)
         val remaining = (deadline - System.nanoTime()).coerceAtLeast(0L)
         val homesDone = homeWrites.awaitIdle(remaining, TimeUnit.NANOSECONDS)
         return loaderDone && writesDone && homesDone
@@ -351,7 +352,7 @@ class Library(context: Context) {
     fun flush() {
         writes.flush(); homeWrites.flush()
     }
-    /** Drain pending commits after Activity destruction; abrupt process death is still a boundary. */
+    /** Close this Library view; process-owned persistence queues remain reusable for relaunch. */
     fun close() {
         if (closed) return
         closed = true
