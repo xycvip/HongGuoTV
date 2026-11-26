@@ -129,10 +129,12 @@ fun HongguoApp(vm: AppViewModel) {
     }
 
     LaunchedEffect(state.toast) {
-        if (state.toast != null) {
-            delay(2400)
-            vm.clearToast()
-        }
+        val message = state.toast ?: return@LaunchedEffect
+        // Clearing all data may spend up to 30 seconds draining pending disk writes.
+        // Keep this progress message visible for the whole wait instead of letting the
+        // normal short toast disappear and making the app look unresponsive.
+        delay(if (message.startsWith("正在保存尚未保存完成的数据")) 45_000 else 2400)
+        vm.clearToast()
     }
 
     // 启动后静默检查一次更新：只有发现新版才弹窗，且不在播放页打扰。

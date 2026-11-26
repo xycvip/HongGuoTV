@@ -15,19 +15,61 @@ typealias WatchProgress = BackupProgress
 
 /** Memory-only UI access; disk reads, JSON serialization and commits run on workers. */
 class Library(context: Context) {
-    private companion object {
-        // A replacement Activity must not load before its predecessor's final checkpoint commits.
-        val retiredWrites = mutableListOf<LatestWriteQueue<String, () -> Any?>>()
+    /**
+     * Persistence belongs to the process, not to an Activity/ViewModel.
+     * Reusing the serial queues avoids waiting up to 30 seconds for a retired
+     * Activity's writer when the app is opened again in the same process.
+     */
+    private class PersistenceQueues(context: Context) {
+        val prefs: SharedPreferences = context.getSharedPreferences("native-library-v1", Context.MODE_PRIVATE)
+        val homePrefs: SharedPreferences = context.getSharedPreferences("native-home-cache-v1", Context.MODE_PRIVATE)
+        val writes = LatestWriteQueue<String, () -> Any?>(
+            "hongguotv-library-write",
+            write = { batch -> commit(prefs, batch) },
+            failed = { Log.w("HongGuoTV", "Local library commit failed; pending changes retained for retry") },
+        )
+        val homeWrites = LatestWriteQueue<String, () -> Any?>(
+            "hongguotv-home-write",
+            write = { batch -> commit(homePrefs, batch) },
+            failed = { Log.w("HongGuoTV", "Home cache commit failed; pending changes retained for retry") },
+        )
+
+        private fun commit(target: SharedPreferences, values: Map<String, () -> Any?>): Boolean {
+            val edit = target.edit()
+            values.forEach { (key, encode) ->
+                when (val value = encode()) {
+                    null -> edit.remove(key)
+                    is String -> edit.putString(key, value)
+                    is Int -> edit.putInt(key, value)
+                    is Float -> edit.putFloat(key, value)
+                    is Boolean -> edit.putBoolean(key, value)
+                    is Set<*> -> edit.putStringSet(key, value.filterIsInstance<String>().toSet())
+                    else -> error("Unsupported library value")
+                }
+            }
+            return edit.commit()
+        }
     }
+
+    private companion object {
+        @Volatile private var processPersistence: PersistenceQueues? = null
+
+        private fun persistenceFor(context: Context): PersistenceQueues {
+            processPersistence?.let { return it }
+            return synchronized(this) {
+                processPersistence ?: PersistenceQueues(context.applicationContext).also { processPersistence = it }
+            }
+        }
+    }
+
     private val app = context.applicationContext
+    private val persistence = persistenceFor(app)
     private val main = Handler(Looper.getMainLooper())
     private val loader = Executors.newSingleThreadExecutor { task -> Thread(task, "hongguotv-library-load") }
-    private val prefs by lazy { app.getSharedPreferences("native-library-v1", Context.MODE_PRIVATE) }
-    private val homePrefs by lazy { app.getSharedPreferences("native-home-cache-v1", Context.MODE_PRIVATE) }
-    private val writes = LatestWriteQueue<String, () -> Any?>("hongguotv-library-write", write = { batch -> commit(prefs, batch) },
-        failed = { Log.w("HongguoTV", "Local library commit failed; pending changes retained for retry") })
-    private val homeWrites = LatestWriteQueue<String, () -> Any?>("hongguotv-home-write", write = { batch -> commit(homePrefs, batch) },
-        failed = { Log.w("HongguoTV", "Home cache commit failed") })
+    private val prefs = persistence.prefs
+    private val homePrefs = persistence.homePrefs
+    private val writes = persistence.writes
+    private val homeWrites = persistence.homeWrites
     private var index: LibraryIndex? = null
     private val homes = mutableMapOf<ContentType, CatalogPage>()
     private val homeSavedAt = mutableMapOf<ContentType, Long>()
@@ -47,10 +89,41 @@ class Library(context: Context) {
         loading = true
         loader.execute {
             val result = runCatching {
-                val retired = synchronized(retiredWrites) { retiredWrites.toList() }
-                retired.forEach { check(it.awaitClosed(30, TimeUnit.SECONDS)) { "上次观看记录仍在保存，请稍后重试" } }
-                synchronized(retiredWrites) { retiredWrites.removeAll(retired.toSet()) }
-                val values = prefs.all
+                // Flush the previous session's checkpoints, but never let a failed disk
+                // commit hold the second launch behind the old queue for 30 seconds.
+                // Both sessions share the same serial writers, so later values still win.
+                writes.flush()
+                homeWrites.flush()
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+                val libraryWritesReady = writes.awaitIdle(2, TimeUnit.SECONDS)
+                val remaining = (deadline - System.nanoTime()).coerceAtLeast(0L)
+                val homeWritesReady = homeWrites.awaitIdle(remaining, TimeUnit.NANOSECONDS)
+                if (!libraryWritesReady || !homeWritesReady) {
+                    Log.w("HongGuoTV", "Previous library checkpoint is still pending; continuing startup")
+                }
+                // Read disk and overlay pending/in-flight writes under each queue's state
+                // lock. A writer may finish disk I/O concurrently, but cannot clear its
+                // in-flight snapshot until this read completes.
+                val values = writes.readWithPending(
+                    read = { prefs.all.toMutableMap() },
+                    overlay = { disk, pending ->
+                        pending.forEach { (key, encode) ->
+                            val value = encode()
+                            if (value == null) disk.remove(key) else disk[key] = value
+                        }
+                        disk
+                    },
+                )
+                val homeValues = homeWrites.readWithPending(
+                    read = { homePrefs.all.toMutableMap() },
+                    overlay = { disk, pending ->
+                        pending.forEach { (key, encode) ->
+                            val value = encode()
+                            if (value == null) disk.remove(key) else disk[key] = value
+                        }
+                        disk
+                    },
+                )
                 val loaded = LibraryDisk.decode(values)
                 val now = System.currentTimeMillis()
                 val cached = mutableMapOf<ContentType, CatalogPage>()
@@ -60,16 +133,17 @@ class Library(context: Context) {
                 ContentType.entries.forEach { type ->
                     val key = "home-${type.storedValue}"
                     val legacy = values[key] as? String
-                    val raw = homePrefs.getString(key, null) ?: legacy.orEmpty()
+                    val raw = (homeValues[key] as? String) ?: legacy.orEmpty()
                     CatalogSnapshot.decode(raw, now)?.let { page ->
                         cached[type] = page
                         stamps[type] = org.json.JSONObject(raw).getLong("savedAt")
-                        if (!homePrefs.contains(key)) migration.putString(key, raw)
+                        if (!homeValues.containsKey(key)) migration.putString(key, raw)
                     }
                     if (legacy != null) oldKeys += key
                 }
-                // Only remove legacy cache after the separate cache has been committed.
-                if (oldKeys.isNotEmpty() && migration.commit()) {
+                // Do not race an older process-session cache write with migration.
+                // A later launch can retry migration after the shared writer becomes idle.
+                if (homeWritesReady && oldKeys.isNotEmpty() && migration.commit()) {
                     prefs.edit().also { edit -> oldKeys.forEach(edit::remove) }.commit()
                 }
                 Triple(loaded, cached, stamps)
@@ -284,49 +358,50 @@ class Library(context: Context) {
         ))
     }
 
-    /** Close and wait for queued library writes before an all-data reset removes storage. */
+    /**
+     * Permanently stop this process-owned persistence pair before destructive storage reset.
+     * The loader is stopped first because it can still migrate cache data directly; only after
+     * it exits are both serial writers closed and drained. A timeout means callers MUST NOT
+     * delete preferences, because an in-flight commit could otherwise recreate cleared data.
+     */
+    fun shutdownAndAwait(timeoutSeconds: Long = 30): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
+        close()
+        if (!loader.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)) return false
+
+        writes.close()
+        homeWrites.close()
+        val remainingWrites = (deadline - System.nanoTime()).coerceAtLeast(0L)
+        if (!writes.awaitClosed(remainingWrites, TimeUnit.NANOSECONDS)) return false
+        val remainingHomes = (deadline - System.nanoTime()).coerceAtLeast(0L)
+        return homeWrites.awaitClosed(remainingHomes, TimeUnit.NANOSECONDS)
+    }
+
+    /** Wait for currently queued writes without permanently shutting down process queues. */
     fun closeAndAwait(timeoutSeconds: Long = 15): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
         close()
         val loaderDone = loader.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)
-        val writesDone = writes.awaitClosed(timeoutSeconds, TimeUnit.SECONDS)
-        val homesDone = homeWrites.awaitClosed(timeoutSeconds, TimeUnit.SECONDS)
-        val drained = loaderDone && writesDone && homesDone
-        // 超时不代表写入队列已经结束；保留引用，让后续 Activity 仍能等待旧队列。
-        if (drained) synchronized(retiredWrites) {
-            retiredWrites.remove(writes)
-            retiredWrites.remove(homeWrites)
-        }
-        return drained
+        val afterLoader = (deadline - System.nanoTime()).coerceAtLeast(0L)
+        val writesDone = writes.awaitIdle(afterLoader, TimeUnit.NANOSECONDS)
+        val remaining = (deadline - System.nanoTime()).coerceAtLeast(0L)
+        val homesDone = homeWrites.awaitIdle(remaining, TimeUnit.NANOSECONDS)
+        return loaderDone && writesDone && homesDone
     }
 
     /** Requests prompt background commit, without lifecycle-thread disk waits. */
     fun flush() {
         writes.flush(); homeWrites.flush()
     }
-    /** Drain pending commits after Activity destruction; abrupt process death is still a boundary. */
+    /** Close this Library view; process-owned persistence queues remain reusable for relaunch. */
     fun close() {
         if (closed) return
         closed = true
         readyCallbacks.clear(); errorCallbacks.clear()
         loader.shutdown()
-        synchronized(retiredWrites) {
-            writes.close(); homeWrites.close()
-            retiredWrites += writes; retiredWrites += homeWrites
-        }
-    }
-    private fun commit(target: SharedPreferences, values: Map<String, () -> Any?>): Boolean {
-        val edit = target.edit()
-        values.forEach { (key, encode) ->
-            when (val value = encode()) {
-                null -> edit.remove(key)
-                is String -> edit.putString(key, value)
-                is Int -> edit.putInt(key, value)
-                is Float -> edit.putFloat(key, value)
-                is Boolean -> edit.putBoolean(key, value)
-                is Set<*> -> edit.putStringSet(key, value.filterIsInstance<String>().toSet())
-                else -> error("Unsupported library value")
-            }
-        }
-        return edit.commit()
+        // Keep the process-owned queues alive for a quick relaunch; flush without blocking
+        // the lifecycle thread. Their single writer preserves ordering across Library instances.
+        writes.flush()
+        homeWrites.flush()
     }
 }

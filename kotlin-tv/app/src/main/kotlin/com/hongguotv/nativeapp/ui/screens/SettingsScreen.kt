@@ -991,10 +991,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dataPanel(
     item {
         SettingRow(
             title = "清除全部数据",
-            description = "清空收藏、历史、设置、账号与数据脚本并重启，脚本会重新下载",
+            description = "清空本机收藏、历史、设置和账号，完成后自动重启",
             value = "清除",
             onClick = {
-                onConfirm(ConfirmRequest("清除全部数据", "将删除本机全部收藏、观看历史、设置、账号与数据脚本，应用随后自动重启并重新下载脚本。此操作不可恢复，确定继续？") { vm.clearAllData() })
+                onConfirm(ConfirmRequest("清除全部数据", "将删除本机全部收藏、观看历史、设置、账号与数据脚本。应用会先保存尚未保存完成的数据，再清除全部内容并自动重启，可能需要几十秒。此操作不可恢复，确定继续？") { vm.clearAllData() })
             },
         )
     }

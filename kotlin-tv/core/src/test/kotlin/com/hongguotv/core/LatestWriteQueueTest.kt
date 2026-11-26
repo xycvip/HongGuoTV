@@ -56,6 +56,119 @@ class LatestWriteQueueTest {
         assertEquals(listOf(mapOf("progress" to 2, "favorites" to 8)), committed)
     }
 
+    @Test fun `read with pending preserves a commit that finishes during preference read`() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val committed = CountDownLatch(1)
+        val queue = LatestWriteQueue<String, Int>("test-library", 60_000, write = { values ->
+            entered.countDown()
+            check(release.await(5, TimeUnit.SECONDS))
+            committed.countDown()
+            true
+        })
+
+        queue.submit(mapOf("progress" to 42))
+        queue.flush()
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+
+        val snapshot = queue.readWithPending(
+            read = {
+                release.countDown()
+                assertTrue(committed.await(5, TimeUnit.SECONDS))
+                mutableMapOf("progress" to 1)
+            },
+            overlay = { disk, pending ->
+                pending.forEach { (key, value) -> disk[key] = value }
+                disk
+            },
+        )
+        assertEquals(42, snapshot["progress"])
+        assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+        queue.close()
+        assertTrue(queue.awaitClosed(5, TimeUnit.SECONDS))
+    }
+
+    @Test fun `snapshot includes in flight values and lets newer pending values win`() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val committed = mutableListOf<Map<String, Int>>()
+        val queue = LatestWriteQueue<String, Int>("test-library", 60_000, write = { values ->
+            if (committed.isEmpty()) {
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+            }
+            committed += values
+            true
+        })
+
+        queue.submit(mapOf("progress" to 1, "favorites" to 4))
+        queue.flush()
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        queue.submit(mapOf("progress" to 2))
+        assertEquals(
+            mapOf("progress" to 2, "favorites" to 4),
+            queue.snapshotPending(),
+        )
+
+        release.countDown()
+        queue.flush()
+        assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+        assertEquals(
+            listOf(mapOf("progress" to 1, "favorites" to 4), mapOf("progress" to 2)),
+            committed,
+        )
+        queue.close()
+        assertTrue(queue.awaitClosed(5, TimeUnit.SECONDS))
+    }
+
+    @Test fun `open process queue keeps retrying a failed checkpoint`() {
+        val allowCommit = AtomicBoolean(false)
+        val failed = CountDownLatch(1)
+        val committed = CountDownLatch(1)
+        val queue = LatestWriteQueue<String, Int>("test-library", 0, write = { values ->
+            assertEquals(mapOf("progress" to 7), values)
+            if (allowCommit.get()) {
+                committed.countDown()
+                true
+            } else {
+                failed.countDown()
+                false
+            }
+        })
+
+        queue.submit(mapOf("progress" to 7))
+        assertTrue(failed.await(5, TimeUnit.SECONDS))
+        allowCommit.set(true)
+        assertTrue(committed.await(5, TimeUnit.SECONDS))
+        assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+
+        queue.close()
+        assertTrue(queue.awaitClosed(5, TimeUnit.SECONDS))
+    }
+
+    @Test fun `queue can be reused after previous session becomes idle`() {
+        val committed = mutableListOf<Map<String, Int>>()
+        val queue = LatestWriteQueue<String, Int>("test-library", 60_000, write = {
+            committed += it
+            true
+        })
+
+        queue.submit(mapOf("progress" to 1))
+        queue.flush()
+        assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+
+        queue.submit(mapOf("progress" to 2, "favorites" to 3))
+        queue.flush()
+        assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+        assertEquals(
+            listOf(mapOf("progress" to 1), mapOf("progress" to 2, "favorites" to 3)),
+            committed,
+        )
+
+        queue.close()
+        assertTrue(queue.awaitClosed(5, TimeUnit.SECONDS))
+    }
+
     @Test fun `close does not report success while final checkpoint is failing`() {
         val allowCommit = AtomicBoolean(false)
         val attempts = AtomicInteger()

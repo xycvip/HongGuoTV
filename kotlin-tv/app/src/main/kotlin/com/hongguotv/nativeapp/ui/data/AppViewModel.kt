@@ -87,6 +87,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 脚本热更新器：走共享连接池与统一 DNS，检查结果持久化在独立 prefs。 */
     private val scriptUpdater = JsScriptUpdater(app, repository.http)
 
+    // Gateways are process-global registries; keep our exact instances so this ViewModel
+    // can unregister them on clear without erasing a newer ViewModel's registrations.
+    private var installedJs: HongguoJs? = null
+    private var installedContentGateway: HongguoJsContent? = null
+    private var installedAccountGateway: HongguoJsAccount? = null
+
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
 
@@ -149,6 +155,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         get() = getApplication<Application>().packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
 
     init {
+        ensureLauncherAliasConsistency()
         applyDnsSettings()
         scriptUpdater.clearPending()
         // APK 不再内置 main.js：本地有脚本才装门面进主界面，否则先走引导下载。
@@ -164,8 +171,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 把脚本实例接到内容与账号两个门面上；切换脚本时也走这里。 */
     private fun installScriptGateways(js: HongguoJs) {
-        JsContent.gateway = HongguoJsContent(js)
-        JsAccount.gateway = HongguoJsAccount(js)
+        val contentGateway = HongguoJsContent(js)
+        val accountGateway = HongguoJsAccount(js)
+        installedJs = js
+        installedContentGateway = contentGateway
+        installedAccountGateway = accountGateway
+        JsContent.gateway = contentGateway
+        JsAccount.gateway = accountGateway
         _scriptUpdate.value = ScriptUpdateState(
             version = js.builtAt,
             digest = js.contentDigest.take(8),
@@ -1705,27 +1717,64 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun clearAllData() {
         val app = getApplication<Application>()
-        val prefNames = listOf(
-            "native-library-v1", "native-home-cache-v1", "startup_playback",
-            "playback-settings-v1", "playback-extras-v1", "compose-account-v1",
-            "hongguo-js-kv", "script-update-v1",
-        )
-        prefNames.forEach { name ->
-            runCatching { app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit() }
-        }
-        runCatching { app.cacheDir.deleteRecursively() }
-        runCatching { File(app.filesDir, "js-bytecode").deleteRecursively() }
-        // 脚本本体也清掉：重启后走首次安装流程重新联网下载，等同全新安装。
-        runCatching { File(app.filesDir, "hongguo-js").deleteRecursively() }
-        toast("已清除全部数据，正在重启…")
-        // 用 launch intent 重启：杀进程后由系统按 MAIN/LEANBACK 入口重新拉起，兼容电视桌面。
-        runCatching {
-            val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        toast("正在保存尚未保存完成的数据，请稍候…")
+
+        // Stop all ViewModel-owned jobs before touching storage. The dedicated reset thread
+        // survives scope cancellation and waits for the loader plus both process-wide writers.
+        viewModelScope.coroutineContext[Job]?.cancel()
+        Thread({
+            fun restartProcess() {
+                runCatching {
+                    val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    }
+                    if (intent != null) app.startActivity(intent)
+                }
+                exitProcess(0)
             }
-            if (intent != null) app.startActivity(intent)
+
+            if (!library.shutdownAndAwait(timeoutSeconds = 30)) {
+                // The queues are now closing and this ViewModel cannot safely continue.
+                // Preserve the existing files/preferences and relaunch with fresh process state.
+                toast("未能安全清除数据，原有数据已保留，正在重启…")
+                restartProcess()
+                return@Thread
+            }
+
+            // Both persistence queues are fully drained: the pending local changes are now
+            // safely on disk, so tell the user before the destructive reset starts.
+            toast("数据已保存，正在清除本机数据…")
+
+            val prefNames = listOf(
+                "native-library-v1", "native-home-cache-v1", "startup_playback",
+                "playback-settings-v1", "playback-extras-v1", "compose-account-v1",
+                "hongguo-js-kv", "script-update-v1",
+            )
+            val failedPrefs = prefNames.filter { name ->
+                !runCatching {
+                    app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
+                }.getOrDefault(false)
+            }.filter { name ->
+                !runCatching {
+                    app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
+                }.getOrDefault(false)
+            }
+            if (failedPrefs.isNotEmpty()) {
+                toast("部分数据未能清除，正在重启应用…")
+                restartProcess()
+                return@Thread
+            }
+
+            runCatching { app.cacheDir.deleteRecursively() }
+            runCatching { File(app.filesDir, "js-bytecode").deleteRecursively() }
+            // 脚本本体也清掉：重启后走首次安装流程重新联网下载，等同全新安装。
+            runCatching { File(app.filesDir, "hongguo-js").deleteRecursively() }
+            toast("已清除全部数据，正在重启…")
+            restartProcess()
+        }, "hongguotv-clear-all-data").apply {
+            isDaemon = false
+            start()
         }
-        exitProcess(0)
     }
 
     private fun dirSize(dir: File): Long =
@@ -1833,29 +1882,104 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- 应用图标（launcher activity-alias 切换） ----
 
-    fun appIconVariant(): String = prefs.getString("appIconVariant", "i") ?: "i"
+    fun appIconVariant(): String =
+        prefs.getString("appIconVariant", "i")?.takeIf { APP_ICON_ALIASES.containsKey(it) } ?: "i"
 
-    fun setAppIconVariant(variant: String) {
-        val aliases = mapOf("h" to "LauncherIconH", "i" to "LauncherIconI", "j" to "LauncherIconJ", "k" to "LauncherIconK")
-        val alias = aliases[variant] ?: return
+    /** Resolve DEFAULT against the manifest instead of treating it as disabled. */
+    private fun launcherAliasEnabled(pm: PackageManager, component: ComponentName): Boolean =
+        when (pm.getComponentEnabledSetting(component)) {
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER,
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED -> false
+            else -> runCatching { pm.getActivityInfo(component, 0).enabled }.getOrDefault(false)
+        }
+
+    /**
+     * Apply one launcher entry as a single PackageManager transaction on Android 13+.
+     * Older versions enable and verify the target before disabling any previous entry.
+     */
+    private fun applyLauncherAliasVariant(variant: String) {
+        require(APP_ICON_ALIASES.containsKey(variant))
         val app = getApplication<Application>()
         val pm = app.packageManager
         val prefix = ComposeActivity::class.java.name.removeSuffix("ComposeActivity")
-        // 先启用目标入口再停用其余，任何时刻桌面都保有恰好一个图标
-        pm.setComponentEnabledSetting(
-            ComponentName(app, prefix + alias),
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-            PackageManager.DONT_KILL_APP,
-        )
-        aliases.filterKeys { it != variant }.values.forEach { other ->
+        val components = APP_ICON_ALIASES.mapValues { (_, alias) -> ComponentName(app, prefix + alias) }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val settings = APP_ICON_ALIASES.map { (key, _) ->
+                PackageManager.ComponentEnabledSetting(
+                    components.getValue(key),
+                    if (key == variant) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                    else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP,
+                )
+            }
+            pm.setComponentEnabledSettings(settings)
+        } else {
+            val target = components.getValue(variant)
             pm.setComponentEnabledSetting(
-                ComponentName(app, prefix + other),
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                target,
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                 PackageManager.DONT_KILL_APP,
             )
+            check(launcherAliasEnabled(pm, target)) { "目标桌面入口未能启用" }
+            components.filterKeys { it != variant }.values.forEach { component ->
+                pm.setComponentEnabledSetting(
+                    component,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP,
+                )
+            }
         }
-        prefs.edit().putString("appIconVariant", variant).apply()
-        toast("应用图标已更换 · 桌面没刷新就重启一下桌面")
+
+        val enabled = components.filterValues { launcherAliasEnabled(pm, it) }.keys
+        check(enabled == setOf(variant)) { "桌面入口状态异常：${enabled.joinToString()}" }
+    }
+
+    /** Activity 能启动时自检一次，纠正偏好与系统实际 alias 状态不一致的情况。 */
+    private fun ensureLauncherAliasConsistency() {
+        val app = getApplication<Application>()
+        val pm = app.packageManager
+        val prefix = ComposeActivity::class.java.name.removeSuffix("ComposeActivity")
+        val active = APP_ICON_ALIASES.mapNotNull { (key, alias) ->
+            val component = ComponentName(app, prefix + alias)
+            key.takeIf { runCatching { launcherAliasEnabled(pm, component) }.getOrDefault(false) }
+        }.toSet()
+        val preferred = appIconVariant()
+        if (active == setOf(preferred)) return
+
+        val recovered = runCatching { applyLauncherAliasVariant(preferred); preferred }.getOrElse {
+            val fallback = active.singleOrNull() ?: "i"
+            runCatching { applyLauncherAliasVariant(fallback); fallback }.getOrNull()
+        }
+        if (recovered != null) prefs.edit().putString("appIconVariant", recovered).commit()
+    }
+
+    fun setAppIconVariant(variant: String) {
+        if (!APP_ICON_ALIASES.containsKey(variant)) return
+        val previous = appIconVariant()
+        val app = getApplication<Application>()
+        val pm = app.packageManager
+        val prefix = ComposeActivity::class.java.name.removeSuffix("ComposeActivity")
+        val previousActive = APP_ICON_ALIASES.mapNotNull { (key, alias) ->
+            val component = ComponentName(app, prefix + alias)
+            key.takeIf { runCatching { launcherAliasEnabled(pm, component) }.getOrDefault(false) }
+        }.toSet()
+
+        try {
+            applyLauncherAliasVariant(variant)
+            check(prefs.edit().putString("appIconVariant", variant).commit()) { "图标偏好保存失败" }
+            toast("应用图标已更换 · 桌面可能需要刷新图标缓存")
+        } catch (failure: Exception) {
+            // Recover a known working launcher entry first; never leave all aliases disabled.
+            val fallback = previousActive.singleOrNull() ?: previous
+            val recovered = runCatching { applyLauncherAliasVariant(fallback); fallback }.getOrElse {
+                runCatching { applyLauncherAliasVariant("i"); "i" }.getOrNull()
+            }
+            if (recovered != null) prefs.edit().putString("appIconVariant", recovered).commit()
+            toast("图标切换失败，已尝试恢复可启动入口")
+        }
     }
 
     fun setShowNetworkSpeed(value: Boolean) {
@@ -2384,21 +2508,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        // ViewModel.onCleared() itself does not cancel viewModelScope; ViewModel.clear()
+        // closes its registered scope after this callback returns. Cancel it here first so
+        // active JS/OkHttp requests receive cancellation before global gateways are detached.
+        viewModelScope.coroutineContext[Job]?.cancel()
         super.onCleared()
         castRevision++
-        castJob?.cancel()
+        listOfNotNull(
+            castJob, homeJob, homeDeferJob, theaterJob, rankingJob,
+            theaterMoreJob, rankingMoreJob, searchJob, suggestJob,
+            accountPoll, scriptBootstrapJob, updateJob, countdownJob,
+        ).forEach { it.cancel() }
         castServer?.close()
         castServer = null
-        homeJob?.cancel()
-        theaterJob?.cancel()
-        searchJob?.cancel()
-        suggestJob?.cancel()
-        accountPoll?.cancel()
-        updateJob?.cancel()
+
+        // Do not leave process-global gateways pointing at a cleared ViewModel.
+        // Identity checks protect a replacement ViewModel that has already installed new ones.
+        if (JsContent.gateway === installedContentGateway) JsContent.gateway = null
+        if (JsAccount.gateway === installedAccountGateway) JsAccount.gateway = null
+        installedContentGateway = null
+        installedAccountGateway = null
+
+        // QuickJS runtimes are per-call and close in JsScriptRunner.finally. Release only
+        // this ViewModel's cached facade; a newer session may already own the process store.
+        installedJs?.let(HongguoJsStore::release)
+        installedJs = null
         library.flush()
         library.close()
     }
 }
+
+/** Stable manifest aliases used by both phone and Leanback launchers. */
+private val APP_ICON_ALIASES = linkedMapOf(
+    "h" to "LauncherIconH",
+    "i" to "LauncherIconI",
+    "j" to "LauncherIconJ",
+    "k" to "LauncherIconK",
+)
 
 /** 分页失败重试上限：网络连续失败三次才判定「到底」，避免一次抖动锁死列表。 */
 private const val MAX_LOAD_MORE_RETRIES = 3
