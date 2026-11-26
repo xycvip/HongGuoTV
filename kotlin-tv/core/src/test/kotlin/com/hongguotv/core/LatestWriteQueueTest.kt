@@ -56,6 +56,29 @@ class LatestWriteQueueTest {
         assertEquals(listOf(mapOf("progress" to 2, "favorites" to 8)), committed)
     }
 
+    @Test fun `queue can be reused after previous session becomes idle`() {
+        val committed = mutableListOf<Map<String, Int>>()
+        val queue = LatestWriteQueue<String, Int>("test-library", 60_000, write = {
+            committed += it
+            true
+        })
+
+        queue.submit(mapOf("progress" to 1))
+        queue.flush()
+        assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+
+        queue.submit(mapOf("progress" to 2, "favorites" to 3))
+        queue.flush()
+        assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+        assertEquals(
+            listOf(mapOf("progress" to 1), mapOf("progress" to 2, "favorites" to 3)),
+            committed,
+        )
+
+        queue.close()
+        assertTrue(queue.awaitClosed(5, TimeUnit.SECONDS))
+    }
+
     @Test fun `close does not report success while final checkpoint is failing`() {
         val allowCommit = AtomicBoolean(false)
         val attempts = AtomicInteger()
