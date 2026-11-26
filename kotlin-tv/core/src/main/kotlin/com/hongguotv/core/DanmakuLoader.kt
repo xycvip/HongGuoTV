@@ -97,10 +97,10 @@ class DanmakuLoader(
                         val key = keyOf(comment)
                         if (seen.add(key)) comments.add(comment)
                     }
-                    // Windows normally arrive in order; a forward seek can interleave offsets.
-                    if (comments.size > 1 && comments[comments.size - 2].offsetMs > comments[comments.size - 1].offsetMs) {
-                        comments.sortBy { it.offsetMs }
-                    }
+                    // A source may return overlapping or out-of-order windows. Checking only the
+                    // final two entries is insufficient (e.g. 0, 3000, 1000, 4000 remains unsorted).
+                    // Keep the invariant required by between()'s binary search and trimCache().
+                    if (window.comments.isNotEmpty()) comments.sortBy { it.offsetMs }
                     frontier = if (window.nextStartMs > start) window.nextStartMs else start + WINDOW_MS
                     trimCache(positionMs)
                     if (frontier >= durationMs) exhausted = true
