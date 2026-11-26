@@ -1015,7 +1015,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dataPanel(
             description = "清空本机收藏、历史、设置和账号，完成后自动重启",
             value = "清除",
             onClick = {
-                onConfirm(ConfirmRequest("清除全部数据", "将删除本机全部收藏、观看历史、设置、账号与数据脚本。应用会先保存尚未保存完成的数据，再清除全部内容并自动重启，可能需要几十秒。此操作不可恢复，确定继续？") { vm.clearAllData() })
+                onConfirm(ConfirmRequest("清除全部数据", "将清除本机全部应用数据，包括收藏、观看历史、设置、账号、缓存、诊断记录和数据脚本。应用会先保存尚未保存完成的数据，再由 Android 系统执行完整清除。APP 不会卸载，但下次打开会像首次安装一样重新初始化并下载脚本。此操作不可恢复，确定继续？") { vm.clearAllData() })
             },
         )
     }
