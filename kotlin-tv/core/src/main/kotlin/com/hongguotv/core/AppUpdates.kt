@@ -10,6 +10,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk: Int,
                      val tag: String, val fileName: String, val size: Long, val sha256: String, val notes: String,
@@ -192,6 +193,10 @@ class AppUpdateRepository(
 ) : java.io.Closeable {
     private val apiLatestReleaseUrl = "https://api.github.com/repos/$releaseRepository/releases/latest"
     private val isOfficialChannel = expectedPackageName == AppUpdate.OFFICIAL_PACKAGE
+    private val cancelled = AtomicBoolean(false)
+    private fun checkCancelled() {
+        if (cancelled.get() || Thread.currentThread().isInterrupted) throw IOException("下载已取消")
+    }
     private fun parseManifest(json: String) =
         AppUpdate.parse(json, expectedPackageName, releaseRepository, releaseTagPrefix, apkFilePrefix)
 
@@ -437,6 +442,7 @@ class AppUpdateRepository(
             }
         }
         for (wrap in mirrors) {
+            checkCancelled()
             val url = wrap(base)
             var response: okhttp3.Response? = null
             try {
@@ -448,6 +454,7 @@ class AppUpdateRepository(
                 body.byteStream().use { UpdateFiles.receive(it, file, selectedUpdate, progress, speed) }
                 return
             } catch (e: IOException) {
+                checkCancelled()
                 errors += "${e.message?.take(50) ?: "?"}@${hostOf(url)}"
                 file.delete()
             } finally {
@@ -480,6 +487,7 @@ class AppUpdateRepository(
                     AppUpdate.MIRRORS.getOrNull(mirrorIndex) ?: throw IOException("备用代理线路编号无效")
                 )
                 for (wrap in fallbackMirrors) {
+                    checkCancelled()
                     val url = wrap(fallbackBase)
                     var response: okhttp3.Response? = null
                     try {
@@ -493,6 +501,7 @@ class AppUpdateRepository(
                         body.byteStream().use { UpdateFiles.receive(it, file, selectedUpdate, progress, speed) }
                         return
                     } catch (e: IOException) {
+                        checkCancelled()
                         fallbackErrors += "${e.message?.take(50) ?: "?"}@${hostOf(url)}"
                         file.delete()
                     } finally {
@@ -507,6 +516,9 @@ class AppUpdateRepository(
         throw IOException("安装包下载失败：${errors.joinToString("; ")}")
     }
 
-    fun cancel() = http.dispatcher.cancelAll()
+    fun cancel() {
+        cancelled.set(true)
+        http.dispatcher.cancelAll()
+    }
     override fun close() { cancel(); http.connectionPool.evictAll(); http.dispatcher.executorService.shutdown() }
 }
