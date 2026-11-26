@@ -70,7 +70,6 @@ import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.system.exitProcess
 
 /**
  * 全应用唯一的数据入口。网络与解析在 IO 线程完成，本地片单在主线程读写，
@@ -1731,66 +1730,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 清除全部数据：清空本机所有 SharedPreferences（收藏/历史/设置/账号/设备身份/脚本版本等）、
-     * 缓存，以及 data 脚本本体。APK 不内置脚本，启动检测不到本地脚本会自动走首次安装流程联网下载，
-     * 因此删掉脚本不会变砖，重启后等同于全新安装。
+     * 等待本地持久化队列完成后，交由 Android 系统清除整个应用数据目录。
+     * 覆盖偏好、数据库、缓存、私有文件和诊断日志，不再维护手工清理名单。
+     * APK 保留安装；下次启动按首次启动流程重新初始化并下载脚本。
      */
     fun clearAllData() {
         val app = getApplication<Application>()
         toast("正在保存尚未保存完成的数据，请稍候…")
-
-        // Stop all ViewModel-owned jobs before touching storage. The dedicated reset thread
-        // survives scope cancellation and waits for the loader plus both process-wide writers.
         viewModelScope.coroutineContext[Job]?.cancel()
+
         Thread({
-            fun restartProcess() {
-                runCatching {
-                    val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    }
-                    if (intent != null) app.startActivity(intent)
-                }
-                exitProcess(0)
-            }
-
             if (!library.shutdownAndAwait(timeoutSeconds = 30)) {
-                // The queues are now closing and this ViewModel cannot safely continue.
-                // Preserve the existing files/preferences and relaunch with fresh process state.
-                toast("未能安全清除数据，原有数据已保留，正在重启…")
-                restartProcess()
+                // 无法确认写入队列已落盘时绝不清除，避免丢失收藏和观看进度。
+                toast("数据暂未保存完成，已取消清除；原有数据保持不变")
                 return@Thread
             }
 
-            // Both persistence queues are fully drained: the pending local changes are now
-            // safely on disk, so tell the user before the destructive reset starts.
-            toast("数据已保存，正在清除本机数据…")
+            toast("数据已保存，正在调用系统清除应用数据…")
+            val cleared = runCatching {
+                app.getSystemService(android.app.ActivityManager::class.java)
+                    ?.clearApplicationUserData() == true
+            }.getOrDefault(false)
 
-            val prefNames = listOf(
-                "native-library-v1", "native-home-cache-v1", "startup_playback",
-                "playback-settings-v1", "playback-extras-v1", "compose-account-v1",
-                "hongguo-js-kv", "script-update-v1",
-            )
-            val failedPrefs = prefNames.filter { name ->
-                !runCatching {
-                    app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
-                }.getOrDefault(false)
-            }.filter { name ->
-                !runCatching {
-                    app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
-                }.getOrDefault(false)
+            if (!cleared) {
+                // 系统拒绝执行时不退回手工删除，避免产生半清理状态。
+                toast("系统未能清除应用数据，原有数据已保留")
             }
-            if (failedPrefs.isNotEmpty()) {
-                toast("部分数据未能清除，正在重启应用…")
-                restartProcess()
-                return@Thread
-            }
-
-            runCatching { app.cacheDir.deleteRecursively() }
-            runCatching { File(app.filesDir, "js-bytecode").deleteRecursively() }
-            // 脚本本体也清掉：重启后走首次安装流程重新联网下载，等同全新安装。
-            runCatching { File(app.filesDir, "hongguo-js").deleteRecursively() }
-            toast("已清除全部数据，正在重启…")
-            restartProcess()
         }, "hongguotv-clear-all-data").apply {
             isDaemon = false
             start()
