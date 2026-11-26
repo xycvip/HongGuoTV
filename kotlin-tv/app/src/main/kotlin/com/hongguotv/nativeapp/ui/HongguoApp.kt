@@ -112,13 +112,22 @@ fun HongguoApp(vm: AppViewModel) {
     // 内容区是否已经有可聚焦元素。没有时不要把导航项的「下」指过去，
     // 否则会指向一个尚未 attach 的 requester，焦点移动直接抛异常。
     val contentReady = when (tab) {
-        // 首页的落点是第一排海报，只有片单出来才算就绪（hero 单独有数据时落点还不存在）。
-        Tab.HOME -> state.home.visibleShelves.isNotEmpty()
+        // HomeScreen 在 Hero 有数据时把入口挂在 Hero 浏览锚点；没有 Hero 才挂到第一排片单。
+        // 但加载/错误空态不会创建 LazyColumn，因此必须同时判断当前实际显示的是不是内容区。
+        Tab.HOME -> {
+            val emptyLoading = state.home.loading && state.home.shelves.isEmpty()
+            val emptyError = state.home.error != null && state.home.shelves.isEmpty()
+            !emptyLoading && !emptyError &&
+                (state.home.hero.isNotEmpty() || state.home.visibleShelves.isNotEmpty())
+        }
         Tab.THEATER -> state.theater.items.isNotEmpty()
         Tab.RANK -> state.ranking.items.isNotEmpty()
-        Tab.LIBRARY -> state.library.favorites.isNotEmpty() || state.library.history.isNotEmpty() || state.library.later.isNotEmpty()
+        // 追剧页即使历史/收藏为空，也始终显示「观看历史 / 我的收藏」标签，
+        // entryFocus 就挂在「观看历史」标签上，不应依赖列表数据量。
+        Tab.LIBRARY -> true
         // 设置页是静态布局，只要有快照就一定有可聚焦项（分类导轨）。
         Tab.SETTINGS -> snapshot != null
+        // 账号页始终有入口：未登录时是登录方式标签，已登录时是退出登录按钮。
         Tab.ACCOUNT -> true
     }
 
