@@ -483,25 +483,6 @@ private fun androidx.compose.foundation.lazy.LazyListScope.danmakuPanel(
 
     item {
         SettingRow(
-            title = "SurfaceView 弹幕帧率",
-            description = "逐帧模式跟随屏幕刷新；低性能电视盒子可切回省资源模式",
-            value = if (snapshot.danmakuFrameRateMode == 1) "逐帧（跟随屏幕刷新）" else "省资源（约30fps）",
-            onClick = {
-                onChoice(
-                    ChoiceRequest(
-                        "SurfaceView 弹幕帧率",
-                        listOf(
-                            Choice("1", "逐帧（跟随屏幕刷新）"),
-                            Choice("0", "省资源（约30fps）"),
-                        ),
-                        snapshot.danmakuFrameRateMode.toString(),
-                    ) { vm.setDanmakuFrameRateMode(it.toIntOrNull() ?: 1) },
-                )
-            },
-        )
-    }
-    item {
-        SettingRow(
             title = "不透明度",
             description = "弹幕压在画面上，太高会挡字幕",
             value = "${snapshot.danmakuOpacity}%",
