@@ -56,6 +56,31 @@ class LatestWriteQueueTest {
         assertEquals(listOf(mapOf("progress" to 2, "favorites" to 8)), committed)
     }
 
+    @Test fun `open process queue keeps retrying a failed checkpoint`() {
+        val allowCommit = AtomicBoolean(false)
+        val failed = CountDownLatch(1)
+        val committed = CountDownLatch(1)
+        val queue = LatestWriteQueue<String, Int>("test-library", 0, write = { values ->
+            assertEquals(mapOf("progress" to 7), values)
+            if (allowCommit.get()) {
+                committed.countDown()
+                true
+            } else {
+                failed.countDown()
+                false
+            }
+        })
+
+        queue.submit(mapOf("progress" to 7))
+        assertTrue(failed.await(5, TimeUnit.SECONDS))
+        allowCommit.set(true)
+        assertTrue(committed.await(5, TimeUnit.SECONDS))
+        assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+
+        queue.close()
+        assertTrue(queue.awaitClosed(5, TimeUnit.SECONDS))
+    }
+
     @Test fun `queue can be reused after previous session becomes idle`() {
         val committed = mutableListOf<Map<String, Int>>()
         val queue = LatestWriteQueue<String, Int>("test-library", 60_000, write = {
