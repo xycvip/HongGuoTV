@@ -192,23 +192,19 @@ fun HomeScreen(
                                 .focusRequester(heroBrowseFocus)
                                 .onFocusChanged { heroBrowseFocused = it.isFocused }
                                 .onPreviewKeyEvent { event ->
-                                    if (event.type != KeyEventType.KeyDown || hero.size <= 1) {
-                                        if (event.type == KeyEventType.KeyDown &&
-                                            (event.key == Key.Enter || event.key == Key.NumPadEnter || event.key == Key.DirectionCenter)
-                                        ) {
-                                            playFocus.tryRequestFocus()
-                                        } else false
+                                    if (event.type != KeyEventType.KeyDown) {
+                                        false
                                     } else {
                                         val currentIndex = hero.indexOfFirst {
                                             it.id == hero.getOrNull(state.heroIndex)?.id
                                         }.coerceAtLeast(0)
                                         when (event.key) {
                                             Key.DirectionLeft -> {
-                                                onHeroIndex((currentIndex - 1 + hero.size) % hero.size)
+                                                if (hero.size > 1) onHeroIndex((currentIndex - 1 + hero.size) % hero.size)
                                                 true
                                             }
                                             Key.DirectionRight -> {
-                                                onHeroIndex((currentIndex + 1) % hero.size)
+                                                if (hero.size > 1) onHeroIndex((currentIndex + 1) % hero.size)
                                                 true
                                             }
                                             Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
