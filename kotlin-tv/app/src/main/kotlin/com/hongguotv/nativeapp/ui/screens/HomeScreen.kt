@@ -103,8 +103,14 @@ fun HomeScreen(
     // Hero 分成两个遥控器焦点层：浏览层负责左右切换海报，确定键进入按钮层。
     // 导航栏下移优先落在稳定的浏览焦点；海报为空时才回退到第一排内容。
     val heroBrowseFocus = remember(entryFocus) { entryFocus ?: FocusRequester() }
-    val firstShelfFocus = remember(entryFocus, hero.isEmpty()) {
-        if (hero.isEmpty()) entryFocus ?: FocusRequester() else FocusRequester()
+    // 只有第一排片单真实存在时才创建下移目标；没有片单时不能把一个未挂载的
+    // FocusRequester 塞进 focusProperties，否则按下可能请求一个不存在的焦点节点。
+    val firstShelfFocus = remember(entryFocus, hero.isEmpty(), state.visibleShelves.isNotEmpty()) {
+        when {
+            state.visibleShelves.isEmpty() -> null
+            hero.isEmpty() -> entryFocus ?: FocusRequester()
+            else -> FocusRequester()
+        }
     }
     val playFocus = remember { FocusRequester() }
     val favoriteFocus = remember { FocusRequester() }
@@ -188,7 +194,13 @@ fun HomeScreen(
                                 .width(d(2))
                                 .height(d(2))
                                 .then(if (upFocus != null) Modifier.focusProperties { up = upFocus } else Modifier)
-                                .focusProperties { down = firstShelfFocus }
+                                .then(
+                                    if (firstShelfFocus != null) {
+                                        Modifier.focusProperties { down = firstShelfFocus }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
                                 .focusRequester(heroBrowseFocus)
                                 .onFocusChanged { heroBrowseFocused = it.isFocused }
                                 .onPreviewKeyEvent { event ->
