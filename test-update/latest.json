@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "f4ca468c45b4551c99e9690c714163d379b9b434",
-  "versionCode": 115,
-  "versionName": "0.0.115",
+  "sourceCommit": "890be20f8d5238fc3806e8d6846858a1811f411c",
+  "versionCode": 116,
+  "versionName": "0.0.116",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.115",
+  "tag": "hongguotv-bate-v0.0.116",
   "apk": {
-    "name": "HongguoTV-0.0.115.apk",
-    "size": 5771670,
-    "sha256": "f03ec886750a00c4cbc63d7912d265dfbb8bddd0ffb1f091d19e900002152401",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.115/HongguoTV-0.0.115.apk"
+    "name": "HongguoTV-0.0.116.apk",
+    "size": 5771666,
+    "sha256": "0c58503e3b8a10a64428f2b619771798b15653c8e029a7e3417285a4721b2734",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.116/HongguoTV-0.0.116.apk"
   },
-  "notes": "【界面与交互】\n- 精简首页大海报设置说明\n- 简化弹幕帧率设置说明\n【其他功能与问题修复】\n- Add HeroSource, ActorSheet, ActorRankScreen and ImageUrls\n- Add actor profile sheet, actor ranking board and rework rank page\n- Restore home hero when later-page candidates are unavailable"
+  "notes": "【其他功能与问题修复】\n- 桌面图标点不开：每个版本首次启动全量翻转四个 alias"
 }
