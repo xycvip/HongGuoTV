@@ -464,7 +464,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.danmakuPanel(
     item {
         SettingRow(
             title = "弹幕帧率",
-            description = "标准约半屏幕刷新率；高帧率约60fps；超帧率跟随屏幕最高刷新率。高帧率可能增加图形负载，切换后下次进入播放页生效",
+            description = "控制弹幕流畅度，帧率越高越流畅，性能消耗也越大。",
             value = listOf("标准", "高帧率", "超帧率")[snapshot.danmakuFrameRateMode.coerceIn(0, 2)],
             onClick = {
                 onChoice(
