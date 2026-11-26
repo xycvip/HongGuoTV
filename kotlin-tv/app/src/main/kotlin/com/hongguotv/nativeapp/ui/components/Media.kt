@@ -437,6 +437,7 @@ fun ResumeCard(
     modifier: Modifier = Modifier,
     width: Dp = ui.dp(300),
     focusRequester: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -455,6 +456,7 @@ fun ResumeCard(
         Box(
             Modifier
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .focusUpTo(upFocus)
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .then(if (focused) Modifier.shadow(d(20f), RoundedCornerShape(d(13)), ambientColor = Rouge.Core.copy(0.5f)) else Modifier)
