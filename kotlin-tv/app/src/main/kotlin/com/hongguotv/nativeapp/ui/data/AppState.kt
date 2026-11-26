@@ -136,6 +136,8 @@ data class SettingsSnapshot(
     val danmakuRows: Int = 2,
     /** 0=自动，1=普通 View 实验，2=原版 SurfaceView。 */
     val danmakuRendererMode: Int = 0,
+    /** 0=约30fps省资源，1=跟随屏幕 VSync 逐帧绘制。 */
+    val danmakuFrameRateMode: Int = 1,
     val danmakuColor: Int = 0,
     val blockedWords: List<String> = emptyList(),
     // ---- 播放增强 ----
