@@ -228,7 +228,13 @@ fun HomeScreen(
                                                 true
                                             }
                                             Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
-                                                playFocus.tryRequestFocus()
+                                                // Crossfade 的目标节点可能刚 attach；失败时等布局完成再重试。
+                                                scope.launch {
+                                                    repeat(12) {
+                                                        if (playFocus.tryRequestFocus()) return@launch
+                                                        withFrameNanos { }
+                                                    }
+                                                }
                                                 true
                                             }
                                             else -> false
@@ -244,6 +250,13 @@ fun HomeScreen(
                             animationSpec = tween(480),
                             label = "hero",
                         ) { series ->
+                            // Crossfade 过渡期间旧、新两张 Hero 会同时存在。
+                            // 只允许目标海报的按钮参与焦点搜索，防止 requester 命中即将销毁的旧按钮。
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .focusProperties { canFocus = series.id == current.id },
+                            ) {
                             val progress = progressById[series.id]
                             HeroBanner(
                                 series = series,
@@ -272,6 +285,7 @@ fun HomeScreen(
                                 detailFocus = detailFocus,
                                 upFocus = upFocus,
                             )
+                            }
                         }
                         // 轮播指示条：当前项用一条会「走完」的细线。
                         // 必须钉在 hero 底部——它原先没有 align，Box 默认左上，整条跑到画面顶端，
