@@ -468,6 +468,9 @@ class DanmakuView(
     override fun setPlaybackActive(active: Boolean) {
         if (!running || playbackActive == active) return
         playbackActive = active
+        // 暂停期间没有 VSync 回调；恢复时重新建立时间基准，避免把暂停时长计入帧率累积。
+        lastVsyncNanos = 0L
+        frameRateAccumulatorNanos = 0.0
         if (active && loader != null && surfaceAlive) {
             scheduleFrame()
         } else {
