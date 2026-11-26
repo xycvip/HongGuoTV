@@ -1723,8 +1723,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // survives scope cancellation and waits for the loader plus both process-wide writers.
         viewModelScope.coroutineContext[Job]?.cancel()
         Thread({
+            fun restartProcess() {
+                runCatching {
+                    val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    }
+                    if (intent != null) app.startActivity(intent)
+                }
+                exitProcess(0)
+            }
+
             if (!library.shutdownAndAwait(timeoutSeconds = 30)) {
-                toast("清除失败：本地数据仍在写入，请稍后重试")
+                // The queues are now closing and this ViewModel cannot safely continue.
+                // Preserve the existing files/preferences and relaunch with fresh process state.
+                toast("未能安全清除数据，原有数据已保留，正在重启…")
+                restartProcess()
                 return@Thread
             }
 
@@ -1733,13 +1746,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 "playback-settings-v1", "playback-extras-v1", "compose-account-v1",
                 "hongguo-js-kv", "script-update-v1",
             )
-            val cleared = prefNames.all { name ->
-                runCatching {
+            val failedPrefs = prefNames.filter { name ->
+                !runCatching {
+                    app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
+                }.getOrDefault(false)
+            }.filter { name ->
+                !runCatching {
                     app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
                 }.getOrDefault(false)
             }
-            if (!cleared) {
-                toast("部分数据清除失败，请重试")
+            if (failedPrefs.isNotEmpty()) {
+                toast("部分数据未能清除，正在重启应用…")
+                restartProcess()
                 return@Thread
             }
 
@@ -1748,15 +1766,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // 脚本本体也清掉：重启后走首次安装流程重新联网下载，等同全新安装。
             runCatching { File(app.filesDir, "hongguo-js").deleteRecursively() }
             toast("已清除全部数据，正在重启…")
-
-            // Use the manifest launcher entry so both phone and Leanback launchers can restart.
-            runCatching {
-                val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                }
-                if (intent != null) app.startActivity(intent)
-            }
-            exitProcess(0)
+            restartProcess()
         }, "hongguotv-clear-all-data").apply {
             isDaemon = false
             start()
