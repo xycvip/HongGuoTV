@@ -24,6 +24,7 @@ class LatestWriteQueue<K, V>(
     private var retryScheduled = false
     private var closed = false
     private var writing = false
+    private var inFlight: Map<K, V> = emptyMap()
     private var retries = 0
 
     @Synchronized fun submit(values: Map<K, V>) {
@@ -60,11 +61,15 @@ class LatestWriteQueue<K, V>(
                 return
             }
             writing = true
-            pending.toMap().also { pending.clear() }
+            pending.toMap().also {
+                pending.clear()
+                inFlight = it
+            }
         }
         val success = runCatching { write(batch) }.getOrDefault(false)
         synchronized(this) {
             writing = false
+            inFlight = emptyMap()
             if (success) {
                 retries = 0
             } else {
@@ -106,6 +111,18 @@ class LatestWriteQueue<K, V>(
         retryScheduled = false
         schedule(0)
     }
+
+    /**
+     * Returns the newest not-yet-durable values, including the batch currently being written.
+     * Pending values override in-flight values for the same key. Readers can overlay this
+     * snapshot on SharedPreferences after a bounded wait, avoiding stale startup state when
+     * the previous session is still retrying a failed disk commit.
+     */
+    @Synchronized fun snapshotPending(): Map<K, V> =
+        LinkedHashMap<K, V>(inFlight.size + pending.size).apply {
+            putAll(inFlight)
+            putAll(pending)
+        }
 
     /**
      * Waits for the current pending batch to become idle without shutting the queue down.
