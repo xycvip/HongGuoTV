@@ -104,6 +104,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _update = MutableStateFlow(UpdateUiState())
     val update: StateFlow<UpdateUiState> = _update.asStateFlow()
     private var updateJob: Job? = null
+    @Volatile private var activeUpdateRepository: AppUpdateRepository? = null
+    private var updateGeneration = 0L
 
     /** 数据脚本热更新状态：设置页只读展示，更新过程完全自动。 */
     private val _scriptUpdate = MutableStateFlow(ScriptUpdateState())
@@ -2170,32 +2172,50 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun downloadUpdate() {
         val info = _update.value.update ?: return
-        if (_update.value.phase == UpdatePhase.DOWNLOADING) return
+        if (_update.value.phase == UpdatePhase.DOWNLOADING || _update.value.phase == UpdatePhase.VERIFYING) return
+
+        val generation = ++updateGeneration
+        val previousJob = updateJob
+        // Cancel the actual blocking OkHttp calls before asking the old coroutine to stop.
+        activeUpdateRepository?.cancel()
+        previousJob?.cancel()
+
         val app = getApplication<Application>()
         val dir = File(app.cacheDir, "updates").apply { mkdirs() }
-        // 每个版本独立文件名，避免系统安装器把旧包缓存当成新包。
         val target = File(dir, "HongGuoTV-${info.versionName}-${info.versionCode}.apk")
-        updateJob?.cancel()
         _update.update { it.copy(phase = UpdatePhase.DOWNLOADING, progress = 0, speedBytesPerSecond = 0, error = null, notice = null, apkPath = null) }
+
         updateJob = viewModelScope.launch {
+            // The previous receive() finally block deletes the shared .part file.
+            // Wait for it to finish before the next task touches that file.
+            previousJob?.join()
+            if (generation != updateGeneration) return@launch
+
             val repo = createAppUpdateRepository()
+            activeUpdateRepository = repo
             try {
                 withContext(Dispatchers.IO) {
                     repo.download(
                         update = info,
                         file = target,
                         progress = { percent ->
-                            _update.update { if (it.phase == UpdatePhase.DOWNLOADING) it.copy(progress = percent) else it }
+                            if (generation == updateGeneration) {
+                                _update.update { if (it.phase == UpdatePhase.DOWNLOADING) it.copy(progress = percent) else it }
+                            }
                         },
                         mirrorIndex = _update.value.mirrorIndex,
                         sourceIndex = null,
                         speed = { bytesPerSecond ->
-                            _update.update { if (it.phase == UpdatePhase.DOWNLOADING) it.copy(speedBytesPerSecond = bytesPerSecond) else it }
+                            if (generation == updateGeneration) {
+                                _update.update { if (it.phase == UpdatePhase.DOWNLOADING) it.copy(speedBytesPerSecond = bytesPerSecond) else it }
+                            }
                         },
                     )
                 }
+                if (generation != updateGeneration) return@launch
                 _update.update { it.copy(phase = UpdatePhase.VERIFYING) }
                 withContext(Dispatchers.IO) { AppUpdateInstaller.validate(app, target, info) }
+                if (generation != updateGeneration) return@launch
                 _update.update {
                     it.copy(
                         phase = UpdatePhase.READY,
@@ -2206,18 +2226,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             } catch (cancelled: CancellationException) {
-                _update.update { it.copy(phase = UpdatePhase.AVAILABLE, progress = 0, speedBytesPerSecond = 0, notice = "下载已取消") }
+                if (generation == updateGeneration) {
+                    _update.update { it.copy(phase = UpdatePhase.AVAILABLE, progress = 0, speedBytesPerSecond = 0, notice = "下载已取消") }
+                }
             } catch (problem: Exception) {
-                _update.update {
-                    it.copy(phase = UpdatePhase.ERROR, error = problem.message ?: "下载失败，请重试", progress = 0, speedBytesPerSecond = 0)
+                if (generation == updateGeneration) {
+                    _update.update {
+                        it.copy(phase = UpdatePhase.ERROR, error = problem.message ?: "下载失败，请重试", progress = 0, speedBytesPerSecond = 0)
+                    }
                 }
             } finally {
                 runCatching { repo.close() }
+                if (activeUpdateRepository === repo) activeUpdateRepository = null
             }
         }
     }
 
     fun cancelUpdateDownload() {
+        // Invalidate callbacks first; a late response from the cancelled task cannot
+        // overwrite the state or progress of a subsequent download.
+        updateGeneration++
+        activeUpdateRepository?.cancel()
         updateJob?.cancel()
         updateJob = null
         _update.update { it.copy(phase = UpdatePhase.AVAILABLE, progress = 0, speedBytesPerSecond = 0, notice = "下载已取消") }
