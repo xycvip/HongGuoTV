@@ -337,15 +337,9 @@ fun HongguoApp(vm: AppViewModel) {
                         contentEntry = entryOf(tab)?.takeIf { contentReady },
                         tabFocus = tabAnchors,
                         onEnterContent = { selected ->
-                            if (selected != tab) {
-                                // 非当前项按「下」：先切页，等这一页内容落点 attach 再进入。
-                                tab = selected
-                                pendingContent = selected
-                            } else if (!contentReady) {
-                                // 当前项按「下」但内容还在转圈：记下意图，等数据就绪后自动进入。
-                                // NavItem 此时已吞掉按键、没有交给几何搜索，这里补上"待进入"状态。
-                                pendingContent = selected
-                            }
+                            // 仅记录当前选中页的进入意图；不因焦点所在的导航项切换页面。
+                            // 即使即时 requestFocus 失败，也由 pendingContent 等待 attach 后重试。
+                            if (selected == tab) pendingContent = selected
                         },
                         modifier = Modifier.align(Alignment.TopCenter),
                     )
