@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.core
 
-import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
@@ -12,8 +12,12 @@ class LatestWriteQueue<K, V>(
     private val write: (Map<K, V>) -> Boolean,
     private val failed: () -> Unit = {}
 ) {
-    private val worker = Executors.newSingleThreadScheduledExecutor { task ->
+    private val worker = ScheduledThreadPoolExecutor(1) { task ->
         Thread(task, name).apply { isDaemon = true }
+    }.apply {
+        setKeepAliveTime(30, TimeUnit.SECONDS)
+        allowCoreThreadTimeOut(true)
+        setRemoveOnCancelPolicy(true)
     }
     private val pending = linkedMapOf<K, V>()
     private var scheduled: ScheduledFuture<*>? = null
