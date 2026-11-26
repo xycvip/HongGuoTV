@@ -56,6 +56,39 @@ class LatestWriteQueueTest {
         assertEquals(listOf(mapOf("progress" to 2, "favorites" to 8)), committed)
     }
 
+    @Test fun `snapshot includes in flight values and lets newer pending values win`() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val committed = mutableListOf<Map<String, Int>>()
+        val queue = LatestWriteQueue<String, Int>("test-library", 60_000, write = { values ->
+            if (committed.isEmpty()) {
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+            }
+            committed += values
+            true
+        })
+
+        queue.submit(mapOf("progress" to 1, "favorites" to 4))
+        queue.flush()
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        queue.submit(mapOf("progress" to 2))
+        assertEquals(
+            mapOf("progress" to 2, "favorites" to 4),
+            queue.snapshotPending(),
+        )
+
+        release.countDown()
+        queue.flush()
+        assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+        assertEquals(
+            listOf(mapOf("progress" to 1, "favorites" to 4), mapOf("progress" to 2)),
+            committed,
+        )
+        queue.close()
+        assertTrue(queue.awaitClosed(5, TimeUnit.SECONDS))
+    }
+
     @Test fun `open process queue keeps retrying a failed checkpoint`() {
         val allowCommit = AtomicBoolean(false)
         val failed = CountDownLatch(1)
