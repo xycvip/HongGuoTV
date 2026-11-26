@@ -1740,9 +1740,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.coroutineContext[Job]?.cancel()
 
         Thread({
+            fun restartWithoutClearing() {
+                // shutdownAndAwait 会关闭当前 Library；失败时重启进程以恢复全新的数据访问层。
+                runCatching {
+                    val launch = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    }
+                    if (launch != null) app.startActivity(launch)
+                }
+                android.os.Process.killProcess(android.os.Process.myPid())
+            }
+
             if (!library.shutdownAndAwait(timeoutSeconds = 30)) {
-                // 无法确认写入队列已落盘时绝不清除，避免丢失收藏和观看进度。
-                toast("数据暂未保存完成，已取消清除；原有数据保持不变")
+                // 无法确认写入队列已落盘时绝不清除，保留原数据并重启恢复访问层。
+                toast("数据暂未保存完成，未执行清除；正在恢复应用…")
+                restartWithoutClearing()
                 return@Thread
             }
 
@@ -1754,7 +1766,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
             if (!cleared) {
                 // 系统拒绝执行时不退回手工删除，避免产生半清理状态。
-                toast("系统未能清除应用数据，原有数据已保留")
+                toast("系统未能清除应用数据，原有数据已保留；正在重启…")
+                restartWithoutClearing()
             }
         }, "hongguotv-clear-all-data").apply {
             isDaemon = false
