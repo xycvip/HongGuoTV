@@ -2248,7 +2248,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         updateGeneration++
         activeUpdateRepository?.cancel()
         updateJob?.cancel()
-        updateJob = null
+        // Keep the cancelled Job reference so a rapid retry can join it before
+        // opening the same .part file. The next download replaces this reference.
         _update.update { it.copy(phase = UpdatePhase.AVAILABLE, progress = 0, speedBytesPerSecond = 0, notice = "下载已取消") }
     }
 
