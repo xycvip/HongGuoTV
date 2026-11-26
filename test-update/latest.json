@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "750b638b200a4dc12a25cee132140c9631818cb5",
-  "versionCode": 111,
-  "versionName": "0.0.111",
+  "sourceCommit": "52ff8ccccf3504d15cb2a424a88d4526836fe2a5",
+  "versionCode": 112,
+  "versionName": "0.0.112",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.111",
+  "tag": "hongguotv-bate-v0.0.112",
   "apk": {
-    "name": "HongguoTV-0.0.111.apk",
-    "size": 5722518,
-    "sha256": "b5d66b0c2883d36b53e9b18efeb84f7ddf8b444ee39833dc255ccac55894a6e6",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.111/HongguoTV-0.0.111.apk"
+    "name": "HongguoTV-0.0.112.apk",
+    "size": 5738902,
+    "sha256": "02b23edefbd7ce4b09e2f62251973a2a9ac76564522b9f2afe205c77e4320c4d",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.112/HongguoTV-0.0.112.apk"
   },
-  "notes": "【其他功能与问题修复】\n- Remove redundant script error fallback\n- Clean PushShare override and nullability warnings\n- Remove redundant nullable fallback in account nickname"
+  "notes": "【播放与播放器】\n- 修复单播放器切集同步与弹幕生命周期\n【焦点与遥控器】\n- 修复 HomeScreen Compose 焦点相关导入\n- 修复首页 Hero 遥控器两层焦点导航 (#24)\n【其他功能与问题修复】\n- 修复桌面图标入口与二次启动初始化卡顿\n- Add files via upload\n- Make clear action fully clear current playback log\n- Clarify playback state and heap diagnostics\n- Keep newest diagnostic records visible when log text is capped\n- Fix standby first-frame diagnostic timestamp\n- Trace standby decoder readiness and first-frame handoff\n- Update player diagnostic logging documentation\n- Clear stale interrupted-session metadata\n- Preserve interrupted session identity and sanitize all logged fields\n- Trace stream preparation and memory pressure during playback\n- Include memory snapshots in playback heartbeat records\n- Add periodic playback and dual-decoder handoff diagnostics\n- Add safe URL and credential redaction to playback logs\n- Make playback diagnostic lines navigable with TV remote\n- Redact sensitive query values from playback diagnostics\n- Capture uncaught Java exceptions in playback diagnostics\n- Bound playback log size and preserve active recording on clear\n- Add remote-friendly playback diagnostics viewer\n- Instrument player lifecycle and episode transitions\n- Initialize playback diagnostics on app startup\n- Persist player log events to diagnostics\n- Add persistent playback diagnostics store"
 }
