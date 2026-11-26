@@ -15,8 +15,8 @@ class LatestWriteQueue<K, V>(
     private val worker = ScheduledThreadPoolExecutor(1) { task ->
         Thread(task, name).apply { isDaemon = true }
     }.apply {
-        setKeepAliveTime(30, TimeUnit.SECONDS)
-        allowCoreThreadTimeOut(true)
+        // Scheduled retries may be delayed for up to 30 seconds. Keep the daemon worker
+        // available so an idle timeout cannot strand a delayed task in the scheduler queue.
         setRemoveOnCancelPolicy(true)
     }
     private val pending = linkedMapOf<K, V>()
