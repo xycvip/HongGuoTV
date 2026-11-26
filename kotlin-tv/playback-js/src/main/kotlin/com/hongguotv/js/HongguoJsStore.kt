@@ -48,6 +48,17 @@ object HongguoJsStore {
     }
 
     /**
+     * Release the session-owned script facade and in-memory bytecode cache when the app's
+     * ViewModel is permanently cleared. QuickJS itself is per-call and already closed by
+     * JsScriptRunner.finally; the process-wide daemon dispatcher intentionally stays alive
+     * so a later Activity launch can create fresh runtimes without executor reinitialization.
+     */
+    fun release() {
+        synchronized(this) { instance = null }
+        HongguoJsStreamSource.clearCache()
+    }
+
+    /**
      * 重置设备身份：删掉持久化的 device_register 结果。
      * 下次任意脚本调用新建 runtime 时，bootstrap 读不到缓存，vendor 的 Ot() 会重新注册一台新设备。
      * 用于被风控封禁后换身份；SharedPreferences 按 name 共享，这里直接构造 store 操作同一份数据即可。
