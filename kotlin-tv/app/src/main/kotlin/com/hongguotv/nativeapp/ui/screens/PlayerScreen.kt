@@ -110,8 +110,6 @@ import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
 import kotlinx.coroutines.delay
 
-private const val USE_CANVAS_DANMAKU_EXPERIMENT = true
-
 @UnstableApi
 @Composable
 fun PlayerScreen(
@@ -373,8 +371,11 @@ fun PlayerScreen(
         // 弹幕层通过 DanmakuRenderer 接口接入。正式版使用独立 SurfaceView；本实验分支启用
         // 普通 View + 硬件加速 Canvas，专门比较移动文字的观感与视频合成开销。
         // 只覆盖顶部弹幕带，限制窗口失效和绘制范围。
-        val danmakuView: android.view.View = remember {
-            if (USE_CANVAS_DANMAKU_EXPERIMENT) DanmakuCanvasView(context) else DanmakuView(context)
+        val danmakuView: android.view.View = remember(session.danmakuRendererMode) {
+            when (session.danmakuRendererMode) {
+                1 -> DanmakuCanvasView(context)
+                else -> DanmakuView(context) // 自动当前走兼容优先；2 强制原版 SurfaceView
+            }
         }
         val danmakuRenderer = danmakuView as DanmakuRenderer
         AndroidView(
