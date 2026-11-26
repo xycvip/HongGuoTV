@@ -463,15 +463,16 @@ private fun androidx.compose.foundation.lazy.LazyListScope.danmakuPanel(
     item {
         SettingRow(
             title = "弹幕帧率",
-            description = "标准模式隔帧绘制；高帧率逐帧绘制，可能增加图形负载，切换后下次进入播放页生效",
-            value = listOf("标准（隔帧）", "高帧率（逐帧）")[snapshot.danmakuFrameRateMode.coerceIn(0, 1)],
+            description = "标准约半屏幕刷新率；高帧率约60fps；超帧率跟随屏幕最高刷新率。高帧率可能增加图形负载，切换后下次进入播放页生效",
+            value = listOf("标准", "高帧率", "超帧率")[snapshot.danmakuFrameRateMode.coerceIn(0, 2)],
             onClick = {
                 onChoice(
                     ChoiceRequest(
                         "弹幕帧率",
                         listOf(
-                            Choice("0", "标准（隔帧）"),
-                            Choice("1", "高帧率（逐帧）"),
+                            Choice("0", "标准"),
+                            Choice("1", "高帧率"),
+                            Choice("2", "超帧率"),
                         ),
                         snapshot.danmakuFrameRateMode.toString(),
                     ) { vm.setDanmakuFrameRateMode(it.toIntOrNull() ?: 0) },
