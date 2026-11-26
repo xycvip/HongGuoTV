@@ -1402,7 +1402,7 @@ private fun AppIconDialog(
     )
     AppDialog(
         title = "应用图标",
-        message = "选中即生效，桌面图标与电视横幅一起更换",
+        message = "桌面图标点不开时，就在这里选一次桌面上现在显示的那张图标；平时选中即生效，桌面图标与电视横幅一起更换",
         confirmText = "完成",
         dismissText = null,
         onConfirm = onDismiss,
