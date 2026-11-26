@@ -343,6 +343,8 @@ class PlayerSession(
     /** playlist 快进目标：同一次切集被连按两次时不重复重建数据源。 */
     private var switchingTo = -1
     private var switchingAt = 0L
+    /** Ignore a stale STATE_ENDED dispatched just after playlist transition. */
+    private var lastPlaylistTransitionAt = 0L
 
     val currentEpisodeId: String get() = episodes.getOrNull(index).orEmpty()
 
@@ -392,8 +394,11 @@ class PlayerSession(
                     if (useDualDecoder) prepareStandby(index + 1) else queueNextEpisode(index)
                 }
                 Player.STATE_ENDED -> {
-                    // Media3 回调可能在 playlist transition 后才到。以实际 MediaItem 校验集号，
-                    // 不拿已更新的 index 再 +1，避免跳集或重复 prepare。
+                    // Media3 可能在 transition 事件后补发旧集的 ENDED。保护窗内忽略，
+                    // 避免把刚切入的新集标记为看完或再次 prepare(index+1)。
+                    if (lastPlaylistTransitionAt > 0L &&
+                        SystemClock.elapsedRealtime() - lastPlaylistTransitionAt < ENDED_TRANSITION_GUARD_MS
+                    ) return
                     val actualIndex = owner.currentMediaItem?.mediaId?.let(episodes::indexOf) ?: -1
                     if (actualIndex >= 0 && actualIndex != index) {
                         applyEpisodeTransition(actualIndex)
@@ -426,6 +431,12 @@ class PlayerSession(
             // 改用 mediaId 在 episodes 里反查真实集号。
             val newIndex = mediaItem?.mediaId?.let { episodes.indexOf(it) } ?: -1
             if (newIndex < 0 || newIndex == index) return
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && index in episodes.indices) {
+                // AUTO transition 表示当前集自然播完；先保存完播，避免下一集开始后旧集仍未完成。
+                save(completed = true)
+                completedIndex = index
+            }
+            lastPlaylistTransitionAt = SystemClock.elapsedRealtime()
             applyEpisodeTransition(newIndex)
         }
 
@@ -1219,6 +1230,7 @@ class PlayerSession(
             "queuePreparingIndex" to queuePreparingIndex, "mediaItemCount" to (player?.mediaItemCount ?: -1),
         ))
         switchingTo = -1
+        lastPlaylistTransitionAt = SystemClock.elapsedRealtime()
         val queued = queuedStream?.takeIf { queuedIndex == newIndex }
         saveLeavingEpisode(newIndex)
         val previous = remote
@@ -2234,6 +2246,7 @@ class PlayerSession(
 
         /** 同一次「下一集」请求在这个窗口内重复到达时视为连按，不重建数据源。 */
         const val SWITCH_GUARD_MS = 3_000L
+        const val ENDED_TRANSITION_GUARD_MS = 1_500L
 
         /** seek 到队列下一项后迟迟没有过渡回调时的兜底时限。 */
         const val SWITCH_FALLBACK_MS = 1_200L
