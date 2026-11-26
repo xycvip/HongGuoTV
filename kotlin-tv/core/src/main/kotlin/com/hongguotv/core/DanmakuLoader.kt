@@ -22,16 +22,22 @@ class DanmakuLoader(
     private val comments = ArrayList<Danmaku>()
     private val seen = HashSet<String>()
     private val loading = AtomicBoolean(false)
+    private val cancelled = AtomicBoolean(false)
     private var frontier = 0L
     private var exhausted = false
     private var failures = 0
     private var retryAfter = 0L
 
     /** Fetch windows until buffered past [positionMs] + lead. No-op while another load runs. */
+    /** Stop this episode's loader. An in-flight source call may finish, but its result is discarded. */
+    fun cancel() {
+        cancelled.set(true)
+    }
+
     fun loadUpTo(positionMs: Long) {
-        if (durationMs <= 0 || !loading.compareAndSet(false, true)) return
+        if (cancelled.get() || durationMs <= 0 || !loading.compareAndSet(false, true)) return
         try {
-            while (true) {
+            while (!cancelled.get()) {
                 val start = synchronized(this) {
                     when {
                         exhausted || clock() < retryAfter -> return
@@ -60,7 +66,9 @@ class DanmakuLoader(
                     }
                     return
                 }
+                if (cancelled.get()) return
                 synchronized(this) {
+                    if (cancelled.get()) return
                     failures = 0
                     for (comment in window.comments) {
                         val key = if (comment.id.isNotEmpty()) "id:${comment.id}" else "anonymous:${comment.offsetMs}:${comment.text}"
