@@ -89,6 +89,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // Gateways are process-global registries; keep our exact instances so this ViewModel
     // can unregister them on clear without erasing a newer ViewModel's registrations.
+    private var installedJs: HongguoJs? = null
     private var installedContentGateway: HongguoJsContent? = null
     private var installedAccountGateway: HongguoJsAccount? = null
 
@@ -172,6 +173,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun installScriptGateways(js: HongguoJs) {
         val contentGateway = HongguoJsContent(js)
         val accountGateway = HongguoJsAccount(js)
+        installedJs = js
         installedContentGateway = contentGateway
         installedAccountGateway = accountGateway
         JsContent.gateway = contentGateway
@@ -2487,10 +2489,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         installedContentGateway = null
         installedAccountGateway = null
 
-        // QuickJS runtimes are per-call and close in JsScriptRunner.finally. Drop only the
-        // session-owned script/cache references; keep the process-wide daemon dispatcher alive.
-        HongguoJsStreamSource.clearCache()
-        HongguoJsStore.release()
+        // QuickJS runtimes are per-call and close in JsScriptRunner.finally. Release only
+        // this ViewModel's cached facade; a newer session may already own the process store.
+        installedJs?.let(HongguoJsStore::release)
+        installedJs = null
         library.flush()
         library.close()
     }
