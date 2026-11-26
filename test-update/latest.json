@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "3fc91b76acd66523859bf63821ae3ad14022ff3d",
-  "versionCode": 113,
-  "versionName": "0.0.113",
+  "sourceCommit": "bd3224c12eab660c53537711a82b89755ccd5d53",
+  "versionCode": 114,
+  "versionName": "0.0.114",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.113",
+  "tag": "hongguotv-bate-v0.0.114",
   "apk": {
-    "name": "HongguoTV-0.0.113.apk",
+    "name": "HongguoTV-0.0.114.apk",
     "size": 5738902,
-    "sha256": "48ec0b164f916436e59f5cb433a50aa8de6ff35a8390665f2ba3863691115846",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.113/HongguoTV-0.0.113.apk"
+    "sha256": "a81714ce58587382578786df553bd3815a593af45e482ae4ca1a5f46f55ac330",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.114/HongguoTV-0.0.114.apk"
   },
-  "notes": "【界面与交互】\n- 修复首页导航下移导致 Hero 被滚出屏幕\n【其他功能与问题修复】\n- Improve danmaku rendering and simplify renderer settings\n- 修正首页 Hero 去重计算顺序\n- 修复首页 Hero 与热门片单内容重复\n- 修复首页 Hero 获焦后被滚出屏幕"
+  "notes": "【其他功能与问题修复】\n- Fix update dialog Compose compilation errors\n- Keep full home hot shelves when selecting hero items\n- Route first home shelf upward focus to hero browse anchor\n- Allow explicit upward focus target for resume cards\n- Clean update dialog scroll imports\n- Fix TV remote scrolling in update notes\n- Clarify system-level data reset setting\n- Use supported display refresh-rate fallback\n- Clarify full app-data reset confirmation\n- Restart safely if system data reset cannot proceed\n- Use system app-data reset for full clear\n- Fix danmaku VSync lifecycle and fractional pacing\n- Fix danmaku frame rate mode reference\n- Fix update download cancellation race (#26)\n- Replace danmaku renderer toggle with three frame rate levels (#27)"
 }
