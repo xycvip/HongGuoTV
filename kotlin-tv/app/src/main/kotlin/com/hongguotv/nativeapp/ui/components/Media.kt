@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -257,6 +258,8 @@ fun HeroBanner(
     imageCrossfadeMillis: Int? = null,
     downFocus: FocusRequester? = null,
     playFocus: FocusRequester? = null,
+    favoriteFocus: FocusRequester? = null,
+    detailFocus: FocusRequester? = null,
     upFocus: FocusRequester? = null,
 ) {
     val breathe = rememberInfiniteTransition(label = "hero")
@@ -372,16 +375,36 @@ fun HeroBanner(
                     focusRequester = playFocus,
                     downFocus = downFocus,
                     upFocus = upFocus,
+                    modifier = Modifier.focusProperties {
+                        if (favoriteFocus != null) right = favoriteFocus
+                        if (detailFocus != null) left = detailFocus
+                    },
                 )
                 TvButton(
                     text = if (isFavorite) "已收藏" else "加入收藏",
                     onClick = onFavorite,
                     icon = if (isFavorite) Icons.Rounded.Check else Icons.Rounded.Add,
                     tone = ButtonTone.Ghost,
+                    focusRequester = favoriteFocus,
                     downFocus = downFocus,
                     upFocus = upFocus,
+                    modifier = Modifier.focusProperties {
+                        if (playFocus != null) left = playFocus
+                        if (detailFocus != null) right = detailFocus
+                    },
                 )
-                TvButton(text = "剧集详情", onClick = onDetail, tone = ButtonTone.Quiet, downFocus = downFocus, upFocus = upFocus)
+                TvButton(
+                    text = "剧集详情",
+                    onClick = onDetail,
+                    tone = ButtonTone.Quiet,
+                    focusRequester = detailFocus,
+                    downFocus = downFocus,
+                    upFocus = upFocus,
+                    modifier = Modifier.focusProperties {
+                        if (favoriteFocus != null) left = favoriteFocus
+                        if (playFocus != null) right = playFocus
+                    },
+                )
             }
         }
         // 右侧悬浮的评分徽标
