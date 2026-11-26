@@ -88,6 +88,7 @@ fun AccountScreen(
     onResetPhone: () -> Unit,
     modifier: Modifier = Modifier,
     entryFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     Row(
         modifier
@@ -106,6 +107,7 @@ fun AccountScreen(
             onVerify = onVerify,
             onResetPhone = onResetPhone,
             entryFocus = entryFocus.takeIf { !state.signedIn },
+            upFocus = upFocus,
         )
 
         AccountIntro(
@@ -114,6 +116,7 @@ fun AccountScreen(
             onSignOut = onSignOut,
             modifier = Modifier.weight(1f),
             entryFocus = entryFocus.takeIf { state.signedIn },
+            upFocus = upFocus,
         )
     }
 }
@@ -131,6 +134,7 @@ private fun LoginCard(
     onVerify: () -> Unit,
     onResetPhone: () -> Unit,
     entryFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     val phoneMode = state.mode == LoginMode.PHONE
     val cardWidth by animateDpAsState(
@@ -187,7 +191,7 @@ private fun LoginCard(
                 )
                 Spacer(Modifier.weight(1f))
                 if (!state.signedIn) {
-                    ModeSwitch(state.mode, onSwitchMode, entryFocus)
+                    ModeSwitch(state.mode, onSwitchMode, entryFocus, upFocus)
                 }
             }
             Spacer(Modifier.height(d(18)))
@@ -214,9 +218,10 @@ private fun ModeSwitch(
     mode: LoginMode,
     onSwitchMode: (LoginMode) -> Unit,
     entryFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(d(6))) {
-        ModeTab("扫码", mode == LoginMode.QR, entryFocus) { onSwitchMode(LoginMode.QR) }
+        ModeTab("扫码", mode == LoginMode.QR, entryFocus, upFocus) { onSwitchMode(LoginMode.QR) }
         ModeTab("手机号", mode == LoginMode.PHONE) { onSwitchMode(LoginMode.PHONE) }
     }
 }
@@ -226,6 +231,7 @@ private fun ModeTab(
     label: String,
     selected: Boolean,
     focusRequester: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -234,6 +240,7 @@ private fun ModeTab(
     Box(
         Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .then(if (upFocus != null) Modifier.focusProperties { up = upFocus } else Modifier)
             .clip(shape)
             .background(
                 when {
@@ -629,6 +636,7 @@ private fun AccountIntro(
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
     entryFocus: FocusRequester? = null,
+    upFocus: FocusRequester? = null,
 ) {
     val phoneMode = state.mode == LoginMode.PHONE
     Column(modifier, verticalArrangement = Arrangement.spacedBy(d(16))) {
@@ -660,6 +668,7 @@ private fun AccountIntro(
                 onSignOut,
                 tone = ButtonTone.Ghost,
                 focusRequester = entryFocus,
+                upFocus = upFocus,
             )
         } else if (!phoneMode) {
             TvButton("扫码登录", onLogin, tone = ButtonTone.Primary)
