@@ -376,8 +376,8 @@ fun HeroBanner(
                     downFocus = downFocus,
                     upFocus = upFocus,
                     modifier = Modifier.focusProperties {
+                        if (playFocus != null) left = playFocus
                         if (favoriteFocus != null) right = favoriteFocus
-                        if (detailFocus != null) left = detailFocus
                     },
                 )
                 TvButton(
@@ -402,7 +402,7 @@ fun HeroBanner(
                     upFocus = upFocus,
                     modifier = Modifier.focusProperties {
                         if (favoriteFocus != null) left = favoriteFocus
-                        if (playFocus != null) right = playFocus
+                        if (detailFocus != null) right = detailFocus
                     },
                 )
             }
