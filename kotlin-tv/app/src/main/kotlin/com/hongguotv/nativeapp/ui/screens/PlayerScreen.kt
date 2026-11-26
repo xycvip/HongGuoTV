@@ -310,8 +310,8 @@ fun PlayerScreen(
         // inactive 层由 session 用 translationX 物理移出屏幕（surface 仍存活、照常预渲染首帧），
         // 不用 alpha / z-order——那两类「改属性」方式在 SurfaceView 上有传播时序窗口，
         // 会让备用首帧偶发闪到前台。位置切换是 View 属性、同步生效，无此问题。
-        // 弹幕是独立 SurfaceView（setZOrderMediaOverlay），浮在视频之上、控制层之下，
-        // 由 Choreographer 对齐 vsync 驱动，重绘不触发 window 合成，视频不受影响。
+        // 正式渲染器使用独立 SurfaceView；本实验分支可切换为普通 View + 硬件加速 Canvas，
+        // 用于对比窗口合成路径的清晰度与资源开销。两种实现共用同一弹幕时钟和排程。
         // 播放器与 view 的绑定、位置切换由 session 管理，这里的 update 只同步缩放模式。
         fun buildVideoLayer(ctx: android.content.Context, slot: Int): PlayerView {
             val view = android.view.View.inflate(ctx, R.layout.player_view_surface, null) as PlayerView
@@ -370,10 +370,9 @@ fun PlayerScreen(
                 },
         )
 
-        // 弹幕层：独立 SurfaceView + Choreographer（vsync 对齐），setZOrderMediaOverlay 浮在
-        // 视频之上、控制层之下。用独立 surface 而非普通 View：普通 View 每帧 invalidate
-        // 会强制整个 window 重合成，把两层全屏视频 SurfaceView 一起拖垮（视频卡死/错位）。
-        // 只覆盖顶部弹幕带：匹配常见弹幕区域，也限制每帧清屏/绘制面积。
+        // 弹幕层通过 DanmakuRenderer 接口接入。正式版使用独立 SurfaceView；本实验分支启用
+        // 普通 View + 硬件加速 Canvas，专门比较移动文字的观感与视频合成开销。
+        // 只覆盖顶部弹幕带，限制窗口失效和绘制范围。
         val danmakuView: android.view.View = remember {
             if (USE_CANVAS_DANMAKU_EXPERIMENT) DanmakuCanvasView(context) else DanmakuView(context)
         }
