@@ -53,9 +53,17 @@ object HongguoJsStore {
      * JsScriptRunner.finally; the process-wide daemon dispatcher intentionally stays alive
      * so a later Activity launch can create fresh runtimes without executor reinitialization.
      */
-    fun release() {
-        synchronized(this) { instance = null }
-        HongguoJsStreamSource.clearCache()
+    fun release(expected: HongguoJs): Boolean {
+        val released = synchronized(this) {
+            if (instance === expected) {
+                instance = null
+                true
+            } else {
+                false
+            }
+        }
+        if (released) HongguoJsStreamSource.clearCache()
+        return released
     }
 
     /**
