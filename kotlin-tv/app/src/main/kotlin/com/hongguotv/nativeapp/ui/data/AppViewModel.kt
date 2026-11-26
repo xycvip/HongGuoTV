@@ -1717,27 +1717,50 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun clearAllData() {
         val app = getApplication<Application>()
-        val prefNames = listOf(
-            "native-library-v1", "native-home-cache-v1", "startup_playback",
-            "playback-settings-v1", "playback-extras-v1", "compose-account-v1",
-            "hongguo-js-kv", "script-update-v1",
-        )
-        prefNames.forEach { name ->
-            runCatching { app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit() }
-        }
-        runCatching { app.cacheDir.deleteRecursively() }
-        runCatching { File(app.filesDir, "js-bytecode").deleteRecursively() }
-        // 脚本本体也清掉：重启后走首次安装流程重新联网下载，等同全新安装。
-        runCatching { File(app.filesDir, "hongguo-js").deleteRecursively() }
-        toast("已清除全部数据，正在重启…")
-        // 用 launch intent 重启：杀进程后由系统按 MAIN/LEANBACK 入口重新拉起，兼容电视桌面。
-        runCatching {
-            val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        toast("正在安全停止本地写入…")
+
+        // Stop all ViewModel-owned jobs before touching storage. The dedicated reset thread
+        // survives scope cancellation and waits for the loader plus both process-wide writers.
+        viewModelScope.coroutineContext[Job]?.cancel()
+        Thread({
+            if (!library.shutdownAndAwait(timeoutSeconds = 30)) {
+                toast("清除失败：本地数据仍在写入，请稍后重试")
+                return@Thread
             }
-            if (intent != null) app.startActivity(intent)
+
+            val prefNames = listOf(
+                "native-library-v1", "native-home-cache-v1", "startup_playback",
+                "playback-settings-v1", "playback-extras-v1", "compose-account-v1",
+                "hongguo-js-kv", "script-update-v1",
+            )
+            val cleared = prefNames.all { name ->
+                runCatching {
+                    app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
+                }.getOrDefault(false)
+            }
+            if (!cleared) {
+                toast("部分数据清除失败，请重试")
+                return@Thread
+            }
+
+            runCatching { app.cacheDir.deleteRecursively() }
+            runCatching { File(app.filesDir, "js-bytecode").deleteRecursively() }
+            // 脚本本体也清掉：重启后走首次安装流程重新联网下载，等同全新安装。
+            runCatching { File(app.filesDir, "hongguo-js").deleteRecursively() }
+            toast("已清除全部数据，正在重启…")
+
+            // Use the manifest launcher entry so both phone and Leanback launchers can restart.
+            runCatching {
+                val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                }
+                if (intent != null) app.startActivity(intent)
+            }
+            exitProcess(0)
+        }, "hongguotv-clear-all-data").apply {
+            isDaemon = false
+            start()
         }
-        exitProcess(0)
     }
 
     private fun dirSize(dir: File): Long =
