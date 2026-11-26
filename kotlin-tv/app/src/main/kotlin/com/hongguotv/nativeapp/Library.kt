@@ -252,10 +252,10 @@ class Library(context: Context) {
     var danmakuRows: Int
         get() = state().settings.danmakuRows
         set(value) { val next = DanmakuPrefs.rows(value); if (next != danmakuRows) { state().settings = state().settings.copy(danmakuRows = next); put("danmakuRows", next) } }
-    /** 0=默认 SurfaceView，1=普通 View 实验。旧值 2 归一到默认 SurfaceView。 */
-    var danmakuRendererMode: Int
-        get() = prefs.getInt("danmakuRendererMode", 0).let { if (it == 1) 1 else 0 }
-        set(value) { prefs.edit().putInt("danmakuRendererMode", value.coerceIn(0, 1)).apply() }
+    /** 0=隔帧绘制，1=逐帧绘制。使用新键，避免旧版「普通 View」设置误开启高帧率。 */
+    var danmakuFrameRateMode: Int
+        get() = prefs.getInt("danmakuFrameRateMode", 0).coerceIn(0, 2)
+        set(value) { prefs.edit().putInt("danmakuFrameRateMode", value.coerceIn(0, 2)).apply() }
     var playbackSpeed: Float
         get() = state().settings.speed
         set(value) { val next = PlaybackSpeed.normalize(value); if (next != playbackSpeed) { state().settings = state().settings.copy(speed = next); put("playbackSpeed", next) } }

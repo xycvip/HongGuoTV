@@ -45,6 +45,7 @@ class DanmakuView(
     context: Context,
     textSizeSp: Float = 20f,
     crossMs: Long = 9_000L,
+    frameRateMode: Int = 0,
 ) :
     SurfaceView(context), SurfaceHolder.Callback, DanmakuRenderer {
     private data class Scheduled(
@@ -126,7 +127,8 @@ class DanmakuView(
     private var idleCleared = false
     /** 当前这一集实际用到几条轨道；清屏只清到这里，比整块 lanes 省很多。 */
     private var contentRows = 0
-    private var frameTick = 0L
+    private var lastVsyncNanos = 0L
+    private var frameRateAccumulatorNanos = 0.0
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             frameScheduled = false
@@ -150,8 +152,28 @@ class DanmakuView(
                     lastPumpAt = tick
                     needMore(now)
                 }
-                // 固定隔一个 VSync 绘制一次：60Hz 屏幕约30fps，120Hz 屏幕约60fps。
-                if ((frameTick++ and 1L) == 0L) drawFrame(now)
+                val deltaNanos = if (lastVsyncNanos == 0L) 0L else (frameTimeNanos - lastVsyncNanos).coerceAtLeast(0L)
+                lastVsyncNanos = frameTimeNanos
+                val drawRatio = when (frameRateModeValue) {
+                    0 -> 0.5 // 标准：隔帧，约为屏幕刷新率的 50%
+                    1 -> 0.75 // 高帧率：隔半帧，约为屏幕刷新率的 75%
+                    else -> 1.0 // 超帧率：逐帧，跟随屏幕原生刷新率
+                }
+                val shouldDraw = if (deltaNanos == 0L) {
+                    true
+                } else {
+                    // 按当前 VSync 间隔换算目标绘制周期，再用时间累积做分数帧率调度。
+                    // 例如 90Hz × 0.75 = 67.5fps，无需取整；长时间平均帧率保持目标比例。
+                    frameRateAccumulatorNanos += deltaNanos.toDouble()
+                    val targetPeriodNanos = deltaNanos.toDouble() / drawRatio
+                    if (frameRateAccumulatorNanos >= targetPeriodNanos) {
+                        frameRateAccumulatorNanos %= targetPeriodNanos
+                        true
+                    } else {
+                        false
+                    }
+                }
+                if (shouldDraw) drawFrame(now)
             }
             if (running && playbackActive && loader != null) scheduleFrame()
         }
@@ -446,6 +468,9 @@ class DanmakuView(
     override fun setPlaybackActive(active: Boolean) {
         if (!running || playbackActive == active) return
         playbackActive = active
+        // 暂停期间没有 VSync 回调；恢复时重新建立时间基准，避免把暂停时长计入帧率累积。
+        lastVsyncNanos = 0L
+        frameRateAccumulatorNanos = 0.0
         if (active && loader != null && surfaceAlive) {
             scheduleFrame()
         } else {
@@ -471,7 +496,9 @@ class DanmakuView(
         scheduleAnchorMs = 0L
         positionProvider = { 0L }
         contentRows = 0
-        frameTick = 0L
+        lastVsyncNanos = 0L
+        lastVsyncNanos = 0L
+        frameRateAccumulatorNanos = 0.0
         clearTextCache()
         choreographer.removeFrameCallback(frameCallback)
         frameScheduled = false

@@ -100,7 +100,6 @@ import com.hongguotv.nativeapp.ui.player.PlayerSession
 import com.hongguotv.nativeapp.ui.theme.Ink
 import com.hongguotv.nativeapp.ui.theme.Paper
 import com.hongguotv.nativeapp.ui.theme.Rouge
-import com.hongguotv.nativeapp.DanmakuCanvasView
 import com.hongguotv.nativeapp.DanmakuRenderer
 import com.hongguotv.nativeapp.DanmakuView
 import com.hongguotv.nativeapp.PlaybackExtras
@@ -368,14 +367,10 @@ fun PlayerScreen(
                 },
         )
 
-        // 弹幕层通过 DanmakuRenderer 接口接入。默认使用独立 SurfaceView；可选普通 View
-        // + 硬件加速 Canvas 实验方案，便于比较移动文字观感与视频合成开销。
+        // 固定使用独立 SurfaceView；帧率设置仅控制隔帧或逐帧绘制。
         // 只覆盖顶部弹幕带，限制窗口失效和绘制范围。
-        val danmakuView: android.view.View = remember(session.danmakuRendererMode) {
-            when (session.danmakuRendererMode) {
-                1 -> DanmakuCanvasView(context)
-                else -> DanmakuView(context) // 默认 SurfaceView
-            }
+        val danmakuView: android.view.View = remember(session.danmakuFrameRateMode) {
+            DanmakuView(context, frameRateMode = session.danmakuFrameRateMode)
         }
         val danmakuRenderer = danmakuView as DanmakuRenderer
         AndroidView(

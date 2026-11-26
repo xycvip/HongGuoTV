@@ -156,9 +156,9 @@ class PlayerSession(
     private val danmakuSource = HongguoJsDanmaku(HongguoJsStore.get(context, repository.http))
     private var danmakuView: DanmakuRenderer? = null
     private var danmakuLoader: DanmakuLoader? = null
-    /** 弹幕层覆盖 A/B 两个视频 Surface，共用同一个渲染器；切换选项在下次进入播放页生效。 */
-    val danmakuRendererMode: Int
-        get() = library.danmakuRendererMode
+    /** 弹幕帧率设置；切换后下次进入播放页生效。 */
+    val danmakuFrameRateMode: Int
+        get() = library.danmakuFrameRateMode
     /** 当前绑定的「集 + 时长」，避免同一集被 READY/接管/刷新重复重建 loader。 */
     private var danmakuKey = ""
 

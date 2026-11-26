@@ -1640,7 +1640,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         danmakuFont = library.danmakuFont,
         danmakuSpeed = library.danmakuSpeed,
         danmakuRows = library.danmakuRows,
-        danmakuRendererMode = library.danmakuRendererMode,
+        danmakuFrameRateMode = library.danmakuFrameRateMode,
         danmakuColor = extras.danmakuColorMode,
         blockedWords = extras.blockedWords.sorted(),
         startupAutoplay = extras.startupAutoplay,
@@ -1687,10 +1687,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         toast(if (value) "弹幕已开启" else "弹幕已关闭")
     }
 
-    fun setDanmakuRendererMode(value: Int) {
-        library.danmakuRendererMode = value.coerceIn(0, 1)
+    fun setDanmakuFrameRateMode(value: Int) {
+        library.danmakuFrameRateMode = value.coerceIn(0, 2)
         touchSettings()
-        toast("弹幕渲染方式 · " + listOf("SurfaceView（默认）", "普通 View（实验）")[library.danmakuRendererMode])
+        toast("弹幕帧率 · " + listOf("标准", "高帧率", "超帧率")[library.danmakuFrameRateMode])
     }
 
     fun setShowClock(value: Boolean) {
