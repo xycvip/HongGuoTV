@@ -14,9 +14,8 @@ class CatalogFetchTest {
         val out = File("/workspace/preview/posters").apply { mkdirs() }
         val rows = mutableListOf<String>()
         ContentType.entries.forEach { type ->
-            val page = runCatching {
-                if (type == ContentType.AI) repo.ranking(com.hongguotv.core.RankBoard.AI, 1) else repo.home(1, type)
-            }.getOrNull() ?: return@forEach
+            // 三类内容统一走发现流（home），AI 不再借用榜单接口。
+            val page = runCatching { repo.home(1, type) }.getOrNull() ?: return@forEach
             page.items.take(18).forEach { item ->
                 rows += "${item.id}\t${item.title}\t${item.cover}\t${item.badge}\t${item.tags}"
             }

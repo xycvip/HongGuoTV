@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.js
 
+import com.hongguotv.core.Actor
+import com.hongguotv.core.ActorRankBoard
+import com.hongguotv.core.ActorRankEntry
+import com.hongguotv.core.ActorRankPage
+import com.hongguotv.core.ActorWorksPage
 import com.hongguotv.core.CatalogPage
 import com.hongguotv.core.ComicRanking
 import com.hongguotv.core.ContentType
 import com.hongguotv.core.Danmaku
 import com.hongguotv.core.DanmakuWindow
 import com.hongguotv.core.Detail
+import com.hongguotv.core.ImageUrls
 import com.hongguotv.core.JsContentGateway
 import com.hongguotv.core.RankBoard
+import com.hongguotv.core.RankKind
 import com.hongguotv.core.SeasonEntry
 import com.hongguotv.core.Series
 import com.hongguotv.core.seasonNumber
@@ -31,7 +38,8 @@ import java.util.LinkedHashMap
  * 关键约定：
  *  - 剧集 ID 用官方数字 ID（drama.sourceId），与原生 Series.id 一致；
  *  - 搜索类型过滤：官方响应 content_type 1004=短剧、1=漫剧（AI 剧归漫剧口径，与原生一致）；
- *  - 榜单：RankBoard.jsGroup 映射到官方榜单分组，优先「热播榜」，分组内找不到就取第一个。
+ *  - 榜单：(RankBoard 内容类型 × RankKind 榜单口径) 经固定 id 表映射到官方榜单，
+ *    查不到时按「分组 + 榜名」兜底，不再按 id 后缀猜（官方命名不统一）。
  */
 class HongguoJsContent(
     private val js: HongguoJs,
@@ -106,6 +114,9 @@ class HongguoJsContent(
             related = emptyList(),
             sameName = emptyList(),
             social = SeriesSocial(),
+            // 脚本 2026.11.26 起在 detail 里下发 actors；旧脚本没有该字段，
+            // 解析成空列表即可，UI 会自动隐藏演员栏。
+            actors = data.optJSONArray("actors").mapActors(),
         )
     }
 
@@ -129,11 +140,11 @@ class HongguoJsContent(
             .take(limit)
     }
 
-    override fun rankingPage(board: RankBoard, page: Int): CatalogPage {
+    override fun rankingPage(board: RankBoard, kind: RankKind, page: Int): CatalogPage {
         // 榜单分组是全局常量：以前每次翻页都先问一遍分组，白白多一次脚本调用 + 网络请求。
         val boards = callCached("rankingBoards", BOARDS_TTL_MS).optJSONArray("items") ?: JSONArray()
-        val boardId = resolveBoardId(boards, board.jsGroup)
-            ?: throw IOException("官方榜单缺少${board.label}分组")
+        val boardId = resolveBoardId(boards, board, kind)
+            ?: throw IOException("官方榜单缺少「${board.label}·${kind.label}」")
         val data = call("rankingPage", boardId, page)
         val description = boardDescription(boards, boardId)
         return CatalogPage(
@@ -157,6 +168,46 @@ class HongguoJsContent(
     override fun theaterFilters(type: ContentType): List<TheaterFilterGroup> {
         val data = call("theaterFilters", type.name)
         return parseTheaterFilters(data.optJSONArray("items"))
+    }
+
+    override fun actorWorks(actorId: String, offset: Int, count: Int): ActorWorksPage {
+        // 脚本的游标语义是「上游已消耗行数」，不是页码：每页大小固定后逐页累加会漏条目。
+        // 这里只把 offset 原样传给脚本，并原样带回它算出的 nextOffset。
+        val options = JSONObject()
+            .put("actorId", actorId)
+            .put("offset", offset.coerceAtLeast(0))
+            .put("pageSize", count.coerceIn(1, 50))
+        val data = callCached("actorWorks", ACTOR_WORKS_TTL_MS, options)
+        return ActorWorksPage(
+            items = data.optJSONArray("items").mapDramas(),
+            hasMore = data.optBoolean("hasMore"),
+            nextOffset = data.optInt("nextOffset", offset + count),
+            totalCount = data.optInt("totalCount", 0),
+        )
+    }
+
+    /**
+     * 演员榜（剧星榜 / 星光榜）。
+     *
+     * 会话游标：首屏 offset=0 且不带 sessionId，脚本内部用第一段的 tab_type；
+     * 之后必须把上一页返回的 sessionId 原样带回去，脚本才会切到翻页用的 tab_type。
+     * 实测不带 session 翻第 2 页会拿到与第 1 页完全相同的 20 个人。
+     *
+     * 缓存键包含 offset + sessionId，命中即回放同一页，不会串页。
+     */
+    override fun actorRank(board: ActorRankBoard, offset: Int, sessionId: String): ActorRankPage {
+        val options = JSONObject()
+            .put("offset", offset.coerceAtLeast(0))
+            .put("subBoard", board.scriptId)
+        if (sessionId.isNotBlank()) options.put("sessionId", sessionId)
+        val data = callCached("actorRanking", ACTOR_RANK_TTL_MS, options)
+        val rows = data.optJSONArray("items")
+        return ActorRankPage(
+            items = rows.mapActorRanks(offset),
+            nextOffset = data.optInt("nextOffset", offset + (rows?.length() ?: 0)),
+            hasMore = data.optBoolean("hasMore"),
+            sessionId = data.optString("sessionId"),
+        )
     }
 
     private fun call(function: String, vararg args: Any?): JSONObject {
@@ -188,6 +239,10 @@ class HongguoJsContent(
         private const val DETAIL_TTL_MS = 2 * 60 * 1000L
         private const val SEASONS_TTL_MS = 10 * 60 * 1000L
         private const val RELATED_TTL_MS = 10 * 60 * 1000L
+        /** 演员作品列表变动很慢，翻回上一页时直接命中，不必重跑一次脚本运行时。 */
+        private const val ACTOR_WORKS_TTL_MS = 5 * 60 * 1000L
+        /** 演员榜按人气实时变动，但 3 分钟内的重复进出没必要重拉。 */
+        private const val ACTOR_RANK_TTL_MS = 3 * 60 * 1000L
         private const val BOARDS_TTL_MS = 10 * 60 * 1000L
         /** 搜索结果 60 秒内复用，重复提交同一个关键词不再等一次完整请求。 */
         private const val SEARCH_TTL_MS = 60 * 1000L
@@ -251,18 +306,105 @@ class HongguoJsContent(
             return out
         }
 
-        /** 榜单分组内优先「热播榜」，分组调整时退到第一个，保证四个页签永远有数。 */
-        internal fun resolveBoardId(boards: JSONArray, group: String): String? {
-            val prefix = "hongguo-app:$group:"
-            var fallback: String? = null
-            for (index in 0 until boards.length()) {
-                val board = boards.optJSONObject(index) ?: continue
-                val id = board.optString("id")
-                if (!id.startsWith(prefix)) continue
-                if (id.endsWith("hot_play")) return id
-                if (fallback == null) fallback = id
+        /**
+         * actors JSON → Actor。字段名同时兼容脚本的短名（id/name/role）和官方原名
+         * （celebrity_id/nickname/role_name）——脚本若直接透传 celebrities 也能解析，
+         * 不必两边约定同一套命名。头像由脚本过一遍 cleanCoverUrl（heic → JPEG）。
+         */
+        internal fun JSONArray?.mapActors(): List<Actor> {
+            if (this == null) return emptyList()
+            val out = ArrayList<Actor>(length())
+            for (index in 0 until length()) {
+                val row = optJSONObject(index) ?: continue
+                val name = row.optString("name").ifBlank { row.optString("nickname") }.trim()
+                if (name.isBlank()) continue
+                out.add(
+                    Actor(
+                        id = row.optString("id").ifBlank { row.optString("celebrity_id") }.trim(),
+                        name = name,
+                        role = row.optString("role").ifBlank { row.optString("role_name") }.trim(),
+                        avatar = ImageUrls.normalize(
+                            row.optString("avatar").ifBlank { row.optString("avatarUrl") },
+                        ),
+                        intro = row.optString("intro").trim(),
+                    ),
+                )
             }
-            return fallback
+            return out
+        }
+
+        /**
+         * 演员榜 JSON → ActorRankEntry。
+         *
+         * 官方字段：actorId / name / avatar / popularity（「881万人气」）/ intro /
+         * details（两段说明）/ position（1 起的连续名次）/ changeType / changePlaces。
+         * intro 在两个榜语义不同——剧星榜是作品名串，星光榜是最新动态，
+         * 一律放进 Actor.intro 让弹窗原样展示，不在这里改写。
+         */
+        internal fun JSONArray?.mapActorRanks(baseOffset: Int): List<ActorRankEntry> {
+            if (this == null) return emptyList()
+            val out = ArrayList<ActorRankEntry>(length())
+            for (index in 0 until length()) {
+                val row = optJSONObject(index) ?: continue
+                val name = row.optString("name").trim()
+                if (name.isBlank()) continue
+                val details = row.optJSONArray("details")?.let { array ->
+                    (0 until array.length()).map { array.optString(it).trim() }.filter { it.isNotBlank() }
+                }.orEmpty()
+                val fallbackRank = baseOffset + index + 1
+                out.add(
+                    ActorRankEntry(
+                        actor = Actor(
+                            id = row.optString("actorId").trim(),
+                            name = name,
+                            // 旧脚本可能把头放在 avatarUrl / avatar_url；详情页那套早就三种都认，
+                            // 演员榜之前只读 avatar，字段一换整页头像全空。
+                            // 再过一遍归一化：裸 novel-pic / heic 在盒子上解不出来，会表现成空白。
+                            avatar = ImageUrls.normalize(
+                                row.optString("avatar")
+                                    .ifBlank { row.optString("avatarUrl") }
+                                    .ifBlank { row.optString("avatar_url") },
+                            ),
+                            intro = row.optString("intro").trim(),
+                            meta = details.joinToString(" · "),
+                        ),
+                        rank = row.optInt("position", fallbackRank).takeIf { it > 0 } ?: fallbackRank,
+                        popularity = row.optString("popularity").trim(),
+                        details = details,
+                        changeType = row.optInt("changeType", 0),
+                        changePlaces = row.optInt("changePlaces", 0),
+                    ),
+                )
+            }
+            return out
+        }
+
+        /**
+         * 榜单 id 解析：先查固定表，查不到再按榜名兜底。
+         *
+         * 三段式而不是「按后缀猜」——官方 id 命名不统一：综合推荐是 `ranklist_hot_sc`，
+         * 漫剧推荐却是 `comic_series_hot_rank`，综合热播又多了 `_sc` 后缀。
+         * 旧实现用 `endsWith("hot_play")` 挑热播，综合组匹配不上就退回列表首项，
+         * 于是「综合」长期显示的是推荐榜。固定表 + 名字兜底不会错位，
+         * 官方未来换 id 也能靠「真人剧·热播榜」这种名字自愈。
+         */
+        internal fun resolveBoardId(boards: JSONArray, board: RankBoard, kind: RankKind): String? {
+            val prefix = "hongguo-app:${board.jsGroup}:"
+            // 1) 固定表命中且确实存在于当前返回里
+            kind.boardId(board.jsGroup)?.let { pinned ->
+                val full = prefix + pinned
+                for (index in 0 until boards.length()) {
+                    if (boards.optJSONObject(index)?.optString("id") == full) return full
+                }
+            }
+            // 2) 名字兜底：同一分组下，名字以榜名结尾（"真人剧·热播榜" / "热播榜"）
+            for (index in 0 until boards.length()) {
+                val item = boards.optJSONObject(index) ?: continue
+                val id = item.optString("id")
+                if (!id.startsWith(prefix)) continue
+                if (item.optString("name").endsWith(kind.label)) return id
+            }
+            return null
         }
 
         internal fun boardDescription(boards: JSONArray, boardId: String): String {

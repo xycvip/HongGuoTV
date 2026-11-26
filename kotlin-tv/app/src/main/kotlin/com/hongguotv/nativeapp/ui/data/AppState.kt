@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp.ui.data
 
+import com.hongguotv.core.ActorRankBoard
+import com.hongguotv.core.ActorRankEntry
 import com.hongguotv.core.BackupProgress
 import com.hongguotv.core.ContentType
 import com.hongguotv.core.Detail
 import com.hongguotv.core.RankBoard
+import com.hongguotv.core.RankKind
 import com.hongguotv.core.RecentSearch
 import com.hongguotv.core.SeasonEntry
 import com.hongguotv.core.Series
@@ -70,7 +73,10 @@ data class TheaterState(
 )
 
 data class RankingState(
+    /** 内容类型：综合 / 真人剧 / 漫剧 / AI剧。 */
     val board: RankBoard = RankBoard.TOTAL,
+    /** 榜单口径：热播 / 推荐 / 新剧 / 臻果。 */
+    val kind: RankKind = RankKind.HEAT,
     val items: List<Series> = emptyList(),
     val heat: Map<String, String> = emptyMap(),
     val page: Int = 1,
@@ -110,6 +116,43 @@ data class DetailState(
     val seasons: List<SeasonEntry> = emptyList(),
 )
 
+/**
+ * 演员档案弹窗的数据。
+ *
+ * [actor] 非空即弹窗可见；关闭时由 ViewModel 清空，避免切换到另一部剧时
+ * 新详情页继承上一位演员的弹窗。
+ *
+ * [nextOffset] 是官方游标（已消耗行数），不是页码：加载更多只能原样回传，
+ * 用 page × count 反推会在上游丢弃畸形行时越翻越偏（实测会漏条目）。
+ */
+data class ActorState(
+    val actor: com.hongguotv.core.Actor? = null,
+    val items: List<Series> = emptyList(),
+    val total: Int = 0,
+    val nextOffset: Int = 0,
+    val hasMore: Boolean = true,
+    val loading: Boolean = true,
+    val loadingMore: Boolean = false,
+    val error: String? = null,
+)
+
+/**
+ * 演员榜页面（剧星榜 / 星光榜）。
+ *
+ * [nextOffset] 是官方游标（已消耗行数），[sessionId] 必须随翻页回传：
+ * 实测不带会话直接翻第 2 页，拿回来的还是第 1 页那 20 个人。
+ */
+data class ActorRankState(
+    val board: ActorRankBoard = ActorRankBoard.DRAMA,
+    val items: List<ActorRankEntry> = emptyList(),
+    val nextOffset: Int = 0,
+    val sessionId: String = "",
+    val hasMore: Boolean = true,
+    val loading: Boolean = false,
+    val loadingMore: Boolean = false,
+    val error: String? = null,
+)
+
 data class LibraryState(
     val favorites: List<Series> = emptyList(),
     val history: List<BackupProgress> = emptyList(),
@@ -145,6 +188,8 @@ data class SettingsSnapshot(
     val longPressSpeed: Float = 3f,
     // ---- 画面 ----
     val posterColumns: Int = 0,
+    /** 首页大海报的取数来源，见 [com.hongguotv.nativeapp.HeroSource]，默认综合。 */
+    val heroSource: String = "mixed",
     val videoInfoMode: Int = 0,
     val showNetworkSpeed: Boolean = false,
     /** 屏幕最底部常驻一条极细进度条；默认关闭，不影响观感。 */
@@ -236,6 +281,8 @@ data class AppState(
     val ranking: RankingState = RankingState(),
     val search: SearchState = SearchState(),
     val detail: DetailState = DetailState(),
+    val actor: ActorState = ActorState(),
+    val actorRank: ActorRankState = ActorRankState(),
     val library: LibraryState = LibraryState(),
     val account: AccountState = AccountState(),
     val cast: CastState = CastState(),

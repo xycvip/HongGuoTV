@@ -34,6 +34,14 @@ class PlaybackExtras(context: Context) {
         get() = prefs.getInt(KEY_POSTER_COLUMNS, 0).coerceIn(0, 8)
         set(value) { prefs.edit().putInt(KEY_POSTER_COLUMNS, value.coerceIn(0, 8)).apply() }
 
+    /**
+     * 首页大海报的取数来源（综合 / 真人剧 / 漫剧 / AI 剧）。
+     * 存字符串而非序号，后续新增来源时老值不会错位。
+     */
+    var heroSource: String
+        get() = prefs.getString(KEY_HERO_SOURCE, HeroSource.MIXED.storedValue) ?: HeroSource.MIXED.storedValue
+        set(value) { prefs.edit().putString(KEY_HERO_SOURCE, HeroSource.fromStored(value).storedValue).apply() }
+
     /** 弹幕颜色：0 默认、1 多彩、2..9 固定色。 */
     var danmakuColorMode: Int
         get() = prefs.getInt(KEY_DANMAKU_COLOR, 0).coerceIn(0, 9)
@@ -141,6 +149,7 @@ class PlaybackExtras(context: Context) {
         private const val KEY_STARTUP_AUTOPLAY = "startupAutoplay"
         private const val KEY_SEAMLESS = "seamlessPlayback"
         private const val KEY_POSTER_COLUMNS = "posterColumns"
+        private const val KEY_HERO_SOURCE = "heroSource"
         private const val KEY_DANMAKU_COLOR = "danmakuColorMode"
         const val REMOTE_PREVIOUS = "previous"
         const val REMOTE_NEXT = "next"

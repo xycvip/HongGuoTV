@@ -93,6 +93,7 @@ import com.hongguotv.nativeapp.R
 import com.hongguotv.core.PlaybackQuality
 import com.hongguotv.core.PlaybackSpeed
 import com.hongguotv.core.VideoFrameMode
+import com.hongguotv.nativeapp.HeroSource
 import com.hongguotv.nativeapp.PlaybackExtras
 import com.hongguotv.nativeapp.ui.components.AppDialog
 import com.hongguotv.nativeapp.ui.components.ButtonTone
@@ -620,6 +621,22 @@ private fun androidx.compose.foundation.lazy.LazyListScope.appearancePanel(
                         listOf(Choice("0", "自动")) + (3..8).map { Choice(it.toString(), "$it 列") },
                         snapshot.posterColumns.toString(),
                     ) { vm.setPosterColumns(it.toIntOrNull() ?: 0) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "首页大海报",
+            description = "首屏大图取自第 2 页，与下方货架不重复；综合为三类各取 2 部，单选则取该类 6 部",
+            value = HeroSource.fromStored(snapshot.heroSource).label,
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "首页大海报",
+                        HeroSource.entries.map { Choice(it.storedValue, it.label) },
+                        snapshot.heroSource,
+                    ) { vm.setHeroSource(HeroSource.fromStored(it)) },
                 )
             },
         )

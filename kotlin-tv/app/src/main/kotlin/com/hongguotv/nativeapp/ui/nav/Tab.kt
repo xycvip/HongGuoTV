@@ -17,7 +17,13 @@ sealed interface Route {
     data object Search : Route
     /** 投播：扫码把手机里的分享文案推到电视播放。 */
     data object Cast : Route
-    data class Detail(val seriesId: String, val seed: com.hongguotv.core.Series, val autoplay: Boolean = false) : Route
+    data class Detail(
+        val seriesId: String,
+        val seed: com.hongguotv.core.Series,
+        val autoplay: Boolean = false,
+        /** 来源路由：从演员榜点进作品时带回演员榜，而不是甩回排行榜。 */
+        val from: Route? = null,
+    ) : Route
     data class Player(
         val series: com.hongguotv.core.Series,
         val episodes: List<String>,
@@ -25,6 +31,14 @@ sealed interface Route {
         val positionMs: Long = 0L,
     ) : Route
     data class Collection(val kind: CollectionKind) : Route
+
+    /**
+     * 演员榜（剧星榜 / 星光榜）。
+     *
+     * 不做成排行榜的第五个签：榜签换的是口径（热播/推荐/新剧/臻果），
+     * 而这里的对象是「人」，第二行的内容签对它没有意义。
+     */
+    data object ActorRank : Route
 }
 
 /** 「查看全部」的去向：本机片单，或某一类内容的完整目录。 */

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,8 +42,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,6 +53,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -56,8 +62,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.hongguotv.core.Actor
 import com.hongguotv.core.SeasonEntry
 import com.hongguotv.core.Series
 import com.hongguotv.nativeapp.ui.components.ButtonTone
@@ -70,6 +78,7 @@ import com.hongguotv.nativeapp.ui.components.SmartImage
 import com.hongguotv.nativeapp.ui.components.ThinProgress
 import com.hongguotv.nativeapp.ui.components.TvButton
 import com.hongguotv.nativeapp.ui.components.tryRequestFocus
+import com.hongguotv.nativeapp.ui.data.ActorState
 import com.hongguotv.nativeapp.ui.data.DetailState
 import com.hongguotv.nativeapp.ui.theme.Gold
 import com.hongguotv.nativeapp.ui.theme.Ink
@@ -77,14 +86,16 @@ import com.hongguotv.nativeapp.ui.theme.Paper
 import com.hongguotv.nativeapp.ui.theme.Rouge
 import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
+import kotlinx.coroutines.launch
 
 /**
- * 详情页：整幅剧照做底，信息压在画面左下，下面是选集 / 系列剧 / 相关推荐。
+ * 详情页：整幅剧照做底，信息压在画面左下，下面是演职员 / 选集 / 相关推荐。
  *
  * 布局要点：
  *  - 选集按可用宽度均分列宽（BoxWithConstraints + weight），不再出现「右边空一大片」；
  *  - 进入页面焦点直接落在「播放/继续观看」上，遥控器一进来就知道按确定会发生什么；
- *  - 系列剧用海报卡 + 第几季标签，当前季带「正在看」标记。
+ *  - 系列剧用海报卡 + 第几季标签，当前季带「正在看」标记；
+ *  - 点演员头像在本页弹出 [ActorSheet]：档案和作品同屏，返回即回原处，不切路由。
  */
 @Composable
 fun DetailScreen(
@@ -95,8 +106,16 @@ fun DetailScreen(
     onFavorite: () -> Unit,
     onLater: () -> Unit,
     onSeries: (Series) -> Unit,
+    /** 点演员卡打开其档案弹窗；没有作品 ID 的演员也会弹窗，只是作品区显示「暂无作品」。 */
+    onActor: (Actor) -> Unit,
     onExpandSynopsis: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 演员弹窗的数据；actor == null 时不显示。 */
+    actor: ActorState = ActorState(loading = false, hasMore = false),
+    onActorClose: () -> Unit = {},
+    onActorDetail: (Series) -> Unit = {},
+    onActorLoadMore: () -> Unit = {},
+    onActorRetry: () -> Unit = {},
     /** 切季成功后希望落到哪一季的季签上，由上一级设置、请求一次后回清。 */
     focusSeasonId: String? = null,
     onSeasonFocusConsumed: () -> Unit = {},
@@ -116,10 +135,22 @@ fun DetailScreen(
                 onFavorite = onFavorite,
                 onLater = onLater,
                 onSeries = onSeries,
+                onActor = onActor,
+                actorSheetOpen = actor.actor != null,
                 onExpandSynopsis = onExpandSynopsis,
                 focusSeasonId = focusSeasonId,
                 onSeasonFocusConsumed = onSeasonFocusConsumed,
                 showBack = showBack,
+            )
+        }
+        // 弹窗叠在详情页之上：详情页保持在组合里，关掉弹窗时选集/滚动位置原样还在。
+        if (actor.actor != null) {
+            ActorSheet(
+                state = actor,
+                onClose = onActorClose,
+                onDetail = onActorDetail,
+                onLoadMore = onActorLoadMore,
+                onRetry = onActorRetry,
             )
         }
     }
@@ -134,6 +165,9 @@ private fun DetailContent(
     onFavorite: () -> Unit,
     onLater: () -> Unit,
     onSeries: (Series) -> Unit,
+    onActor: (Actor) -> Unit,
+    /** 演员弹窗是否正开着；关掉时把焦点还给刚才点的头像。 */
+    actorSheetOpen: Boolean,
     onExpandSynopsis: () -> Unit,
     focusSeasonId: String?,
     onSeasonFocusConsumed: () -> Unit,
@@ -143,6 +177,8 @@ private fun DetailContent(
     var episodesExpanded by remember(series.id) { mutableIntStateOf(0) }
     val playFocus = remember { FocusRequester() }
     val backFocus = remember { FocusRequester() }
+    // 「展开全部 / 收起」按钮的落点：末尾的收起按钮消失后要有人接住焦点。
+    val episodeToggleFocus = remember { FocusRequester() }
     // 每个季签一个 requester，切季后能把光标留在「刚点的那一季」上，方便连着换。
     val seasonFoci = remember(state.seasons) {
         state.seasons.associate { it.series.id to FocusRequester() }
@@ -196,6 +232,18 @@ private fun DetailContent(
                 showBack = showBack,
             )
         }
+        // 演职员放在选集之前：它是「这部剧是什么」，属于内容本身；
+        // 选集是「看哪一集」，会随「展开全部」长到十几行——排在它后面的区块
+        // 会被一下子推到几屏以外，用户以为那里没内容。
+        if (detail.actors.isNotEmpty()) {
+            item {
+                ActorSection(
+                    actors = detail.actors,
+                    onActor = onActor,
+                    sheetOpen = actorSheetOpen,
+                )
+            }
+        }
         if (episodes.isNotEmpty()) {
             item {
                 EpisodeSection(
@@ -208,6 +256,7 @@ private fun DetailContent(
                     seasons = state.seasons,
                     currentId = series.id,
                     seasonFoci = seasonFoci,
+                    toggleFocus = episodeToggleFocus,
                     onToggleExpand = { episodesExpanded = if (episodesExpanded == 1) 0 else 1 },
                     onPlay = onPlay,
                     onSeason = onSeries,
@@ -236,15 +285,18 @@ private fun DetailHero(
     showBack: Boolean = true,
 ) {
     val series = detail.series
-    // 高度跟着屏幕走：固定 520dp 在 540dp 高的盒子上会把竖版海报整块顶出屏外，
-    // 用户看到的就是「海报显示不全」。这里按屏高 62% 取，并给一个下限。
+    // 高度按屏高取一个下限，但不再写死：内容（标题 2 行 + 评分 + 简介 + 按钮）
+    // 在矮屏上会比 58% 屏高更高，Box 又是底部对齐，多出来的部分会向上溢出——
+    // 用户看到的「上方显示不全、按上也回不来」正是标题被裁到了画面外。
+    // 改成 heightIn(下限) + 背景 matchParentSize，内容多高就撑多高，永不裁切。
     val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp
-    val heroHeight = minOf(d(520), (screenHeight * 0.58f).dp).coerceAtLeast(d(300))
-    Box(Modifier.fillMaxWidth().height(heroHeight)) {
-        SmartImage(series.cover, Modifier.fillMaxSize(), fallbackTitle = series.title)
+    val heroMinHeight = minOf(d(520), (screenHeight * 0.58f).dp).coerceAtLeast(d(300))
+    Box(Modifier.fillMaxWidth().heightIn(min = heroMinHeight)) {
+        // matchParentSize 不参与 Box 尺寸测量：高度由文字内容决定，背景再铺满。
+        SmartImage(series.cover, Modifier.matchParentSize(), fallbackTitle = series.title)
         // 左→右压暗保证文字可读，右边留出剧照细节。
         Box(
-            Modifier.fillMaxSize().background(
+            Modifier.matchParentSize().background(
                 Brush.horizontalGradient(
                     0f to Ink.Deep.copy(0.96f),
                     0.38f to Ink.Deep.copy(0.86f),
@@ -255,7 +307,7 @@ private fun DetailHero(
         )
         // 上下融入页面底色，避免标题区和内容区之间有硬边。
         Box(
-            Modifier.fillMaxSize().background(
+            Modifier.matchParentSize().background(
                 Brush.verticalGradient(
                     0f to Ink.Deep.copy(0.70f),
                     0.26f to Color.Transparent,
@@ -387,6 +439,120 @@ private fun DetailHero(
     }
 }
 
+/**
+ * 演职员：圆形头像横滑，选中弹出档案弹窗（简介 + 全部作品）。
+ *
+ * 位置在 hero 与选集之间——它描述「这部剧是什么」，属于内容本身；
+ * 而选集是「看哪一集」，且会随「展开全部」从 2 行涨到十几行，
+ * 排在它后面的区块会被整体推到几屏以外，用户会以为那里没有内容。
+ *
+ * 可聚焦：这是唯一能「从剧看到人」的入口，不给焦点等于把入口藏起来。
+ * 官方 celebrities 按主演排序，横向滑到底能看到全部（21 人的剧也能翻完）。
+ */
+@Composable
+private fun ActorSection(actors: List<Actor>, onActor: (Actor) -> Unit, sheetOpen: Boolean) {
+    // 每位演员一个 requester：弹窗关掉时要把焦点还给「刚才点的那张脸」。
+    // 不还的话，Dialog 关闭后焦点会落到几何搜索的起点，用户得重新从选集摸回来。
+    val foci = remember(actors) { actors.associate { it.id to FocusRequester() } }
+    var lastOpened by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(sheetOpen) {
+        if (sheetOpen) return@LaunchedEffect
+        val id = lastOpened ?: return@LaunchedEffect
+        lastOpened = null
+        val target = foci[id] ?: return@LaunchedEffect
+        repeat(10) {
+            if (target.tryRequestFocus()) return@LaunchedEffect
+            withFrameNanos { }
+        }
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = ui.gutter)) {
+            SectionTitle(
+                title = "演职员",
+                subtitle = "共 ${actors.size} 位 · 选中查看档案与作品",
+            )
+        }
+        Spacer(Modifier.height(d(16)))
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = ui.gutter),
+            horizontalArrangement = Arrangement.spacedBy(d(14)),
+        ) {
+            items(actors) { actor ->
+                ActorCard(
+                    actor = actor,
+                    onClick = {
+                        lastOpened = actor.id
+                        onActor(actor)
+                    },
+                    focusRequester = foci[actor.id],
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActorCard(
+    actor: Actor,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    // 焦点放大一点就够：电视上 1.05 已经能看出「选中了」，再大就会和相邻头像挤在一起。
+    // 与海报卡同一条缓动：默认 spring 会过冲，连续按右键时整排头像看着在抖。
+    val scale by animateFloatAsState(if (focused) 1.05f else 1f, tween(150), label = "actorFocus")
+    Column(
+        Modifier
+            .width(d(100))
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .clip(RoundedCornerShape(d(16)))
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(vertical = d(4)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        SmartImage(
+            url = actor.avatar,
+            modifier = Modifier
+                .size(d(84))
+                .clip(CircleShape)
+                .border(
+                    d(if (focused) 2.2f else 1.4f),
+                    if (focused) Rouge.Bright else Color(0x26FFFFFF),
+                    CircleShape,
+                ),
+            fallbackTitle = actor.name.take(1),
+        )
+        Spacer(Modifier.height(d(10)))
+        Text(
+            actor.name,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (focused) Paper.Pure else Paper.Secondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (actor.role.isNotBlank()) {
+            Spacer(Modifier.height(d(2)))
+            Text(
+                "饰 ${actor.role}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Paper.Tertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
 /** 选集：季切换条压在标题上方，按可用宽度均分列宽铺满整行。 */
 @Composable
 private fun EpisodeSection(
@@ -399,10 +565,13 @@ private fun EpisodeSection(
     seasons: List<SeasonEntry>,
     currentId: String,
     seasonFoci: Map<String, FocusRequester>,
+    /** 展开/收起按钮的落点：收起后末尾按钮会消失，焦点必须有人接。 */
+    toggleFocus: FocusRequester,
     onToggleExpand: () -> Unit,
     onPlay: (Int, Long) -> Unit,
     onSeason: (Series) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     Column(Modifier.padding(horizontal = ui.gutter)) {
         // 多季才显示切换条：三五个季签一行排开，比整排海报省一大块高度。
         if (seasons.size > 1) {
@@ -416,7 +585,12 @@ private fun EpisodeSection(
             )
             Spacer(Modifier.weight(1f))
             if (episodes.size > 24) {
-                TvButton(if (expanded) "收起" else "展开全部", onToggleExpand, tone = ButtonTone.Quiet)
+                TvButton(
+                    text = if (expanded) "收起" else "展开全部",
+                    onClick = onToggleExpand,
+                    tone = ButtonTone.Quiet,
+                    focusRequester = toggleFocus,
+                )
             }
         }
         Spacer(Modifier.height(d(16)))
@@ -443,6 +617,25 @@ private fun EpisodeSection(
                         repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
+            }
+        }
+        // 展开后几十集会把顶部那颗「收起」推出屏幕，末尾再给一个：
+        // 不然用户收起前要先滚回选集开头，几十行的滚动在电视上很折磨。
+        // 这颗按钮收起后会跟着消失，所以先把焦点交给顶部那颗，再切状态。
+        if (expanded && episodes.size > shown) {
+            Spacer(Modifier.height(d(14)))
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                TvButton(
+                    text = "收起选集",
+                    onClick = {
+                        onToggleExpand()
+                        scope.launch {
+                            withFrameNanos { }
+                            toggleFocus.requestFocus()
+                        }
+                    },
+                    tone = ButtonTone.Quiet,
+                )
             }
         }
     }

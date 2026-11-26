@@ -2,8 +2,11 @@
 package com.hongguotv.nativeapp.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +25,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import com.hongguotv.nativeapp.ui.components.tryRequestFocus
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -42,12 +49,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hongguotv.core.RankBoard
+import com.hongguotv.core.RankKind
 import com.hongguotv.core.Series
 import com.hongguotv.nativeapp.ui.components.ErrorState
 import com.hongguotv.nativeapp.ui.components.FocusSurface
 import com.hongguotv.nativeapp.ui.components.LoadingState
 import com.hongguotv.nativeapp.ui.components.SelectChip
 import com.hongguotv.nativeapp.ui.components.SmartImage
+import com.hongguotv.nativeapp.ui.components.focusUpTo
 import com.hongguotv.nativeapp.ui.data.RankingState
 import com.hongguotv.nativeapp.ui.theme.Gold
 import com.hongguotv.nativeapp.ui.theme.Ink
@@ -61,7 +70,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun RankingScreen(
     state: RankingState,
+    onKind: (RankKind) -> Unit,
     onBoard: (RankBoard) -> Unit,
+    /** 打开演员榜：那是「人」的榜，换的是对象而不是口径，所以单独一页。 */
+    onActorRank: () -> Unit,
     onDetail: (Series) -> Unit,
     onLoadMore: () -> Unit,
     onRetry: () -> Unit,
@@ -72,7 +84,7 @@ fun RankingScreen(
     val listState = rememberLazyListState()
     // 无限滚动：订阅布局信息而不是用 derivedStateOf 当 key——
     // 之前列表长度不变时状态变化不会重启副作用，滚到底也不会再补页。
-    LaunchedEffect(listState, state.hasMore, state.items.size, state.page, state.board) {
+    LaunchedEffect(listState, state.hasMore, state.items.size, state.page, state.board, state.kind) {
         if (!state.hasMore) return@LaunchedEffect
         snapshotFlow {
             val info = listState.layoutInfo
@@ -81,22 +93,26 @@ fun RankingScreen(
         }.collect { nearEnd -> if (nearEnd) onLoadMore() }
     }
 
-    // 换榜后整列 id 全换，焦点节点会被销毁；把落点钉在榜签上，遥控器不会掉回导航栏。
-    val boardFoci = remember(entryFocus) {
-        RankBoard.entries.associateWith { board ->
-            if (board == RankBoard.entries.first() && entryFocus != null) entryFocus else FocusRequester()
+    // 第一行是「榜」（页面主控），第二行是「内容」（次级筛选），焦点默认落第一行。
+    val kindFoci = remember(entryFocus) {
+        RankKind.entries.associateWith { kind ->
+            if (kind == RankKind.entries.first() && entryFocus != null) entryFocus else FocusRequester()
         }
     }
-    LaunchedEffect(state.board) {
+    val boardFoci = remember { RankBoard.entries.associateWith { FocusRequester() } }
+
+    // 只跟着「榜」走：切内容时焦点本来就在内容签上，没必要把它抢回第一行。
+    // items 从空变非空也要再试一次——首屏加载时签还没进组合树，requestFocus 会失败。
+    LaunchedEffect(state.kind, state.items.isEmpty()) {
         repeat(6) {
-            val target = boardFoci[state.board]
+            val target = kindFoci[state.kind]
             if (target != null && target.tryRequestFocus()) return@LaunchedEffect
             withFrameNanos { }
         }
     }
 
-    // 换榜后回到顶部：旧榜的滚动位置留在这里会让人以为「榜单没切换」。
-    LaunchedEffect(state.board) { listState.scrollToItem(0) }
+    // 换榜/换内容都回顶部：旧榜的滚动位置留在这里会让人以为「榜单没切换」。
+    LaunchedEffect(state.kind, state.board) { listState.scrollToItem(0) }
 
     Box(modifier.fillMaxSize()) {
         when {
@@ -119,22 +135,72 @@ fun RankingScreen(
                                 Text("排行榜", style = MaterialTheme.typography.displaySmall, color = Paper.Pure, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.height(d(6)))
                                 Text(
-                                    state.updatedText.ifBlank { "红果官方热播榜 · 实时更新" },
+                                    // 脚本给的描述跟着榜走（「11月26日已更新·基于…顺序」），
+                                    // 拿不到才用本地兜底文案，避免四个榜共用一个写死的标题。
+                                    state.updatedText.ifBlank { state.kind.sourceText },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Paper.Tertiary,
                                 )
                             }
                         }
                         Spacer(Modifier.height(d(18)))
-                        Row(horizontalArrangement = Arrangement.spacedBy(d(10))) {
-                            RankBoard.entries.forEach { board ->
+                        // 第一行 = 榜（主控）：实心胶囊，选中红底，四个口径按「热度→发现→时效→口碑」排。
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(d(10)),
+                        ) {
+                            RankKind.entries.forEach { kind ->
                                 SelectChip(
-                                    text = board.buttonLabel,
-                                    selected = state.board == board,
-                                    onClick = { onBoard(board) },
-                                    accent = if (board == RankBoard.TOTAL) Rouge.Core else Gold.Core,
-                                    focusRequester = boardFoci[board],
+                                    text = kind.label,
+                                    selected = state.kind == kind,
+                                    onClick = { onKind(kind) },
+                                    accent = Rouge.Core,
+                                    focusRequester = kindFoci[kind],
                                     upFocus = upFocus,
+                                )
+                            }
+                            // 竖线把「换榜」和「换到人榜」隔开：金色实心、图标开场，
+                            // 一眼能看出它不是第五个榜签，按下去是另一页。
+                            Box(
+                                Modifier
+                                    .padding(horizontal = d(4))
+                                    .width(d(1))
+                                    .height(d(18))
+                                    .background(Ink.LineSoft),
+                            )
+                            ActorRankChip(onClick = onActorRank, upFocus = upFocus)
+                        }
+                        Spacer(Modifier.height(d(12)))
+                        // 第二行 = 内容（次级）：细描边小签，一眼能和上面区分开。
+                        // 榜只覆盖一类时（臻果）不渲染内容签，改一句话说明，不留按到死的灰键。
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(d(8)),
+                        ) {
+                            Text(
+                                "内容",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Paper.Tertiary,
+                                modifier = Modifier.padding(end = d(2)),
+                            )
+                            if (state.kind.availableBoards.size > 1) {
+                                RankBoard.entries.forEach { board ->
+                                    if (board in state.kind.availableBoards) {
+                                        TypeChip(
+                                            text = board.label,
+                                            selected = state.board == board,
+                                            onClick = { onBoard(board) },
+                                            accent = Gold.Core,
+                                            focusRequester = boardFoci[board],
+                                            upFocus = kindFoci[state.kind],
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    state.kind.scopeNote.ifBlank { "仅${state.board.label}已开分" },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Gold.Core.copy(alpha = 0.9f),
                                 )
                             }
                         }
@@ -352,6 +418,109 @@ private fun RankRow(
             if (!heat.isNullOrBlank()) {
                 Text(heat, style = MaterialTheme.typography.labelSmall, color = Gold.Core.copy(0.85f))
             }
+        }
+    }
+}
+
+/**
+ * 次级「内容」签：比榜签小一号、无填充、细描边。
+ *
+ * 两个选中态不能打架——榜签实心红、内容签只亮描边，
+ * 一眼能看出「当前是哪个榜」和「当前看哪一类内容」。
+ */
+@Composable
+private fun TypeChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    accent: Color,
+    focusRequester: FocusRequester?,
+    upFocus: FocusRequester?,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Box(
+        Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusUpTo(upFocus)
+            .clip(RoundedCornerShape(d(999)))
+            .background(
+                when {
+                    selected -> accent.copy(alpha = 0.16f)
+                    focused -> Color(0x14FFFFFF)
+                    else -> Color.Transparent
+                },
+            )
+            .border(
+                d(1f),
+                when {
+                    focused -> accent
+                    selected -> accent.copy(alpha = 0.55f)
+                    else -> Ink.LineSoft
+                },
+                RoundedCornerShape(d(999)),
+            )
+            .combinedClickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = d(14), vertical = d(6)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = when {
+                selected || focused -> Paper.Pure
+                else -> Paper.Secondary
+            },
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * 「演员榜」入口。
+ *
+ * 金色实心 + 图标，与上方的红底榜签刻意不同：它不切换当前榜单，而是去另一页看「人」。
+ * 放在四个榜签同一行的末尾，是因为它回答的是同一个问题「谁在火」，
+ * 只是主体从剧换成了演员，连着按左右键就能到，不用另找入口。
+ */
+@Composable
+private fun ActorRankChip(onClick: () -> Unit, upFocus: FocusRequester?) {
+    FocusSurface(
+        onClick = onClick,
+        modifier = Modifier.focusUpTo(upFocus),
+        shape = RoundedCornerShape(d(999)),
+        focusScale = 1.08f,
+        glow = Gold.Core,
+        borderWidth = d(1.2f),
+    ) { focused ->
+        Row(
+            Modifier
+                .background(
+                    Brush.horizontalGradient(
+                        if (focused) {
+                            listOf(Gold.Deep.copy(alpha = 0.95f), Gold.Core.copy(alpha = 0.55f))
+                        } else {
+                            listOf(Gold.Deep.copy(alpha = 0.50f), Gold.Core.copy(alpha = 0.20f))
+                        },
+                    ),
+                )
+                .padding(horizontal = d(16), vertical = d(7)),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.Star,
+                contentDescription = null,
+                tint = Gold.Bright,
+                modifier = Modifier.size(d(15)),
+            )
+            Spacer(Modifier.width(d(7)))
+            Text(
+                "演员榜",
+                style = MaterialTheme.typography.labelMedium,
+                color = Gold.Bright,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
         }
     }
 }

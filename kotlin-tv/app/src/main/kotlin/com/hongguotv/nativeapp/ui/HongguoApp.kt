@@ -44,6 +44,7 @@ import com.hongguotv.nativeapp.ui.nav.Route
 import com.hongguotv.nativeapp.ui.nav.Tab
 import com.hongguotv.nativeapp.ui.player.PlayerSession
 import com.hongguotv.nativeapp.ui.screens.AccountScreen
+import com.hongguotv.nativeapp.ui.screens.ActorRankScreen
 import com.hongguotv.nativeapp.ui.screens.CastScreen
 import com.hongguotv.nativeapp.ui.screens.CollectionScreen
 import com.hongguotv.nativeapp.ui.screens.DetailScreen
@@ -275,8 +276,20 @@ fun HongguoApp(vm: AppViewModel) {
     BackHandler(enabled = route != Route.Main) {
         route = when (val current = route) {
             is Route.Player -> Route.Detail(current.series.id, current.series)
-            is Route.Detail -> Route.Main
+            // 详情页记着来源：从演员榜点进作品，返回要回演员榜（列表还在，秒开）。
+            is Route.Detail -> current.from ?: Route.Main
+            is Route.ActorRank -> {
+                vm.closeActorRank()
+                Route.Main
+            }
             else -> Route.Main
+        }
+    }
+
+    // 第一次进演员榜：列表为空才拉，返回再进来直接用上次的名单。
+    LaunchedEffect(route) {
+        if (route == Route.ActorRank && state.actorRank.items.isEmpty() && !state.actorRank.loading) {
+            vm.loadActorRank()
         }
     }
 
@@ -327,6 +340,7 @@ fun HongguoApp(vm: AppViewModel) {
                         },
                         onSearch = { vm.openSearch(); route = Route.Search },
                         onCollection = { kind -> route = Route.Collection(kind) },
+                        onActorRank = { route = Route.ActorRank },
                         onApiStatus = { showApiStatus = true },
                         homeEntry = homeEntry,
                         theaterEntry = theaterEntry,
@@ -394,7 +408,8 @@ fun HongguoApp(vm: AppViewModel) {
 
                 is Route.Detail -> DetailScreen(
                     state = state.detail,
-                    onBack = { route = Route.Main },
+                    // 页内返回箭头与遥控器返回键走同一条路：从演员榜点进来的作品，回演员榜。
+                    onBack = { route = target.from ?: Route.Main },
                     focusSeasonId = pendingSeasonFocus,
                     onSeasonFocusConsumed = { pendingSeasonFocus = null },
                     onPlay = { index, position ->
@@ -412,6 +427,17 @@ fun HongguoApp(vm: AppViewModel) {
                         vm.openDetail(series)
                         route = Route.Detail(series.id, series)
                     },
+                    onActor = vm::openActor,
+                    onActorClose = vm::closeActor,
+                    onActorDetail = { series ->
+                        // 先关弹窗再切路由：否则新详情页会继承上一位演员的弹窗状态。
+                        vm.closeActor()
+                        vm.openDetail(series)
+                        route = Route.Detail(series.id, series)
+                    },
+                    onActorLoadMore = vm::loadMoreActor,
+                    onActorRetry = { state.actor.actor?.let(vm::openActor) },
+                    actor = state.actor,
                     onExpandSynopsis = vm::toggleSynopsis,
                     showBack = snapshot?.showScreenBack == true,
                 )
@@ -435,6 +461,24 @@ fun HongguoApp(vm: AppViewModel) {
                     entries = vm.collectionItems(target.kind),
                     onDetail = { series -> vm.openDetail(series); route = Route.Detail(series.id, series) },
                     onBack = { route = Route.Main },
+                )
+
+                is Route.ActorRank -> ActorRankScreen(
+                    state = state.actorRank,
+                    actorState = state.actor,
+                    onBoard = { board -> vm.loadActorRank(board) },
+                    onActor = vm::openActor,
+                    onActorClose = vm::closeActor,
+                    onActorDetail = { series ->
+                        // 先关弹窗再切路由：否则详情页一进来就带着上一位演员的档案。
+                        vm.closeActor()
+                        vm.openDetail(series)
+                        route = Route.Detail(series.id, series, from = Route.ActorRank)
+                    },
+                    onActorLoadMore = vm::loadMoreActor,
+                    onActorRetry = { state.actor.actor?.let(vm::openActor) },
+                    onLoadMore = vm::loadMoreActorRank,
+                    onRetry = { vm.loadActorRank(state.actorRank.board) },
                 )
             }
         }
@@ -501,7 +545,8 @@ private fun PlayerRoute(
         onDispose {
             // 先落盘再刷新首页：否则「接着看」要等下次启动才出现。
             session.release()
-            vm.syncWatchHistory()
+            // 首页栏目重排延后一帧：别和「详情页重新上屏」抢同一帧的主线程。
+            vm.syncWatchHistoryDeferred()
         }
     }
     // 切后台暂停、回前台恢复：Activity 不随 Compose 页面 dispose，切后台时播放器会继续播。
@@ -529,6 +574,8 @@ private fun MainTabContent(
     onResume: (Series) -> Unit,
     onSearch: () -> Unit,
     onCollection: (CollectionKind) -> Unit,
+    /** 排行榜页的「演员榜」入口：换的是对象（人）而不是榜单口径，所以走独立路由。 */
+    onActorRank: () -> Unit,
     onApiStatus: () -> Unit = {},
     homeEntry: FocusRequester? = null,
     theaterEntry: FocusRequester? = null,
@@ -547,7 +594,8 @@ private fun MainTabContent(
         if (!state.booted) return@LaunchedEffect
         when (tab) {
             Tab.THEATER -> if (state.theater.items.isEmpty() && !state.theater.loading) vm.loadTheater(state.theater.type)
-            Tab.RANK -> if (state.ranking.items.isEmpty() && !state.ranking.loading) vm.loadRanking(state.ranking.board)
+            Tab.RANK -> if (state.ranking.items.isEmpty() && !state.ranking.loading)
+                vm.loadRanking(state.ranking.board, state.ranking.kind)
             Tab.LIBRARY -> vm.refreshLibraryState()
             Tab.ACCOUNT -> if (!state.account.signedIn && state.account.mode == LoginMode.QR &&
                 state.account.qrBitmap == null
@@ -589,10 +637,12 @@ private fun MainTabContent(
 
         Tab.RANK -> RankingScreen(
             state = state.ranking,
-            onBoard = { board -> vm.loadRanking(board) },
+            onKind = { kind -> vm.loadRanking(kind = kind) },
+            onBoard = { board -> vm.loadRanking(board = board) },
+            onActorRank = onActorRank,
             onDetail = onDetail,
             onLoadMore = vm::loadMoreRanking,
-            onRetry = { vm.loadRanking(state.ranking.board) },
+            onRetry = { vm.loadRanking(board = state.ranking.board, kind = state.ranking.kind) },
             entryFocus = rankEntry,
             upFocus = upFocus,
         )

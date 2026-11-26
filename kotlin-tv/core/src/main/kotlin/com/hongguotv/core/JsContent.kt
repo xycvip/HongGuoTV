@@ -39,8 +39,11 @@ interface JsContentGateway {
      */
     fun related(seriesId: String, genre: String, limit: Int): List<Series>
 
-    /** 官方榜单分页；[board] 决定榜单分组，数据来自官方榜单接口。 */
-    fun rankingPage(board: RankBoard, page: Int): CatalogPage
+    /**
+     * 官方榜单分页。[board] 是内容类型（综合/真人剧/漫剧/AI剧），
+     * [kind] 是榜单口径（热播/推荐/新剧/臻果），两者组合成官方榜单 id。
+     */
+    fun rankingPage(board: RankBoard, kind: RankKind, page: Int): CatalogPage
 
     /** 弹幕一个 30 秒窗口；由 DanmakuLoader 在播放推进时调用。 */
     fun danmakuWindow(seriesId: String, vid: String, durationMs: Long, startMs: Long): DanmakuWindow
@@ -54,6 +57,19 @@ interface JsContentGateway {
 
     /** 剧院筛选面板（第 1 页），供题材选择器。 */
     fun theaterFilters(type: ContentType): List<TheaterFilterGroup>
+
+    /**
+     * 演员参演作品分页（官方 celebrity/works）。
+     * [offset] 用上一页返回的 [ActorWorksPage.nextOffset] 原样回传；[count] 建议 24（8 列 × 3 行）。
+     */
+    fun actorWorks(actorId: String, offset: Int, count: Int): ActorWorksPage
+
+    /**
+     * 演员榜分页（官方榜单 cell 的剧星榜 / 星光榜）。
+     *
+     * [offset] 同样是「已消耗行数」，[sessionId] 首屏传空、之后原样回传上一页的值。
+     */
+    fun actorRank(board: ActorRankBoard, offset: Int, sessionId: String): ActorRankPage
 }
 
 /** 进程内门面注册表。 */

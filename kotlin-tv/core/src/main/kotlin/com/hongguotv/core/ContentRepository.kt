@@ -24,9 +24,10 @@ open class ContentRepository(
     fun comicRanking(page: Int = 1)=ranking(RankBoard.COMIC,page)
     fun realRanking(page: Int = 1)=ranking(RankBoard.REAL,page)
 
-    open fun ranking(board: RankBoard, page: Int = 1): CatalogPage {
+    /** [kind] 默认热播：首页货架用的是「正在火」的口径，不传就是它。 */
+    open fun ranking(board: RankBoard, page: Int = 1, kind: RankKind = RankKind.HEAT): CatalogPage {
         require(page in 1..100)
-        return js.rankingPage(board, page)
+        return js.rankingPage(board, kind, page)
     }
 
     fun search(keyword: String, page: Int = 1, type: ContentType = ContentType.SHORT): CatalogPage =
@@ -49,6 +50,17 @@ open class ContentRepository(
     /** 相关推荐：官方推荐位同类型剧集，剔除当前剧。 */
     fun related(seriesId: String, genre: String = "short_play", limit: Int = 12): List<Series> =
         js.related(seriesId, genre, limit)
+
+    /** 演员参演作品：offset 用上一页的 nextOffset 原样回传。 */
+    fun actorWorks(actorId: String, offset: Int = 0, count: Int = 24): ActorWorksPage =
+        js.actorWorks(actorId, offset, count)
+
+    /**
+     * 演员榜：剧星榜 / 星光榜。
+     * 首屏 [sessionId] 传空，翻页原样回传上一页返回的值，否则上游会重放第一页。
+     */
+    fun actorRank(board: ActorRankBoard, offset: Int = 0, sessionId: String = ""): ActorRankPage =
+        js.actorRank(board, offset, sessionId)
 
     // ---------------------------------------------------------- 剧院 ----
     open fun theater(page:Int=1,type:ContentType?=null,selected:Map<String,String> = emptyMap()):TheaterCatalogPage =

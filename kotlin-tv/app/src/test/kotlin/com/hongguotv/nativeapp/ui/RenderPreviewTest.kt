@@ -12,6 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import com.hongguotv.core.Actor
+import com.hongguotv.core.ActorRankBoard
+import com.hongguotv.core.ActorRankEntry
 import com.hongguotv.core.BackupProgress
 import com.hongguotv.core.ContentType
 import com.hongguotv.core.Detail
@@ -22,6 +25,8 @@ import com.hongguotv.core.SeasonEntry
 import com.hongguotv.core.SeriesSocial
 import com.hongguotv.core.TheaterFilterGroup
 import com.hongguotv.core.TheaterFilterOption
+import com.hongguotv.nativeapp.ui.data.ActorState
+import com.hongguotv.nativeapp.ui.data.ActorRankState
 import com.hongguotv.nativeapp.ui.data.DetailState
 import com.hongguotv.nativeapp.ui.data.HomeState
 import com.hongguotv.nativeapp.ui.data.RankingState
@@ -34,6 +39,7 @@ import com.hongguotv.nativeapp.ui.nav.CollectionKind
 import com.hongguotv.nativeapp.ui.components.TopBar
 import com.hongguotv.nativeapp.ui.nav.Tab
 import com.hongguotv.nativeapp.ui.data.LibraryState
+import com.hongguotv.nativeapp.ui.screens.ActorRankScreen
 import com.hongguotv.nativeapp.ui.screens.DetailScreen
 import com.hongguotv.nativeapp.ui.screens.LibraryScreen
 import com.hongguotv.nativeapp.ui.screens.HomeScreen
@@ -129,7 +135,57 @@ class RenderPreviewTest {
             updatedText = "每小时更新",
         )
         render("03-ranking", chrome = Tab.RANK) {
-            RankingScreen(state = state, onBoard = {}, onDetail = {}, onLoadMore = {}, onRetry = {})
+            RankingScreen(
+                state = state,
+                onKind = {},
+                onBoard = {},
+                onActorRank = {},
+                onDetail = {},
+                onLoadMore = {},
+                onRetry = {},
+            )
+        }
+    }
+
+    @Test
+    fun actorRank() {
+        // 头像借海报图：预览只为看排版，真实数据是圆头像。
+        val rows = all.take(14).mapIndexed { index, series ->
+            ActorRankEntry(
+                actor = Actor(
+                    id = "${900 + index}",
+                    name = series.title,
+                    avatar = series.cover,
+                    meta = "${32 - index}部作品 · 双周追剧${161 - index}万人",
+                ),
+                rank = index + 1,
+                popularity = "${880 - index}万人气",
+                details = listOf("${32 - index}部作品", "双周追剧${161 - index}万人"),
+                changeType = when (index % 3) {
+                    0 -> 3
+                    1 -> 1
+                    else -> 2
+                },
+                changePlaces = if (index % 3 == 0) 0 else index % 5 + 1,
+            )
+        }
+        render("09-actor-rank", chrome = Tab.RANK) {
+            ActorRankScreen(
+                state = ActorRankState(
+                    board = ActorRankBoard.DRAMA,
+                    items = rows,
+                    hasMore = false,
+                ),
+                actorState = ActorState(loading = false, hasMore = false),
+                onBoard = {},
+                onActor = {},
+                onActorClose = {},
+                onActorDetail = {},
+                onActorLoadMore = {},
+                onActorRetry = {},
+                onLoadMore = {},
+                onRetry = {},
+            )
         }
     }
 
@@ -159,7 +215,7 @@ class RenderPreviewTest {
         render("04-detail") {
             DetailScreen(
                 state = state, onBack = {}, onPlay = { _, _ -> }, onNextEpisode = {}, onFavorite = {},
-                onLater = {}, onSeries = {}, onExpandSynopsis = {},
+                onLater = {}, onSeries = {}, onActor = {}, onExpandSynopsis = {},
             )
         }
     }

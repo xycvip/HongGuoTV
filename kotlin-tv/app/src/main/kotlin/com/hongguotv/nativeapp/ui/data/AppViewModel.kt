@@ -12,6 +12,8 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.hongguotv.core.Actor
+import com.hongguotv.core.ActorRankBoard
 import com.hongguotv.core.BackupProgress
 import com.hongguotv.core.CloudProfile
 import com.hongguotv.core.ContentRepository
@@ -25,6 +27,7 @@ import com.hongguotv.core.PhoneInputServer
 import com.hongguotv.core.PlaybackQuality
 import com.hongguotv.core.PlaybackSpeed
 import com.hongguotv.core.RankBoard
+import com.hongguotv.core.RankKind
 import com.hongguotv.core.RecentSearch
 import com.hongguotv.core.Series
 import com.hongguotv.core.TheaterFilterGroup
@@ -45,6 +48,7 @@ import com.hongguotv.js.ScriptUpdateOutcome
 import com.hongguotv.nativeapp.ui.components.qrPngBytes
 import com.hongguotv.nativeapp.AppUpdateInstaller
 import com.hongguotv.nativeapp.BuildConfig
+import com.hongguotv.nativeapp.HeroSource
 import com.hongguotv.nativeapp.Library
 import com.hongguotv.nativeapp.PlaybackExtras
 import com.hongguotv.nativeapp.playbackStreamSource
@@ -126,7 +130,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var homeShort: List<Series> = emptyList()
     private var homeComic: List<Series> = emptyList()
     private var homeAi: List<Series> = emptyList()
+
+    /**
+     * 首页大海报的候选池：固定取第 2 页，按设置决定取哪几类、每类取几部。
+     * 与 [homeShort]/[homeComic]/[homeAi]（第 1 页、供货架消费）分开存，
+     * 保证「大图与货架零重叠」，切换设置时也能独立刷新。
+     */
+    private var homeHeroSeed: List<Series> = emptyList()
+
+    /** [homeHeroSeed] 对应的来源；设置切走后旧种子立即失效，不再拿错分类的图充数。 */
+    private var homeHeroSeedSource: HeroSource = HeroSource.MIXED
     private var homeJob: Job? = null
+    /** 只刷新大海报候选的任务；切换「首页大海报」设置时用它，避免连货架一起重拉。 */
+    private var heroJob: Job? = null
     /** 冷启动用缓存顶首屏后，网络刷新被推迟到「切走首页」或兜底计时器。 */
     private var homeRefreshPending = false
     private var homeDeferJob: Job? = null
@@ -148,6 +164,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var rankingEmptyPages = 0
     private var searchJob: Job? = null
     private var suggestJob: Job? = null
+    /** 演员作品的请求；切演员或关闭弹窗时取消，避免旧结果覆盖新演员。 */
+    private var actorJob: Job? = null
+    private var actorGeneration = 0
+    /** 演员榜的请求；切榜或离开页面时取消，避免旧榜结果盖住新榜。 */
+    private var actorRankJob: Job? = null
+    private var actorRankGeneration = 0L
     private var accountPoll: Job? = null
     private var scriptBootstrapJob: Job? = null
     private val jsAccount get() = JsAccount.required()
@@ -396,13 +418,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         homeRefreshPending = false
         homeJob = viewModelScope.launch {
+            // 大图候选独立并发、不参与首屏等待：货架先出，候选到了再刷新主视觉。
+            // 把它塞进下面的 await 里会让首屏多等一整批请求（每类一次脚本运行时 + 网络）。
+            val source = HeroSource.fromStored(extras.heroSource)
+            heroJob?.cancel()
+            heroJob = launch {
+                val seed = withContext(Dispatchers.IO) {
+                    runCatching { fetchHeroSeed(source) }.getOrDefault(emptyList())
+                }
+                if (seed.isEmpty()) return@launch
+                homeHeroSeed = seed
+                homeHeroSeedSource = source
+                // 保持当前 loading 状态：货架还没回来时不能因为大图先到就提前收起骨架。
+                publishHome(loading = _state.value.home.loading)
+            }
             // 三类内容并发拉取：每次脚本调用都是一次独立的运行时 + 网络请求，
             // 串行等于把三个 RTT 相加，首屏要等三倍。
             val (short, comic, ai) = withContext(Dispatchers.IO) {
                 coroutineScope {
                     val shortJob = async { runCatching { repository.home(1, ContentType.SHORT) }.getOrNull() }
                     val comicJob = async { runCatching { repository.home(1, ContentType.COMIC) }.getOrNull() }
-                    val aiJob = async { runCatching { repository.ranking(RankBoard.AI, 1) }.getOrNull() }
+                    // AI 与短剧/漫剧走同一条发现流（ai_series -> app:discover:ai_playlet），
+                    // 不再借用榜单接口：榜单是「按名次排的计划流」，和首页「推荐位」语义不同，
+                    // 榜单分组为空时 AI 货架/hero 候选会一起消失。
+                    val aiJob = async { runCatching { repository.home(1, ContentType.AI) }.getOrNull() }
                     Triple(shortJob.await(), comicJob.await(), aiJob.await())
                 }
             }
@@ -424,6 +463,71 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 loading = false,
                 error = if (failed) "内容加载失败，请检查网络后重试" else null,
             )
+        }
+    }
+
+    // ---------------------------------------------------------------- 首页大海报
+
+    /**
+     * 拉取首页大海报候选，固定取第 2 页。
+     *
+     * 首页货架固定消费第 1 页（每页 6 部），大图从第 2 页取可以与货架做到零重叠：
+     * 首屏既不会出现「大图 + 正下方就是同一部」的重复，也不占用货架的推荐位。
+     * 综合模式三类各取 2 部共 6 部；单选模式只取该类 6 部。
+     */
+    private suspend fun fetchHeroSeed(source: HeroSource): List<Series> = coroutineScope {
+        val types = when (source) {
+            HeroSource.MIXED -> listOf(ContentType.SHORT, ContentType.COMIC, ContentType.AI)
+            HeroSource.SHORT -> listOf(ContentType.SHORT)
+            HeroSource.COMIC -> listOf(ContentType.COMIC)
+            HeroSource.AI -> listOf(ContentType.AI)
+        }
+        val perType = if (source == HeroSource.MIXED) HERO_MIXED_PER_TYPE else HERO_TAKE
+        val groups = types.map { type ->
+            async {
+                runCatching { repository.home(HERO_PAGE, type) }.getOrNull()
+                    ?.items
+                    ?.filter { it.cover.isNotBlank() }
+                    ?.take(perType)
+                    .orEmpty()
+            }
+        }.awaitAll()
+        if (source != HeroSource.MIXED) {
+            groups.flatten()
+        } else {
+            // 综合模式按「真人、漫剧、AI、真人、漫剧、AI」轮转交错，而不是同类排在一起，
+            // 横滑时类型分布均匀，不会前半屏全是真人剧、后半屏全是 AI 剧。
+            buildList {
+                var round = 0
+                while (size < HERO_TAKE) {
+                    val before = size
+                    groups.forEach { group ->
+                        if (round < group.size && size < HERO_TAKE) add(group[round])
+                    }
+                    if (size == before) break
+                    round++
+                }
+            }
+        }
+    }
+
+    /** 切换首页大海报来源：只重拉大图候选，货架保持不动。 */
+    fun setHeroSource(source: HeroSource) {
+        if (HeroSource.fromStored(extras.heroSource) == source) return
+        extras.heroSource = source.storedValue
+        homeHeroSeed = emptyList()
+        // 候选未到之前先按货架数据兜底重排一次，画面不会空窗。
+        publishHome(loading = _state.value.home.loading)
+        toast("首页大海报 · ${source.label}")
+        heroJob?.cancel()
+        heroJob = viewModelScope.launch {
+            val seed = withContext(Dispatchers.IO) {
+                runCatching { fetchHeroSeed(source) }.getOrDefault(emptyList())
+            }
+            if (seed.isEmpty()) return@launch
+            homeHeroSeed = seed
+            homeHeroSeedSource = source
+            publishHome(loading = _state.value.home.loading)
         }
     }
 
@@ -458,23 +562,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val comic = homeComic.filterNot { it.id in hidden }
         val ai = homeAi.filterNot { it.id in hidden }
 
-        // 优先从各分类第 12 部之后选择 Hero，避免正常情况下占用热门横排名额。
-        // 首页目前只拉取第 1 页，后续候选不足时必须回退到已有首页推荐数据，
-        // 否则首次加载会得到空 Hero，整块主视觉区域直接消失。
-        val heroCandidates = buildList {
-            addAll(short.drop(12).take(3))
-            addAll(comic.drop(12).take(2))
-            addAll(ai.drop(12).take(2))
-        }
+        // 首页大海报优先用第 2 页候选：首页货架消费第 1 页的 6 部，第 2 页正好与它零重叠，
+        // 首屏不会出现「大图 + 正下方就是同一部」的重复，也不占用货架的推荐位。
+        // 候选未就绪（冷启动命中缓存）或该分类内容不足时，退回货架第 4 部之后兜底，
+        // 保证主视觉永不空窗。
+        val heroSeed = homeHeroSeed
+            .takeIf { homeHeroSeedSource == HeroSource.fromStored(extras.heroSource) }
+            .orEmpty()
+            .filterNot { it.id in hidden }
         val hero = buildList {
-            addAll(heroCandidates)
-            if (heroCandidates.size < 6) {
-                addAll(short.take(3))
-                addAll(comic.take(2))
-                addAll(ai.take(2))
+            addAll(heroSeed)
+            if (size < HERO_TAKE) {
+                addAll(short.drop(3))
+                addAll(comic.drop(3))
+                addAll(ai.drop(3))
             }
-        }.filter { it.cover.isNotBlank() }.distinctBy { it.id }.take(6)
-        val displayedHero = hero.ifEmpty { _state.value.home.hero }
+        }.filter { it.cover.isNotBlank() }.distinctBy { it.id }.take(HERO_TAKE)
+        // 第 2 页候选未到时，优先沿用上一帧的大图，避免先闪一版货架兜底图、再被候选替换。
+        val displayedHero = if (heroSeed.isNotEmpty()) {
+            hero.ifEmpty { _state.value.home.hero }
+        } else {
+            _state.value.home.hero.ifEmpty { hero }
+        }
         val shelfShort = short.take(12)
         val shelfComic = comic.take(12)
         val shelfAi = ai.take(12)
@@ -563,6 +672,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     refreshing = false,
                     error = error,
                     hero = displayedHero,
+                    // 切换大海报来源后条数会变（6 部 → 不足 6 部），把游标收进新范围，避免停在不存在的页。
+                    heroIndex = it.home.heroIndex.coerceIn(0, maxOf(0, displayedHero.size - 1)),
                     shelves = shelves,
                     updatedAt = System.currentTimeMillis(),
                 ),
@@ -673,6 +784,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (!library.isLoaded) return
         refreshLibraryState()
         republishHome()
+    }
+
+    /**
+     * 退出播放页时用：先让出一帧再重排首页。
+     *
+     * 退播放要和「详情页重新上屏」抢同一帧，而重排首页会把全部栏目（接着看、收藏、更新）
+     * 连同图片引用一起重建一次。放在同一帧里，观感就是返回之后先顿一下。延后一帧再做，
+     * 用户看到的是详情页立刻回来，首页栏目的刷新在下一帧静默完成。
+     */
+    fun syncWatchHistoryDeferred() {
+        viewModelScope.launch {
+            delay(32)
+            syncWatchHistory()
+        }
     }
 
     /** 只按当前本地数据重排首页栏目，不发起网络请求。 */
@@ -826,6 +951,204 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleSynopsis() {
         _state.update { it.copy(detail = it.detail.copy(synopsisExpanded = !it.detail.synopsisExpanded)) }
+    }
+
+    // ------------------------------------------------------------ 演员作品
+
+    /**
+     * 打开演员档案弹窗（详情页内弹出，不切页面）。
+     *
+     * 不清空 [AppState.detail]：弹窗关掉要能原地回到详情页，重新拉一次详情会多等
+     * 1~3 秒的脚本运行时。没有合法 celebrity_id 的演员也照样开弹窗——
+     * 姓名、本剧角色、头像本身就有信息量，作品区显示「暂无作品」比弹一条 toast 更清楚。
+     */
+    fun openActor(actor: Actor) {
+        actorJob?.cancel()
+        if (!actor.worksCapable) {
+            actorGeneration++
+            _state.update {
+                it.copy(actor = ActorState(actor = actor, loading = false, hasMore = false))
+            }
+            return
+        }
+        val generation = ++actorGeneration
+        _state.update { it.copy(actor = ActorState(actor = actor, loading = true)) }
+        actorJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { repository.actorWorks(actor.id, 0, ACTOR_PAGE_SIZE) }
+            }
+            if (generation != actorGeneration) return@launch
+            result.onSuccess { page ->
+                _state.update {
+                    it.copy(
+                        actor = it.actor.copy(
+                            items = page.items,
+                            total = if (page.totalCount > 0) page.totalCount else page.items.size,
+                            nextOffset = page.nextOffset,
+                            hasMore = page.hasMore,
+                            loading = false,
+                            error = null,
+                        ),
+                    )
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                _state.update {
+                    it.copy(actor = it.actor.copy(loading = false, error = error.message ?: "演员作品加载失败"))
+                }
+            }
+        }
+    }
+
+    fun loadMoreActor() {
+        val current = _state.value.actor
+        val actor = current.actor ?: return
+        if (current.loading || current.loadingMore || !current.hasMore) return
+        val generation = actorGeneration
+        _state.update { it.copy(actor = it.actor.copy(loadingMore = true)) }
+        actorJob = viewModelScope.launch {
+            // 游标原样回传：官方按「已消耗行数」推进，用页码反推会漏条目。
+            val result = withContext(Dispatchers.IO) {
+                runCatching { repository.actorWorks(actor.id, current.nextOffset, ACTOR_PAGE_SIZE) }
+            }
+            if (generation != actorGeneration) return@launch
+            result.onSuccess { page ->
+                _state.update { state ->
+                    val seen = state.actor.items.mapTo(HashSet()) { it.id }
+                    val merged = state.actor.items + page.items.filter { seen.add(it.id) }
+                    state.copy(
+                        actor = state.actor.copy(
+                            items = merged,
+                            total = if (page.totalCount > 0) page.totalCount else merged.size,
+                            nextOffset = page.nextOffset,
+                            hasMore = page.hasMore && page.items.isNotEmpty(),
+                            loadingMore = false,
+                        ),
+                    )
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                _state.update {
+                    it.copy(actor = it.actor.copy(loadingMore = false, error = error.message ?: "加载更多失败"))
+                }
+            }
+        }
+    }
+
+    /**
+     * 关闭演员弹窗：取消在途请求，并清掉 [AppState.actor]。
+     *
+     * 清空是必须的：弹窗显隐由 actor != null 决定，且从弹窗里点作品会跳到另一部剧的详情页，
+     * 若不清空，新详情页一进来就会带着上一位演员的弹窗。
+     */
+    fun closeActor() {
+        actorGeneration++
+        actorJob?.cancel()
+        actorJob = null
+        _state.update {
+            if (it.actor.actor == null && it.actor.items.isEmpty()) it
+            else it.copy(actor = ActorState(actor = null, loading = false, hasMore = false))
+        }
+    }
+
+    // -------------------------------------------------------------- 演员榜
+
+    /**
+     * 拉演员榜。[board] 为空表示「当前这页重刷」。
+     *
+     * 切榜会清空旧列表：剧星榜和星光榜只重合 11 人，留着上一榜的名单会让人以为没切换成功。
+     * 首屏 [sessionId] 必须留空——脚本靠它区分「第一段」与「翻页段」，带错了直接重放第一页。
+     */
+    fun loadActorRank(board: ActorRankBoard? = null) {
+        val next = board ?: _state.value.actorRank.board
+        val generation = ++actorRankGeneration
+        actorRankJob?.cancel()
+        _state.update {
+            it.copy(
+                actorRank = it.actorRank.copy(
+                    board = next,
+                    items = emptyList(),
+                    nextOffset = 0,
+                    sessionId = "",
+                    hasMore = true,
+                    loading = true,
+                    loadingMore = false,
+                    error = null,
+                ),
+            )
+        }
+        actorRankJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { repository.actorRank(next, 0, "") } }
+            if (generation != actorRankGeneration) return@launch
+            result.onSuccess { page ->
+                _state.update {
+                    it.copy(
+                        actorRank = it.actorRank.copy(
+                            items = page.items,
+                            nextOffset = page.nextOffset,
+                            sessionId = page.sessionId,
+                            hasMore = page.hasMore && page.items.isNotEmpty(),
+                            loading = false,
+                            error = null,
+                        ),
+                    )
+                }
+            }.onFailure { error ->
+                if (error is CancellationException) return@onFailure
+                _state.update {
+                    it.copy(
+                        actorRank = it.actorRank.copy(
+                            loading = false,
+                            error = error.message ?: "演员榜加载失败",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun loadMoreActorRank() {
+        val current = _state.value.actorRank
+        if (current.loading || current.loadingMore || !current.hasMore) return
+        val generation = actorRankGeneration
+        _state.update { it.copy(actorRank = it.actorRank.copy(loadingMore = true)) }
+        actorRankJob = viewModelScope.launch {
+            // 游标与会话都原样回传：官方按「已消耗行数 + rank_session」推进。
+            val result = withContext(Dispatchers.IO) {
+                runCatching { repository.actorRank(current.board, current.nextOffset, current.sessionId) }
+            }
+            if (generation != actorRankGeneration) return@launch
+            result.onSuccess { page ->
+                _state.update { state ->
+                    if (generation != actorRankGeneration || state.actorRank.board != current.board) {
+                        return@update state
+                    }
+                    // 同一演员在两页交界处可能重复出现，按 actorId 去重后再拼。
+                    val seen = state.actorRank.items.mapTo(HashSet()) { it.actor.id }
+                    val fresh = page.items.filter { it.actor.id.isNotBlank() && seen.add(it.actor.id) }
+                    state.copy(
+                        actorRank = state.actorRank.copy(
+                            items = state.actorRank.items + fresh,
+                            nextOffset = page.nextOffset,
+                            sessionId = page.sessionId.ifBlank { current.sessionId },
+                            hasMore = page.hasMore && page.items.isNotEmpty(),
+                            loadingMore = false,
+                        ),
+                    )
+                }
+            }.onFailure { error ->
+                if (error is CancellationException) return@onFailure
+                _state.update { it.copy(actorRank = it.actorRank.copy(loadingMore = false)) }
+                toast(error.message ?: "加载更多失败")
+            }
+        }
+    }
+
+    /** 离开演员榜：取消在途请求。列表保留，再进来秒开（榜单本身几分钟内不会变）。 */
+    fun closeActorRank() {
+        actorRankGeneration++
+        actorRankJob?.cancel()
+        actorRankJob = null
     }
 
     // ---------------------------------------------------------------- 剧场
@@ -988,13 +1311,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------------------------------------------------------- 榜单
 
-    fun loadRanking(board: RankBoard? = null, reset: Boolean = true) {
+    /**
+     * 拉榜单。[board] 是内容类型，[kind] 是榜单口径；两者都不传就「当前这页再刷一遍」。
+     *
+     * 当前类型不在该榜的覆盖范围内时夹到它的默认类型（臻果只挂在综合，且只统计真人剧），
+     * 否则会出现「标题写着臻果、列表却是漫剧」的空页。
+     */
+    fun loadRanking(board: RankBoard? = null, kind: RankKind? = null, reset: Boolean = true) {
         if (!library.isLoaded) {
             _state.update { it.copy(ranking = it.ranking.copy(loading = false)) }
             return
         }
         val current = _state.value.ranking
-        val nextBoard = board ?: current.board
+        val nextKind = kind ?: current.kind
+        val requested = board ?: current.board
+        val nextBoard = if (requested in nextKind.availableBoards) requested else nextKind.defaultBoard
         val generation = ++rankingGeneration
         rankingJob?.cancel()
         rankingMoreJob?.cancel()
@@ -1003,6 +1334,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 ranking = it.ranking.copy(
                     board = nextBoard,
+                    kind = nextKind,
                     // 同剧场：切榜不清空旧列表，否则榜单切换条会随整页 loading 一起被销毁，焦点掉回导航栏。
                     items = it.ranking.items,
                     loading = reset,
@@ -1010,6 +1342,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     page = 1,
                     hasMore = true,
                     error = null,
+                    // 换榜才清副标题（描述属于榜，不随内容类型变）：别等接口回来还挂着上一榜的「基于…排序」。
+                    updatedText = if (nextKind != current.kind) "" else it.ranking.updatedText,
                 ),
             )
         }
@@ -1017,7 +1351,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         rankingMoreFailures = 0
         rankingEmptyPages = 0
         rankingJob = viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { repository.ranking(nextBoard, 1) } }
+            val result = withContext(Dispatchers.IO) { runCatching { repository.ranking(nextBoard, 1, nextKind) } }
             result.onSuccess { page ->
                 if (generation != rankingGeneration) return@onSuccess
                 _state.update {
@@ -1051,7 +1385,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(ranking = it.ranking.copy(loadingMore = true)) }
         rankingMoreJob = viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { repository.ranking(s.board, next) }
+                runCatching { repository.ranking(s.board, next, s.kind) }
             }
             if (generation != rankingGeneration) return@launch
             result.onSuccess { page ->
@@ -1060,7 +1394,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val empty = page.items.isEmpty()
                 rankingEmptyPages = if (empty) rankingEmptyPages + 1 else 0
                 _state.update { state ->
-                    if (generation != rankingGeneration || state.ranking.board != s.board || state.ranking.page != s.page) {
+                    if (generation != rankingGeneration || state.ranking.board != s.board ||
+                        state.ranking.kind != s.kind || state.ranking.page != s.page
+                    ) {
                         state
                     } else state.copy(ranking = state.ranking.copy(
                         items = (state.ranking.items + page.items).distinctBy { item -> item.id },
@@ -1074,7 +1410,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 rankingMoreFailures++
                 val giveUp = rankingMoreFailures >= MAX_LOAD_MORE_RETRIES
                 _state.update { state ->
-                    if (generation != rankingGeneration || state.ranking.board != s.board || state.ranking.page != s.page) {
+                    if (generation != rankingGeneration || state.ranking.board != s.board ||
+                        state.ranking.kind != s.kind || state.ranking.page != s.page
+                    ) {
                         state
                     } else state.copy(ranking = state.ranking.copy(
                         loadingMore = false, hasMore = !giveUp,
@@ -1655,6 +1993,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         seekStepSeconds = extras.seekStepSeconds,
         longPressSpeed = extras.longPressSpeed,
         posterColumns = extras.posterColumns,
+        heroSource = extras.heroSource,
         videoInfoMode = library.videoInfoMode,
         showNetworkSpeed = library.showNetworkSpeed,
         persistentProgress = library.persistentProgress,
@@ -2594,6 +2933,23 @@ private const val HOME_DEFER_FALLBACK_MS = 45_000L
 private const val HOME_STALE_MS = 5 * 60 * 1000L
 /** 切走首页后稍等再补网络：让目标页的首屏请求先占用脚本运行时。 */
 private const val HOME_BACKGROUND_REFRESH_DELAY_MS = 1_200L
+
+/**
+ * 演员作品每页条数：8 列 × 3 行。
+ * 不能调小——官方上游默认只回 40 条，页大小太小时脚本会用不到 offset，
+ * 每页都从第 0 条开始（实测 pageSize=8 时四页全是同一批 8 部）。
+ */
+private const val ACTOR_PAGE_SIZE = 24
+
+/**
+ * 首页大海报的取数页：固定第 2 页。
+ * 货架消费第 1 页（每页 6 部），第 2 页与之零重叠，大图不会和正下方的货架撞车。
+ */
+private const val HERO_PAGE = 2
+/** 大海报总张数，与原来保持一致。 */
+private const val HERO_TAKE = 6
+/** 综合模式每个分类取几部：三类 × 2 部 = 6 部。 */
+private const val HERO_MIXED_PER_TYPE = 2
 
 /** 脚本热更新：首屏请求发出去之后再开始，清单只有几百字节，不会抢带宽。 */
 private const val SCRIPT_FIRST_DELAY_MS = 1_500L

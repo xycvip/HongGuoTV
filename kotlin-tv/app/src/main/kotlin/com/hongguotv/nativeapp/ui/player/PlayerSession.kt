@@ -2170,12 +2170,23 @@ class PlayerSession(
 
     fun release() {
         if (released) return
+        val releaseStartedAt = android.os.SystemClock.elapsedRealtime()
         PlaybackDiagnostics.event("PLAYER_RELEASE_BEGIN", "PlayerSession release", mapOf(
             "episodeIndex" to index, "positionMs" to position, "mediaItemCount" to (player?.mediaItemCount ?: -1),
             "dual" to useDualDecoder, "standbyExists" to (standbyPlayer != null),
         ))
         saveLeavingEpisode()
         released = true
+        // 退出会话时先静音、摘掉监听并主动断开当前视频流。
+        // ExoPlayer 的加载线程很可能正阻塞在网络读取上，player.release() 会等它退出，
+        // 最坏要等到 socket 读超时才返回；这段时间全在主线程上，表现就是
+        // 「播完返回详情页要等好几秒」。先关流能让阻塞中的 read 立刻抛错返回，
+        // release 随即结束。此时已经 released = true，不会再回调上层。
+        activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }
+        activeMainListener = null
+        runCatching { player?.volume = 0f }
+        runCatching { remote?.close() }
+        runCatching { player?.stop() }
         // 先收重叠换层的旧实例，再清备用实例：两者都可能在延迟队列里。
         settleOverlapNow()
         clearStandby("会话结束")
@@ -2195,8 +2206,8 @@ class PlayerSession(
         scope.cancel()
         activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }
         activeMainListener = null
-        // 主播放器仍可能持有当前 RemoteVideo/HTTP DataSource：先 release 播放器，
-        // 再关闭视频流及其专属客户端，不能在会话退出时提前掐断正在使用的网络源。
+        // 当前视频流上面已经提前关过（为了让阻塞中的读立刻返回），这里剩下的
+        // 主要是重叠换层留下的旧实例，保持「先 release 播放器、再收流」的原顺序即可。
         runCatching { player?.release() }
         player = null
         remote?.let(::closeRemote)
@@ -2211,7 +2222,11 @@ class PlayerSession(
         }
         playerViews[0] = null
         playerViews[1] = null
-        PlaybackDiagnostics.event("PLAYER_RELEASE_END", "PlayerSession released")
+        PlaybackDiagnostics.event(
+            "PLAYER_RELEASE_END",
+            "PlayerSession released",
+            mapOf("costMs" to (android.os.SystemClock.elapsedRealtime() - releaseStartedAt)),
+        )
         PlaybackDiagnostics.endSession("播放器正常释放")
     }
 
