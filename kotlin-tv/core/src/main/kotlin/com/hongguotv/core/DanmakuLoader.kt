@@ -43,12 +43,12 @@ class DanmakuLoader(
         }
     }
 
-    /** Fetch windows until buffered past [positionMs] + lead. No-op while another load runs. */
     /** Stop this episode's loader. An in-flight source call may finish, but its result is discarded. */
     fun cancel() {
         cancelled.set(true)
     }
 
+    /** Fetch windows until buffered past [positionMs] + lead. No-op while another load runs. */
     fun loadUpTo(positionMs: Long) {
         if (cancelled.get() || durationMs <= 0 || !loading.compareAndSet(false, true)) return
         try {
