@@ -98,6 +98,7 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
     private var cachedStrokeWidth = 0f
     /** 当前这一集实际用到几条轨道；清屏只清到这里，比整块 lanes 省很多。 */
     private var contentRows = 0
+    private var frameTick = 0L
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             frameScheduled = false
@@ -121,8 +122,8 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
                     lastPumpAt = tick
                     needMore(now)
                 }
-                // 每个 vsync 都请求窗口硬件加速 Canvas 绘制。
-                invalidate()
+                // 固定隔一个 VSync 请求一次绘制，与 SurfaceView 保持一致。
+                if ((frameTick++ and 1L) == 0L) invalidate()
             }
             if (running && playbackActive && loader != null) scheduleFrame()
         }
@@ -266,7 +267,7 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
         return low
     }
 
-    /** 每个 vsync 由普通 View 的硬件加速 Canvas 绘制当前可见弹幕。 */
+    /** 由隔帧调度触发普通 View 的硬件加速 Canvas 绘制当前可见弹幕。 */
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (!viewAttached || !running || !playbackActive || loader == null || surfaceW <= 0 || surfaceH <= 0) return
@@ -406,6 +407,7 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
         scheduleAnchorMs = 0L
         positionProvider = { 0L }
         contentRows = 0
+        frameTick = 0L
         clearTextCache()
         choreographer.removeFrameCallback(frameCallback)
         frameScheduled = false
