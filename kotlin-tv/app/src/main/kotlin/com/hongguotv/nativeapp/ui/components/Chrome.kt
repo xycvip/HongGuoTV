@@ -98,7 +98,7 @@ fun TopBar(
     contentEntry: FocusRequester? = null,
     /** 每个导航项自己的 requester：切页/返回时把光标钉在下划线所在项上。 */
     tabFocus: Map<Tab, FocusRequester> = emptyMap(),
-    /** 非当前项按「下」：先切到这一页，再把焦点交给它的内容区。 */
+    /** 当前页面的内容入口暂不可聚焦时，请求上层记住进入意图并在 attach 后重试。 */
     onEnterContent: (Tab) -> Unit = {},
 ) {
     // logo 默认不参与焦点搜索：canFocus=false 时几何搜索命中不了它，
