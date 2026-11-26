@@ -119,8 +119,9 @@ class Library(context: Context) {
                     }
                     if (legacy != null) oldKeys += key
                 }
-                // Only remove legacy cache after the separate cache has been committed.
-                if (oldKeys.isNotEmpty() && migration.commit()) {
+                // Do not race an older process-session cache write with migration.
+                // A later launch can retry migration after the shared writer becomes idle.
+                if (homeWritesReady && oldKeys.isNotEmpty() && migration.commit()) {
                     prefs.edit().also { edit -> oldKeys.forEach(edit::remove) }.commit()
                 }
                 Triple(loaded, cached, stamps)
