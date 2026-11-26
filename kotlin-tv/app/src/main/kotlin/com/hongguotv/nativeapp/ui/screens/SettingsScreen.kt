@@ -462,19 +462,19 @@ private fun androidx.compose.foundation.lazy.LazyListScope.danmakuPanel(
     }
     item {
         SettingRow(
-            title = "弹幕渲染方式",
-            description = "默认使用兼容性更好的 SurfaceView；普通 View 为实验方案，切换后下次进入播放页生效",
-            value = listOf("SurfaceView（默认）", "普通 View（实验）")[snapshot.danmakuRendererMode.coerceIn(0, 1)],
+            title = "弹幕帧率",
+            description = "标准模式隔帧绘制；高帧率逐帧绘制，可能增加图形负载，切换后下次进入播放页生效",
+            value = listOf("标准（隔帧）", "高帧率（逐帧）")[snapshot.danmakuFrameRateMode.coerceIn(0, 1)],
             onClick = {
                 onChoice(
                     ChoiceRequest(
-                        "弹幕渲染方式",
+                        "弹幕帧率",
                         listOf(
-                            Choice("0", "SurfaceView（默认）"),
-                            Choice("1", "普通 View（实验）"),
+                            Choice("0", "标准（隔帧）"),
+                            Choice("1", "高帧率（逐帧）"),
                         ),
-                        snapshot.danmakuRendererMode.toString(),
-                    ) { vm.setDanmakuRendererMode(it.toIntOrNull() ?: 0) },
+                        snapshot.danmakuFrameRateMode.toString(),
+                    ) { vm.setDanmakuFrameRateMode(it.toIntOrNull() ?: 0) },
                 )
             },
         )
