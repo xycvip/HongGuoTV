@@ -1934,7 +1934,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             applyLauncherAliasVariant(variant)
             check(prefs.edit().putString("appIconVariant", variant).commit()) { "图标偏好保存失败" }
             toast("应用图标已更换 · 桌面可能需要刷新图标缓存")
-        } catch (failure: Throwable) {
+        } catch (failure: Exception) {
             // Recover a known working launcher entry first; never leave all aliases disabled.
             val fallback = previousActive.singleOrNull() ?: previous
             val recovered = runCatching { applyLauncherAliasVariant(fallback); fallback }.getOrElse {
@@ -2471,7 +2471,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        // Cancels every anonymous viewModelScope child as well as the tracked jobs below.
+        // ViewModel.onCleared() itself does not cancel viewModelScope; ViewModel.clear()
+        // closes its registered scope after this callback returns. Cancel it here first so
+        // active JS/OkHttp requests receive cancellation before global gateways are detached.
+        viewModelScope.coroutineContext[Job]?.cancel()
         super.onCleared()
         castRevision++
         listOfNotNull(
