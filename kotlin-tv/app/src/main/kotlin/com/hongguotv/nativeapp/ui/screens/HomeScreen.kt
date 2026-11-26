@@ -209,8 +209,12 @@ fun HomeScreen(
                         // 只有在浏览层时左右键才切海报；确定键进入播放/收藏/详情按钮层。
                         Box(
                             Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(start = ui.gutter, bottom = d(7))
+                                .align(Alignment.TopStart)
+                                // 导航栏按「下」会直接请求这个入口焦点。
+                                // 锚点放在 Hero 底部会触发 LazyColumn 的 bring-into-view，
+                                // 为了露出这 2dp 焦点节点，整块 452dp Hero 就被向上推走。
+                                // 放在顶部，让系统以 Hero 顶边作为可见目标。
+                                .padding(start = ui.gutter, top = d(2))
                                 .width(d(2))
                                 .height(d(2))
                                 .then(if (upFocus != null) Modifier.focusProperties { up = upFocus } else Modifier)
