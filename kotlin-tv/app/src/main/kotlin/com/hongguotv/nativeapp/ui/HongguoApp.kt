@@ -113,15 +113,19 @@ fun HongguoApp(vm: AppViewModel) {
     // 否则会指向一个尚未 attach 的 requester，焦点移动直接抛异常。
     val contentReady = when (tab) {
         // HomeScreen 在 Hero 有数据时把入口挂在 Hero 浏览锚点；没有 Hero 才挂到第一排片单。
-        // 但加载/错误空态不会创建 LazyColumn，因此必须同时判断当前实际显示的是不是内容区。
+        // 空错误态则把同一个入口挂到「重新加载」按钮；纯加载态没有可聚焦目标。
         Tab.HOME -> {
             val emptyLoading = state.home.loading && state.home.shelves.isEmpty()
             val emptyError = state.home.error != null && state.home.shelves.isEmpty()
-            !emptyLoading && !emptyError &&
-                (state.home.hero.isNotEmpty() || state.home.visibleShelves.isNotEmpty())
+            !emptyLoading && (
+                emptyError || state.home.hero.isNotEmpty() || state.home.visibleShelves.isNotEmpty()
+            )
         }
-        Tab.THEATER -> state.theater.items.isNotEmpty()
-        Tab.RANK -> state.ranking.items.isNotEmpty()
+        // 剧场/榜单的加载态没有焦点控件；数据空错误态则可进入重新加载按钮。
+        Tab.THEATER -> state.theater.items.isNotEmpty() ||
+            (state.theater.error != null && !state.theater.loading)
+        Tab.RANK -> state.ranking.items.isNotEmpty() ||
+            (state.ranking.error != null && !state.ranking.loading)
         // 追剧页即使历史/收藏为空，也始终显示「观看历史 / 我的收藏」标签，
         // entryFocus 就挂在「观看历史」标签上，不应依赖列表数据量。
         Tab.LIBRARY -> true
