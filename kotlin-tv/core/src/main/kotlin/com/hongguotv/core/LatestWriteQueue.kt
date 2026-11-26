@@ -21,6 +21,7 @@ class LatestWriteQueue<K, V>(
     }
     private val pending = linkedMapOf<K, V>()
     private var scheduled: ScheduledFuture<*>? = null
+    private var retryScheduled = false
     private var closed = false
     private var writing = false
     private var retries = 0
@@ -28,22 +29,32 @@ class LatestWriteQueue<K, V>(
     @Synchronized fun submit(values: Map<K, V>) {
         check(!closed) { "Persistence queue is closed" }
         pending.putAll(values)
-        if (scheduled == null) schedule(delayMillis)
+        if (scheduled == null) {
+            schedule(delayMillis)
+        } else if (retryScheduled && !writing) {
+            // A new checkpoint should not sit behind a long retry backoff.
+            scheduled?.cancel(false)
+            scheduled = null
+            schedule(delayMillis)
+        }
     }
 
     @Synchronized fun flush() {
         if (closed || pending.isEmpty()) return
         scheduled?.cancel(false)
+        scheduled = null
         schedule(0)
     }
 
-    private fun schedule(delay: Long) {
+    private fun schedule(delay: Long, retry: Boolean = false) {
+        retryScheduled = retry
         scheduled = worker.schedule({ drain() }, delay, TimeUnit.MILLISECONDS)
     }
 
     private fun drain() {
         val batch = synchronized(this) {
             scheduled = null
+            retryScheduled = false
             if (pending.isEmpty()) {
                 if (closed) worker.shutdown()
                 return
@@ -68,16 +79,19 @@ class LatestWriteQueue<K, V>(
                 if (pending.isEmpty()) {
                     worker.shutdown()
                 } else if (scheduled == null) {
-                    // Retry indefinitely with bounded backoff; awaitClosed() supplies the caller's
-                    // time limit while the daemon worker keeps the last snapshot available.
-                    val exponent = (retries - 1).coerceIn(0, 5)
-                    val retryDelay = minOf(30_000L, 1_000L * (1L shl exponent))
-                    schedule(retryDelay)
+                    schedule(retryDelayMillis(), retry = true)
                 }
-            } else if (!success && retries <= 2 && scheduled == null) {
-                schedule(1_000)
+            } else if (!success && scheduled == null) {
+                // Keep retrying while the process is alive; a newer submit/flush can pull
+                // the retry forward instead of waiting behind the maximum backoff.
+                schedule(retryDelayMillis(), retry = true)
             }
         }
+    }
+
+    private fun retryDelayMillis(): Long {
+        val exponent = (retries - 1).coerceIn(0, 5)
+        return minOf(30_000L, 1_000L * (1L shl exponent))
     }
 
     /**
@@ -89,6 +103,7 @@ class LatestWriteQueue<K, V>(
         closed = true
         scheduled?.cancel(false)
         scheduled = null
+        retryScheduled = false
         schedule(0)
     }
 
