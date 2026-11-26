@@ -131,7 +131,11 @@ fun HomeScreen(
     Box(modifier.fillMaxSize()) {
         when {
             state.loading && state.shelves.isEmpty() -> LoadingState(label = "正在为你准备片单")
-            state.error != null && state.shelves.isEmpty() -> ErrorState(state.error, onRefresh)
+            state.error != null && state.shelves.isEmpty() -> ErrorState(
+                state.error,
+                onRefresh,
+                focusRequester = entryFocus,
+            )
             else -> LazyColumn(
                 state = listState,
                 // 数据刷新时把焦点还给同一分组的邻居，避免焦点被顶栏抢走。
