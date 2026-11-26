@@ -199,9 +199,8 @@ fun HongguoApp(vm: AppViewModel) {
     var pendingContent by remember { mutableStateOf<Tab?>(null) }
     // 切季后希望光标落在新季的季签上，连按左右就能换季；详情页请求一次后回清。
     var pendingSeasonFocus by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(tab, route, state.booted, pendingContent) {
-        // 从导航项按下进内容时由 pendingContent 接管光标；进入意图完成或作废后，
-        // 再把焦点同步到当前页导航项，避免旧 pendingContent 让新页面漏掉焦点恢复。
+    LaunchedEffect(tab, route, state.booted) {
+        // 从导航项按下进内容时由 pendingContent 接管光标，不在成功进入后拉回导航栏。
         if (route == Route.Main && state.booted && pendingContent == null) pendingFocus = tab
     }
     LaunchedEffect(pendingFocus, route, state.booted) {
@@ -224,8 +223,9 @@ fun HongguoApp(vm: AppViewModel) {
         val target = pendingContent ?: return@LaunchedEffect
         if (route != Route.Main || !state.booted) return@LaunchedEffect
         if (tab != target) {
-            // 用户已切到别的页/离开主页：旧的进入意图作废，清掉避免悬挂。
+            // 用户已切到别的页：旧的进入意图作废，并把焦点同步到新选中页导航项。
             pendingContent = null
+            pendingFocus = tab
             return@LaunchedEffect
         }
         val requester = entryOf(target)
