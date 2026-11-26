@@ -541,6 +541,7 @@ fun ErrorState(
     message: String,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
 ) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -553,7 +554,12 @@ fun ErrorState(
             Spacer(Modifier.height(d(14)))
             Text(message, style = MaterialTheme.typography.bodyMedium, color = Paper.Secondary)
             Spacer(Modifier.height(d(18)))
-            TvButton("重新加载", onRetry, tone = ButtonTone.Ghost)
+            TvButton(
+                "重新加载",
+                onRetry,
+                tone = ButtonTone.Ghost,
+                focusRequester = focusRequester,
+            )
         }
     }
 }

@@ -98,7 +98,7 @@ fun TopBar(
     contentEntry: FocusRequester? = null,
     /** 每个导航项自己的 requester：切页/返回时把光标钉在下划线所在项上。 */
     tabFocus: Map<Tab, FocusRequester> = emptyMap(),
-    /** 非当前项按「下」：先切到这一页，再把焦点交给它的内容区。 */
+    /** 当前页面的内容入口暂不可聚焦时，请求上层记住进入意图并在 attach 后重试。 */
     onEnterContent: (Tab) -> Unit = {},
 ) {
     // logo 默认不参与焦点搜索：canFocus=false 时几何搜索命中不了它，
@@ -106,16 +106,18 @@ fun TopBar(
     // 这样做既满足「不自动跳 logo」，又保留了主动可达。
     var logoReachable by remember { mutableStateOf(false) }
     val logoFocus = remember { FocusRequester() }
+    var logoWasFocused by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     fun reachLogo() {
         if (logoReachable) return
         logoReachable = true
         scope.launch {
-            // canFocus 变更要经过一次组合 + 布局才生效，多等几帧再请求，避免请求落空。
+            // canFocus 变更要经过组合 + 布局才生效；失败时恢复状态，允许用户再次尝试。
             repeat(8) {
                 withFrameNanos { }
                 if (logoFocus.tryRequestFocus()) return@launch
             }
+            logoReachable = false
         }
     }
 
@@ -134,8 +136,18 @@ fun TopBar(
         Box(
             Modifier.onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
-                    val target = tabFocus[Tab.entries.first { it.inTopBar }]
-                    target?.tryRequestFocus() ?: false
+                    val target = tabFocus[current]
+                    if (target != null) {
+                        scope.launch {
+                            repeat(8) {
+                                if (target.tryRequestFocus()) return@launch
+                                withFrameNanos { }
+                            }
+                        }
+                        true
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 }
@@ -146,8 +158,13 @@ fun TopBar(
                     .focusRequester(logoFocus)
                     .focusProperties { canFocus = logoReachable }
                     .onFocusChanged { state ->
-                        // 光标离开后立刻收起入口，避免下一次几何搜索又落到 logo 上。
-                        if (!state.isFocused && logoReachable) logoReachable = false
+                        if (state.isFocused) {
+                            logoWasFocused = true
+                        } else if (logoWasFocused) {
+                            // 只有确实获得过焦点后再离开，才关闭临时入口；忽略初始 false 回调。
+                            logoWasFocused = false
+                            logoReachable = false
+                        }
                     },
                 status = apiStatus,
                 onClick = onApiStatus,
@@ -161,10 +178,12 @@ fun TopBar(
                     tab = tab,
                     selected = tab == current,
                     onClick = { onSelect(tab) },
-                    downEntry = if (tab == current) contentEntry else null,
+                    // 无论焦点停在哪个导航项，「下」都进入当前已选页面，
+                    // 不把焦点所在项误当成页面切换指令。
+                    downEntry = contentEntry,
                     requester = tabFocus[tab],
                     onLeftEdge = if (index == 0) ({ reachLogo() }) else null,
-                    onEnter = { onEnterContent(tab) },
+                    onEnter = { onEnterContent(current) },
                 )
             }
         }
@@ -174,8 +193,10 @@ fun TopBar(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown && contentEntry != null) {
-                    contentEntry.tryRequestFocus()
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                    val moved = contentEntry?.tryRequestFocus() == true
+                    if (!moved) onEnterContent(current)
+                    true
                 } else {
                     false
                 }
@@ -189,7 +210,11 @@ fun TopBar(
             Spacer(Modifier.width(d(10)))
             RoundIconButton(Icons.Rounded.Search, onSearch, size = d(40), iconSize = d(18), contentDescription = "搜索")
             Spacer(Modifier.width(d(14)))
-            AccountChip(accountName, onAccount)
+            AccountChip(
+                accountName,
+                onAccount,
+                focusRequester = tabFocus[Tab.ACCOUNT],
+            )
         }
     }
 }
@@ -224,28 +249,16 @@ private fun NavItem(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
-                    // 选中项按「下」直接跳到页面首个可聚焦元素。默认几何搜索在 hero 这类
-                    // 大块内容前经常落空，表现就是「焦点卡在导航栏」。
-                    // 精确 requester 失败时再交给焦点管理器做几何搜索，双保险。
+                    // 「下」始终进入当前已选页面，而不是焦点所在的导航项对应页面。
+                    // 因此即使焦点误落到其他导航项，也不会悄悄切换顶部导航。
                     Key.DirectionDown -> {
-                        // 只有「当前选中项」（页面就是它）按「下」才进入内容区。
-                        // 光标停在别的导航项上时，「下」必须无动作：既不切页、也不进内容，
-                        // 否则就是「光标在 A 上按一下，却跑进了 B 页」的越界。
-                        // 切页统一交给 OK/确定（clickable onClick）：选中后它成为当前项，再按下才进内容。
-                        if (!selected) {
-                            true
-                        } else if (downEntry != null) {
-                            // 内容已就绪：精确落到内容落点。无论成功与否都吞掉事件——
-                            // 失败时若回退几何搜索，焦点会落到 hero、页脚等不确定位置。
-                            downEntry.tryRequestFocus()
-                            true
-                        } else {
-                            // 内容还没就绪（首屏转圈，contentReady=false → contentEntry 为 null）。
-                            // 绝不能交给系统几何搜索：加载占位/空列表里没有可靠落点，焦点会乱跳。
-                            // 吞掉事件，并通知上层记住「按过下」的意图，等数据到了自动精确进入。
+                        val moved = downEntry?.tryRequestFocus() == true
+                        if (!moved) {
+                            // requester 暂时未 attach / 请求失败时交给上层重试，
+                            // 不放行给 Compose 几何搜索，避免焦点跳到别页。
                             onEnter?.invoke()
-                            true
                         }
+                        true
                     }
                     // 最左侧再按一次左键才进 logo（见 TopBar 里的 logoReachable）。
                     Key.DirectionLeft -> if (onLeftEdge != null) { onLeftEdge(); true } else false
@@ -315,11 +328,16 @@ private fun CastEntry(onClick: () -> Unit) {
 }
 
 @Composable
-private fun AccountChip(name: String?, onClick: () -> Unit) {
+private fun AccountChip(
+    name: String?,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     Row(
         Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clip(RoundedCornerShape(d(999)))
             .background(if (focused) Color(0x1FFFFFFF) else Color(0x0DFFFFFF))
             .border(d(1f), if (focused) Rouge.Bright else Ink.LineSoft, RoundedCornerShape(d(999)))

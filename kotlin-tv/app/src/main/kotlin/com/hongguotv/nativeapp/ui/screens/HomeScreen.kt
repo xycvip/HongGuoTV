@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +45,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusable
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -60,6 +65,7 @@ import com.hongguotv.nativeapp.ui.components.PosterCard
 import com.hongguotv.nativeapp.ui.components.ResumeCard
 import com.hongguotv.nativeapp.ui.components.SectionHeader
 import com.hongguotv.nativeapp.ui.components.TvButton
+import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import com.hongguotv.nativeapp.ui.components.ButtonTone
 import com.hongguotv.nativeapp.ui.data.HomeState
 import com.hongguotv.nativeapp.ui.data.Shelf
@@ -95,19 +101,28 @@ fun HomeScreen(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    // hero 的「下移」必须落到第一张海报上：默认焦点搜索会先撞到轮播指示条，
-    // 这里直接把目标钉死，遥控器不会掉进空隙。
-    //
-    // 导航栏「按下」也落到这里（而不是 hero 的播放按钮）：hero 在 AnimatedContent 里
-    // 每 7 秒轮播一次，过渡期间同一个 requester 会短暂挂到两份内容上，焦点容易指到
-    // 正在淡出的那一份。第一张海报是稳定节点，落点不会丢。
-    val firstShelfFocus = remember(entryFocus) { entryFocus ?: FocusRequester() }
     val hero = state.hero
+    // Hero 分成两个遥控器焦点层：浏览层负责左右切换海报，确定键进入按钮层。
+    // 导航栏下移优先落在稳定的浏览焦点；海报为空时才回退到第一排内容。
+    val heroBrowseFocus = remember(entryFocus) { entryFocus ?: FocusRequester() }
+    // 只有第一排片单真实存在时才创建下移目标；没有片单时不能把一个未挂载的
+    // FocusRequester 塞进 focusProperties，否则按下可能请求一个不存在的焦点节点。
+    val firstShelfFocus = remember(entryFocus, hero.isEmpty(), state.visibleShelves.isNotEmpty()) {
+        when {
+            state.visibleShelves.isEmpty() -> null
+            hero.isEmpty() -> entryFocus ?: FocusRequester()
+            else -> FocusRequester()
+        }
+    }
+    val playFocus = remember { FocusRequester() }
+    val favoriteFocus = remember { FocusRequester() }
+    val detailFocus = remember { FocusRequester() }
+    var heroBrowseFocused by remember { mutableStateOf(false) }
     // 光标停在主视觉（播放/详情/收藏按钮）时暂停轮播：换图会重建 AnimatedContent 子树，
     // 正在聚焦的按钮被销毁，焦点就会掉到顶栏。
     var heroFocused by remember { mutableStateOf(false) }
     // 主视觉自动轮播：7 秒换一张，用户从详情返回时仍停留在原来的位置。
-    LaunchedEffect(hero.map { it.id }, heroFocused) {
+    LaunchedEffect(hero.map { it.id }, heroFocused, state.heroIndex) {
         if (hero.size <= 1 || heroFocused) return@LaunchedEffect
         while (true) {
             delay(7000)
@@ -118,7 +133,11 @@ fun HomeScreen(
     Box(modifier.fillMaxSize()) {
         when {
             state.loading && state.shelves.isEmpty() -> LoadingState(label = "正在为你准备片单")
-            state.error != null && state.shelves.isEmpty() -> ErrorState(state.error, onRefresh)
+            state.error != null && state.shelves.isEmpty() -> ErrorState(
+                state.error,
+                onRefresh,
+                focusRequester = entryFocus,
+            )
             else -> LazyColumn(
                 state = listState,
                 // 数据刷新时把焦点还给同一分组的邻居，避免焦点被顶栏抢走。
@@ -162,7 +181,10 @@ fun HomeScreen(
                                   if (focus.hasFocus && listState.firstVisibleItemIndex > 0) {
                                       scope.launch { listState.animateScrollToItem(0) }
                                   }
-                              },
+                              }
+                              // 把浏览锚点与三个操作按钮作为同一焦点组观察，
+                              // 确保组内任一子项获得焦点时都暂停自动轮播。
+                              .focusGroup(),
                       ) {
                         // 缩放相位提到切换动画外面：新旧两张海报共用同一个缩放值，
                         // 交叉淡入时才不会一张在放大、另一张在缩小——那看着就是整幅画面在抖。
@@ -172,6 +194,56 @@ fun HomeScreen(
                             animationSpec = infiniteRepeatable(tween(18000), RepeatMode.Reverse),
                             label = "hero-zoom",
                         )
+                        // 独立于 Crossfade 的稳定焦点锚点：切换海报不会销毁浏览焦点。
+                        // 只有在浏览层时左右键才切海报；确定键进入播放/收藏/详情按钮层。
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = ui.gutter, bottom = d(7))
+                                .width(d(2))
+                                .height(d(2))
+                                .then(if (upFocus != null) Modifier.focusProperties { up = upFocus } else Modifier)
+                                .then(
+                                    if (firstShelfFocus != null) {
+                                        Modifier.focusProperties { down = firstShelfFocus }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .focusRequester(heroBrowseFocus)
+                                .onFocusChanged { heroBrowseFocused = it.isFocused }
+                                .onPreviewKeyEvent { event ->
+                                    if (event.type != KeyEventType.KeyDown) {
+                                        false
+                                    } else {
+                                        val currentIndex = hero.indexOfFirst {
+                                            it.id == hero.getOrNull(state.heroIndex)?.id
+                                        }.coerceAtLeast(0)
+                                        when (event.key) {
+                                            Key.DirectionLeft -> {
+                                                if (hero.size > 1) onHeroIndex((currentIndex - 1 + hero.size) % hero.size)
+                                                true
+                                            }
+                                            Key.DirectionRight -> {
+                                                if (hero.size > 1) onHeroIndex((currentIndex + 1) % hero.size)
+                                                true
+                                            }
+                                            Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
+                                                // Crossfade 的目标节点可能刚 attach；失败时等布局完成再重试。
+                                                scope.launch {
+                                                    repeat(12) {
+                                                        if (playFocus.tryRequestFocus()) return@launch
+                                                        withFrameNanos { }
+                                                    }
+                                                }
+                                                true
+                                            }
+                                            else -> false
+                                        }
+                                    }
+                                }
+                                .focusable(),
+                        )
                         Crossfade(
                             targetState = current,
                             modifier = Modifier.fillMaxSize(),
@@ -179,6 +251,13 @@ fun HomeScreen(
                             animationSpec = tween(480),
                             label = "hero",
                         ) { series ->
+                            // Crossfade 过渡期间旧、新两张 Hero 会同时存在。
+                            // 只允许目标海报的按钮参与焦点搜索，防止 requester 命中即将销毁的旧按钮。
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .focusProperties { canFocus = series.id == current.id },
+                            ) {
                             val progress = progressById[series.id]
                             HeroBanner(
                                 series = series,
@@ -202,9 +281,12 @@ fun HomeScreen(
                                 // 切换瞬间先暗一下再亮起来，看着像闪。这里交给 Crossfade 统一处理。
                                 imageCrossfadeMillis = 0,
                                 downFocus = firstShelfFocus,
-                                playFocus = null,
+                                playFocus = playFocus,
+                                favoriteFocus = favoriteFocus,
+                                detailFocus = detailFocus,
                                 upFocus = upFocus,
                             )
+                            }
                         }
                         // 轮播指示条：当前项用一条会「走完」的细线。
                         // 必须钉在 hero 底部——它原先没有 align，Box 默认左上，整条跑到画面顶端，
@@ -236,6 +318,14 @@ fun HomeScreen(
                                         .clickable { onHeroIndex(index) },
                                 )
                             }
+                        }
+                        if (heroBrowseFocused) {
+                            Text(
+                                "按确定进入操作",
+                                Modifier.align(Alignment.BottomEnd).padding(end = ui.gutter, bottom = d(24)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Paper.Secondary,
+                            )
                         }
                       }
                     }

@@ -97,13 +97,14 @@ fun HongguoApp(vm: AppViewModel) {
     val rankEntry = remember { FocusRequester() }
     val libraryEntry = remember { FocusRequester() }
     val settingsEntry = remember { FocusRequester() }
+    val accountEntry = remember { FocusRequester() }
     fun entryOf(target: Tab): FocusRequester? = when (target) {
         Tab.HOME -> homeEntry
         Tab.THEATER -> theaterEntry
         Tab.RANK -> rankEntry
         Tab.LIBRARY -> libraryEntry
         Tab.SETTINGS -> settingsEntry
-        Tab.ACCOUNT -> null
+        Tab.ACCOUNT -> accountEntry
     }
     // 导航项各自的锚点。切页、返回首页时把光标钉在「下划线所在的那一项」上，
     // 而不是散落在上一页残留的位置——这是「红线到首页、光标还在设置」的修法。
@@ -111,14 +112,27 @@ fun HongguoApp(vm: AppViewModel) {
     // 内容区是否已经有可聚焦元素。没有时不要把导航项的「下」指过去，
     // 否则会指向一个尚未 attach 的 requester，焦点移动直接抛异常。
     val contentReady = when (tab) {
-        // 首页的落点是第一排海报，只有片单出来才算就绪（hero 单独有数据时落点还不存在）。
-        Tab.HOME -> state.home.visibleShelves.isNotEmpty()
-        Tab.THEATER -> state.theater.items.isNotEmpty()
-        Tab.RANK -> state.ranking.items.isNotEmpty()
-        Tab.LIBRARY -> state.library.favorites.isNotEmpty() || state.library.history.isNotEmpty() || state.library.later.isNotEmpty()
+        // HomeScreen 在 Hero 有数据时把入口挂在 Hero 浏览锚点；没有 Hero 才挂到第一排片单。
+        // 空错误态则把同一个入口挂到「重新加载」按钮；纯加载态没有可聚焦目标。
+        Tab.HOME -> {
+            val emptyLoading = state.home.loading && state.home.shelves.isEmpty()
+            val emptyError = state.home.error != null && state.home.shelves.isEmpty()
+            !emptyLoading && (
+                emptyError || state.home.hero.isNotEmpty() || state.home.visibleShelves.isNotEmpty()
+            )
+        }
+        // 剧场/榜单的加载态没有焦点控件；数据空错误态则可进入重新加载按钮。
+        Tab.THEATER -> state.theater.items.isNotEmpty() ||
+            (state.theater.error != null && !state.theater.loading)
+        Tab.RANK -> state.ranking.items.isNotEmpty() ||
+            (state.ranking.error != null && !state.ranking.loading)
+        // 追剧页即使历史/收藏为空，也始终显示「观看历史 / 我的收藏」标签，
+        // entryFocus 就挂在「观看历史」标签上，不应依赖列表数据量。
+        Tab.LIBRARY -> true
         // 设置页是静态布局，只要有快照就一定有可聚焦项（分类导轨）。
         Tab.SETTINGS -> snapshot != null
-        else -> false
+        // 账号页始终有入口：未登录时是登录方式标签，已登录时是退出登录按钮。
+        Tab.ACCOUNT -> true
     }
 
     LaunchedEffect(Unit) {
@@ -199,7 +213,7 @@ fun HongguoApp(vm: AppViewModel) {
     // 切季后希望光标落在新季的季签上，连按左右就能换季；详情页请求一次后回清。
     var pendingSeasonFocus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(tab, route, state.booted) {
-        // 从导航项按下进内容时由 pendingContent 接管光标，这里不要再把光标拉回导航项。
+        // 从导航项按下进内容时由 pendingContent 接管光标，不在成功进入后拉回导航栏。
         if (route == Route.Main && state.booted && pendingContent == null) pendingFocus = tab
     }
     LaunchedEffect(pendingFocus, route, state.booted) {
@@ -215,15 +229,22 @@ fun HongguoApp(vm: AppViewModel) {
         }
     }
 
-    // 导航项按「下」进入内容：非当前项先切页；当前项若内容还在转圈则记下意图。
-    // contentReady 作为关键依赖：内容未就绪时保持意图、不清除，等数据到了自动精确进入，
-    // 这样用户按一次「下」就够了，不必等转圈结束再按一次，也不会 fallback 到几何搜索乱跳。
+    // 导航栏按「下」只进入当前选中页，不根据焦点所在的导航项切页。
+    // 即时请求失败或页面尚未就绪时，保留意图并在入口 attach 后重试，
+    // 避免几何搜索把焦点送到其他页面。
     LaunchedEffect(pendingContent, tab, route, state.booted, contentReady) {
         val target = pendingContent ?: return@LaunchedEffect
-        if (route != Route.Main || !state.booted) return@LaunchedEffect
-        if (tab != target) {
-            // 用户已切到别的页/离开主页：旧的进入意图作废，清掉避免悬挂。
+        if (route != Route.Main) {
+            // 用户已离开主页面（搜索、详情、投播等）：取消旧的「进入内容」意图，
+            // 避免返回主页面时无缘无故自动跳进之前的列表。
             pendingContent = null
+            return@LaunchedEffect
+        }
+        if (!state.booted) return@LaunchedEffect
+        if (tab != target) {
+            // 用户已切到别的页：旧的进入意图作废，并把焦点同步到新选中页导航项。
+            pendingContent = null
+            pendingFocus = tab
             return@LaunchedEffect
         }
         val requester = entryOf(target)
@@ -312,6 +333,7 @@ fun HongguoApp(vm: AppViewModel) {
                         rankEntry = rankEntry,
                         libraryEntry = libraryEntry,
                         settingsEntry = settingsEntry,
+                        accountEntry = accountEntry,
                         upFocus = tabAnchors[tab],
                         initialSettingsSection = pendingSettingsSection,
                         onSettingsSectionConsumed = { pendingSettingsSection = null },
@@ -337,15 +359,9 @@ fun HongguoApp(vm: AppViewModel) {
                         contentEntry = entryOf(tab)?.takeIf { contentReady },
                         tabFocus = tabAnchors,
                         onEnterContent = { selected ->
-                            if (selected != tab) {
-                                // 非当前项按「下」：先切页，等这一页内容落点 attach 再进入。
-                                tab = selected
-                                pendingContent = selected
-                            } else if (!contentReady) {
-                                // 当前项按「下」但内容还在转圈：记下意图，等数据就绪后自动进入。
-                                // NavItem 此时已吞掉按键、没有交给几何搜索，这里补上"待进入"状态。
-                                pendingContent = selected
-                            }
+                            // 仅记录当前选中页的进入意图；不因焦点所在的导航项切换页面。
+                            // 即使即时 requestFocus 失败，也由 pendingContent 等待 attach 后重试。
+                            if (selected == tab) pendingContent = selected
                         },
                         modifier = Modifier.align(Alignment.TopCenter),
                     )
@@ -519,6 +535,7 @@ private fun MainTabContent(
     rankEntry: FocusRequester? = null,
     libraryEntry: FocusRequester? = null,
     settingsEntry: FocusRequester? = null,
+    accountEntry: FocusRequester? = null,
     upFocus: FocusRequester? = null,
     initialSettingsSection: String? = null,
     onSettingsSectionConsumed: () -> Unit = {},
@@ -618,6 +635,8 @@ private fun MainTabContent(
             onSendCode = vm::sendLoginCode,
             onVerify = vm::verifyLoginCode,
             onResetPhone = vm::resetLoginPhone,
+            entryFocus = accountEntry,
+            upFocus = upFocus,
         )
     }
 }

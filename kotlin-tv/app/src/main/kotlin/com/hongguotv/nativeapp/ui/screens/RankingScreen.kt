@@ -101,7 +101,11 @@ fun RankingScreen(
     Box(modifier.fillMaxSize()) {
         when {
             state.loading && state.items.isEmpty() -> LoadingState(label = "正在拉取榜单")
-            state.error != null && state.items.isEmpty() -> ErrorState(state.error, onRetry)
+            state.error != null && state.items.isEmpty() -> ErrorState(
+                state.error,
+                onRetry,
+                focusRequester = entryFocus,
+            )
             else -> LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(),

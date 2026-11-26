@@ -158,7 +158,11 @@ fun TheaterScreen(
     Box(modifier.fillMaxSize()) {
         when {
             state.loading && state.items.isEmpty() -> LoadingState(label = "正在整理剧场")
-            state.error != null && state.items.isEmpty() -> ErrorState(state.error, onRetry)
+            state.error != null && state.items.isEmpty() -> ErrorState(
+                state.error,
+                onRetry,
+                focusRequester = entryFocus,
+            )
             else -> LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Fixed(columns),
