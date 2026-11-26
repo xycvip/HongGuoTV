@@ -64,6 +64,7 @@ import com.hongguotv.nativeapp.ui.components.PosterCard
 import com.hongguotv.nativeapp.ui.components.ResumeCard
 import com.hongguotv.nativeapp.ui.components.SectionHeader
 import com.hongguotv.nativeapp.ui.components.TvButton
+import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import com.hongguotv.nativeapp.ui.components.ButtonTone
 import com.hongguotv.nativeapp.ui.data.HomeState
 import com.hongguotv.nativeapp.ui.data.Shelf
