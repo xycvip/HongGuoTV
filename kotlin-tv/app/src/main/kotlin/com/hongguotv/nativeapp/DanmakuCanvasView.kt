@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PorterDuff
 import android.graphics.Typeface
 import android.os.SystemClock
 import android.util.TypedValue
@@ -86,7 +85,8 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
     private val textCache = object : LinkedHashMap<TextKey, Bitmap>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<TextKey, Bitmap>): Boolean {
             if (size > TEXT_CACHE_MAX) {
-                eldest.value.recycle()
+                // Hardware Canvas may still have queued this bitmap for GPU consumption.
+                // Drop the cache reference and let GC reclaim it instead of recycling eagerly.
                 return true
             }
             return false
@@ -329,7 +329,8 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
 
     /** 字号/描边变化会让位图失真，整体重建；换集时也调用，尽早释放。 */
     private fun clearTextCache() {
-        for (bitmap in textCache.values) runCatching { bitmap.recycle() }
+        // A hardware-accelerated View can have pending GPU work referencing cached bitmaps.
+        // Release Java references only; do not recycle a bitmap while a frame may still use it.
         textCache.clear()
     }
 
