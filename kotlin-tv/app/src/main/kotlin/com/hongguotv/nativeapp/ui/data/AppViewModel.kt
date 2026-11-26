@@ -458,15 +458,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val comic = homeComic.filterNot { it.id in hidden }
         val ai = homeAi.filterNot { it.id in hidden }
 
-        // 先给下方热门横排保留完整名额，再从各分类的后续候选中挑 Hero。
-        // 旧逻辑先拿走 short/comic/ai 的前几部做 Hero，再从热门中去重，
-        // 会把热门短剧/漫剧/AI 剧场的首屏数量直接削掉，导致海报位铺不满。
-        // 这里不再让 Hero 占用热门横排的前 12 个名额；数据不足时宁可沿用上一批 Hero，
-        // 也不从热门横排重复抽取来凑数。
-        val hero = buildList {
+        // 优先从各分类第 12 部之后选择 Hero，避免正常情况下占用热门横排名额。
+        // 首页目前只拉取第 1 页，后续候选不足时必须回退到已有首页推荐数据，
+        // 否则首次加载会得到空 Hero，整块主视觉区域直接消失。
+        val heroCandidates = buildList {
             addAll(short.drop(12).take(3))
             addAll(comic.drop(12).take(2))
             addAll(ai.drop(12).take(2))
+        }
+        val hero = buildList {
+            addAll(heroCandidates)
+            if (heroCandidates.size < 6) {
+                addAll(short.take(3))
+                addAll(comic.take(2))
+                addAll(ai.take(2))
+            }
         }.filter { it.cover.isNotBlank() }.distinctBy { it.id }.take(6)
         val displayedHero = hero.ifEmpty { _state.value.home.hero }
         val shelfShort = short.take(12)
