@@ -230,7 +230,13 @@ fun HongguoApp(vm: AppViewModel) {
     // 避免几何搜索把焦点送到其他页面。
     LaunchedEffect(pendingContent, tab, route, state.booted, contentReady) {
         val target = pendingContent ?: return@LaunchedEffect
-        if (route != Route.Main || !state.booted) return@LaunchedEffect
+        if (route != Route.Main) {
+            // 用户已离开主页面（搜索、详情、投播等）：取消旧的「进入内容」意图，
+            // 避免返回主页面时无缘无故自动跳进之前的列表。
+            pendingContent = null
+            return@LaunchedEffect
+        }
+        if (!state.booted) return@LaunchedEffect
         if (tab != target) {
             // 用户已切到别的页：旧的进入意图作废，并把焦点同步到新选中页导航项。
             pendingContent = null
