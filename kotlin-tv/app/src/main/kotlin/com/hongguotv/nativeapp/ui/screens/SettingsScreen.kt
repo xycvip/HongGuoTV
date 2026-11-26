@@ -628,7 +628,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.appearancePanel(
     item {
         SettingRow(
             title = "首页大海报",
-            description = "首屏大图取自第 2 页，与下方货架不重复；综合为三类各取 2 部，单选则取该类 6 部",
+            description = "选择首页大海报的内容类型。",
             value = HeroSource.fromStored(snapshot.heroSource).label,
             onClick = {
                 onChoice(
