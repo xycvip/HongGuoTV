@@ -104,13 +104,21 @@ class Library(context: Context) {
                 // A failed previous-session commit may still be in flight after the bounded
                 // wait. Overlay its newest immutable snapshot so this launch never initializes
                 // from stale disk data and then overwrites the user's last changes.
+                // Take the pending snapshot on both sides of the preference read. If a
+                // writer commits between the disk read and the second snapshot, the first
+                // snapshot still contains that in-flight batch; if a newer write is submitted
+                // during the read, the second snapshot contains it.
+                val pendingLibrary = writes.snapshotPending().toMutableMap()
                 val values = prefs.all.toMutableMap()
-                writes.snapshotPending().forEach { (key, encode) ->
+                pendingLibrary.putAll(writes.snapshotPending())
+                pendingLibrary.forEach { (key, encode) ->
                     val value = encode()
                     if (value == null) values.remove(key) else values[key] = value
                 }
+                val pendingHome = homeWrites.snapshotPending().toMutableMap()
                 val homeValues = homePrefs.all.toMutableMap()
-                homeWrites.snapshotPending().forEach { (key, encode) ->
+                pendingHome.putAll(homeWrites.snapshotPending())
+                pendingHome.forEach { (key, encode) ->
                     val value = encode()
                     if (value == null) homeValues.remove(key) else homeValues[key] = value
                 }
