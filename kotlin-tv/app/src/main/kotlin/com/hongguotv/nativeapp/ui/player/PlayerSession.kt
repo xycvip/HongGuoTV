@@ -404,6 +404,17 @@ class PlayerSession(
                         applyEpisodeTransition(actualIndex)
                         return
                     }
+                    // 极端情况下播放器报告 ENDED 时 playlist 的下一项仍在队列但未自动推进：
+                    // 直接消费已预载 MediaItem，避免重新取流破坏无感连播。
+                    val nextMediaIndex = owner.currentMediaItemIndex + 1
+                    if (library.autoNext && queuedAppended && nextMediaIndex < owner.mediaItemCount &&
+                        owner.getMediaItemAt(nextMediaIndex).mediaId == episodes.getOrNull(index + 1)
+                    ) {
+                        save(completed = true)
+                        completedIndex = index
+                        owner.seekToNextMediaItem()
+                        return
+                    }
                     ready = false
                     save(completed = true)
                     completedIndex = index
