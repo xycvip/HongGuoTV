@@ -41,8 +41,12 @@ import kotlin.math.roundToInt
  * 弹幕一次性预排程：数据每批到来时把已缓冲弹幕排到轨道、算好 startMs/endMs，
  * 每帧只做二分定位可见区间 + 位图 blit，不做逐帧轨道分配。
  */
-class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_000L) :
-    SurfaceView(context), SurfaceHolder.Callback {
+class DanmakuView(
+    context: Context,
+    textSizeSp: Float = 20f,
+    crossMs: Long = 9_000L,
+) :
+    SurfaceView(context), SurfaceHolder.Callback, DanmakuRenderer {
     private data class Scheduled(
         val text: String,
         val color: Int,
@@ -146,8 +150,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
                     lastPumpAt = tick
                     needMore(now)
                 }
-                // 弹幕横向滚动 30fps 足够：隔帧画能把每帧预算从 16.7ms 提到 33ms，
-                // 避免个别帧超时导致整体顿卡；位置按媒体时间算，滚动速度不受影响。
+                // 固定隔一个 VSync 绘制一次：60Hz 屏幕约30fps，120Hz 屏幕约60fps。
                 if ((frameTick++ and 1L) == 0L) drawFrame(now)
             }
             if (running && playbackActive && loader != null) scheduleFrame()
@@ -339,7 +342,8 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
             val paint = if (opacityAlpha == 255) null else bitmapPaint
             for (i in first until end) {
                 val item = scheduled[i]
-                val x = item.xAt(now, surfaceW).roundToInt().toFloat()
+                // 保留亚像素坐标，避免整数像素取整造成移动时的跳格。
+                val x = item.xAt(now, surfaceW)
                 val top = (item.lane * lineHeightPx).roundToInt().toFloat()
                 canvas.drawBitmap(bitmapFor(item), x, top, paint)
             }
@@ -392,7 +396,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
 
     // ---------------------------------------------------------------- 对外接口（保持兼容）
 
-    fun applyPrefs(opacityPct: Int, font: Int, speed: Int, rows: Int) {
+    override fun applyPrefs(opacityPct: Int, font: Int, speed: Int, rows: Int) {
         opacityAlpha = DanmakuPrefs.opacity(opacityPct) * 255 / 100
         fontValue = font
         speedValue = speed
@@ -401,23 +405,23 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         reschedule()
     }
 
-    fun setColorMode(mode: Int) {
+    override fun setColorMode(mode: Int) {
         val normalized = mode.coerceIn(COLOR_MODE_DEFAULT, COLOR_MODE_LAST)
         if (colorMode == normalized) return
         colorMode = normalized
         reschedule()
     }
 
-    fun setBlockedFilter(filter: (String) -> Boolean) {
+    override fun setBlockedFilter(filter: (String) -> Boolean) {
         blocked = filter
         reschedule()
     }
 
-    fun bind(
+    override fun bind(
         loader: DanmakuLoader,
         position: () -> Long,
-        needMore: (Long) -> Unit = {},
-        playing: Boolean = true,
+        needMore: (Long) -> Unit,
+        playing: Boolean,
     ) {
         unbind()
         this.loader = loader
@@ -439,7 +443,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     }
 
     /** 暂停/恢复：vsync 循环持续运行，只切换绘制开关即可，无需重启线程。 */
-    fun setPlaybackActive(active: Boolean) {
+    override fun setPlaybackActive(active: Boolean) {
         if (!running || playbackActive == active) return
         playbackActive = active
         if (active && loader != null && surfaceAlive) {
@@ -451,13 +455,13 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     }
 
     /** 位置按绝对媒体时间计算，seek 后自然落到正确位置，无需清空。 */
-    fun seekTo(positionMs: Long) {
+    override fun seekTo(positionMs: Long) {
         lastPumpAt = 0L
         // seek 后画面跳变，下一帧必须重画（哪怕是空帧），否则残留上一处的内容。
         idleCleared = false
     }
 
-    fun unbind() {
+    override fun unbind() {
         running = false
         playbackActive = false
         loader = null

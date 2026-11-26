@@ -40,7 +40,7 @@ import com.hongguotv.core.VideoFrameMode
 import com.hongguotv.js.HongguoJsDanmaku
 import com.hongguotv.js.HongguoJsStore
 import com.hongguotv.js.HongguoJsStreamSource
-import com.hongguotv.nativeapp.DanmakuView
+import com.hongguotv.nativeapp.DanmakuRenderer
 import com.hongguotv.nativeapp.Library
 import com.hongguotv.nativeapp.PlaybackExtras
 import com.hongguotv.nativeapp.VideoDataSource
@@ -154,8 +154,11 @@ class PlayerSession(
         private set
 
     private val danmakuSource = HongguoJsDanmaku(HongguoJsStore.get(context, repository.http))
-    private var danmakuView: DanmakuView? = null
+    private var danmakuView: DanmakuRenderer? = null
     private var danmakuLoader: DanmakuLoader? = null
+    /** 弹幕层覆盖 A/B 两个视频 Surface，共用同一个渲染器；切换选项在下次进入播放页生效。 */
+    val danmakuRendererMode: Int
+        get() = library.danmakuRendererMode
     /** 当前绑定的「集 + 时长」，避免同一集被 READY/接管/刷新重复重建 loader。 */
     private var danmakuKey = ""
 
@@ -1807,14 +1810,14 @@ class PlayerSession(
 
     // ---------------------------------------------------------------- 弹幕
 
-    fun attachDanmaku(view: DanmakuView) {
+    fun attachDanmaku(view: DanmakuRenderer) {
         danmakuView = view
         applyDanmakuPrefs()
         view.setBlockedFilter { extras.blocks(it) }
         startDanmaku()
     }
 
-    fun detachDanmaku(view: DanmakuView) {
+    fun detachDanmaku(view: DanmakuRenderer) {
         if (danmakuView === view) {
             danmakuLoader?.cancel()
             danmakuLoader = null
