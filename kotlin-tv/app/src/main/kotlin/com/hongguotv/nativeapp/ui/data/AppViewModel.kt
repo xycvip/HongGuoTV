@@ -458,20 +458,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val comic = homeComic.filterNot { it.id in hidden }
         val ai = homeAi.filterNot { it.id in hidden }
 
-        // Hero 直接从首页推荐池中挑选；首页热门横排必须排除已进入 Hero 的剧，
-        // 否则同一部剧会在首屏主视觉和下方热门区域重复出现。
-        // 去重只作用于首页横排，查看全部仍使用完整 homeShort/homeComic/homeAi。
+        // 先给下方热门横排保留完整名额，再从各分类的后续候选中挑 Hero。
+        // 旧逻辑先拿走 short/comic/ai 的前几部做 Hero，再从热门中去重，
+        // 会把热门短剧/漫剧/AI 剧场的首屏数量直接削掉，导致海报位铺不满。
+        // 这里不再让 Hero 占用热门横排的前 12 个名额；数据不足时宁可沿用上一批 Hero，
+        // 也不从热门横排重复抽取来凑数。
         val hero = buildList {
-            addAll(short.take(3))
-            addAll(comic.take(2))
-            addAll(ai.take(2))
+            addAll(short.drop(12).take(3))
+            addAll(comic.drop(12).take(2))
+            addAll(ai.drop(12).take(2))
         }.filter { it.cover.isNotBlank() }.distinctBy { it.id }.take(6)
-        // 新推荐暂时为空时，界面会沿用上一批 Hero；去重也必须按实际显示的 Hero 计算。
         val displayedHero = hero.ifEmpty { _state.value.home.hero }
-        val heroIds = displayedHero.mapTo(mutableSetOf()) { it.id }
-        val shelfShort = short.filterNot { it.id in heroIds }
-        val shelfComic = comic.filterNot { it.id in heroIds }
-        val shelfAi = ai.filterNot { it.id in heroIds }
+        val shelfShort = short.take(12)
+        val shelfComic = comic.take(12)
+        val shelfAi = ai.take(12)
 
         val history = library.history().filterNot { library.watched(it.series.id) }
         val updates = library.favorites().filter { library.favoriteUpdate(it.id)?.hasUpdate == true }
