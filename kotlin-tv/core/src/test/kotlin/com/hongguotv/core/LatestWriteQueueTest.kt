@@ -84,6 +84,8 @@ class LatestWriteQueueTest {
         )
         assertEquals(42, snapshot["progress"])
         assertTrue(queue.awaitIdle(5, TimeUnit.SECONDS))
+        queue.close()
+        assertTrue(queue.awaitClosed(5, TimeUnit.SECONDS))
     }
 
     @Test fun `snapshot includes in flight values and lets newer pending values win`() {
