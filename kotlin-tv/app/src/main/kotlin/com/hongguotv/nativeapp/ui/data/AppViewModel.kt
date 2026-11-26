@@ -1717,7 +1717,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun clearAllData() {
         val app = getApplication<Application>()
-        toast("正在保存尚未落盘的数据，请稍候…")
+        toast("正在保存尚未保存完成的数据，请稍候…")
 
         // Stop all ViewModel-owned jobs before touching storage. The dedicated reset thread
         // survives scope cancellation and waits for the loader plus both process-wide writers.
