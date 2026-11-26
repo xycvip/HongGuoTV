@@ -48,6 +48,9 @@ class DanmakuView(
     frameRateMode: Int = 0,
 ) :
     SurfaceView(context), SurfaceHolder.Callback, DanmakuRenderer {
+    // 主构造参数需保存为属性，才能在 Choreographer 回调中读取。
+    private val frameRateModeValue = frameRateMode.coerceIn(0, 2)
+
     private data class Scheduled(
         val text: String,
         val color: Int,
