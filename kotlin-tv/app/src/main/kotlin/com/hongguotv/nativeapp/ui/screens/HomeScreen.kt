@@ -44,6 +44,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusable
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -95,14 +99,17 @@ fun HomeScreen(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    // hero 的「下移」必须落到第一张海报上：默认焦点搜索会先撞到轮播指示条，
-    // 这里直接把目标钉死，遥控器不会掉进空隙。
-    //
-    // 导航栏「按下」也落到这里（而不是 hero 的播放按钮）：hero 在 AnimatedContent 里
-    // 每 7 秒轮播一次，过渡期间同一个 requester 会短暂挂到两份内容上，焦点容易指到
-    // 正在淡出的那一份。第一张海报是稳定节点，落点不会丢。
-    val firstShelfFocus = remember(entryFocus) { entryFocus ?: FocusRequester() }
     val hero = state.hero
+    // Hero 分成两个遥控器焦点层：浏览层负责左右切换海报，确定键进入按钮层。
+    // 导航栏下移优先落在稳定的浏览焦点；海报为空时才回退到第一排内容。
+    val heroBrowseFocus = remember(entryFocus) { entryFocus ?: FocusRequester() }
+    val firstShelfFocus = remember(entryFocus, hero.isEmpty()) {
+        if (hero.isEmpty()) entryFocus ?: FocusRequester() else FocusRequester()
+    }
+    val playFocus = remember { FocusRequester() }
+    val favoriteFocus = remember { FocusRequester() }
+    val detailFocus = remember { FocusRequester() }
+    var heroBrowseFocused by remember { mutableStateOf(false) }
     // 光标停在主视觉（播放/详情/收藏按钮）时暂停轮播：换图会重建 AnimatedContent 子树，
     // 正在聚焦的按钮被销毁，焦点就会掉到顶栏。
     var heroFocused by remember { mutableStateOf(false) }
@@ -172,6 +179,48 @@ fun HomeScreen(
                             animationSpec = infiniteRepeatable(tween(18000), RepeatMode.Reverse),
                             label = "hero-zoom",
                         )
+                        // 独立于 Crossfade 的稳定焦点锚点：切换海报不会销毁浏览焦点。
+                        // 只有在浏览层时左右键才切海报；确定键进入播放/收藏/详情按钮层。
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = ui.gutter, bottom = d(7))
+                                .width(d(2))
+                                .height(d(2))
+                                .then(if (upFocus != null) Modifier.focusProperties { up = upFocus } else Modifier)
+                                .focusProperties { down = firstShelfFocus }
+                                .focusRequester(heroBrowseFocus)
+                                .onFocusChanged { heroBrowseFocused = it.isFocused }
+                                .onPreviewKeyEvent { event ->
+                                    if (event.type != KeyEventType.KeyDown || hero.size <= 1) {
+                                        if (event.type == KeyEventType.KeyDown &&
+                                            (event.key == Key.Enter || event.key == Key.NumPadEnter || event.key == Key.DirectionCenter)
+                                        ) {
+                                            playFocus.tryRequestFocus()
+                                        } else false
+                                    } else {
+                                        val currentIndex = hero.indexOfFirst {
+                                            it.id == hero.getOrNull(state.heroIndex)?.id
+                                        }.coerceAtLeast(0)
+                                        when (event.key) {
+                                            Key.DirectionLeft -> {
+                                                onHeroIndex((currentIndex - 1 + hero.size) % hero.size)
+                                                true
+                                            }
+                                            Key.DirectionRight -> {
+                                                onHeroIndex((currentIndex + 1) % hero.size)
+                                                true
+                                            }
+                                            Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
+                                                playFocus.tryRequestFocus()
+                                                true
+                                            }
+                                            else -> false
+                                        }
+                                    }
+                                }
+                                .focusable(),
+                        )
                         Crossfade(
                             targetState = current,
                             modifier = Modifier.fillMaxSize(),
@@ -202,7 +251,9 @@ fun HomeScreen(
                                 // 切换瞬间先暗一下再亮起来，看着像闪。这里交给 Crossfade 统一处理。
                                 imageCrossfadeMillis = 0,
                                 downFocus = firstShelfFocus,
-                                playFocus = null,
+                                playFocus = playFocus,
+                                favoriteFocus = favoriteFocus,
+                                detailFocus = detailFocus,
                                 upFocus = upFocus,
                             )
                         }
@@ -236,6 +287,14 @@ fun HomeScreen(
                                         .clickable { onHeroIndex(index) },
                                 )
                             }
+                        }
+                        if (heroBrowseFocused) {
+                            Text(
+                                "按确定进入操作",
+                                Modifier.align(Alignment.BottomEnd).padding(end = ui.gutter, bottom = d(24)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Paper.Secondary,
+                            )
                         }
                       }
                     }
