@@ -134,6 +134,8 @@ data class SettingsSnapshot(
     val danmakuFont: Int = 2,
     val danmakuSpeed: Int = 2,
     val danmakuRows: Int = 2,
+    /** 0=自动，1=普通 View 实验，2=原版 SurfaceView。 */
+    val danmakuRendererMode: Int = 0,
     val danmakuColor: Int = 0,
     val blockedWords: List<String> = emptyList(),
     // ---- 播放增强 ----
