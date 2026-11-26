@@ -115,6 +115,23 @@ class LatestWriteQueue<K, V>(
     }
 
     /**
+     * Read the backing store while holding the queue state lock, then overlay every pending
+     * or in-flight value. The writer performs disk I/O outside this lock but cannot clear its
+     * in-flight batch until the read completes, so a commit racing the read is never lost:
+     * either disk already contains it, or the in-flight snapshot overlays it.
+     */
+    fun <R> readWithPending(
+        read: () -> R,
+        overlay: (R, Map<K, V>) -> R,
+    ): R = synchronized(this) {
+        val snapshot = LinkedHashMap<K, V>(inFlight.size + pending.size).apply {
+            putAll(inFlight)
+            putAll(pending)
+        }
+        overlay(read(), snapshot)
+    }
+
+    /**
      * Returns the newest not-yet-durable values, including the batch currently being written.
      * Pending values override in-flight values for the same key. Readers can overlay this
      * snapshot on SharedPreferences after a bounded wait, avoiding stale startup state when
