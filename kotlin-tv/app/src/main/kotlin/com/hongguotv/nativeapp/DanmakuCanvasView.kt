@@ -273,11 +273,14 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
         val now = positionProvider().coerceAtLeast(0L)
         val first = firstStartingAfter(now - travelMs)
         val end = firstStartingAfter(now)
-        if (end <= first) return
         val clipBottom = (contentRows.coerceAtLeast(1) * lineHeightPx).coerceAtMost(surfaceH.toFloat())
         canvas.save()
         canvas.clipRect(0f, 0f, surfaceW.toFloat(), clipBottom)
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        if (end <= first) {
+            canvas.restore()
+            return
+        }
         bitmapPaint.alpha = opacityAlpha
         val paint = if (opacityAlpha == 255) null else bitmapPaint
         for (i in first until end) {
