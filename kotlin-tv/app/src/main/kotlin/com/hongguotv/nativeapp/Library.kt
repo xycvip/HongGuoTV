@@ -101,27 +101,29 @@ class Library(context: Context) {
                 if (!libraryWritesReady || !homeWritesReady) {
                     Log.w("HongGuoTV", "Previous library checkpoint is still pending; continuing startup")
                 }
-                // A failed previous-session commit may still be in flight after the bounded
-                // wait. Overlay its newest immutable snapshot so this launch never initializes
-                // from stale disk data and then overwrites the user's last changes.
-                // Take the pending snapshot on both sides of the preference read. If a
-                // writer commits between the disk read and the second snapshot, the first
-                // snapshot still contains that in-flight batch; if a newer write is submitted
-                // during the read, the second snapshot contains it.
-                val pendingLibrary = writes.snapshotPending().toMutableMap()
-                val values = prefs.all.toMutableMap()
-                pendingLibrary.putAll(writes.snapshotPending())
-                pendingLibrary.forEach { (key, encode) ->
-                    val value = encode()
-                    if (value == null) values.remove(key) else values[key] = value
-                }
-                val pendingHome = homeWrites.snapshotPending().toMutableMap()
-                val homeValues = homePrefs.all.toMutableMap()
-                pendingHome.putAll(homeWrites.snapshotPending())
-                pendingHome.forEach { (key, encode) ->
-                    val value = encode()
-                    if (value == null) homeValues.remove(key) else homeValues[key] = value
-                }
+                // Read disk and overlay pending/in-flight writes under each queue's state
+                // lock. A writer may finish disk I/O concurrently, but cannot clear its
+                // in-flight snapshot until this read completes.
+                val values = writes.readWithPending(
+                    read = { prefs.all.toMutableMap() },
+                    overlay = { disk, pending ->
+                        pending.forEach { (key, encode) ->
+                            val value = encode()
+                            if (value == null) disk.remove(key) else disk[key] = value
+                        }
+                        disk
+                    },
+                )
+                val homeValues = homeWrites.readWithPending(
+                    read = { homePrefs.all.toMutableMap() },
+                    overlay = { disk, pending ->
+                        pending.forEach { (key, encode) ->
+                            val value = encode()
+                            if (value == null) disk.remove(key) else disk[key] = value
+                        }
+                        disk
+                    },
+                )
                 val loaded = LibraryDisk.decode(values)
                 val now = System.currentTimeMillis()
                 val cached = mutableMapOf<ContentType, CatalogPage>()
