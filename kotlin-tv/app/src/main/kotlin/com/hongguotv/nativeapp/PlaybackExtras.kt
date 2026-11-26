@@ -26,7 +26,7 @@ class PlaybackExtras(context: Context) {
 
     /** 无感连播：开启时第二个播放器预渲染下一集首帧并接管；关闭时同一播放器用 playlist 预载下一集。 */
     var seamlessPlayback: Boolean
-        get() = prefs.getBoolean(KEY_SEAMLESS, true)
+        get() = prefs.getBoolean(KEY_SEAMLESS, false)
         set(value) { prefs.edit().putBoolean(KEY_SEAMLESS, value).apply() }
 
     /** 首页/剧场每行海报数，0 表示按屏幕宽度自动。 */

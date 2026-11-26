@@ -73,6 +73,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     private var needMore: (Long) -> Unit = {}
     private var lastPumpAt = 0L
     private var lastBuffered = -1
+    private var scheduleAnchorMs = 0L
     private var running = false
     private var playbackActive = false
 
@@ -135,6 +136,11 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
                     reschedule()
                 }
                 val now = positionProvider().coerceAtLeast(0L)
+                // 只维护当前位置附近的排程；播放较长视频时避免每次新窗口都重排整集。
+                if (now < scheduleAnchorMs - travelMs || now > scheduleAnchorMs + SCHEDULE_AHEAD_MS - travelMs) {
+                    scheduleAnchorMs = now
+                    reschedule()
+                }
                 val tick = SystemClock.elapsedRealtime()
                 if (now > 0L && tick - lastPumpAt > 1_000L) {
                     lastPumpAt = tick
@@ -222,7 +228,9 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
     private fun reschedule() {
         val source = loader ?: return
         if (surfaceW <= 0 || travelMs <= 0 || lanes <= 0) return
-        val comments = source.between(0L, Long.MAX_VALUE)
+        val anchor = positionProvider().coerceAtLeast(0L)
+        scheduleAnchorMs = anchor
+        val comments = source.between((anchor - travelMs).coerceAtLeast(0L), anchor + SCHEDULE_AHEAD_MS)
         if (comments.isEmpty()) {
             scheduled = emptyList()
             return
@@ -417,6 +425,7 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         this.needMore = needMore
         lastPumpAt = 0L
         lastBuffered = -1
+        scheduleAnchorMs = position().coerceAtLeast(0L)
         running = true
         playbackActive = playing
         idleCleared = false
@@ -455,6 +464,8 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         needMore = {}
         scheduled = emptyList()
         lastBuffered = -1
+        scheduleAnchorMs = 0L
+        positionProvider = { 0L }
         contentRows = 0
         frameTick = 0L
         clearTextCache()
@@ -485,6 +496,8 @@ class DanmakuView(context: Context, textSizeSp: Float = 20f, crossMs: Long = 9_0
         /** 轨道挤满时最多顺延多久，太久就丢弃，避免弹幕远离剧情。 */
         private const val MAX_DELAY_MS = 3_000L
         private const val MAX_TEXT_CHARS = 80
+        /** Bound track scheduling to a rolling two-minute window plus currently visible tails. */
+        private const val SCHEDULE_AHEAD_MS = 120_000L
         /**
          * 文字位图缓存条数。一条弹幕在屏 9 秒，同屏可见通常二三十条，
          * 取 64 条既覆盖当前窗口、又不会把整集几千条都烤进内存。

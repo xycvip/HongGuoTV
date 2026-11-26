@@ -236,10 +236,13 @@ class PlayerSession(
      * 抢资源挂过一次。置位后退回同实例 playlist 预载——切集、连播、画质全都不变，
      * 只是少了「下一集首帧已渲染」那一点顺滑。宁可少一点顺滑，也不能让主画面被回收。
      */
-    private var dualDecoderBlocked = false
+    private var dualDecoderBlocked by mutableStateOf(false)
 
     /** 双播放器真正可用：用户开了开关，且没有因为设备解码能力被禁掉。 */
     private val useDualDecoder: Boolean get() = extras.seamlessPlayback && !dualDecoderBlocked
+
+    /** Compose observes this state: when dual decode falls back, remove the unused second video Surface. */
+    val dualVideoLayers: Boolean get() = useDualDecoder
 
     /** 这一集里解码类错误已经重试过几次，用于避免「降档→同样的错→再降档」死循环。 */
     private var decodeRetries = 0
@@ -389,13 +392,28 @@ class PlayerSession(
                     if (useDualDecoder) prepareStandby(index + 1) else queueNextEpisode(index)
                 }
                 Player.STATE_ENDED -> {
+                    val actualIndex = owner.currentMediaItem?.mediaId?.let(episodes::indexOf) ?: -1
+                    if (actualIndex >= 0 && actualIndex != index) {
+                        applyEpisodeTransition(actualIndex)
+                        return
+                    }
+                    // 极端情况下播放器报告 ENDED 时 playlist 的下一项仍在队列但未自动推进：
+                    // 直接消费已预载 MediaItem，避免重新取流破坏无感连播。
+                    val nextMediaIndex = owner.currentMediaItemIndex + 1
+                    if (library.autoNext && queuedAppended && nextMediaIndex < owner.mediaItemCount &&
+                        owner.getMediaItemAt(nextMediaIndex).mediaId == episodes.getOrNull(index + 1)
+                    ) {
+                        save(completed = true)
+                        completedIndex = index
+                        owner.seekToNextMediaItem()
+                        return
+                    }
                     ready = false
                     save(completed = true)
-                    // 这一集已经写成「已看完」：紧接着的自动连播会离开本集，
-                    // 若不做标记，leave 时的 save(completed=false) 会立刻把它抹回未看完。
                     completedIndex = index
                     playing = false
-                    if (library.autoNext && index < episodes.lastIndex) {
+                    // playlist 已包含下一集时由 Media3 自己过渡，不能再手动 prepare(index+1)。
+                    if (library.autoNext && !queuedAppended && index < episodes.lastIndex) {
                         prepare(index + 1, 0L)
                     }
                 }
@@ -407,7 +425,8 @@ class PlayerSession(
             if (released || owner !== player || useDualDecoder) return
             PlaybackDiagnostics.event("MEDIA_ITEM_TRANSITION", "reason=$reason mediaId=${mediaItem?.mediaId.orEmpty()}", mapOf("oldIndex" to index))
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
-                reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
+                reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK &&
+                reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED
             ) return
             // 修复：单实例 playlist 恒被收敛成 [当前集, 下一集] 两项，currentMediaItemIndex
             // 只有 0/1，不能当绝对集号用——从第 2 集起 newIndex(1) 恰好等于 index(1)，
@@ -416,6 +435,11 @@ class PlayerSession(
             // 改用 mediaId 在 episodes 里反查真实集号。
             val newIndex = mediaItem?.mediaId?.let { episodes.indexOf(it) } ?: -1
             if (newIndex < 0 || newIndex == index) return
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && index in episodes.indices) {
+                // AUTO transition 表示当前集自然播完；先保存完播，避免下一集开始后旧集仍未完成。
+                save(completed = true)
+                completedIndex = index
+            }
             applyEpisodeTransition(newIndex)
         }
 
@@ -1792,9 +1816,11 @@ class PlayerSession(
 
     fun detachDanmaku(view: DanmakuView) {
         if (danmakuView === view) {
+            danmakuLoader?.cancel()
+            danmakuLoader = null
+            danmakuKey = ""
             runCatching { view.unbind() }
             danmakuView = null
-            danmakuLoader = null
         }
     }
 
@@ -1862,9 +1888,10 @@ class PlayerSession(
     private fun startDanmaku() {
         val view = danmakuView ?: return
         if (!danmakuEnabled || currentEpisodeId.isBlank()) {
-            runCatching { view.unbind() }
+            danmakuLoader?.cancel()
             danmakuLoader = null
             danmakuKey = ""
+            runCatching { view.unbind() }
             return
         }
         // 有些片源（HLS / 直播切片）拿不到时长，duration 一直是 0。
@@ -1873,6 +1900,7 @@ class PlayerSession(
         val span = if (duration > 0L) duration else UNKNOWN_DURATION_MS
         val key = "$currentEpisodeId@$span"
         if (danmakuLoader != null && danmakuKey == key) return
+        danmakuLoader?.cancel()
         applyDanmakuPrefs()
         val loader = DanmakuLoader(danmakuSource, series.id, currentEpisodeId, span)
         danmakuLoader = loader
@@ -1892,6 +1920,7 @@ class PlayerSession(
     }
 
     private fun stopDanmaku() {
+        danmakuLoader?.cancel()
         danmakuLoader = null
         danmakuKey = ""
         runCatching { danmakuView?.unbind() }
@@ -1901,6 +1930,11 @@ class PlayerSession(
         val exo = player ?: return
         if (released) return
         runCatching {
+            // Heartbeat 校正实际 MediaItem，修复极端回调时序下画面已切集而进度仍属于旧集。
+            if (!useDualDecoder) {
+                val actualIndex = exo.currentMediaItem?.mediaId?.let(episodes::indexOf) ?: -1
+                if (actualIndex >= 0 && actualIndex != index) applyEpisodeTransition(actualIndex)
+            }
             position = exo.currentPosition.coerceAtLeast(0L)
             duration = exo.duration.coerceAtLeast(0L)
         }
