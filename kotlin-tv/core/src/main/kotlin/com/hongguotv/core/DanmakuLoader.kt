@@ -28,6 +28,21 @@ class DanmakuLoader(
     private var failures = 0
     private var retryAfter = 0L
 
+    private fun keyOf(comment: Danmaku): String = if (comment.id.isNotEmpty()) "id:${comment.id}" else "anonymous:${comment.offsetMs}:${comment.text}"
+
+    /** Keep a rolling history and hard cap; older ranges are fetched again after a backward seek. */
+    private fun trimCache(positionMs: Long) {
+        val cutoff = (positionMs - HISTORY_RETENTION_MS).coerceAtLeast(0L)
+        val removeUntil = comments.indexOfFirst { it.offsetMs >= cutoff }.let { if (it < 0) comments.size else it }
+        if (removeUntil > 0) {
+            for (i in 0 until removeUntil) seen.remove(keyOf(comments[i]))
+            comments.subList(0, removeUntil).clear()
+        }
+        while (comments.size > MAX_BUFFERED_COMMENTS) {
+            seen.remove(keyOf(comments.removeAt(0)))
+        }
+    }
+
     /** Fetch windows until buffered past [positionMs] + lead. No-op while another load runs. */
     /** Stop this episode's loader. An in-flight source call may finish, but its result is discarded. */
     fun cancel() {
@@ -39,6 +54,14 @@ class DanmakuLoader(
         try {
             while (!cancelled.get()) {
                 val start = synchronized(this) {
+                    trimCache(positionMs)
+                    // A backward seek beyond the retained/load-ahead range must reopen old windows.
+                    if (positionMs + leadMs < frontier) {
+                        frontier = (positionMs / WINDOW_MS) * WINDOW_MS
+                        exhausted = false
+                        failures = 0
+                        retryAfter = 0L
+                    }
                     when {
                         exhausted || clock() < retryAfter -> return
                         frontier >= durationMs -> { exhausted = true; return }
@@ -71,7 +94,7 @@ class DanmakuLoader(
                     if (cancelled.get()) return
                     failures = 0
                     for (comment in window.comments) {
-                        val key = if (comment.id.isNotEmpty()) "id:${comment.id}" else "anonymous:${comment.offsetMs}:${comment.text}"
+                        val key = keyOf(comment)
                         if (seen.add(key)) comments.add(comment)
                     }
                     // Windows normally arrive in order; a forward seek can interleave offsets.
@@ -79,6 +102,7 @@ class DanmakuLoader(
                         comments.sortBy { it.offsetMs }
                     }
                     frontier = if (window.nextStartMs > start) window.nextStartMs else start + WINDOW_MS
+                    trimCache(positionMs)
                     if (frontier >= durationMs) exhausted = true
                 }
             }
@@ -122,5 +146,7 @@ class DanmakuLoader(
         private const val MAX_FAILURES = 10
         private const val RETRY_BACKOFF_MS = 8_000L
         private const val MAX_BACKOFF_MS = 60_000L
+        private const val HISTORY_RETENTION_MS = 8 * 60_000L
+        private const val MAX_BUFFERED_COMMENTS = 4_000
     }
 }
