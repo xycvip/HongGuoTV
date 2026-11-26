@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,14 +26,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusable
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.hongguotv.core.AppUpdate
@@ -209,6 +218,8 @@ private fun MetaChip(text: String) {
 
 @Composable
 private fun NotesPanel(update: AppUpdate) {
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
     Column(
         Modifier
             .fillMaxWidth()
@@ -224,8 +235,31 @@ private fun NotesPanel(update: AppUpdate) {
             style = MaterialTheme.typography.bodyMedium,
             color = Paper.Secondary,
             modifier = Modifier
+                .fillMaxWidth()
                 .heightIn(max = d(190))
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) {
+                        false
+                    } else {
+                        when (event.key) {
+                            Key.DirectionDown -> {
+                                if (scrollState.maxValue > 0 && scrollState.value < scrollState.maxValue) {
+                                    scope.launch { scrollState.animateScrollTo((scrollState.value + d(72).value.toInt()).coerceAtMost(scrollState.maxValue)) }
+                                    true
+                                } else false
+                            }
+                            Key.DirectionUp -> {
+                                if (scrollState.value > 0) {
+                                    scope.launch { scrollState.animateScrollTo((scrollState.value - d(72).value.toInt()).coerceAtLeast(0)) }
+                                    true
+                                } else false
+                            }
+                            else -> false
+                        }
+                    }
+                }
+                .focusable(),
         )
     }
 }
