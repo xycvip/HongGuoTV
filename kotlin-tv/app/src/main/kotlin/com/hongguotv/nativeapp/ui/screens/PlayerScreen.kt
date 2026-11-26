@@ -100,6 +100,8 @@ import com.hongguotv.nativeapp.ui.player.PlayerSession
 import com.hongguotv.nativeapp.ui.theme.Ink
 import com.hongguotv.nativeapp.ui.theme.Paper
 import com.hongguotv.nativeapp.ui.theme.Rouge
+import com.hongguotv.nativeapp.DanmakuCanvasView
+import com.hongguotv.nativeapp.DanmakuRenderer
 import com.hongguotv.nativeapp.DanmakuView
 import com.hongguotv.nativeapp.PlaybackExtras
 import com.hongguotv.nativeapp.ui.data.RemoteKey
@@ -107,6 +109,8 @@ import com.hongguotv.nativeapp.ui.data.SettingsSnapshot
 import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
 import kotlinx.coroutines.delay
+
+private const val USE_CANVAS_DANMAKU_EXPERIMENT = true
 
 @UnstableApi
 @Composable
@@ -370,7 +374,10 @@ fun PlayerScreen(
         // 视频之上、控制层之下。用独立 surface 而非普通 View：普通 View 每帧 invalidate
         // 会强制整个 window 重合成，把两层全屏视频 SurfaceView 一起拖垮（视频卡死/错位）。
         // 只覆盖顶部弹幕带：匹配常见弹幕区域，也限制每帧清屏/绘制面积。
-        val danmakuView = remember { DanmakuView(context) }
+        val danmakuView: android.view.View = remember {
+            if (USE_CANVAS_DANMAKU_EXPERIMENT) DanmakuCanvasView(context) else DanmakuView(context)
+        }
+        val danmakuRenderer = danmakuView as DanmakuRenderer
         AndroidView(
             factory = { danmakuView },
             modifier = Modifier
@@ -378,9 +385,9 @@ fun PlayerScreen(
                 .fillMaxHeight(0.46f)
                 .padding(top = d(26)),
         )
-        DisposableEffect(danmakuView) {
-            session.attachDanmaku(danmakuView)
-            onDispose { session.detachDanmaku(danmakuView) }
+        DisposableEffect(danmakuRenderer) {
+            session.attachDanmaku(danmakuRenderer)
+            onDispose { session.detachDanmaku(danmakuRenderer) }
         }
 
         // 播放信息与实时网速
