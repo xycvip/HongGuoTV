@@ -1641,6 +1641,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         danmakuSpeed = library.danmakuSpeed,
         danmakuRows = library.danmakuRows,
         danmakuRendererMode = library.danmakuRendererMode,
+        danmakuFrameRateMode = library.danmakuFrameRateMode,
         danmakuColor = extras.danmakuColorMode,
         blockedWords = extras.blockedWords.sorted(),
         startupAutoplay = extras.startupAutoplay,
@@ -1691,6 +1692,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         library.danmakuRendererMode = value.coerceIn(0, 2)
         touchSettings()
         toast("弹幕渲染方式 · " + listOf("自动（兼容优先）", "普通 View（实验）", "SurfaceView（原版）")[library.danmakuRendererMode])
+    }
+
+    fun setDanmakuFrameRateMode(value: Int) {
+        library.danmakuFrameRateMode = value.coerceIn(0, 1)
+        touchSettings()
+        toast(if (library.danmakuFrameRateMode == 1) "弹幕已切换为逐帧绘制" else "弹幕已切换为省资源模式（约30fps）")
     }
 
     fun setShowClock(value: Boolean) {
