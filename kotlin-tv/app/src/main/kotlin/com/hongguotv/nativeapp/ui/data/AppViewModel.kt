@@ -1688,9 +1688,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setDanmakuRendererMode(value: Int) {
-        library.danmakuRendererMode = value.coerceIn(0, 2)
+        library.danmakuRendererMode = value.coerceIn(0, 1)
         touchSettings()
-        toast("弹幕渲染方式 · " + listOf("自动（兼容优先）", "普通 View（实验）", "SurfaceView（原版）")[library.danmakuRendererMode])
+        toast("弹幕渲染方式 · " + listOf("SurfaceView（默认）", "普通 View（实验）")[library.danmakuRendererMode])
     }
 
     fun setShowClock(value: Boolean) {
