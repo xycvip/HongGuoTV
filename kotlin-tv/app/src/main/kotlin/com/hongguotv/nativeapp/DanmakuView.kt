@@ -45,6 +45,7 @@ class DanmakuView(
     context: Context,
     textSizeSp: Float = 20f,
     crossMs: Long = 9_000L,
+    frameRateMode: Int = 0,
 ) :
     SurfaceView(context), SurfaceHolder.Callback, DanmakuRenderer {
     private data class Scheduled(
@@ -127,6 +128,7 @@ class DanmakuView(
     /** 当前这一集实际用到几条轨道；清屏只清到这里，比整块 lanes 省很多。 */
     private var contentRows = 0
     private var frameTick = 0L
+    private var frameRateModeValue = frameRateMode.coerceIn(0, 1)
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             frameScheduled = false
@@ -150,8 +152,9 @@ class DanmakuView(
                     lastPumpAt = tick
                     needMore(now)
                 }
-                // 固定隔一个 VSync 绘制一次：60Hz 屏幕约30fps，120Hz 屏幕约60fps。
-                if ((frameTick++ and 1L) == 0L) drawFrame(now)
+                // 标准模式隔一个 VSync 绘制；高帧率模式每个 VSync 都绘制。
+                val shouldDraw = frameRateModeValue == 1 || (frameTick++ and 1L) == 0L
+                if (shouldDraw) drawFrame(now)
             }
             if (running && playbackActive && loader != null) scheduleFrame()
         }
