@@ -165,10 +165,14 @@ class DanmakuView(
                 val shouldDraw = if (deltaNanos == 0L) {
                     true
                 } else {
-                    // 按当前 VSync 间隔换算目标绘制周期，再用时间累积做分数帧率调度。
-                    // 例如 90Hz × 0.75 = 67.5fps，无需取整；长时间平均帧率保持目标比例。
+                    // 以屏幕实际刷新率计算目标周期，而不是用本次回调间隔。
+                    // 遇到丢帧/刷新率切换时仍按真实时间累积，90Hz × 0.75 可稳定得到 67.5fps。
                     frameRateAccumulatorNanos += deltaNanos.toDouble()
-                    val targetPeriodNanos = deltaNanos.toDouble() / drawRatio
+                    val refreshRate = display?.refreshRate
+                        ?.takeIf { it > 0f }
+                        ?: resources.displayMetrics.refreshRate.takeIf { it > 0f }
+                        ?: 60f
+                    val targetPeriodNanos = 1_000_000_000.0 / (refreshRate.toDouble() * drawRatio)
                     if (frameRateAccumulatorNanos >= targetPeriodNanos) {
                         frameRateAccumulatorNanos %= targetPeriodNanos
                         true
@@ -192,13 +196,21 @@ class DanmakuView(
     }
 
     // ---------------------------------------------------------------- surface 生命周期
+    /** Surface 中断/重建后丢弃旧 VSync 时间基准，避免把离屏时长算进帧率累积。 */
+    private fun resetFrameClock() {
+        lastVsyncNanos = 0L
+        frameRateAccumulatorNanos = 0.0
+    }
+
     override fun surfaceCreated(holder: SurfaceHolder) {
         surfaceAlive = true
+        resetFrameClock()
         updateMetrics()
         if (running && playbackActive && loader != null) scheduleFrame()
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        if (surfaceW != width || surfaceH != height) resetFrameClock()
         surfaceW = width
         surfaceH = height
         // 新 surface 内容是空的，下一帧必须重画一遍清屏。
@@ -209,12 +221,14 @@ class DanmakuView(
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         surfaceAlive = false
+        resetFrameClock()
         choreographer.removeFrameCallback(frameCallback)
         frameScheduled = false
     }
 
     override fun onDetachedFromWindow() {
         surfaceAlive = false
+        resetFrameClock()
         choreographer.removeFrameCallback(frameCallback)
         frameScheduled = false
         super.onDetachedFromWindow()
@@ -499,9 +513,7 @@ class DanmakuView(
         scheduleAnchorMs = 0L
         positionProvider = { 0L }
         contentRows = 0
-        lastVsyncNanos = 0L
-        lastVsyncNanos = 0L
-        frameRateAccumulatorNanos = 0.0
+        resetFrameClock()
         clearTextCache()
         choreographer.removeFrameCallback(frameCallback)
         frameScheduled = false
