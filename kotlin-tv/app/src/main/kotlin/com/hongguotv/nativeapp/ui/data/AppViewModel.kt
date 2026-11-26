@@ -1688,9 +1688,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setDanmakuFrameRateMode(value: Int) {
-        library.danmakuFrameRateMode = value.coerceIn(0, 1)
+        library.danmakuFrameRateMode = value.coerceIn(0, 2)
         touchSettings()
-        toast("弹幕帧率 · " + listOf("标准（隔帧）", "高帧率（逐帧）")[library.danmakuFrameRateMode])
+        toast("弹幕帧率 · " + listOf("标准", "高帧率", "超帧率")[library.danmakuFrameRateMode])
     }
 
     fun setShowClock(value: Boolean) {
