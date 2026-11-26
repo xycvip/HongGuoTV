@@ -358,7 +358,26 @@ class Library(context: Context) {
         ))
     }
 
-    /** Close and wait for queued library writes before an all-data reset removes storage. */
+    /**
+     * Permanently stop this process-owned persistence pair before destructive storage reset.
+     * The loader is stopped first because it can still migrate cache data directly; only after
+     * it exits are both serial writers closed and drained. A timeout means callers MUST NOT
+     * delete preferences, because an in-flight commit could otherwise recreate cleared data.
+     */
+    fun shutdownAndAwait(timeoutSeconds: Long = 30): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
+        close()
+        if (!loader.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)) return false
+
+        writes.close()
+        homeWrites.close()
+        val remainingWrites = (deadline - System.nanoTime()).coerceAtLeast(0L)
+        if (!writes.awaitClosed(remainingWrites, TimeUnit.NANOSECONDS)) return false
+        val remainingHomes = (deadline - System.nanoTime()).coerceAtLeast(0L)
+        return homeWrites.awaitClosed(remainingHomes, TimeUnit.NANOSECONDS)
+    }
+
+    /** Wait for currently queued writes without permanently shutting down process queues. */
     fun closeAndAwait(timeoutSeconds: Long = 15): Boolean {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
         close()
