@@ -256,10 +256,6 @@ class Library(context: Context) {
     var danmakuRendererMode: Int
         get() = prefs.getInt("danmakuRendererMode", 0).coerceIn(0, 2)
         set(value) { prefs.edit().putInt("danmakuRendererMode", value.coerceIn(0, 2)).apply() }
-    /** 0=约30fps省资源，1=每个屏幕 VSync 都绘制。默认逐帧，优先改善移动清晰度。 */
-    var danmakuFrameRateMode: Int
-        get() = prefs.getInt("danmakuFrameRateMode", 1).coerceIn(0, 1)
-        set(value) { prefs.edit().putInt("danmakuFrameRateMode", value.coerceIn(0, 1)).apply() }
     var playbackSpeed: Float
         get() = state().settings.speed
         set(value) { val next = PlaybackSpeed.normalize(value); if (next != playbackSpeed) { state().settings = state().settings.copy(speed = next); put("playbackSpeed", next) } }
