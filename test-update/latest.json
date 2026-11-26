@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "bd3224c12eab660c53537711a82b89755ccd5d53",
-  "versionCode": 114,
-  "versionName": "0.0.114",
+  "sourceCommit": "f4ca468c45b4551c99e9690c714163d379b9b434",
+  "versionCode": 115,
+  "versionName": "0.0.115",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.114",
+  "tag": "hongguotv-bate-v0.0.115",
   "apk": {
-    "name": "HongguoTV-0.0.114.apk",
-    "size": 5738902,
-    "sha256": "a81714ce58587382578786df553bd3815a593af45e482ae4ca1a5f46f55ac330",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.114/HongguoTV-0.0.114.apk"
+    "name": "HongguoTV-0.0.115.apk",
+    "size": 5771670,
+    "sha256": "f03ec886750a00c4cbc63d7912d265dfbb8bddd0ffb1f091d19e900002152401",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.115/HongguoTV-0.0.115.apk"
   },
-  "notes": "【其他功能与问题修复】\n- Fix update dialog Compose compilation errors\n- Keep full home hot shelves when selecting hero items\n- Route first home shelf upward focus to hero browse anchor\n- Allow explicit upward focus target for resume cards\n- Clean update dialog scroll imports\n- Fix TV remote scrolling in update notes\n- Clarify system-level data reset setting\n- Use supported display refresh-rate fallback\n- Clarify full app-data reset confirmation\n- Restart safely if system data reset cannot proceed\n- Use system app-data reset for full clear\n- Fix danmaku VSync lifecycle and fractional pacing\n- Fix danmaku frame rate mode reference\n- Fix update download cancellation race (#26)\n- Replace danmaku renderer toggle with three frame rate levels (#27)"
+  "notes": "【界面与交互】\n- 精简首页大海报设置说明\n- 简化弹幕帧率设置说明\n【其他功能与问题修复】\n- Add HeroSource, ActorSheet, ActorRankScreen and ImageUrls\n- Add actor profile sheet, actor ranking board and rework rank page\n- Restore home hero when later-page candidates are unavailable"
 }
