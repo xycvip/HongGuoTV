@@ -236,12 +236,20 @@ class SmartDns : Dns {
         private const val QUERY_TIMEOUT_MS = 800
         private const val CACHE_TTL_MS = 5 * 60 * 1000L
 
-        private val resolver = java.util.concurrent.Executors.newFixedThreadPool(4) { runnable ->
+        // Process-wide DNS workers are shared by every Activity/ViewModel. Let idle
+        // workers time out instead of retaining four thread stacks for the whole process.
+        private val resolver = java.util.concurrent.ThreadPoolExecutor(
+            4,
+            4,
+            30,
+            TimeUnit.SECONDS,
+            java.util.concurrent.LinkedBlockingQueue(),
+        ) { runnable ->
             Thread(runnable, "hongguo-dns").apply {
                 isDaemon = true
                 priority = Thread.NORM_PRIORITY
             }
-        }
+        }.apply { allowCoreThreadTimeOut(true) }
     }
 }
 
