@@ -106,6 +106,7 @@ fun TopBar(
     // 这样做既满足「不自动跳 logo」，又保留了主动可达。
     var logoReachable by remember { mutableStateOf(false) }
     val logoFocus = remember { FocusRequester() }
+    var logoWasFocused by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     fun reachLogo() {
         if (logoReachable) return
@@ -157,8 +158,13 @@ fun TopBar(
                     .focusRequester(logoFocus)
                     .focusProperties { canFocus = logoReachable }
                     .onFocusChanged { state ->
-                        // 光标离开后立刻收起入口，避免下一次几何搜索又落到 logo 上。
-                        if (!state.isFocused && logoReachable) logoReachable = false
+                        if (state.isFocused) {
+                            logoWasFocused = true
+                        } else if (logoWasFocused) {
+                            // 只有确实获得过焦点后再离开，才关闭临时入口；忽略初始 false 回调。
+                            logoWasFocused = false
+                            logoReachable = false
+                        }
                     },
                 status = apiStatus,
                 onClick = onApiStatus,
@@ -204,7 +210,11 @@ fun TopBar(
             Spacer(Modifier.width(d(10)))
             RoundIconButton(Icons.Rounded.Search, onSearch, size = d(40), iconSize = d(18), contentDescription = "搜索")
             Spacer(Modifier.width(d(14)))
-            AccountChip(accountName, onAccount)
+            AccountChip(
+                accountName,
+                onAccount,
+                focusRequester = tabFocus[Tab.ACCOUNT],
+            )
         }
     }
 }
@@ -318,11 +328,16 @@ private fun CastEntry(onClick: () -> Unit) {
 }
 
 @Composable
-private fun AccountChip(name: String?, onClick: () -> Unit) {
+private fun AccountChip(
+    name: String?,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     Row(
         Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clip(RoundedCornerShape(d(999)))
             .background(if (focused) Color(0x1FFFFFFF) else Color(0x0DFFFFFF))
             .border(d(1f), if (focused) Rouge.Bright else Ink.LineSoft, RoundedCornerShape(d(999)))
