@@ -636,6 +636,7 @@ private fun MainTabContent(
             onVerify = vm::verifyLoginCode,
             onResetPhone = vm::resetLoginPhone,
             entryFocus = accountEntry,
+            upFocus = upFocus,
         )
     }
 }
