@@ -114,7 +114,7 @@ fun HomeScreen(
     // 正在聚焦的按钮被销毁，焦点就会掉到顶栏。
     var heroFocused by remember { mutableStateOf(false) }
     // 主视觉自动轮播：7 秒换一张，用户从详情返回时仍停留在原来的位置。
-    LaunchedEffect(hero.map { it.id }, heroFocused) {
+    LaunchedEffect(hero.map { it.id }, heroFocused, state.heroIndex) {
         if (hero.size <= 1 || heroFocused) return@LaunchedEffect
         while (true) {
             delay(7000)
