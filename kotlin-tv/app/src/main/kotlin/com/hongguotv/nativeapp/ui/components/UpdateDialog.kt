@@ -30,7 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusable
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -219,6 +219,7 @@ private fun MetaChip(text: String) {
 private fun NotesPanel(update: AppUpdate) {
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
+    val scrollStep = d(72).value.toInt()
     Column(
         Modifier
             .fillMaxWidth()
@@ -244,13 +245,13 @@ private fun NotesPanel(update: AppUpdate) {
                         when (event.key) {
                             Key.DirectionDown -> {
                                 if (scrollState.maxValue > 0 && scrollState.value < scrollState.maxValue) {
-                                    scope.launch { scrollState.animateScrollTo((scrollState.value + d(72).value.toInt()).coerceAtMost(scrollState.maxValue)) }
+                                    scope.launch { scrollState.animateScrollTo((scrollState.value + scrollStep).coerceAtMost(scrollState.maxValue)) }
                                     true
                                 } else false
                             }
                             Key.DirectionUp -> {
                                 if (scrollState.value > 0) {
-                                    scope.launch { scrollState.animateScrollTo((scrollState.value - d(72).value.toInt()).coerceAtLeast(0)) }
+                                    scope.launch { scrollState.animateScrollTo((scrollState.value - scrollStep).coerceAtLeast(0)) }
                                     true
                                 } else false
                             }
