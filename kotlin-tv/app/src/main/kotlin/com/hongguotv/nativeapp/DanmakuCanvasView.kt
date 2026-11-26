@@ -276,7 +276,8 @@ class DanmakuCanvasView(context: Context, textSizeSp: Float = 20f, crossMs: Long
         val clipBottom = (contentRows.coerceAtLeast(1) * lineHeightPx).coerceAtMost(surfaceH.toFloat())
         canvas.save()
         canvas.clipRect(0f, 0f, surfaceW.toFloat(), clipBottom)
-        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        // 普通 View 由系统在失效区域重绘窗口内容；不要对窗口 Canvas 执行 CLEAR，
+        // 否则某些硬件加速设备可能把下层视频 Surface 一并清透。
         if (end <= first) {
             canvas.restore()
             return
