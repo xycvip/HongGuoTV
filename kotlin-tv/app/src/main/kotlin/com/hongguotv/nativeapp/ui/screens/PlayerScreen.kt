@@ -337,12 +337,14 @@ fun PlayerScreen(
             onRelease = { view -> session.detachPlayerView(view, 0) },
             modifier = Modifier.fillMaxSize(),
         )
-        AndroidView(
-            factory = { ctx -> buildVideoLayer(ctx, 1) },
-            update = { view -> view.resizeMode = session.frameResizeMode },
-            onRelease = { view -> session.detachPlayerView(view, 1) },
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (session.dualVideoLayers) {
+            AndroidView(
+                factory = { ctx -> buildVideoLayer(ctx, 1) },
+                update = { view -> view.resizeMode = session.frameResizeMode },
+                onRelease = { view -> session.detachPlayerView(view, 1) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         // 手势覆盖层：放在两层视频之上，切集换层时点击/双击行为保持稳定。
         Box(
             Modifier
