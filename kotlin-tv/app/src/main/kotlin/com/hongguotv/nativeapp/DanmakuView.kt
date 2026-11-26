@@ -128,7 +128,9 @@ class DanmakuView(
     /** 当前这一集实际用到几条轨道；清屏只清到这里，比整块 lanes 省很多。 */
     private var contentRows = 0
     private var frameTick = 0L
-    private var frameRateModeValue = frameRateMode.coerceIn(0, 1)
+    private var frameRateModeValue = frameRateMode.coerceIn(0, 2)
+    private var lastVsyncNanos = 0L
+    private var highRateAccumulatorNanos = 0.0
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             frameScheduled = false
@@ -152,8 +154,24 @@ class DanmakuView(
                     lastPumpAt = tick
                     needMore(now)
                 }
-                // 标准模式隔一个 VSync 绘制；高帧率模式每个 VSync 都绘制。
-                val shouldDraw = frameRateModeValue == 1 || (frameTick++ and 1L) == 0L
+                val deltaNanos = if (lastVsyncNanos == 0L) 0L else (frameTimeNanos - lastVsyncNanos).coerceAtLeast(0L)
+                lastVsyncNanos = frameTimeNanos
+                val shouldDraw = when (frameRateModeValue) {
+                    0 -> (frameTick++ and 1L) == 0L // 标准：约为屏幕刷新率的一半
+                    1 -> { // 高帧率：目标约60fps；高刷新率屏幕按时间累积节奏抽帧
+                        if (deltaNanos == 0L) {
+                            true
+                        } else {
+                            highRateAccumulatorNanos += deltaNanos.toDouble()
+                            val targetPeriod = 1_000_000_000.0 / 60.0
+                            if (highRateAccumulatorNanos >= targetPeriod) {
+                                highRateAccumulatorNanos %= targetPeriod
+                                true
+                            } else false
+                        }
+                    }
+                    else -> true // 超帧率：每个屏幕 VSync 都绘制，受屏幕刷新率上限限制
+                }
                 if (shouldDraw) drawFrame(now)
             }
             if (running && playbackActive && loader != null) scheduleFrame()
@@ -475,6 +493,8 @@ class DanmakuView(
         positionProvider = { 0L }
         contentRows = 0
         frameTick = 0L
+        lastVsyncNanos = 0L
+        highRateAccumulatorNanos = 0.0
         clearTextCache()
         choreographer.removeFrameCallback(frameCallback)
         frameScheduled = false
