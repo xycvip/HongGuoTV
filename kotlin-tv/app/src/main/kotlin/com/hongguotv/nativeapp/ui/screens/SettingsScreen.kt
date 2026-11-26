@@ -462,6 +462,26 @@ private fun androidx.compose.foundation.lazy.LazyListScope.danmakuPanel(
     }
     item {
         SettingRow(
+            title = "弹幕渲染方式",
+            description = "普通 View 为实验方案；切换后下次进入播放页生效，A/B 播放器共用同一渲染层",
+            value = listOf("自动（兼容优先）", "普通 View（实验）", "SurfaceView（原版）").getOrElse(snapshot.danmakuRendererMode.coerceIn(0, 2)) { "自动（兼容优先）" },
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "弹幕渲染方式",
+                        listOf(
+                            Choice("0", "自动（兼容优先）"),
+                            Choice("1", "普通 View（实验）"),
+                            Choice("2", "SurfaceView（原版）"),
+                        ),
+                        snapshot.danmakuRendererMode.toString(),
+                    ) { vm.setDanmakuRendererMode(it.toIntOrNull() ?: 0) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
             title = "不透明度",
             description = "弹幕压在画面上，太高会挡字幕",
             value = "${snapshot.danmakuOpacity}%",
