@@ -92,6 +92,36 @@ class DanmakuLoaderTest {
         assertTrue(loader.between(5_000, 5_000).isEmpty())
     }
 
+
+    @Test fun cancelledLoaderDoesNotFetchAgain() {
+        val (loader, requested) = loader(180_000, leadMs = 0) { start -> window(start, start + 30_000, emptyList()) }
+        loader.loadUpTo(0)
+        val count = requested.size
+        loader.cancel()
+        loader.loadUpTo(90_000)
+        assertEquals(count, requested.size)
+    }
+
+    @Test fun backwardSeekReopensEarlierWindows() {
+        val (loader, requested) = loader(900_000, leadMs = 0) { start -> window(start, start + 30_000, listOf("弹幕$start")) }
+        loader.loadUpTo(300_000)
+        assertEquals(listOf(300_000L), requested)
+        loader.loadUpTo(0)
+        assertEquals(listOf(300_000L, 0L), requested)
+        assertEquals(listOf("弹幕0"), loader.between(0, 1_000).map { it.text })
+    }
+
+    @Test fun bufferedCommentsHaveHardLimit() {
+        val (loader, _) = loader(180_000, leadMs = 0) { start ->
+            DanmakuWindow(
+                comments = (0 until 5_000).map { index -> Danmaku(id = "$start-$index", offsetMs = start + index, text = "弹幕$index") },
+                nextStartMs = start + 30_000,
+            )
+        }
+        loader.loadUpTo(0)
+        assertEquals(4_000, loader.buffered)
+    }
+
     @Test fun unknownDurationWaitsForMetadata() {
         val (loader, requested) = loader(0) { start -> window(start, start + 30_000, emptyList()) }
         loader.loadUpTo(0)
