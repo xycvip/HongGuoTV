@@ -170,7 +170,6 @@ class DanmakuView(
                     frameRateAccumulatorNanos += deltaNanos.toDouble()
                     val refreshRate = display?.refreshRate
                         ?.takeIf { it > 0f }
-                        ?: resources.displayMetrics.refreshRate.takeIf { it > 0f }
                         ?: 60f
                     val targetPeriodNanos = 1_000_000_000.0 / (refreshRate.toDouble() * drawRatio)
                     if (frameRateAccumulatorNanos >= targetPeriodNanos) {
