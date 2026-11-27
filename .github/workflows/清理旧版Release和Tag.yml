@@ -31,7 +31,6 @@ jobs:
           echo "获取所有已发布 Release（包含正式版和预发布版）..."
           releases="$(gh api --paginate "repos/$REPO/releases?per_page=100" | jq -s 'add')"
 
-          # 过滤草稿，按发布时间从新到旧排序，保留最近 3 个。
           old_releases="$(jq -c '
             [ .[] | select(.draft == false and .published_at != null) ]
             | sort_by(.published_at)
@@ -48,24 +47,31 @@ jobs:
           echo "将保留最近 3 个 Release："
           jq -r '
             [ .[] | select(.draft == false and .published_at != null) ]
-            | sort_by(.published_at)
-            | reverse
-            | .[:3][]
-            | "保留: \(.tag_name) | \(.published_at)"
+            | sort_by(.published_at) | reverse | .[:3][]
+            | "保留: (.tag_name) | (.published_at)"
           ' <<< "$releases"
 
           echo "待清理的旧 Release："
-          jq -r '.[] | "删除: \(.tag_name) | \(.published_at)"' <<< "$old_releases"
+          jq -r '.[] | "删除: (.tag_name) | (.published_at)"' <<< "$old_releases"
 
           if [[ "$MODE" != "delete" ]]; then
-            echo "预览模式：没有删除任何 Release 或 Tag。重新运行并选择 delete 才会执行清理。"
+            echo "预览模式：没有删除任何 Release 或 Tag。"
             exit 0
           fi
 
-          while IFS= read -r tag; do
-            [[ -n "$tag" ]] || continue
-            echo "删除 Release 及其关联 Tag: $tag"
-            gh release delete "$tag" --yes --cleanup-tag
-          done < <(jq -r '.[].tag_name' <<< "$old_releases")
+          while IFS=$'\t' read -r release_id tag; do
+            [[ -n "$release_id" && -n "$tag" ]] || continue
+            echo "删除 Release: $tag (ID: $release_id)"
+            gh api --method DELETE "repos/$REPO/releases/$release_id"
+
+            echo "删除关联 Tag: $tag"
+            encoded_tag="$(jq -rn --arg value "$tag" '$value | @uri')"
+            if gh api --method DELETE "repos/$REPO/git/refs/tags/$encoded_tag"; then
+              echo "Tag 已删除: $tag"
+            else
+              echo "::warning::Tag 删除失败或不存在: $tag"
+              exit 1
+            fi
+          done < <(jq -r '.[] | [.id, .tag_name] | @tsv' <<< "$old_releases")
 
           echo "清理完成。最近 3 个已发布 Release 保留。"
