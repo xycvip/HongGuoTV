@@ -1,0 +1,71 @@
+name: 清理旧版 Release 和 Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 执行方式（默认预览，不删除）
+        required: true
+        type: choice
+        options:
+          - preview
+          - delete
+        default: preview
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 清理旧 Release 和对应 Tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          MODE: ${{ inputs.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "获取所有已发布 Release（包含正式版和预发布版）..."
+          releases="$(gh api --paginate "repos/$REPO/releases?per_page=100" | jq -s 'add')"
+
+          # 过滤草稿，按发布时间从新到旧排序，保留最近 3 个。
+          old_releases="$(jq -c '
+            [ .[] | select(.draft == false and .published_at != null) ]
+            | sort_by(.published_at)
+            | reverse
+            | .[3:]
+          ' <<< "$releases")"
+
+          count="$(jq 'length' <<< "$old_releases")"
+          if [[ "$count" -eq 0 ]]; then
+            echo "当前已发布 Release 不超过 3 个，无需清理。"
+            exit 0
+          fi
+
+          echo "将保留最近 3 个 Release："
+          jq -r '
+            [ .[] | select(.draft == false and .published_at != null) ]
+            | sort_by(.published_at)
+            | reverse
+            | .[:3][]
+            | "保留: \(.tag_name) | \(.published_at)"
+          ' <<< "$releases"
+
+          echo "待清理的旧 Release："
+          jq -r '.[] | "删除: \(.tag_name) | \(.published_at)"' <<< "$old_releases"
+
+          if [[ "$MODE" != "delete" ]]; then
+            echo "预览模式：没有删除任何 Release 或 Tag。重新运行并选择 delete 才会执行清理。"
+            exit 0
+          fi
+
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            echo "删除 Release 及其关联 Tag: $tag"
+            gh release delete "$tag" --yes --cleanup-tag
+          done < <(jq -r '.[].tag_name' <<< "$old_releases")
+
+          echo "清理完成。最近 3 个已发布 Release 保留。"
