@@ -2280,62 +2280,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         check(enabled == setOf(variant)) { "桌面入口状态异常：${enabled.joinToString()}" }
     }
 
-    /**
-     * 把四个 alias 全部真实翻转一遍，逼桌面重建所有 launcher 条目。
-     *
-     * 桌面缓存的 ComponentName App 侧读不到。重装后系统 alias 状态和偏好可能恰好一致
-     * （都是 i），常规自检会直接 return，但桌面缓存还指着旧变体（如 K），点图标就
-     * ActivityNotFound。只要四个 alias 都真实变更过，缓存的那个必然收到一次 enable，
-     * 桌面据此重建条目 —— 效果等同于用户手动「选一次桌面上显示的图标」。
-     *
-     * 中途任何一步失败都要收敛回单一入口，绝不能留下「四个都 enabled」。
-     */
-    private fun bounceAllLauncherAliases() {
-        val app = getApplication<Application>()
-        val pm = app.packageManager
-        val prefix = ComposeActivity::class.java.name.removeSuffix("ComposeActivity")
-        val components = APP_ICON_ALIASES.mapValues { (_, alias) -> ComponentName(app, prefix + alias) }
-        fun applyAll(state: Int) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                pm.setComponentEnabledSettings(components.values.map {
-                    PackageManager.ComponentEnabledSetting(it, state, PackageManager.DONT_KILL_APP)
-                })
-            } else {
-                components.values.forEach {
-                    pm.setComponentEnabledSetting(it, state, PackageManager.DONT_KILL_APP)
-                }
-            }
-        }
-        applyAll(PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
-        applyAll(PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
-    }
-
     /** Activity 能启动时自检一次，纠正偏好与系统实际 alias 状态不一致的情况。 */
     private fun ensureLauncherAliasConsistency() {
         val app = getApplication<Application>()
         val pm = app.packageManager
         val prefix = ComposeActivity::class.java.name.removeSuffix("ComposeActivity")
-        val preferred = appIconVariant()
-
-        // 每个版本首次启动强制全量翻转一次，覆盖「系统状态与偏好一致、但桌面缓存过期」的情形。
-        // 之后日常启动是纯读，零开销。
-        val touchedKey = "launcherAliasTouchedVersion"
-        val installed = BuildConfig.VERSION_CODE.toLong()
-        val needBounce = runCatching { prefs.getLong(touchedKey, -1L) }.getOrDefault(-1L) != installed
-        if (needBounce) {
-            val bounced = runCatching {
-                bounceAllLauncherAliases()
-                applyLauncherAliasVariant(preferred)
-                prefs.edit().putLong(touchedKey, installed).commit()
-            }.isSuccess
-            if (!bounced) runCatching { applyLauncherAliasVariant(preferred) }
-            return
-        }
-
         val active = APP_ICON_ALIASES.mapNotNull { (key, alias) ->
             val component = ComponentName(app, prefix + alias)
             key.takeIf { runCatching { launcherAliasEnabled(pm, component) }.getOrDefault(false) }
         }.toSet()
+        val preferred = appIconVariant()
         if (active == setOf(preferred)) return
 
         val recovered = runCatching { applyLauncherAliasVariant(preferred); preferred }.getOrElse {
