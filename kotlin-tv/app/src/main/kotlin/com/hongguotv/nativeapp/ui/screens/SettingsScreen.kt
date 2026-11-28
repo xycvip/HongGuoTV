@@ -4,8 +4,8 @@ package com.hongguotv.nativeapp.ui.screens
 import android.content.Context
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
+import android.content.Intent
+import android.net.Uri
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
@@ -17,7 +17,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -40,7 +39,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Gamepad
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
@@ -68,7 +66,6 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -78,7 +75,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -89,7 +85,6 @@ import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import com.hongguotv.core.DanmakuPrefs
 import com.hongguotv.core.DnsProvider
 import com.hongguotv.core.DnsSettings
-import com.hongguotv.nativeapp.R
 import com.hongguotv.core.PlaybackQuality
 import com.hongguotv.core.PlaybackSpeed
 import com.hongguotv.core.VideoFrameMode
@@ -99,6 +94,8 @@ import com.hongguotv.nativeapp.ui.components.AppDialog
 import com.hongguotv.nativeapp.ui.components.ButtonTone
 import com.hongguotv.nativeapp.ui.components.Choice
 import com.hongguotv.nativeapp.ui.components.ChoiceDialog
+import com.hongguotv.nativeapp.ui.components.ComponentLicenseDialog
+import com.hongguotv.nativeapp.ui.components.SoftwareInfoDialog
 import com.hongguotv.nativeapp.ui.components.TvButton
 import com.hongguotv.nativeapp.ui.data.ApiStatusState
 import com.hongguotv.nativeapp.ui.data.AppViewModel
@@ -118,7 +115,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 private enum class SettingsSection(val label: String, val icon: ImageVector) {
     PLAYBACK("播放", Icons.Rounded.PlayCircle),
     DANMAKU("弹幕", Icons.Rounded.Subtitles),
-    APPEARANCE("画面", Icons.Rounded.Palette),
+    APPEARANCE("显示", Icons.Rounded.Palette),
     CONTROL("按键", Icons.Rounded.Gamepad),
     NETWORK("网络", Icons.Rounded.Wifi),
     DATA("数据", Icons.Rounded.Storage),
@@ -162,8 +159,9 @@ fun SettingsScreen(
     var choice by remember { mutableStateOf<ChoiceRequest?>(null) }
     var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
     var blockEditor by remember { mutableStateOf(false) }
-    var iconPicker by remember { mutableStateOf(false) }
     var customDns by remember { mutableStateOf(false) }
+    var showComponents by remember { mutableStateOf(false) }
+    var showSoftwareInfo by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
     // 右侧内容区焦点锚点：分类导轨按「右/下」时精确落到内容区首个可聚焦项；
@@ -226,7 +224,7 @@ fun SettingsScreen(
                 when (section) {
                     SettingsSection.PLAYBACK -> playbackPanel(snapshot, vm) { choice = it }
                     SettingsSection.DANMAKU -> danmakuPanel(snapshot, vm, { choice = it }, { blockEditor = true }, { confirm = it })
-                    SettingsSection.APPEARANCE -> appearancePanel(snapshot, vm, { iconPicker = true }) { choice = it }
+                    SettingsSection.APPEARANCE -> appearancePanel(snapshot, vm) { choice = it }
                     SettingsSection.CONTROL -> controlPanel(snapshot, vm) { choice = it }
                     SettingsSection.NETWORK -> networkPanel(
                         apiStatus = apiStatus,
@@ -238,7 +236,7 @@ fun SettingsScreen(
                         onCustomDns = { customDns = true },
                     )
                     SettingsSection.DATA -> dataPanel(vm, { confirm = it }, { message = it }, { diagnosticsText = PlaybackDiagnostics.readAll(); showPlaybackDiagnostics = true })
-                    SettingsSection.ABOUT -> aboutPanel(versionName, vm)
+                    SettingsSection.ABOUT -> aboutPanel(versionName, vm, { showSoftwareInfo = true }) { showComponents = true }
                 }
             }
         }
@@ -274,13 +272,6 @@ fun SettingsScreen(
             onAdd = { vm.addBlockedWord(it) },
             onRemove = { vm.removeBlockedWord(it) },
             onDismiss = { blockEditor = false },
-        )
-    }
-    if (iconPicker) {
-        AppIconDialog(
-            current = snapshot.appIconVariant,
-            onPick = { vm.setAppIconVariant(it) },
-            onDismiss = { iconPicker = false },
         )
     }
     if (customDns) {
@@ -331,6 +322,13 @@ fun SettingsScreen(
         }
     }
 
+    if (showSoftwareInfo) {
+        SoftwareInfoDialog(onDismiss = { showSoftwareInfo = false })
+    }
+    if (showComponents) {
+        ComponentLicenseDialog(onDismiss = { showComponents = false })
+    }
+
     message?.let { text ->
         AppDialog(
             title = "提示",
@@ -366,6 +364,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.playbackPanel(
     }
     item {
         SettingRow(
+            title = "自动降低分辨率",
+            description = "可能引起绿屏的视频，自动降低分辨率",
+            toggle = snapshot.autoDowngradeNonAligned,
+            onToggle = { vm.setAutoDowngradeNonAligned(it) },
+        )
+    }
+    item {
+        SettingRow(
             title = "默认倍速",
             description = "不影响已开始的播放",
             value = PlaybackSpeed.label(snapshot.speed),
@@ -381,7 +387,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.playbackPanel(
     item {
         SettingRow(
             title = "启动时播放推荐",
-            description = "打开应用后直接播放首页主推的第一部",
+            description = "打开应用进入选剧画面，上下键切剧、确定键开始播放，返回键回首页",
             toggle = snapshot.startupAutoplay,
             onToggle = { vm.setStartupAutoplay(it) },
         )
@@ -408,22 +414,6 @@ private fun androidx.compose.foundation.lazy.LazyListScope.playbackPanel(
             description = "本季结束后继续播放下一季",
             toggle = snapshot.autoSeason,
             onToggle = { vm.setAutoSeason(it) },
-        )
-    }
-    item {
-        SettingRow(
-            title = "画面模式",
-            description = "完整画面保留字幕，铺满模式填满屏幕",
-            value = VideoFrameMode.fromStored(snapshot.frameMode).label,
-            onClick = {
-                onChoice(
-                    ChoiceRequest(
-                        "画面模式",
-                        VideoFrameMode.entries.map { Choice(it.name, it.label) },
-                        snapshot.frameMode,
-                    ) { vm.setFrameMode(VideoFrameMode.fromStored(it)) },
-                )
-            },
         )
     }
     item {
@@ -464,7 +454,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.danmakuPanel(
     item {
         SettingRow(
             title = "弹幕帧率",
-            description = "控制弹幕流畅度，帧率越高越流畅，性能消耗也越大。",
+            description = "控制弹幕流畅度，帧率越高越流畅，性能消耗也越大",
             value = listOf("标准", "高帧率", "超帧率")[snapshot.danmakuFrameRateMode.coerceIn(0, 2)],
             onClick = {
                 onChoice(
@@ -479,6 +469,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.danmakuPanel(
                     ) { vm.setDanmakuFrameRateMode(it.toIntOrNull() ?: 0) },
                 )
             },
+        )
+    }
+    item {
+        SettingRow(
+            title = "合并重复弹幕",
+            description = "十秒内重复的弹幕只显示一条",
+            toggle = snapshot.danmakuMergeRepeat,
+            onToggle = { vm.setDanmakuMergeRepeat(it) },
         )
     }
 
@@ -593,22 +591,13 @@ private fun danmakuColorLabel(mode: Int): String = when (mode) {
     else -> DanmakuPrefsColor.names.getOrElse(mode - 2) { "默认" }
 }
 
-// ------------------------------------------------------------------ 画面
+// ------------------------------------------------------------------ 显示
 
 private fun androidx.compose.foundation.lazy.LazyListScope.appearancePanel(
     snapshot: SettingsSnapshot,
     vm: AppViewModel,
-    onIconPicker: () -> Unit,
     onChoice: (ChoiceRequest) -> Unit,
 ) {
-    item {
-        SettingRow(
-            title = "应用图标",
-            description = "桌面图标与电视横幅一起换，共四款线稿",
-            value = appIconVariantLabel(snapshot.appIconVariant),
-            onClick = onIconPicker,
-        )
-    }
     item {
         SettingRow(
             title = "海报列数",
@@ -628,7 +617,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.appearancePanel(
     item {
         SettingRow(
             title = "首页大海报",
-            description = "选择首页大海报的内容类型。",
+            description = "选择首页大海报的内容类型",
             value = HeroSource.fromStored(snapshot.heroSource).label,
             onClick = {
                 onChoice(
@@ -644,15 +633,36 @@ private fun androidx.compose.foundation.lazy.LazyListScope.appearancePanel(
     item {
         SettingRow(
             title = "播放信息",
-            description = "播放页叠加分辨率与码率",
+            description = "播放页叠加分辨率、码率或全屏诊断",
             value = videoInfoLabel(snapshot.videoInfoMode),
             onClick = {
                 onChoice(
                     ChoiceRequest(
                         "播放信息",
-                        listOf(Choice("0", "关闭"), Choice("1", "简要（分辨率）"), Choice("2", "详细（码率与帧率）")),
+                        listOf(
+                            Choice("0", "关闭"),
+                            Choice("1", "简要（分辨率）"),
+                            Choice("2", "详细（码率与帧率）"),
+                            Choice("3", "调试模式（全屏诊断）"),
+                        ),
                         snapshot.videoInfoMode.toString(),
                     ) { vm.setVideoInfoMode(it.toIntOrNull() ?: 0) },
+                )
+            },
+        )
+    }
+    item {
+        SettingRow(
+            title = "画面模式",
+            description = "完整画面保留字幕，铺满模式填满屏幕",
+            value = VideoFrameMode.fromStored(snapshot.frameMode).label,
+            onClick = {
+                onChoice(
+                    ChoiceRequest(
+                        "画面模式",
+                        VideoFrameMode.entries.map { Choice(it.name, it.label) },
+                        snapshot.frameMode,
+                    ) { vm.setFrameMode(VideoFrameMode.fromStored(it)) },
                 )
             },
         )
@@ -805,51 +815,28 @@ private fun androidx.compose.foundation.lazy.LazyListScope.networkPanel(
     item {
         SettingRow(
             title = "接口状态",
-            description = "首页、搜索、播放与联想四项接口的连通性",
+            description = "首页、搜索、播放与剧场四项接口的连通性",
             value = apiStatus.summary,
             onClick = onApiStatus,
         )
     }
     item {
         SettingRow(
-            title = "重新检测",
-            description = "立即对四项接口各发一次请求，只读公开数据",
-            value = if (apiStatus.running) "检测中…" else "检测",
-            onClick = { if (!apiStatus.running) vm.refreshApiStatus() },
+            title = "接口版本",
+            description = "点击检测是否有新版本",
+            value = script.manualHint ?: scriptVersionLabel(script),
+            onClick = { vm.checkScriptUpdateManually() },
         )
     }
-    item {
-        val context = LocalContext.current
-        InfoRow("当前网络", remember(context) { networkLabel(context) })
-    }
-    item {
-        InfoRow("数据脚本", scriptVersionLabel(script))
-    }
-    item {
-        InfoRow("脚本更新", scriptStatusLabel(script))
-    }
-    item { InfoRow("更新通道", "RedGuoAPI 发布通道 · 六条线路自动择优") }
 }
 
-/** 「2026-11-24 03:38 · 在线」这种一眼能看出跑的是哪一版。 */
+/** 「v1.0.0-20261128 · 在线 · a1b2c3d4」这种一眼能看出跑的是哪一版。 */
 private fun scriptVersionLabel(state: ScriptUpdateState): String {
     val version = state.version.ifBlank { "未知版本" }
     val source = if (state.fromUpdate) "在线" else "本地"
     val digest = state.digest.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
     return "$version · $source$digest"
 }
-
-/** 检查结果一句话：进行中 / 已下载待生效 / 失败原因 / 上次成功时间。 */
-private fun scriptStatusLabel(state: ScriptUpdateState): String = when {
-    state.checking -> "检查中…"
-    state.pendingVersion.isNotBlank() -> "已下载 ${state.pendingVersion}，稍后生效"
-    state.lastError != null -> "上次检查失败：${state.lastError}"
-    state.checkedAt > 0 -> "已是最新 · ${scriptClock(state.checkedAt)}"
-    else -> "启动后自动检查"
-}
-
-private fun scriptClock(at: Long): String =
-    java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(at))
 
 /** 自定义 DNS：常用地址一键填入，也可用系统输入法手输。 */
 @Composable
@@ -950,18 +937,6 @@ private fun DnsChip(text: String, onClick: () -> Unit) {
     }
 }
 
-private fun networkLabel(context: Context): String = runCatching {
-    val manager = context.getSystemService(ConnectivityManager::class.java) ?: return@runCatching "未知"
-    val network = manager.activeNetwork ?: return@runCatching "未连接"
-    val caps = manager.getNetworkCapabilities(network) ?: return@runCatching "未连接"
-    when {
-        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "有线网络"
-        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "无线网络"
-        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "移动网络"
-        else -> "其他网络"
-    }
-}.getOrDefault("未知")
-
 // ------------------------------------------------------------------ 数据
 
 private fun androidx.compose.foundation.lazy.LazyListScope.dataPanel(
@@ -1043,6 +1018,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dataPanel(
 private fun androidx.compose.foundation.lazy.LazyListScope.aboutPanel(
     versionName: String,
     vm: AppViewModel,
+    onSoftwareInfo: () -> Unit,
+    onComponents: () -> Unit,
 ) {
     item {
         SettingRow(
@@ -1053,9 +1030,38 @@ private fun androidx.compose.foundation.lazy.LazyListScope.aboutPanel(
         )
     }
     item { InfoRow("版本", versionName) }
-    item { InfoRow("内容来源", "红果短剧官方公开接口") }
-    item { InfoRow("本地数据", "收藏、历史与设置仅保存在本机，卸载即清除") }
-    item { InfoRow("开源许可", "GPL-3.0 · 界面基于 Jetpack Compose 重写") }
+    item {
+        SettingRow(
+            title = "软件说明",
+            description = "免责声明与使用须知",
+            onClick = onSoftwareInfo,
+        )
+    }
+    item {
+        SettingRow(
+            title = "组件列表",
+            description = "开源组件、版本与许可详情",
+            onClick = onComponents,
+        )
+    }
+    item {
+        val context = LocalContext.current
+        SettingRow(
+            title = "开源许可",
+            description = "GPL-3.0-only · 点击访问仓库",
+            value = "查看",
+            onClick = {
+                val url = "https://github.com/xycvip/HongGuoTV"
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val opened = runCatching { context.startActivity(intent) }.isSuccess
+                if (!opened) {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                    clipboard?.setPrimaryClip(ClipData.newPlainText("仓库地址", url))
+                    vm.toast("无法打开浏览器，仓库地址已复制")
+                }
+            },
+        )
+    }
 }
 
 // ------------------------------------------------------------------ 通用
@@ -1361,102 +1367,6 @@ private fun BlockedWordsDialog(
                                 Spacer(Modifier.weight(1f))
                                 TvButton(text = "移除", onClick = { onRemove(word) }, tone = ButtonTone.Ghost)
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ------------------------------------------------------------------ 应用图标
-
-private fun appIconVariantLabel(variant: String): String = when (variant) {
-    "h" -> "环刻"
-    "j" -> "光弧"
-    "k" -> "光圈"
-    else -> "玻璃窗"
-}
-
-private val appIconChoices = listOf(
-    Triple("i", "玻璃窗", "圆窗 · 一线反光"),
-    Triple("h", "环刻", "圆环 · 金弧"),
-    Triple("j", "光弧", "暗场一束光"),
-    Triple("k", "光圈", "六叶快门"),
-)
-
-@Composable
-private fun AppIconDialog(
-    current: String,
-    onPick: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    // 预览必须用原始 webp 位图：_safe 是 <inset> 容器 drawable，Compose 的 painterResource
-    // 只支持 VectorDrawable 与 PNG/JPG/WEBP，加载 <inset> 会抛 IllegalArgumentException 闪退。
-    // 桌面那份 inset 安全区（8dp）在这里改用 Modifier.padding 复现，视觉一致且不再崩溃。
-    val fgRes = mapOf(
-        "h" to R.drawable.ic_launcher_fg_h,
-        "i" to R.drawable.ic_launcher_fg_i,
-        "j" to R.drawable.ic_launcher_fg_j,
-        "k" to R.drawable.ic_launcher_fg_k,
-    )
-    AppDialog(
-        title = "应用图标",
-        message = "选中即生效，桌面图标与电视横幅一起更换",
-        confirmText = "完成",
-        dismissText = null,
-        onConfirm = onDismiss,
-        onDismiss = onDismiss,
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(d(14))) {
-            appIconChoices.chunked(2).forEach { rowItems ->
-                Row(horizontalArrangement = Arrangement.spacedBy(d(14))) {
-                    rowItems.forEach { (key, name, hint) ->
-                        val selected = key == current
-                        Column(
-                            Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(d(18)))
-                                .border(
-                                    d(if (selected) 1.6f else 1f),
-                                    if (selected) Gold.Core else Color(0x1FFFFFFF),
-                                    RoundedCornerShape(d(18)),
-                                )
-                                .background(if (selected) Color(0x14E7BE7C) else Color(0x0AFFFFFF))
-                                .clickable { onPick(key) }
-                                .padding(d(12)),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(d(92))
-                                    .clip(RoundedCornerShape(d(20)))
-                                    .background(Brush.verticalGradient(listOf(Color(0xFF131722), Color(0xFF04050A)))),
-                            ) {
-                                Image(
-                                    painter = painterResource(fgRes.getValue(key)),
-                                    contentDescription = name,
-                                    // 用 padding 复现 _safe 那份 8dp inset 安全区，保证预览与桌面裁切一致。
-                                    Modifier.fillMaxSize().padding(d(14)),
-                                )
-                                if (selected) {
-                                    Icon(
-                                        Icons.Rounded.Check,
-                                        contentDescription = null,
-                                        tint = Gold.Bright,
-                                        modifier = Modifier.align(Alignment.TopEnd).size(d(18)).padding(d(2)),
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(d(10)))
-                            Text(
-                                name,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = if (selected) Gold.Core else Paper.Pure,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Spacer(Modifier.height(d(3)))
-                            Text(hint, style = MaterialTheme.typography.labelSmall, color = Paper.Tertiary)
                         }
                     }
                 }

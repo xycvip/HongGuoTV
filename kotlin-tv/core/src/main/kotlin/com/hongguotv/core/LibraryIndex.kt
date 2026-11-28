@@ -89,6 +89,24 @@ class LibraryIndex(data: BackupData, updates: Map<String, FavoriteUpdate> = empt
         watchedIds = watchedIds - id
     }
     fun clearHistory() { historyRows = emptyList(); progressById.clear(); watchedIds = emptySet() }
+
+    /** 云同步合并后一次性写回收藏全集：重建 id 索引与关联的分组/更新元数据。 */
+    fun replaceFavorites(rows: List<Series>) {
+        favoriteRows = rows.distinctBy { it.id }.take(500)
+        favoriteIds = favoriteRows.map { it.id }.toSet()
+        updateRows = updateRows.filterKeys { it in favoriteIds }
+        updateCount = updateRows.values.count { it.added > 0 }
+        groupById = groupById.filterKeys { it in favoriteIds }
+    }
+
+    /** 云同步合并后一次性写回历史全集：按时间排序并重建进度索引。 */
+    fun replaceHistory(rows: List<BackupProgress>) {
+        historyRows = rows.sortedByDescending { it.updatedAt }.distinctBy { it.series.id }.take(200)
+        progressById.clear()
+        historyRows.forEach { progressById[it.series.id] = it }
+        watchedIds = watchedIds.intersect(historyRows.map { it.series.id }.toSet())
+    }
+
     fun observeFavorite(id: String, count: Int, now: Long, acknowledge: Boolean, newSeason: Series? = null): Boolean {
         if (!favorite(id)) return false
         val previous = updateRows[id]
@@ -120,7 +138,7 @@ object LibraryDisk {
         }
         val rawUpdates = runCatching { JSONObject(values["favoriteUpdates"] as? String ?: "{}") }.getOrDefault(JSONObject())
         val updates = rawUpdates.keys().asSequence().mapNotNull { id -> FavoriteUpdate.decode(rawUpdates.optJSONObject(id))?.let { id to it } }.toMap()
-        val settings = BackupSettings(PlaybackQuality.normalize((values["quality"] as? Number)?.toInt() ?: PlaybackQuality.AUTO_COMPAT),
+        val settings = BackupSettings(PlaybackQuality.normalize((values["quality"] as? Number)?.toInt() ?: PlaybackQuality.AUTO_HIGH),
             PlaybackSpeed.normalize((values["playbackSpeed"] as? Number)?.toFloat() ?: 1f), values["autoNext"] as? Boolean ?: true,
             VideoFrameMode.fromStored(values["frameMode"] as? String), values["autoSeason"] as? Boolean ?: true,
             values["danmaku"] as? Boolean ?: true,

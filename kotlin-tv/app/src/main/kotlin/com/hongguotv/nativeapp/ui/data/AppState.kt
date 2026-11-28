@@ -4,6 +4,7 @@ package com.hongguotv.nativeapp.ui.data
 import com.hongguotv.core.ActorRankBoard
 import com.hongguotv.core.ActorRankEntry
 import com.hongguotv.core.BackupProgress
+import com.hongguotv.core.CloudReservation
 import com.hongguotv.core.ContentType
 import com.hongguotv.core.Detail
 import com.hongguotv.core.RankBoard
@@ -27,6 +28,7 @@ enum class RemoteKey(val label: String, val fallback: String) {
 fun videoInfoLabel(mode: Int): String = when (mode) {
     1 -> "简要（分辨率）"
     2 -> "详细（码率与帧率）"
+    3 -> "调试模式（全屏诊断）"
     else -> "关闭"
 }
 
@@ -153,6 +155,34 @@ data class ActorRankState(
     val error: String? = null,
 )
 
+/**
+ * 详情页「发布作者」区块状态。
+ *
+ * 从 creatorList 里挑出作者本人（relativeType=3），再按需拉 creatorProfile 补全档案，
+ * 作品列表来自 creatorWorks，游标 [nextCursor] 原样回传。
+ */
+data class CreatorState(
+    val creator: com.hongguotv.core.Creator? = null,
+    val works: List<Series> = emptyList(),
+    val nextCursor: String = "",
+    val hasMore: Boolean = false,
+    val loading: Boolean = false,
+    val loadingMore: Boolean = false,
+    val loadingWorks: Boolean = false,
+    val error: String? = null,
+)
+
+/** 详情页「剧评」区块状态。游标 [cursor] 原样回传。 */
+data class ReviewState(
+    val items: List<com.hongguotv.core.Review> = emptyList(),
+    val total: Int = 0,
+    val cursor: String = "",
+    val hasMore: Boolean = false,
+    val loading: Boolean = false,
+    val loadingMore: Boolean = false,
+    val error: String? = null,
+)
+
 data class LibraryState(
     val favorites: List<Series> = emptyList(),
     val history: List<BackupProgress> = emptyList(),
@@ -160,6 +190,8 @@ data class LibraryState(
     val favoriteLabels: Map<String, String> = emptyMap(),
     // 每部剧最新一集是否已看完（history.completed），供收藏页显示「已看完」角标。
     val completedIds: Set<String> = emptySet(),
+    /** 预约列表来自云端账号片单；未登录时为空。 */
+    val reservations: List<CloudReservation> = emptyList(),
     val version: Int = 0,
     val groupFilter: String? = null,
 )
@@ -179,13 +211,16 @@ data class SettingsSnapshot(
     val danmakuRows: Int = 2,
     /** 0=隔帧绘制，1=逐帧绘制。 */
     val danmakuFrameRateMode: Int = 0,
+    /** 合并重复弹幕：同一文本 10 秒内只显示一条。 */
+    val danmakuMergeRepeat: Boolean = false,
     val danmakuColor: Int = 0,
     val blockedWords: List<String> = emptyList(),
     // ---- 播放增强 ----
     val startupAutoplay: Boolean = false,
     val seamlessPlayback: Boolean = false,
+    /** 自动降低分辨率：非 8 对齐的 1080p 档自动降到低分辨率，默认关闭。 */
+    val autoDowngradeNonAligned: Boolean = false,
     val seekStepSeconds: Int = 10,
-    val longPressSpeed: Float = 3f,
     // ---- 画面 ----
     val posterColumns: Int = 0,
     /** 首页大海报的取数来源，见 [com.hongguotv.nativeapp.HeroSource]，默认综合。 */
@@ -196,13 +231,11 @@ data class SettingsSnapshot(
     val persistentProgress: Boolean = false,
     /** 是否在页面顶部显示可点击的返回箭头；默认关闭，遥控器按返回键即可返回。 */
     val showScreenBack: Boolean = false,
-    val appIconVariant: String = "i",
     // ---- 按键 ----
     val remoteUp: String = "previous",
     val remoteDown: String = "next",
     val remoteConfirm: String = "play_pause",
     val remoteMenu: String = "menu",
-    val menuKeyAction: String = "panel",
     // ---- 网络 ----
     val dnsProvider: String = "tencent",
     val dnsCustom: String = "",
@@ -225,8 +258,17 @@ data class AccountState(
     val message: String? = null,
     val cloudFavorites: Int = 0,
     val cloudHistory: Int = 0,
+    // ---- 云同步 ----
+    /** 同步开关：默认关闭，账号数据与本机隔离；开启后双向合并。 */
+    val syncEnabled: Boolean = false,
+    /** 正在合并/上传中，UI 显示进度且禁止重复触发。 */
+    val syncBusy: Boolean = false,
+    /** 同步结果提示，如「已合并 12 条 · 上传 3 条」。 */
+    val syncStatus: String = "",
     // ---- 手机验证码 ----
     val mode: LoginMode = LoginMode.QR,
+    /** 手机号区号：+86 时号码按国内 11 位校验，其它区号按 5-15 位国际号码校验。 */
+    val countryCode: String = "+86",
     val phone: String = "",
     val code: String = "",
     val codeSent: Boolean = false,
@@ -236,11 +278,13 @@ data class AccountState(
     val countdown: Int = 0,
     val phoneError: String? = null,
 ) {
-    val phoneValid: Boolean get() = PHONE_PATTERN.matches(phone)
-    val codeValid: Boolean get() = code.length in 4..6
+    val phoneValid: Boolean
+        get() = if (countryCode == "+86") PHONE_PATTERN.matches(phone) else INTL_PATTERN.matches(phone)
+    val codeValid: Boolean get() = code.length in 4..8
 
     companion object {
         private val PHONE_PATTERN = Regex("1[3-9]\\d{9}")
+        private val INTL_PATTERN = Regex("[0-9]{5,15}")
     }
 }
 
@@ -273,6 +317,30 @@ data class CastState(
         get() = phase == CastPhase.STARTING || phase == CastPhase.READY || phase == CastPhase.RECEIVING
 }
 
+/** 定时关闭的计时方式。OFF 表示未设置。 */
+enum class SleepMode { OFF, MINUTES, EPISODES }
+
+/** 定时到点后的动作：暂停播放（保留进度）或彻底退出应用。 */
+enum class SleepAction { PAUSE, EXIT }
+
+/**
+ * 定时关闭状态。应用级持有，切剧/跨季连播都不重置；
+ * 只有用户主动关闭、到点触发、或切换计时方式时才改变。
+ */
+data class SleepTimerUiState(
+    val mode: SleepMode = SleepMode.OFF,
+    /** 分钟模式的分钟数，或集数模式的集数。 */
+    val value: Int = 0,
+    val action: SleepAction = SleepAction.PAUSE,
+    /** 面板底部/无障碍朗读用的完整描述，例如「30 分钟后暂停播放」。 */
+    val summaryText: String = "",
+    /** 右上角临界倒计时文案：分钟<=60s 逐秒到 0、集数<=3 逐集，其余为空（不常驻）。 */
+    val countdownText: String = "",
+    val active: Boolean = false,
+) {
+    val badgeOn: Boolean get() = active
+}
+
 data class AppState(
     val booted: Boolean = false,
     val bootError: String? = null,
@@ -283,6 +351,10 @@ data class AppState(
     val detail: DetailState = DetailState(),
     val actor: ActorState = ActorState(),
     val actorRank: ActorRankState = ActorRankState(),
+    /** 详情页发布作者（独立于演员弹窗）。 */
+    val creator: CreatorState = CreatorState(),
+    /** 详情页剧评。 */
+    val reviews: ReviewState = ReviewState(),
     val library: LibraryState = LibraryState(),
     val account: AccountState = AccountState(),
     val cast: CastState = CastState(),
@@ -310,7 +382,7 @@ data class ScriptSetupState(
  * 校验通过后立即生效（只有播放中会推迟到退出播放页），用户不需要做任何操作。
  */
 data class ScriptUpdateState(
-    /** 运行中脚本的构建时间，如「2026-11-24 03:38」。 */
+    /** 运行中脚本的版本号，如「v1.0.0-20261128」；清单未带版本号时回退构建时间。 */
     val version: String = "",
     /** 运行中脚本 sha256 前 8 位，用于肉眼区分两版。 */
     val digest: String = "",
@@ -322,4 +394,8 @@ data class ScriptUpdateState(
     val checkedAt: Long = 0L,
     val installedAt: Long = 0L,
     val lastError: String? = null,
+    /** 手动点击「接口版本」后的临时反馈，几秒后自动清除。 */
+    val manualHint: String? = null,
+    /** 提示序号，防止旧的延时把新提示清掉。 */
+    val manualHintSeq: Int = 0,
 )

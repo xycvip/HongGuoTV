@@ -61,7 +61,7 @@ class LibraryIndexTest {
         assertEquals(498, state.updatedFavorites())
     }
 
-    @Test fun `captured snapshots survive later mutations and keep backup merge semantics`() {
+    @Test fun `captured snapshots survive later mutations`() {
         val state = LibraryIndex(data(), mapOf("1" to FavoriteUpdate(81, 80, 10)))
         val saved = state.snapshot()
         val updates = state.updates()
@@ -76,9 +76,6 @@ class LibraryIndexTest {
         assertEquals(1, updates.getValue("1").added)
         assertEquals(5, state.favoriteUpdate("1")!!.added)
         assertFalse(state.watched("2"))
-        val merged = LibraryBackup.merge(state.snapshot(), saved, false)
-        assertEquals(200, merged.history.size)
-        assertEquals(state.settings, merged.settings)
     }
 
     @Test fun `malformed rows do not discard valid records`() {

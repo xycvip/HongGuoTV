@@ -2,10 +2,8 @@
 package com.hongguotv.nativeapp.ui.data
 
 import android.app.Application
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -15,7 +13,10 @@ import androidx.lifecycle.viewModelScope
 import com.hongguotv.core.Actor
 import com.hongguotv.core.ActorRankBoard
 import com.hongguotv.core.BackupProgress
+import com.hongguotv.core.CloudFavorite
 import com.hongguotv.core.CloudProfile
+import com.hongguotv.core.CloudProgress
+import com.hongguotv.core.Creator
 import com.hongguotv.core.ContentRepository
 import com.hongguotv.core.ContentType
 import com.hongguotv.core.Detail
@@ -30,7 +31,12 @@ import com.hongguotv.core.RankBoard
 import com.hongguotv.core.RankKind
 import com.hongguotv.core.RecentSearch
 import com.hongguotv.core.Series
+import com.hongguotv.core.SyncEngine
+import com.hongguotv.core.SleepTimer
+import com.hongguotv.core.SyncMode
+import com.hongguotv.core.SyncTombstone
 import com.hongguotv.core.TheaterFilterGroup
+import com.hongguotv.nativeapp.SyncStore
 import com.hongguotv.core.VideoFrameMode
 import com.hongguotv.core.AppUpdate
 import com.hongguotv.core.AppUpdateRepository
@@ -61,8 +67,11 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -86,6 +95,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val extras = PlaybackExtras(app)
     private val prefs = app.getSharedPreferences("native-library-v1", Context.MODE_PRIVATE)
     private val accountPrefs = app.getSharedPreferences("compose-account-v1", Context.MODE_PRIVATE)
+    /** 云同步状态仓库：按账号隔离开关、墓碑与同步游标。 */
+    private val syncStore = SyncStore(app)
 
     /** 脚本热更新器：走共享连接池与统一 DNS，检查结果持久化在独立 prefs。 */
     private val scriptUpdater = JsScriptUpdater(app, repository.http)
@@ -113,6 +124,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 数据脚本热更新状态：设置页只读展示，更新过程完全自动。 */
     private val _scriptUpdate = MutableStateFlow(ScriptUpdateState())
     val scriptUpdate: StateFlow<ScriptUpdateState> = _scriptUpdate.asStateFlow()
+
+    // ---------------------------------------------------------------- 定时关闭
+    // 应用级持有，切剧/跨季连播都不重置；播放页只读状态并订阅到点动作。
+    private val sleepTimer = SleepTimer { SystemClock.elapsedRealtime() }
+    private val _sleepState = MutableStateFlow(SleepTimerUiState())
+    val sleepState: StateFlow<SleepTimerUiState> = _sleepState.asStateFlow()
+    /** 到点动作：暂停播放 / 退出应用，由播放页与顶层分别收集执行。 */
+    private val _sleepFire = MutableSharedFlow<SleepAction>(extraBufferCapacity = 1)
+    val sleepFire: SharedFlow<SleepAction> = _sleepFire.asSharedFlow()
+    private var sleepJob: Job? = null
 
     /**
      * 播放页是否可见。热更新在播放中不切换脚本：
@@ -167,18 +188,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 演员作品的请求；切演员或关闭弹窗时取消，避免旧结果覆盖新演员。 */
     private var actorJob: Job? = null
     private var actorGeneration = 0
+    /** 详情页发布作者 / 剧评的请求；切剧时取消，避免旧剧结果盖住新剧。 */
+    private var socialJob: Job? = null
+    private var socialGeneration = 0
     /** 演员榜的请求；切榜或离开页面时取消，避免旧榜结果盖住新榜。 */
     private var actorRankJob: Job? = null
     private var actorRankGeneration = 0L
     private var accountPoll: Job? = null
     private var scriptBootstrapJob: Job? = null
+    /** 云端预约片单缓存：TV 端只读展示，写入/取消在手机端完成。 */
+    private var cloudReservations: List<com.hongguotv.core.CloudReservation> = emptyList()
+    private var cloudReservationsJob: Job? = null
     private val jsAccount get() = JsAccount.required()
 
     val isTelevision: Boolean
         get() = getApplication<Application>().packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
 
     init {
-        ensureLauncherAliasConsistency()
         applyDnsSettings()
         scriptUpdater.clearPending()
         // APK 不再内置 main.js：本地有脚本才装门面进主界面，否则先走引导下载。
@@ -201,8 +227,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         installedAccountGateway = accountGateway
         JsContent.gateway = contentGateway
         JsAccount.gateway = accountGateway
+        // 界面第一段显示清单版本号（CI 写入，如 v1.0.0-20261128）。
+        // 版本号从脚本同目录的 version sidecar 读取，和摘要走同一条回退路径：
+        // 当前版损坏退到 prev 时，显示的版本号也是 prev 那一版的，绝不会与摘要错位。
+        // 早期落盘的脚本没有该 sidecar，回退到头部构建时间避免空白。
         _scriptUpdate.value = ScriptUpdateState(
-            version = js.builtAt,
+            version = js.version.ifBlank { js.builtAt },
             digest = js.contentDigest.take(8),
             fromUpdate = js.fromUpdate,
             // 能走到这里说明落盘的脚本已经加载生效，不存在「待生效」。
@@ -348,24 +378,55 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             accountPrefs.edit().clear().apply()
             return
         }
-        _state.update { it.copy(account = it.account.copy(signedIn = true, busy = true)) }
+        // 先用上次成功拉到的昵称/头像占位，避免冷启动或断网时账号页先闪成"红果用户+首字"。
+        // profile 回来后会用最新值覆盖；失败则保留缓存，头像不因一次网络抖动消失。
+        val cachedNickname = accountPrefs.getString("nickname", "").orEmpty()
+        val cachedAvatar = accountPrefs.getString("avatar", "").orEmpty()
+        _state.update {
+            it.copy(
+                account = it.account.copy(
+                    signedIn = true,
+                    busy = true,
+                    nickname = cachedNickname.ifBlank { it.account.nickname },
+                    avatar = cachedAvatar.ifBlank { it.account.avatar },
+                ),
+            )
+        }
         viewModelScope.launch {
-            val profile = withContext(Dispatchers.IO) { runCatching { jsAccount.profile(credentials) }.getOrNull() }
-            val favorites = withContext(Dispatchers.IO) { runCatching { jsAccount.favorites(credentials) }.getOrNull() }
-            val history = withContext(Dispatchers.IO) { runCatching { jsAccount.history(credentials) }.getOrNull() }
-            if (profile != null) accountPrefs.edit().putString("nickname", profile.nickname).apply()
+            // 三项云端数据互不依赖（各自带 credentials 独立建 runtime 请求），
+            // 并发拉取把三次串行 runtime+网络压缩成一批，冷启动恢复账号不再等三轮。
+            val (profile, favorites, history) = coroutineScope {
+                val profileDeferred = async(Dispatchers.IO) { runCatching { jsAccount.profile(credentials) }.getOrNull() }
+                val favoritesDeferred = async(Dispatchers.IO) { runCatching { jsAccount.favorites(credentials) }.getOrNull() }
+                val historyDeferred = async(Dispatchers.IO) { runCatching { jsAccount.history(credentials) }.getOrNull() }
+                Triple(profileDeferred.await(), favoritesDeferred.await(), historyDeferred.await())
+            }
+            if (profile != null) {
+                accountPrefs.edit()
+                    .putString("nickname", profile.nickname)
+                    .putString("avatar", profile.avatarUrl)
+                    .apply()
+            }
+            // 绑定同步命名空间（用稳定的云端用户 id；失败时退回 cookie 片段），并读出开关。
+            bindSyncAccount(profile?.id?.takeIf { it.isNotBlank() }
+                ?: credentials.deviceId.ifBlank { credentials.cookie.take(32) })
             _state.update {
                 it.copy(
                     account = it.account.copy(
                         signedIn = true,
                         busy = false,
                         nickname = profile?.nickname ?: it.account.nickname.ifBlank { "红果用户" },
-                        avatar = profile?.avatarUrl ?: it.account.avatar,
+                        // 接口偶尔返回空头像；此时保留缓存头像，不要因为一次空字段就退回首字。
+                        avatar = profile?.avatarUrl?.takeIf { url -> url.isNotBlank() } ?: it.account.avatar,
                         cloudFavorites = favorites?.size ?: it.account.cloudFavorites,
                         cloudHistory = history?.size ?: it.account.cloudHistory,
                     ),
                 )
             }
+            // 上次是开启状态：本次登录自动续同步，把这段时间的云端变化拉下来。
+            // 预约片单始终以云端为准（TV 端只读），登录成功即拉取。
+            loadCloudReservations(force = true)
+            if (_state.value.account.syncEnabled) runSync()
         }
     }
 
@@ -706,6 +767,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         refreshHomeShelves()
         toast(if (added) "已加入收藏" else "已取消收藏")
+        onSyncFavoriteChanged(series, added)
         return added
     }
 
@@ -717,33 +779,270 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         toast(if (added) "已加入稍后看" else "已从稍后看移除")
     }
 
+    /**
+     * 拉取云端预约片单：TV 端只读展示，不提供预约/取消。
+     * 分「已上线 / 未上线」两态并发请求，合并后写入缓存并刷新追剧页。
+     * 未登录时清空缓存，避免切账号后串数据。
+     */
+    fun loadCloudReservations(force: Boolean = false) {
+        val credentials = currentCredentials()
+        if (credentials == null) {
+            if (cloudReservations.isNotEmpty()) {
+                cloudReservations = emptyList()
+                refreshLibraryState()
+            }
+            return
+        }
+        if (!force && cloudReservationsJob?.isActive == true) return
+        cloudReservationsJob?.cancel()
+        cloudReservationsJob = viewModelScope.launch {
+            val (online, upcoming) = coroutineScope {
+                val onlineDeferred = async(Dispatchers.IO) {
+                    runCatching { jsAccount.reservations(credentials, true) }.getOrDefault(emptyList())
+                }
+                val upcomingDeferred = async(Dispatchers.IO) {
+                    runCatching { jsAccount.reservations(credentials, false) }.getOrDefault(emptyList())
+                }
+                onlineDeferred.await() to upcomingDeferred.await()
+            }
+            cloudReservations = (online + upcoming).distinctBy { it.series.id }
+            refreshLibraryState()
+        }
+    }
+
+    // ---------------------------------------------------------------- 云账号同步
+
+    /**
+     * 绑定当前账号的同步命名空间。用 profile.id（云端用户 id）而非 cookie——
+     * 同一账号换设备登录 cookie 变化，但 id 稳定，开关与墓碑应跟着账号走。
+     */
+    private fun bindSyncAccount(profileId: String) {
+        // 同步命名空间 key 必须跨登录/换设备稳定：优先云端用户 id 并固化到本地；
+        // profile 偶发失败时复用上次固化的值，避免退回随设备变化的 cookie 片段
+        // 导致开关与墓碑丢失（表现为同步莫名关闭、删除又被复活）。
+        val cachedKey = accountPrefs.getString("syncAccountKey", "").orEmpty()
+        val key = profileId.ifBlank { cachedKey }.ifBlank {
+            currentCredentials()?.let { c -> c.deviceId.ifBlank { c.cookie.take(32) } }.orEmpty()
+        }
+        if (key.isBlank()) return
+        if (profileId.isNotBlank() && profileId != cachedKey) {
+            accountPrefs.edit().putString("syncAccountKey", profileId).apply()
+        }
+        syncStore.bindAccount(key)
+        val record = syncStore.record()
+        _state.update {
+            it.copy(account = it.account.copy(syncEnabled = record.mode != SyncMode.OFF))
+        }
+    }
+
+    /**
+     * 切换同步开关。开启时由 UI 三选一确认后传入 [mode]；关闭时传 OFF。
+     * 这里只落模式，真正的合并/覆盖由 [runSync] 按模式完成。
+     */
+    fun setSyncEnabled(enabled: Boolean, mode: SyncMode = SyncMode.MERGE) {
+        val resolved = if (enabled) mode else SyncMode.OFF
+        syncStore.setMode(resolved)
+        _state.update {
+            it.copy(account = it.account.copy(
+                syncEnabled = enabled,
+                syncStatus = when {
+                    !enabled -> "已关闭，本机与账号数据恢复隔离"
+                    resolved == SyncMode.CLOUD_WINS -> "已开启，正在以账号为准覆盖本机…"
+                    resolved == SyncMode.LOCAL_WINS -> "已开启，正在上传本机覆盖账号…"
+                    else -> "已开启，正在合并云端数据…"
+                },
+            ))
+        }
+        if (enabled) runSync()
+    }
+
+    /**
+     * 执行一次完整的双向同步：并发拉云端收藏/历史 → 合并引擎计算 → 写回本机 →
+     * 上传待上传项 → 推送收藏删除墓碑 → 更新状态。
+     *
+     * 任何一步失败都不清空本机数据：合并基于并集，最坏情况是没同步成功，不会丢记录。
+     */
+    fun runSync() {
+        if (syncStore.accountKey.isBlank() || !_state.value.account.signedIn) return
+        if (_state.value.account.syncBusy) return
+        val credentials = runCatching {
+            com.hongguotv.core.AccountCredentials.fromJson(
+                accountPrefs.getString("credentials", null) ?: return
+            )
+        }.getOrNull() ?: return
+
+        _state.update { it.copy(account = it.account.copy(syncBusy = true, syncStatus = "正在同步云端数据…")) }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    // 云端两项互不依赖，并发拉取。
+                    val cloudFavDeferred = async { runCatching { jsAccount.favorites(credentials) }.getOrDefault(emptyList()) }
+                    val cloudHistDeferred = async { runCatching { jsAccount.history(credentials) }.getOrDefault(emptyList()) }
+                    val cloudFav = cloudFavDeferred.await()
+                    val cloudHist = cloudHistDeferred.await()
+
+                    val activeMode = syncStore.record().mode
+                    val merged = SyncEngine.merge(
+                        SyncEngine.Input(
+                            mode = activeMode,
+                            cloudFavorites = cloudFav,
+                            cloudHistory = cloudHist,
+                            localFavorites = library.favorites(),
+                            localHistory = library.history(),
+                            record = syncStore.record(),
+                        )
+                    )
+
+                    // 先写回本机（并集，绝不丢数据）。
+                    library.replaceFavoritesMerged(merged.mergedFavorites)
+                    library.replaceHistoryMerged(merged.mergedHistory)
+
+                    // 上传本机独有的收藏。
+                    merged.favoritesToUpload.forEach { series ->
+                        runCatching { jsAccount.setFavorite(credentials, series.id, true) }
+                    }
+                    // 推送收藏删除墓碑到云端，成功后清墓碑。
+                    merged.favoriteIdsToRemove.forEach { id ->
+                        if (runCatching { jsAccount.setFavorite(credentials, id, false) }.isSuccess) {
+                            syncStore.clearTombstone(id, SyncTombstone.Kind.FAVORITE)
+                        }
+                    }
+                    // 上传进度（云端缺失或本机更新）。
+                    merged.progressToUpload.forEach { cp ->
+                        val episodeCount = library.progress(cp.series.id)?.let { p ->
+                            // episodeCount 云端无法反查，用本机历史条数无法得到集数；
+                            // 这里用当前进度索引 + 1 作为保守值，避免 0 被接口判为无效。
+                            (cp.episodeIndex + 1).coerceAtLeast(1)
+                        } ?: (cp.episodeIndex + 1).coerceAtLeast(1)
+                        runCatching { jsAccount.uploadProgress(credentials, cp, episodeCount) }
+                    }
+                    // LOCAL_WINS 覆盖：云端有、本机没有的历史 → 软删除，保证账号端与本机一致。
+                    merged.historyToRemove.forEach { cp ->
+                        runCatching {
+                            jsAccount.deleteHistory(credentials, cp.series.id, cp.episodeId, cp.updatedAt)
+                        }
+                    }
+                    // CLOUD_WINS：以账号为准，本机此前的删除墓碑失效，清空避免下次合并误伤。
+                    if (activeMode == SyncMode.CLOUD_WINS) syncStore.clearAllTombstones()
+                    // 单向覆盖是一次性动作：成功后降级为 MERGE，之后进入正常双向同步。
+                    // 避免每次冷启动重复覆盖（尤其会抹掉隔离期本机新产生的数据）。
+                    if (activeMode == SyncMode.CLOUD_WINS || activeMode == SyncMode.LOCAL_WINS) {
+                        syncStore.setMode(SyncMode.MERGE)
+                    }
+
+                    syncStore.setLastSyncAt(System.currentTimeMillis())
+                    merged
+                }
+            }
+            refreshLibraryState()
+            refreshHomeShelves()
+            result.fold(
+                onSuccess = { m ->
+                    val text = if (m.totalChanges == 0) {
+                        "已是最新，无需同步"
+                    } else {
+                        "已同步 · 下载 ${m.downloadedFavorites + m.downloadedHistory} 条 · 上传 ${m.uploadedFavorites + m.uploadedHistory} 条"
+                    }
+                    _state.update {
+                        it.copy(account = it.account.copy(syncBusy = false, syncStatus = text,
+                            cloudFavorites = it.account.cloudFavorites, cloudHistory = it.account.cloudHistory))
+                    }
+                    toast(text)
+                },
+                onFailure = { error ->
+                    _state.update {
+                        it.copy(account = it.account.copy(syncBusy = false,
+                            syncStatus = "同步失败：${error.message ?: "请稍后重试"}"))
+                    }
+                },
+            )
+        }
+    }
+
+    /** 同步开启时，收藏变化增量上行；取消收藏时记墓碑并推云端。关闭态完全不动作。 */
+    private fun onSyncFavoriteChanged(series: Series, added: Boolean) {
+        if (!_state.value.account.syncEnabled) return
+        val credentials = currentCredentials() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            if (added) {
+                runCatching { jsAccount.setFavorite(credentials, series.id, true) }
+            } else {
+                syncStore.addTombstone(series.id, SyncTombstone.Kind.FAVORITE)
+                if (runCatching { jsAccount.setFavorite(credentials, series.id, false) }.isSuccess) {
+                    syncStore.clearTombstone(series.id, SyncTombstone.Kind.FAVORITE)
+                }
+            }
+        }
+    }
+
+    /** 同步开启时，播放进度增量上行。 */
+    private fun onSyncProgress(progress: BackupProgress) {
+        if (!_state.value.account.syncEnabled) return
+        val credentials = currentCredentials() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                jsAccount.uploadProgress(
+                    credentials,
+                    CloudProgress(progress.series, progress.episodeId, progress.episodeIndex,
+                        progress.position, progress.duration, progress.updatedAt),
+                    (progress.episodeIndex + 1).coerceAtLeast(1),
+                )
+            }
+        }
+    }
+
+    /** 同步开启时，移除历史先记本机墓碑，再把软删除推送到云端（避免并集合并时复活）。 */
+    private fun onSyncHistoryRemoved(seriesId: String, videoId: String, updatedAt: Long) {
+        if (!_state.value.account.syncEnabled) return
+        syncStore.addTombstone(seriesId, SyncTombstone.Kind.HISTORY)
+        val credentials = currentCredentials() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            if (runCatching { jsAccount.deleteHistory(credentials, seriesId, videoId, updatedAt) }.isSuccess) {
+                // 云端已确认软删除，墓碑使命完成；本机墓碑可清，后续并集不会复活。
+                syncStore.clearTombstone(seriesId, SyncTombstone.Kind.HISTORY)
+            }
+        }
+    }
+
+    private fun currentCredentials(): com.hongguotv.core.AccountCredentials? {
+        val saved = accountPrefs.getString("credentials", null) ?: return null
+        return runCatching { com.hongguotv.core.AccountCredentials.fromJson(saved) }.getOrNull()
+    }
+
     fun saveProgress(series: Series, episodeId: String, episodeIndex: Int, position: Long, duration: Long, completed: Boolean = false) {
         if (!library.isLoaded) return
-        library.save(
-            BackupProgress(
-                series = series,
-                episodeId = episodeId,
-                episodeIndex = episodeIndex,
-                position = position,
-                duration = duration,
-                completed = completed,
-                updatedAt = System.currentTimeMillis(),
-            ),
+        val progress = BackupProgress(
+            series = series,
+            episodeId = episodeId,
+            episodeIndex = episodeIndex,
+            position = position,
+            duration = duration,
+            completed = completed,
+            updatedAt = System.currentTimeMillis(),
         )
+        library.save(progress)
         refreshLibraryState()
+        onSyncProgress(progress)
     }
 
     fun removeHistory(id: String) {
+        val progress = library.progress(id)
         library.removeHistory(id)
         refreshLibraryState()
         refreshHomeShelves()
+        if (progress != null) {
+            onSyncHistoryRemoved(id, progress.episodeId, progress.updatedAt)
+        }
         toast("已从观看记录移除")
     }
 
     fun clearHistory() {
+        // 先快照进度，删除后 library.progress() 就取不到了。
+        val snapshot = library.history().map { it.series.id to it }
         library.clearHistory()
         refreshLibraryState()
         refreshHomeShelves()
+        snapshot.forEach { (id, p) -> onSyncHistoryRemoved(id, p.episodeId, p.updatedAt) }
         toast("观看记录已清空")
     }
 
@@ -769,6 +1068,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     later = emptyList(),
                     favoriteLabels = favorites.associate { series -> series.id to library.favoriteLabel(series.id) },
                     completedIds = completedIds,
+                    reservations = cloudReservations,
                     version = it.library.version + 1,
                     groupFilter = it.library.groupFilter,
                 ),
@@ -868,6 +1168,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openDetail(series: Series) {
+        // 切剧：清掉上一部剧的作者 / 剧评，避免新详情短暂显示旧剧社交数据。
+        clearDetailSocial()
         _state.update {
             it.copy(detail = DetailState(loading = true, series = series, favorite = library.favorite(series.id)))
         }
@@ -892,6 +1194,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         ),
                     )
                 }
+                // 作者 / 剧评是详情下方区块，首屏上屏后再异步补，不阻塞。
+                loadDetailSocial(data.series.id)
                 // 播放地址最先排队：用户最可能马上点播放，让预取先占住脚本运行时。
                 val prefetchJob = async(Dispatchers.IO) {
                     prefetchPlayback(data.series.id, data.episodes.getOrNull(resumeIndex))
@@ -1049,6 +1353,187 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (it.actor.actor == null && it.actor.items.isEmpty()) it
             else it.copy(actor = ActorState(actor = null, loading = false, hasMore = false))
         }
+    }
+
+    // -------------------------------------------------------- 详情页作者 / 剧评
+
+    /**
+     * 详情页就绪后并发拉「发布作者」与「剧评」。
+     *
+     * 两者都走匿名设备签名，未登录可读；失败只影响对应区块，不拖累详情首屏。
+     * 用 [socialGeneration] 防止切剧后旧结果覆盖新剧。
+     */
+    fun loadDetailSocial(seriesId: String) {
+        socialJob?.cancel()
+        val generation = ++socialGeneration
+        _state.update {
+            it.copy(
+                creator = CreatorState(loading = true),
+                reviews = ReviewState(loading = true),
+            )
+        }
+        socialJob = viewModelScope.launch {
+            val creatorResult = async(Dispatchers.IO) {
+                runCatching { jsAccount.creatorList(seriesId) }.getOrDefault(emptyList())
+            }
+            val reviewResult = async(Dispatchers.IO) {
+                runCatching { jsAccount.commentList(seriesId, "", SOCIAL_PAGE_SIZE) }
+                    .getOrDefault(com.hongguotv.core.ReviewPage(emptyList(), 0, false, ""))
+            }
+            val creators = creatorResult.await()
+            val reviews = reviewResult.await()
+            if (generation != socialGeneration) return@launch
+
+            _state.update {
+                it.copy(
+                    reviews = ReviewState(
+                        items = reviews.items,
+                        total = reviews.total,
+                        cursor = reviews.cursor,
+                        hasMore = reviews.hasMore,
+                        loading = false,
+                    ),
+                )
+            }
+            // 只认作者本人（主创作者 / 发布方 / 制作方，relativeType=3）。
+            // 绝不退回列表第一个——那可能是演职员，会把演员错当成「作者信息」。
+            val author = creators.firstOrNull { it.relativeType == 3 }
+            if (author == null) {
+                _state.update { it.copy(creator = CreatorState(loading = false)) }
+                return@launch
+            }
+            // 带登录态时再补一次档案，拿到头像 / 简介 / 关注状态。
+            val profile = withContext(Dispatchers.IO) {
+                runCatching { jsAccount.creatorProfile(author.id, credentialsIfSignedIn()) }.getOrNull()
+            }
+            if (generation != socialGeneration) return@launch
+            val full = profile?.creator ?: author
+            _state.update { it.copy(creator = CreatorState(creator = full, loading = false)) }
+            if (full.worksCapable) loadCreatorWorks(full.id, generation)
+        }
+    }
+
+    /** 拉作者作品首屏。 */
+    private suspend fun loadCreatorWorks(userId: String, generation: Int = socialGeneration) {
+        _state.update { it.copy(creator = it.creator.copy(loadingWorks = true)) }
+        val result = withContext(Dispatchers.IO) {
+            runCatching { jsAccount.creatorWorks(userId, "", SOCIAL_PAGE_SIZE) }.getOrNull()
+        }
+        if (generation != socialGeneration) return
+        if (result == null) {
+            _state.update { it.copy(creator = it.creator.copy(loadingWorks = false, error = "作者作品加载失败")) }
+            return
+        }
+        _state.update {
+            it.copy(
+                creator = it.creator.copy(
+                    works = result.items,
+                    nextCursor = result.nextCursor,
+                    hasMore = result.hasMore,
+                    loadingWorks = false,
+                    error = null,
+                ),
+            )
+        }
+    }
+
+    /** 作者作品翻页：游标原样回传。 */
+    fun loadMoreCreatorWorks() {
+        val current = _state.value.creator
+        val userId = current.creator?.id ?: return
+        if (current.loadingMore || !current.hasMore || current.nextCursor.isBlank()) return
+        val generation = socialGeneration
+        _state.update { it.copy(creator = it.creator.copy(loadingMore = true)) }
+        socialJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { jsAccount.creatorWorks(userId, current.nextCursor, SOCIAL_PAGE_SIZE) }.getOrNull()
+            }
+            if (generation != socialGeneration) return@launch
+            if (result == null) {
+                _state.update { it.copy(creator = it.creator.copy(loadingMore = false)) }
+                return@launch
+            }
+            _state.update { state ->
+                val seen = state.creator.works.mapTo(HashSet()) { it.id }
+                val merged = state.creator.works + result.items.filter { seen.add(it.id) }
+                state.copy(
+                    creator = state.creator.copy(
+                        works = merged,
+                        nextCursor = result.nextCursor,
+                        hasMore = result.hasMore && result.items.isNotEmpty(),
+                        loadingMore = false,
+                    ),
+                )
+            }
+        }
+    }
+
+    /** 剧评翻页：游标原样回传。 */
+    fun loadMoreReviews() {
+        val current = _state.value.reviews
+        val seriesId = _state.value.detail.series?.id ?: return
+        if (current.loadingMore || !current.hasMore || current.cursor.isBlank()) return
+        val generation = socialGeneration
+        _state.update { it.copy(reviews = it.reviews.copy(loadingMore = true)) }
+        socialJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { jsAccount.commentList(seriesId, current.cursor, SOCIAL_PAGE_SIZE) }.getOrNull()
+            }
+            if (generation != socialGeneration) return@launch
+            if (result == null) {
+                _state.update { it.copy(reviews = it.reviews.copy(loadingMore = false)) }
+                return@launch
+            }
+            _state.update { state ->
+                val seen = state.reviews.items.mapTo(HashSet()) { it.id }
+                val merged = state.reviews.items + result.items.filter { seen.add(it.id) }
+                state.copy(
+                    reviews = state.reviews.copy(
+                        items = merged,
+                        cursor = result.cursor,
+                        hasMore = result.hasMore && result.items.isNotEmpty(),
+                        loadingMore = false,
+                    ),
+                )
+            }
+        }
+    }
+
+    /** 关注 / 取关作者。未登录时提示先登录。 */
+    fun toggleCreatorFollow() {
+        val creator = _state.value.creator.creator ?: return
+        val credentials = credentialsIfSignedIn()
+        if (credentials == null) {
+            toast("登录账号后可关注作者")
+            return
+        }
+        val next = !(creator.following ?: false)
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    jsAccount.creatorFollow(creator.id, creator.relativeType.coerceIn(2, 3), next, credentials)
+                }.isSuccess
+            }
+            if (!ok) {
+                toast("关注失败，请稍后重试")
+                return@launch
+            }
+            _state.update {
+                it.copy(creator = it.creator.copy(creator = it.creator.creator?.copy(following = next)))
+            }
+            toast(if (next) "已关注 ${creator.name}" else "已取消关注")
+        }
+    }
+
+    /** 当前登录凭证；未登录返回 null。 */
+    private fun credentialsIfSignedIn(): com.hongguotv.core.AccountCredentials? =
+        currentCredentials()?.takeIf { it.cookie.contains("sessionid") || it.cookie.contains("passport_csrf_token") }
+
+    /** 切剧 / 离开详情时清掉作者与剧评，避免新剧继承旧剧的社交数据。 */
+    fun clearDetailSocial() {
+        socialJob?.cancel()
+        socialGeneration++
+        _state.update { it.copy(creator = CreatorState(), reviews = ReviewState()) }
     }
 
     // -------------------------------------------------------------- 演员榜
@@ -1366,8 +1851,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         ),
                     )
                 }
-                // 榜单同理：首屏之后立刻补一页，避免第一次下滑就撞到加载圈。
-                if (page.hasMore) loadMoreRanking()
+                // 不再首屏后立刻补页：补页会走脚本「游标重建」，第 2 页实际要重放第 1 页，
+                // 一进榜单页就是 3～4 次串行网络请求。改为真正滑到底时由列表滚动监听触发。
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException || generation != rankingGeneration) return@onFailure
                 _state.update {
@@ -1986,24 +2471,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         danmakuSpeed = library.danmakuSpeed,
         danmakuRows = library.danmakuRows,
         danmakuFrameRateMode = library.danmakuFrameRateMode,
+        danmakuMergeRepeat = library.danmakuMergeRepeat,
         danmakuColor = extras.danmakuColorMode,
         blockedWords = extras.blockedWords.sorted(),
         startupAutoplay = extras.startupAutoplay,
         seamlessPlayback = extras.seamlessPlayback,
+        autoDowngradeNonAligned = library.autoDowngradeNonAligned,
         seekStepSeconds = extras.seekStepSeconds,
-        longPressSpeed = extras.longPressSpeed,
         posterColumns = extras.posterColumns,
         heroSource = extras.heroSource,
         videoInfoMode = library.videoInfoMode,
         showNetworkSpeed = library.showNetworkSpeed,
         persistentProgress = library.persistentProgress,
         showScreenBack = library.showScreenBack,
-        appIconVariant = appIconVariant(),
         remoteUp = extras.remoteUpAction,
         remoteDown = extras.remoteDownAction,
         remoteConfirm = extras.remoteConfirmAction,
         remoteMenu = extras.remoteMenuAction,
-        menuKeyAction = extras.menuKeyAction,
         dnsProvider = DnsSettings.provider().key,
         dnsCustom = DnsSettings.customText(),
     )
@@ -2037,6 +2521,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         library.danmakuFrameRateMode = value.coerceIn(0, 2)
         touchSettings()
         toast("弹幕帧率 · " + listOf("标准", "高帧率", "超帧率")[library.danmakuFrameRateMode])
+    }
+
+    fun setDanmakuMergeRepeat(value: Boolean) {
+        library.danmakuMergeRepeat = value
+        touchSettings()
+        toast(if (value) "合并重复弹幕已开启" else "合并重复弹幕已关闭")
     }
 
     fun setShowClock(value: Boolean) {
@@ -2173,6 +2663,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         library.danmakuFont = DanmakuPrefs.FONT_DEFAULT
         library.danmakuSpeed = DanmakuPrefs.SPEED_DEFAULT
         library.danmakuRows = DanmakuPrefs.ROWS_DEFAULT
+        library.danmakuFrameRateMode = 0
+        library.danmakuMergeRepeat = false
         extras.danmakuColorMode = 0
         toast("弹幕效果已恢复默认")
     }
@@ -2181,7 +2673,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setStartupAutoplay(value: Boolean) {
         extras.startupAutoplay = value
-        toast(if (value) "下次启动直接播放首页推荐" else "已关闭启动自动播放")
+        toast(if (value) "下次启动直接播放信息流推荐" else "已关闭启动自动播放")
     }
 
     fun setSeamlessPlayback(value: Boolean) {
@@ -2189,26 +2681,51 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         toast(if (value) "无感连播已开启" else "无感连播已关闭")
     }
 
+    fun setAutoDowngradeNonAligned(value: Boolean) {
+        library.autoDowngradeNonAligned = value
+        touchSettings()
+    }
+
     fun setSeekStep(seconds: Int) {
         extras.seekStepSeconds = seconds
         toast("快进步长 · $seconds 秒")
     }
 
-    /** 启动自动播放只触发一次；首页数据就绪后由外壳取走。 */
+    /** 启动自动播放只消费一次：一次开机内返回首页不会重播。 */
     private var startupConsumed = false
 
-    fun consumeStartupRecommendation(): Series? {
-        if (startupConsumed) return null
+    /**
+     * 启动选剧层的候选（feed 信息流直出）。
+     *
+     * feed 的 discovery 响应本身带每部剧的全集 vid（JS 侧顺手解析进 details），
+     * 现在 feed() 直接把它映射进 [Series.episodes]。所以这里拉一次 feed 就能拿到
+     * 「剧 + 分集」，起播和切剧都不再逐部拉 detail——更快，且不需要任何磁盘缓存。
+     *
+     * 每次冷启动都重新拉当下最新的信息流（不落盘），所以不会每次播同一批旧剧。
+     * 只保留带分集的剧：feed 没带 vid 的（旧脚本/异常）跳过，保证拿到就能播。
+     *
+     * 单页过滤后常只剩 2 条，故合并前若干页、按 id 去重凑够一屏。
+     * 只消费一次：取到内容才落 [startupConsumed]，失败留给重组重试。
+     */
+    suspend fun consumeStartupRecommendations(): List<Series> = withContext(Dispatchers.IO) {
+        if (startupConsumed) return@withContext emptyList()
         if (!extras.startupAutoplay) {
             startupConsumed = true
-            return null
+            return@withContext emptyList()
         }
-        val home = _state.value.home
-        val first = home.hero.firstOrNull()
-            ?: home.shelves.firstOrNull { it.entries.isNotEmpty() }?.entries?.firstOrNull()?.series
-            ?: return null
-        startupConsumed = true
-        return first
+        val series = LinkedHashMap<String, Series>()
+        for (page in 1..STARTUP_FEED_PAGES) {
+            val items: List<Series> = runCatching { repository.feed(page, "startup").items }
+                .getOrDefault(emptyList())
+            items.forEach { if (it.id.isNotBlank()) series.putIfAbsent(it.id, it) }
+            if (series.size >= STARTUP_TARGET_CANDIDATES) break
+        }
+        // 只保留 feed 直出分集的剧：拿到即可起播，切剧零网络。
+        // 不做旧脚本兼容兜底：feed 没带 vid 就跳过，全部为空则本次启动直接回首页。
+        val candidates = series.values.filter { it.episodes.isNotEmpty() }
+            .take(STARTUP_TARGET_CANDIDATES)
+        if (candidates.isNotEmpty()) startupConsumed = true
+        candidates
     }
 
     // ---- 画面 ----
@@ -2221,108 +2738,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setVideoInfoMode(value: Int) {
         library.videoInfoMode = value
         toast("播放信息 · ${videoInfoLabel(value)}")
-    }
-
-    // ---- 应用图标（launcher activity-alias 切换） ----
-
-    fun appIconVariant(): String =
-        prefs.getString("appIconVariant", "i")?.takeIf { APP_ICON_ALIASES.containsKey(it) } ?: "i"
-
-    /** Resolve DEFAULT against the manifest instead of treating it as disabled. */
-    private fun launcherAliasEnabled(pm: PackageManager, component: ComponentName): Boolean =
-        when (pm.getComponentEnabledSetting(component)) {
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER,
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED -> false
-            else -> runCatching { pm.getActivityInfo(component, 0).enabled }.getOrDefault(false)
-        }
-
-    /**
-     * Apply one launcher entry as a single PackageManager transaction on Android 13+.
-     * Older versions enable and verify the target before disabling any previous entry.
-     */
-    private fun applyLauncherAliasVariant(variant: String) {
-        require(APP_ICON_ALIASES.containsKey(variant))
-        val app = getApplication<Application>()
-        val pm = app.packageManager
-        val prefix = ComposeActivity::class.java.name.removeSuffix("ComposeActivity")
-        val components = APP_ICON_ALIASES.mapValues { (_, alias) -> ComponentName(app, prefix + alias) }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val settings = APP_ICON_ALIASES.map { (key, _) ->
-                PackageManager.ComponentEnabledSetting(
-                    components.getValue(key),
-                    if (key == variant) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                    else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP,
-                )
-            }
-            pm.setComponentEnabledSettings(settings)
-        } else {
-            val target = components.getValue(variant)
-            pm.setComponentEnabledSetting(
-                target,
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                PackageManager.DONT_KILL_APP,
-            )
-            check(launcherAliasEnabled(pm, target)) { "目标桌面入口未能启用" }
-            components.filterKeys { it != variant }.values.forEach { component ->
-                pm.setComponentEnabledSetting(
-                    component,
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP,
-                )
-            }
-        }
-
-        val enabled = components.filterValues { launcherAliasEnabled(pm, it) }.keys
-        check(enabled == setOf(variant)) { "桌面入口状态异常：${enabled.joinToString()}" }
-    }
-
-    /** Activity 能启动时自检一次，纠正偏好与系统实际 alias 状态不一致的情况。 */
-    private fun ensureLauncherAliasConsistency() {
-        val app = getApplication<Application>()
-        val pm = app.packageManager
-        val prefix = ComposeActivity::class.java.name.removeSuffix("ComposeActivity")
-        val active = APP_ICON_ALIASES.mapNotNull { (key, alias) ->
-            val component = ComponentName(app, prefix + alias)
-            key.takeIf { runCatching { launcherAliasEnabled(pm, component) }.getOrDefault(false) }
-        }.toSet()
-        val preferred = appIconVariant()
-        if (active == setOf(preferred)) return
-
-        val recovered = runCatching { applyLauncherAliasVariant(preferred); preferred }.getOrElse {
-            val fallback = active.singleOrNull() ?: "i"
-            runCatching { applyLauncherAliasVariant(fallback); fallback }.getOrNull()
-        }
-        if (recovered != null) prefs.edit().putString("appIconVariant", recovered).commit()
-    }
-
-    fun setAppIconVariant(variant: String) {
-        if (!APP_ICON_ALIASES.containsKey(variant)) return
-        val previous = appIconVariant()
-        val app = getApplication<Application>()
-        val pm = app.packageManager
-        val prefix = ComposeActivity::class.java.name.removeSuffix("ComposeActivity")
-        val previousActive = APP_ICON_ALIASES.mapNotNull { (key, alias) ->
-            val component = ComponentName(app, prefix + alias)
-            key.takeIf { runCatching { launcherAliasEnabled(pm, component) }.getOrDefault(false) }
-        }.toSet()
-
-        try {
-            applyLauncherAliasVariant(variant)
-            check(prefs.edit().putString("appIconVariant", variant).commit()) { "图标偏好保存失败" }
-            toast("应用图标已更换 · 桌面可能需要刷新图标缓存")
-        } catch (failure: Exception) {
-            // Recover a known working launcher entry first; never leave all aliases disabled.
-            val fallback = previousActive.singleOrNull() ?: previous
-            val recovered = runCatching { applyLauncherAliasVariant(fallback); fallback }.getOrElse {
-                runCatching { applyLauncherAliasVariant("i"); "i" }.getOrNull()
-            }
-            if (recovered != null) prefs.edit().putString("appIconVariant", recovered).commit()
-            toast("图标切换失败，已尝试恢复可启动入口")
-        }
     }
 
     fun setShowNetworkSpeed(value: Boolean) {
@@ -2381,7 +2796,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "home" -> "首页"
             "search" -> "搜索"
             "play" -> "播放"
-            else -> "联想"
+            else -> "剧场"
         }
         val started = SystemClock.elapsedRealtime()
         return try {
@@ -2397,7 +2812,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         .stream("${latest.series.id}:${latest.episodeId}", library.maxQuality)
                     "已获取播放地址 · ${stream.quality}"
                 }
-                else -> "返回 ${repository.probeSuggest("xx")} 个联想词"
+                else -> "返回 ${repository.probeTheater()} 个剧场条目"
             }
             ApiProbe(key, label, ApiProbeStatus.OK, detail, SystemClock.elapsedRealtime() - started, System.currentTimeMillis())
         } catch (problem: Exception) {
@@ -2599,12 +3014,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setLoginPhone(value: String) {
-        val digits = value.filter { it.isDigit() }.take(11)
+        // 国内 11 位；国际区号放宽到 15 位（与脚本 formatPhone 的 5-15 位一致）。
+        val max = if (_state.value.account.countryCode == "+86") 11 else 15
+        val digits = value.filter { it.isDigit() }.take(max)
         _state.update { it.copy(account = it.account.copy(phone = digits, phoneError = null)) }
     }
 
+    /** 从区号列表中选中指定区号；区号变化后号码清空，避免国内号被误当国际号。 */
+    fun setCountryCode(code: String) {
+        if (code !in COUNTRY_CODES) return
+        if (_state.value.account.countryCode == code) return
+        _state.update {
+            it.copy(
+                account = it.account.copy(
+                    countryCode = code,
+                    phone = "",
+                    phoneError = null,
+                ),
+            )
+        }
+    }
+
     fun setLoginCode(value: String) {
-        val digits = value.filter { it.isDigit() }.take(6)
+        val digits = value.filter { it.isDigit() }.take(8)
         _state.update { it.copy(account = it.account.copy(code = digits, phoneError = null)) }
     }
 
@@ -2612,12 +3044,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val account = _state.value.account
         if (account.sending || account.countdown > 0) return
         if (!account.phoneValid) {
-            _state.update { it.copy(account = it.account.copy(phoneError = "请输入 11 位手机号")) }
+            val hint = if (account.countryCode == "+86") "请输入 11 位手机号" else "请输入 5-15 位手机号"
+            _state.update { it.copy(account = it.account.copy(phoneError = hint)) }
             return
         }
         _state.update { it.copy(account = it.account.copy(sending = true, phoneError = null, message = null)) }
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { jsAccount.sendPhoneCode(account.phone) } }
+            // +86 传纯 11 位（脚本自动补 +86 并剥前缀）；其它区号传「+区号 号码」走国际通道。
+            val number = if (account.countryCode == "+86") account.phone else "${account.countryCode} ${account.phone}"
+            val result = withContext(Dispatchers.IO) { runCatching { jsAccount.sendPhoneCode(number) } }
             result.onSuccess { sent ->
                 _state.update {
                     it.copy(
@@ -2730,23 +3165,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         accountPrefs.edit().putString("credentials", credentials.toJson()).apply()
         _state.update { it.copy(account = it.account.copy(signedIn = true, qrBitmap = null, busy = true, qrHint = "登录成功")) }
         viewModelScope.launch {
-            val profile = withContext(Dispatchers.IO) { runCatching { jsAccount.profile(credentials) }.getOrNull() }
-            val favorites = withContext(Dispatchers.IO) { runCatching { jsAccount.favorites(credentials) }.getOrNull() }
-            val history = withContext(Dispatchers.IO) { runCatching { jsAccount.history(credentials) }.getOrNull() }
-            accountPrefs.edit().putString("nickname", profile?.nickname ?: "红果用户").apply()
+            // 与启动恢复一致：三项云端数据并发拉取，登录后的同步等待更短。
+            val (profile, favorites, history) = coroutineScope {
+                val profileDeferred = async(Dispatchers.IO) { runCatching { jsAccount.profile(credentials) }.getOrNull() }
+                val favoritesDeferred = async(Dispatchers.IO) { runCatching { jsAccount.favorites(credentials) }.getOrNull() }
+                val historyDeferred = async(Dispatchers.IO) { runCatching { jsAccount.history(credentials) }.getOrNull() }
+                Triple(profileDeferred.await(), favoritesDeferred.await(), historyDeferred.await())
+            }
+            // 只在拿到真实资料时落盘：失败不写"红果用户"，免得把上次的头像/昵称缓存冲掉。
+            if (profile != null) {
+                accountPrefs.edit()
+                    .putString("nickname", profile.nickname)
+                    .putString("avatar", profile.avatarUrl)
+                    .apply()
+            }
+            bindSyncAccount(profile?.id?.takeIf { it.isNotBlank() }
+                ?: credentials.deviceId.ifBlank { credentials.cookie.take(32) })
             _state.update {
                 it.copy(
                     account = it.account.copy(
                         signedIn = true,
                         busy = false,
                         nickname = profile?.nickname ?: "红果用户",
-                        avatar = profile?.avatarUrl.orEmpty(),
+                        avatar = profile?.avatarUrl?.takeIf { url -> url.isNotBlank() }.orEmpty(),
                         cloudFavorites = favorites?.size ?: 0,
                         cloudHistory = history?.size ?: 0,
                         message = "登录成功，云端数据已同步",
                     ),
                 )
             }
+            // 预约片单始终以云端为准（TV 端只读），登录成功即拉取。
+            loadCloudReservations(force = true)
+            if (_state.value.account.syncEnabled) runSync()
         }
     }
 
@@ -2760,7 +3210,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { runCatching { jsAccount.signOut() } }
             accountPrefs.edit().clear().apply()
-            _state.update { it.copy(account = AccountState()) }
+            syncStore.unbind() // 仅解绑命名空间，开关/墓碑按账号保留
+            cloudReservationsJob?.cancel()
+            cloudReservations = emptyList()
+            _state.update { it.copy(account = AccountState(), library = it.library.copy(reservations = emptyList())) }
             toast("已退出账号")
         }
     }
@@ -2788,8 +3241,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private suspend fun runScriptCheck(force: Boolean) {
-        if (_scriptUpdate.value.checking) return
+    private suspend fun runScriptCheck(force: Boolean): ScriptUpdateOutcome {
+        if (_scriptUpdate.value.checking) return ScriptUpdateOutcome.Skipped
         _scriptUpdate.update { it.copy(checking = true) }
         val outcome = scriptUpdater.check(force)
         _scriptUpdate.update {
@@ -2803,6 +3256,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (outcome is ScriptUpdateOutcome.Installed) {
             applyInstalledScript()
+        }
+        return outcome
+    }
+
+    /**
+     * 手动检测脚本更新：设置页「接口版本」栏点击触发。
+     * 结果临时显示在该栏后方，几秒后自动恢复成版本号；后台正在检查时不重复触发。
+     */
+    fun checkScriptUpdateManually() {
+        viewModelScope.launch {
+            val seq = _scriptUpdate.value.manualHintSeq + 1
+            _scriptUpdate.update { it.copy(manualHint = "检查中…", manualHintSeq = seq) }
+            val outcome = runScriptCheck(force = true)
+            val hint = when (outcome) {
+                ScriptUpdateOutcome.UpToDate -> "已是最新版本"
+                is ScriptUpdateOutcome.Installed -> "已更新到新版本"
+                is ScriptUpdateOutcome.Failed -> "检查失败：${outcome.message}"
+                ScriptUpdateOutcome.Skipped -> null
+            }
+            // 后台已在检查时，清掉刚显示的「检查中…」，不抢占它的状态。
+            if (hint == null) {
+                _scriptUpdate.update { st ->
+                    if (st.manualHintSeq == seq) st.copy(manualHint = null) else st
+                }
+                return@launch
+            }
+            _scriptUpdate.update { it.copy(manualHint = hint, manualHintSeq = seq) }
+            delay(MANUAL_SCRIPT_HINT_MS)
+            _scriptUpdate.update { st ->
+                if (st.manualHintSeq == seq) st.copy(manualHint = null) else st
+            }
         }
     }
 
@@ -2864,6 +3348,92 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------------------------------------------------------------- 定时关闭
+
+    /**
+     * 设置定时。分钟模式启动 1 秒 ticker 轮询；集数模式只靠播放器推进集数时回调 [onEpisodeEnded]。
+     * 重复设置会覆盖旧定时。切剧/跨季连播不调用这里，所以定时器能跨剧存活。
+     */
+    fun setSleep(mode: SleepMode, value: Int, action: SleepAction) {
+        when (mode) {
+            SleepMode.MINUTES -> sleepTimer.afterMinutes(value)
+            SleepMode.EPISODES -> sleepTimer.afterEpisodes(value)
+            SleepMode.OFF -> { cancelSleep(); return }
+        }
+        val next = SleepTimerUiState(mode = mode, value = value, action = action, active = true)
+        _sleepState.value = next.copy(
+            summaryText = sleepSummaryText(next),
+            countdownText = sleepCountdownText(next),
+        )
+        sleepJob?.cancel()
+        if (mode == SleepMode.MINUTES) {
+            sleepJob = viewModelScope.launch {
+                while (sleepTimer.active) {
+                    delay(1_000)
+                    _sleepState.update { it.copy(countdownText = sleepCountdownText()) }
+                    if (sleepTimer.poll()) { fireSleep(); break }
+                }
+            }
+        }
+        toast("定时已设置：${sleepSummaryText()}")
+    }
+
+    /** 切换计时方式时只改到点动作，不重置正在计的时。 */
+    fun setSleepAction(action: SleepAction) {
+        _sleepState.update {
+            val changed = it.copy(action = action)
+            changed.copy(summaryText = sleepSummaryText(changed))
+        }
+    }
+
+    fun cancelSleep() {
+        sleepJob?.cancel()
+        sleepJob = null
+        sleepTimer.cancel()
+        _sleepState.value = SleepTimerUiState()
+    }
+
+    /** 播放器一集播完推进到下一集时调用：集数模式递减，到点则触发动作。 */
+    fun onEpisodeEnded() {
+        if (!sleepTimer.active || _sleepState.value.mode != SleepMode.EPISODES) return
+        if (sleepTimer.episodeEnded()) fireSleep()
+        else _sleepState.update { it.copy(countdownText = sleepCountdownText()) }
+    }
+
+    /** 面板底部/无障碍朗读的完整描述。 */
+    private fun sleepSummaryText(s: SleepTimerUiState = _sleepState.value): String {
+        return when (s.mode) {
+            SleepMode.MINUTES -> "${s.value} 分钟后${if (s.action == SleepAction.EXIT) "退出应用" else "暂停播放"}"
+            SleepMode.EPISODES -> "再播 ${s.value} 集 · ${if (s.action == SleepAction.EXIT) "退出应用" else "暂停播放"}"
+            SleepMode.OFF -> ""
+        }
+    }
+
+    /**
+     * 右上角临界倒计时：只有进入最后阶段才返回文案，平时空串（不常驻）。
+     * 分钟态剩余<=60s 逐秒「59 秒」到「0 秒」；集数态剩余<=3 集「3 集」到「1 集」。
+     */
+    private fun sleepCountdownText(s: SleepTimerUiState = _sleepState.value): String {
+        return when (s.mode) {
+            SleepMode.MINUTES -> sleepTimer.remainingMillis()?.let { ms ->
+                if (ms <= 60_000) "${(ms + 999) / 1_000} 秒" else ""
+            } ?: ""
+            SleepMode.EPISODES -> {
+                val left = sleepTimer.episodesLeft
+                if (left in 1..3) "$left 集" else ""
+            }
+            SleepMode.OFF -> ""
+        }
+    }
+
+    private fun fireSleep() {
+        val action = _sleepState.value.action
+        sleepJob?.cancel()
+        sleepJob = null
+        _sleepState.value = SleepTimerUiState()
+        _sleepFire.tryEmit(action)
+    }
+
     // ---------------------------------------------------------------- 提示
 
     fun toast(message: String) {
@@ -2888,7 +3458,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         listOfNotNull(
             castJob, homeJob, homeDeferJob, theaterJob, rankingJob,
             theaterMoreJob, rankingMoreJob, searchJob, suggestJob,
-            accountPoll, scriptBootstrapJob, updateJob, countdownJob,
+            accountPoll, scriptBootstrapJob, updateJob, countdownJob, sleepJob,
         ).forEach { it.cancel() }
         castServer?.close()
         castServer = null
@@ -2908,14 +3478,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         library.close()
     }
 }
-
-/** Stable manifest aliases used by both phone and Leanback launchers. */
-private val APP_ICON_ALIASES = linkedMapOf(
-    "h" to "LauncherIconH",
-    "i" to "LauncherIconI",
-    "j" to "LauncherIconJ",
-    "k" to "LauncherIconK",
-)
 
 /** 分页失败重试上限：网络连续失败三次才判定「到底」，避免一次抖动锁死列表。 */
 private const val MAX_LOAD_MORE_RETRIES = 3
@@ -2940,6 +3502,7 @@ private const val HOME_BACKGROUND_REFRESH_DELAY_MS = 1_200L
  * 每页都从第 0 条开始（实测 pageSize=8 时四页全是同一批 8 部）。
  */
 private const val ACTOR_PAGE_SIZE = 24
+private const val SOCIAL_PAGE_SIZE = 20
 
 /**
  * 首页大海报的取数页：固定第 2 页。
@@ -2955,5 +3518,14 @@ private const val HERO_MIXED_PER_TYPE = 2
 private const val SCRIPT_FIRST_DELAY_MS = 1_500L
 /** 使用中静默巡检：长时间开机的电视盒子也能拿到新脚本，全程不打断。 */
 private const val SCRIPT_CHECK_INTERVAL_MS = 3 * 60 * 60 * 1000L
+/** 手动检测后，检测结果在该栏停留多久再恢复成版本号。 */
+private const val MANUAL_SCRIPT_HINT_MS = 2_500L
 /** 新脚本就绪时等首屏收尾的上限；超时就直接切，不等首页。 */
 private const val SCRIPT_SWITCH_WAIT_MS = 20_000L
+
+/** 启动播放候选：合并 feed 前几页凑数（单页常只剩 2 条），目标一屏候选。 */
+private const val STARTUP_FEED_PAGES = 5
+private const val STARTUP_TARGET_CANDIDATES = 12
+
+/** 手机号区号循环列表：首项 +86 为默认，其余为常用国际区号。 */
+private val COUNTRY_CODES = listOf("+86", "+852", "+886", "+1", "+44", "+81", "+82")

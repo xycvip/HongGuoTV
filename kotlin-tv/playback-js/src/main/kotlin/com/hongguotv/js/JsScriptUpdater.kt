@@ -102,7 +102,7 @@ class JsScriptUpdater(
         if (!canCompile(bytes)) {
             return fail(IOException("新脚本无法编译，已放弃本次更新"))
         }
-        if (!HongguoJs.installUpdate(context, bytes)) {
+        if (!HongguoJs.installUpdate(context, bytes, manifest.version)) {
             return fail(IOException("脚本写入失败"))
         }
 

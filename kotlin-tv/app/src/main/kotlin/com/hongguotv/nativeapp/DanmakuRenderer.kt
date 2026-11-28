@@ -7,6 +7,7 @@ import com.hongguotv.core.DanmakuLoader
 interface DanmakuRenderer {
     fun applyPrefs(opacityPct: Int, font: Int, speed: Int, rows: Int)
     fun setColorMode(mode: Int)
+    fun setMergeRepeat(enabled: Boolean)
     fun setBlockedFilter(filter: (String) -> Boolean)
     fun bind(loader: DanmakuLoader, position: () -> Long, needMore: (Long) -> Unit = {}, playing: Boolean = true)
     fun setPlaybackActive(active: Boolean)

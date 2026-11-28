@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 光弧原图内容占了 77.4% 画布，是四个里最满的，边缘已经被遮罩切掉，收到 54%。 -->
-<inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@drawable/ic_launcher_fg_j"
-    android:insetLeft="16.5dp"
-    android:insetTop="16.5dp"
-    android:insetRight="16.5dp"
-    android:insetBottom="16.5dp" />

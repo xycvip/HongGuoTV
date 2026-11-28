@@ -20,6 +20,15 @@ class RemoteVideo(
 ): Closeable {
     @Volatile private var closed=false
     private val calls=mutableSetOf<Call>()
+    /** 视频轨道显示宽高，来自 MP4 tkhd（与 ExoPlayer 上报同源）。prepare() 之后才可用，懒解析一次。 */
+    private var parsedSize: Pair<Int,Int>? = null
+    @get:Synchronized val videoSize: Pair<Int,Int> get() {
+        parsedSize?.let { return it }
+        if (!::prepared.isInitialized) return 0 to 0
+        val size = runCatching { MediaCrypto.videoSize(prepared.header) }.getOrDefault(0 to 0)
+        parsedSize = size
+        return size
+    }
     data class Range(val bytes: ByteArray,val total: Long)
     @Volatile var total: Long=0; private set
     private lateinit var prepared: MediaCrypto.Prepared

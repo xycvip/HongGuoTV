@@ -2,6 +2,7 @@
 package com.hongguotv.js
 
 import com.hongguotv.core.EmptyPlaybackResponseException
+import com.hongguotv.core.PlaybackQuality
 import com.hongguotv.core.StreamInfo
 import com.hongguotv.core.StreamSource
 import kotlinx.coroutines.runBlocking
@@ -35,7 +36,7 @@ class HongguoJsStreamSource(
         val task = JSONObject()
             .put("dramaId", seriesId)
             .put("chapter", JSONObject().put("id", "hongguo:$seriesId:$videoId"))
-            .put("maxQuality", maxQuality)
+            .put("maxQuality", PlaybackQuality.streamRequest(maxQuality))
         val result = runBlocking { js.call("resolveMedia", task) }
         if (!result.ok) throw mapScriptError(result)
         val data = JSONObject(result.data ?: "{}")

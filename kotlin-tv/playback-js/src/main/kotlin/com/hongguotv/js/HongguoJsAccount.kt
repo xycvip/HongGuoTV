@@ -6,6 +6,12 @@ import com.hongguotv.core.CloudFavorite
 import com.hongguotv.core.CloudProfile
 import com.hongguotv.core.CloudProgress
 import com.hongguotv.core.CloudReservation
+import com.hongguotv.core.Creator
+import com.hongguotv.core.CreatorProfile
+import com.hongguotv.core.CreatorWorksPage
+import com.hongguotv.core.ImageUrls
+import com.hongguotv.core.Review
+import com.hongguotv.core.ReviewPage
 import com.hongguotv.core.JsAccountGateway
 import com.hongguotv.core.RelatedWork
 import com.hongguotv.core.Series
@@ -82,11 +88,29 @@ class HongguoJsAccount(
     }
 
     override fun profile(credentials: AccountCredentials): CloudProfile {
-        val data = call("profile", JSONObject(), credentials)
+        val direct = runCatching {
+            val data = call("profile", JSONObject(), credentials)
+            val id = data.optString("id")
+            if (id.isBlank()) {
+                null
+            } else {
+                CloudProfile(
+                    id = id,
+                    nickname = data.optString("nickname").ifBlank { "红果用户" },
+                    // 头像与剧集封面走同一套归一化：脚本可能下发 //p3-... 或 .heic，
+                    // TV 盒子解不出来就是「头像空白」，这里统一修好。
+                    avatarUrl = ImageUrls.normalize(data.optString("avatar")),
+                )
+            }
+        }.getOrNull()
+        if (direct != null) return direct
+        // 官方资料接口偶尔改结构（id 字段换名即整条失败）。webInfo 同样返回昵称/头像，
+        // 且登录态有效时必定可用——宁可多一次请求，也不要让账号页只剩「红果用户 + 首字」。
+        val info = call("webInfo", JSONObject(), credentials)
         return CloudProfile(
-            id = data.optString("id"),
-            nickname = data.optString("nickname").ifBlank { "红果用户" },
-            avatarUrl = data.optString("avatar"),
+            id = info.optString("id"),
+            nickname = info.optString("nickname").ifBlank { "红果用户" },
+            avatarUrl = ImageUrls.normalize(info.optString("avatar")),
         )
     }
 
@@ -123,13 +147,140 @@ class HongguoJsAccount(
         call("progressUpdate", payload, credentials)
     }
 
+    override fun deleteHistory(credentials: AccountCredentials, seriesId: String, videoId: String, updatedAt: Long) {
+        val payload = JSONObject()
+            .put("id", seriesId)
+            .put("itemId", videoId.ifBlank { seriesId })
+            .put("updatedAt", updatedAt.takeIf { it > 0 } ?: System.currentTimeMillis())
+        call("historyDelete", payload, credentials)
+    }
+
     override fun reservations(credentials: AccountCredentials, online: Boolean): List<CloudReservation> {
-        // JS 侧没有独立的预约列表 action；返回空列表，避免误报。
-        return emptyList()
+        val data = call("reservations", JSONObject().put("online", online), credentials)
+        val rows = data.optJSONArray("items") ?: return emptyList()
+        val out = ArrayList<CloudReservation>(rows.length())
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val series = row.toSeries() ?: continue
+            val onlineFlag = if (row.has("online")) row.optBoolean("online") else online
+            out += CloudReservation(
+                series = series,
+                online = onlineFlag,
+                publishAt = row.optLong("publishAt"),
+                publishText = row.optString("note"),
+            )
+        }
+        return out.distinctBy { it.series.id }
     }
 
     override fun reserve(credentials: AccountCredentials, work: RelatedWork) {
-        // JS 侧当前没有预约写入 action；静默跳过，保持播放器行为稳定。
+        // op_type: 1 = 预约/加入片单，2 = 取消预约。
+        val payload = JSONObject()
+            .put("id", work.series.id)
+            .put("opType", if (work.upcoming) 1 else 2)
+        call("reserveUpdate", payload, credentials)
+    }
+
+    // ---- 详情页社交数据（匿名设备签名，未登录可读） ----
+
+    override fun creatorList(seriesId: String): List<Creator> {
+        val data = call("creatorList", JSONObject().put("id", seriesId))
+        val rows = data.optJSONArray("creators") ?: return emptyList()
+        val out = ArrayList<Creator>(rows.length())
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val id = row.optString("id")
+            if (!id.matches(Regex("[0-9]{1,30}"))) continue
+            out += Creator(
+                id = id,
+                name = row.optString("name"),
+                relativeType = row.optInt("relativeType"),
+                following = if (row.has("following") && !row.isNull("following")) row.optBoolean("following") else null,
+                canFollow = row.optBoolean("canFollow"),
+            )
+        }
+        return out
+    }
+
+    override fun creatorProfile(userId: String, credentials: AccountCredentials?): CreatorProfile {
+        val data = call("creatorProfile", JSONObject().put("userId", userId), credentials)
+        return CreatorProfile(data.optJSONObject("creator")?.toCreator() ?: Creator(id = userId))
+    }
+
+    override fun creatorWorks(userId: String, cursor: String, count: Int): CreatorWorksPage {
+        val payload = JSONObject()
+            .put("userId", userId)
+            .put("count", count.coerceIn(1, 50))
+        if (cursor.isNotBlank()) payload.put("cursor", cursor)
+        val data = call("creatorWorks", payload)
+        val rows = data.optJSONArray("items") ?: return CreatorWorksPage(emptyList(), false, "", 0)
+        val items = ArrayList<Series>(rows.length())
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val series = row.toSeries() ?: continue
+            items += series
+        }
+        return CreatorWorksPage(
+            items = items,
+            hasMore = data.optBoolean("hasMore"),
+            nextCursor = data.optString("nextCursor"),
+            nextOffset = data.optInt("nextOffset"),
+        )
+    }
+
+    override fun commentList(seriesId: String, cursor: String, count: Int): ReviewPage {
+        val payload = JSONObject()
+            .put("bookId", seriesId)
+            .put("id", seriesId)
+            .put("count", count.coerceIn(1, 50))
+            .put("sort", 1)
+        if (cursor.isNotBlank()) payload.put("cursor", cursor)
+        val data = call("commentList", payload)
+        val rows = data.optJSONArray("list") ?: return ReviewPage(emptyList(), 0, false, "")
+        val items = ArrayList<Review>(rows.length())
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val id = row.optString("id")
+            if (id.isBlank()) continue
+            items += Review(
+                id = id,
+                text = row.optString("text"),
+                userName = row.optString("userName").ifBlank { "红果用户" },
+                userAvatar = ImageUrls.normalize(row.optString("userAvatar")),
+                userId = row.optString("userId"),
+                createTime = row.optLong("createTime"),
+                diggCount = row.optInt("diggCount"),
+                replyCount = row.optInt("replyCount"),
+            )
+        }
+        return ReviewPage(
+            items = items,
+            total = data.optInt("total"),
+            hasMore = data.optBoolean("hasMore"),
+            cursor = data.optString("cursor"),
+        )
+    }
+
+    override fun creatorFollow(userId: String, relativeType: Int, follow: Boolean, credentials: AccountCredentials) {
+        val payload = JSONObject()
+            .put("userId", userId)
+            .put("relativeType", relativeType)
+            .put("follow", if (follow) "1" else "0")
+        call("creatorFollow", payload, credentials)
+    }
+
+    private fun JSONObject.toCreator(): Creator {
+        val id = optString("id")
+        return Creator(
+            id = id,
+            name = optString("name"),
+            avatar = ImageUrls.normalize(optString("avatar")),
+            description = optString("description"),
+            worksCount = optInt("worksCount"),
+            following = if (has("following") && !isNull("following")) optBoolean("following") else null,
+            canFollow = optBoolean("canFollow"),
+            relativeType = optInt("relativeType"),
+        )
     }
 
     override fun restore(credentials: AccountCredentials) {

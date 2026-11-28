@@ -9,7 +9,7 @@ enum class ApiProbeStatus { UNKNOWN, CHECKING, OK, FAILED }
 
 /**
  * 一项接口的最近一次检测结果。
- * 四项固定：首页、搜索、播放、联想，顺序也是品牌四叶的顺时针顺序。
+ * 四项固定：首页、搜索、播放、剧场，顺序也是品牌四叶的顺时针顺序。
  */
 data class ApiProbe(
     val key: String,
@@ -24,7 +24,7 @@ private val defaultProbes = listOf(
     ApiProbe("home", "首页"),
     ApiProbe("search", "搜索"),
     ApiProbe("play", "播放"),
-    ApiProbe("suggest", "联想"),
+    ApiProbe("theater", "剧场"),
 )
 
 /** 接口指示器与「设置 · 网络」共用的状态。 */

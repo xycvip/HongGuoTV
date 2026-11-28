@@ -52,8 +52,28 @@ interface JsAccountGateway {
         episodeCount: Int,
     )
 
+    /** 从云端观看历史中软删除某条记录（删除同步：本机移除后推送云端，避免复活）。 */
+    fun deleteHistory(credentials: AccountCredentials, seriesId: String, videoId: String, updatedAt: Long)
+
     fun reservations(credentials: AccountCredentials, online: Boolean): List<CloudReservation>
     fun reserve(credentials: AccountCredentials, work: RelatedWork)
+
+    // ---- 详情页社交数据（匿名设备签名，未登录可读） ----
+
+    /** 按剧集取发布作者 / 演职员列表（creatorList）。 */
+    fun creatorList(seriesId: String): List<Creator>
+
+    /** 作者档案（creatorProfile），含关注状态；带登录态时更准。 */
+    fun creatorProfile(userId: String, credentials: AccountCredentials? = null): CreatorProfile
+
+    /** 作者作品分页（creatorWorks）；[cursor] 首屏传空，之后原样回传上一页的 nextCursor。 */
+    fun creatorWorks(userId: String, cursor: String, count: Int): CreatorWorksPage
+
+    /** 剧评列表（commentList）；[cursor] 首屏传空，之后原样回传上一页的 cursor。 */
+    fun commentList(seriesId: String, cursor: String, count: Int): ReviewPage
+
+    /** 关注 / 取关作者（creatorFollow），需要登录态。 */
+    fun creatorFollow(userId: String, relativeType: Int, follow: Boolean, credentials: AccountCredentials)
 
     /** 用持久化凭证恢复会话（把 cookie 注入脚本会话）。 */
     fun restore(credentials: AccountCredentials)

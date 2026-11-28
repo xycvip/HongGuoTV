@@ -15,6 +15,8 @@ object DanmakuPrefs {
     const val ROWS_MIN = 1
     const val ROWS_MAX = 10
     const val ROWS_DEFAULT = 2
+    /** 「合并重复弹幕」窗口：同一文本在这段毫秒内只显示一条。 */
+    const val MERGE_REPEAT_WINDOW_MS = 10_000L
     val FONT_LABELS = listOf("小", "较小", "适中", "大", "较大")
     val SPEED_LABELS = listOf("慢", "较慢", "适中", "快", "较快")
 

@@ -33,6 +33,7 @@ import com.hongguotv.core.Series
 import com.hongguotv.nativeapp.BuildConfig
 import com.hongguotv.nativeapp.ui.components.AmbientBackground
 import com.hongguotv.nativeapp.ui.components.ApiStatusDialog
+import com.hongguotv.nativeapp.ui.components.LoadingState
 import com.hongguotv.nativeapp.ui.components.ToastHost
 import com.hongguotv.nativeapp.ui.components.UpdateDialog
 import com.hongguotv.nativeapp.ui.components.TopBar
@@ -50,6 +51,7 @@ import com.hongguotv.nativeapp.ui.screens.CollectionScreen
 import com.hongguotv.nativeapp.ui.screens.DetailScreen
 import com.hongguotv.nativeapp.ui.screens.HomeScreen
 import com.hongguotv.nativeapp.ui.screens.LibraryScreen
+import com.hongguotv.nativeapp.ui.screens.LibraryTab
 import com.hongguotv.nativeapp.ui.screens.PlayerScreen
 import com.hongguotv.nativeapp.ui.screens.RankingScreen
 import com.hongguotv.nativeapp.ui.screens.ScriptBootstrapScreen
@@ -69,11 +71,13 @@ fun HongguoApp(vm: AppViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var route by remember { mutableStateOf<Route>(Route.Main) }
+    // 启动门控：开关开启时，feed 就绪前显示启动态而不是首页——满足「打开就播 feed、不闪首页」。
+    // feed 拿到后直接进播放器；失败/关闭则放行到首页。一次开机只判定一次，返回首页不会重播。
+    var startupGate by remember { mutableStateOf(vm.extras.startupAutoplay) }
     var clock by remember { mutableStateOf("") }
     var showApiStatus by remember { mutableStateOf(false) }
-    // 播放页「弹幕设置」入口：先记下要落到的分栏，再切回设置页；SettingsScreen 消费后清空，
-    // 避免下次正常进设置还停在弹幕栏。
-    var pendingSettingsSection by remember { mutableStateOf<String?>(null) }
+    // 启动选剧第一层的上下键切剧请求（索引）；由下方 LaunchedEffect 拉取新剧分集并重建播放器。
+    var pendingStartupSwitch by remember { mutableStateOf<Int?>(null) }
     // 「接着看」直连播放：取剧集列表期间拦住重复点击，避免叠出多次跳转。
     var resumingSeriesId by remember { mutableStateOf<String?>(null) }
     val appScope = rememberCoroutineScope()
@@ -143,6 +147,17 @@ fun HongguoApp(vm: AppViewModel) {
         }
     }
 
+    // 定时关闭·退出应用：到点在顶层落到 Activity，彻底退出回桌面。
+    // 暂停动作由 PlayerRoute 单独收集，避免顶层拿不到播放器会话。
+    LaunchedEffect(Unit) {
+        vm.sleepFire.collect { action ->
+            if (action == com.hongguotv.nativeapp.ui.data.SleepAction.EXIT) {
+                (context as? android.app.Activity)?.finishAffinity()
+                kotlin.system.exitProcess(0)
+            }
+        }
+    }
+
     LaunchedEffect(state.toast) {
         val message = state.toast ?: return@LaunchedEffect
         // Clearing all data may spend up to 30 seconds draining pending disk writes.
@@ -159,12 +174,61 @@ fun HongguoApp(vm: AppViewModel) {
         vm.autoCheckUpdates()
     }
 
-    // 启动时播放推荐：首页数据就绪后自动进入第一部。
-    LaunchedEffect(state.booted, state.home.loading, state.home.hero.size, route) {
-        if (route != Route.Main) return@LaunchedEffect
-        val first = vm.consumeStartupRecommendation() ?: return@LaunchedEffect
-        vm.openDetail(first)
-        route = Route.Detail(first.id, first, autoplay = true)
+    // 启动时播放推荐：进入播放器的「选剧第一层」，上下键切剧、确定键进完整控制层、返回键回首页。
+    // feed 直出分集：拉一次信息流就拿到「剧 + 分集」，起播不再逐部 detail、不落磁盘缓存。
+    // 门控期间显示启动态而非首页；拿到候选直接进播放器，失败/关闭才放行到首页。
+    // 一次开机只消费一次（VM 内 startupConsumed 保证），返回首页不会重播。
+    LaunchedEffect(state.booted, route) {
+        if (!state.booted) return@LaunchedEffect
+        if (!vm.extras.startupAutoplay) {
+            startupGate = false
+            return@LaunchedEffect
+        }
+        val current = route
+        // 已在启动播放器里（首次进入后 route 变化重跑）：只确保门控已放行，不覆盖播放。
+        if (current is Route.Player && current.startupCandidates.isNotEmpty()) {
+            startupGate = false
+            return@LaunchedEffect
+        }
+        if (current != Route.Main) return@LaunchedEffect
+
+        val candidates = vm.consumeStartupRecommendations()
+        if (candidates.isEmpty()) {
+            // feed 不可用：放行到首页，不让用户卡在启动态。
+            startupGate = false
+            return@LaunchedEffect
+        }
+        val first = candidates.first()
+        if (first.episodes.isNotEmpty()) {
+            route = Route.Player(
+                series = first,
+                episodes = first.episodes,
+                episodeIndex = 0,
+                startupCandidates = candidates,
+                startupIndex = 0,
+            )
+        }
+        startupGate = false
+    }
+
+    // 启动选剧第一层：上下键切剧 → 拉新剧分集 → 重建播放器（换剧但留在第一层）。
+    LaunchedEffect(pendingStartupSwitch) {
+        val index = pendingStartupSwitch ?: return@LaunchedEffect
+        pendingStartupSwitch = null
+        val player = route as? Route.Player ?: return@LaunchedEffect
+        val next = player.startupCandidates.getOrNull(index) ?: return@LaunchedEffect
+        if (next.id == player.series.id) return@LaunchedEffect
+        // 候选剧自带 feed 直出的分集，零网络秒切；不做 detail 兜底。
+        val episodes = next.episodes
+        if (episodes.isNotEmpty()) {
+            route = Route.Player(
+                series = next,
+                episodes = episodes,
+                episodeIndex = 0,
+                startupCandidates = player.startupCandidates,
+                startupIndex = index,
+            )
+        }
     }
 
     // 首页可见性：冷启动用缓存顶首屏，切走后静默补网络，回来就是新内容。
@@ -310,7 +374,10 @@ fun HongguoApp(vm: AppViewModel) {
             label = "route",
         ) { target ->
             when (target) {
-                Route.Main -> Box(Modifier.fillMaxSize()) {
+                Route.Main -> if (startupGate) {
+                    // 启动播放门控：feed 就绪前显示启动态，不闪首页、不加载首页数据。
+                    LoadingState(label = "正在准备推荐…")
+                } else Box(Modifier.fillMaxSize()) {
                     MainTabContent(
                         tab = tab,
                         vm = vm,
@@ -349,8 +416,6 @@ fun HongguoApp(vm: AppViewModel) {
                         settingsEntry = settingsEntry,
                         accountEntry = accountEntry,
                         upFocus = tabAnchors[tab],
-                        initialSettingsSection = pendingSettingsSection,
-                        onSettingsSectionConsumed = { pendingSettingsSection = null },
                     )
                     TopBar(
                         current = tab,
@@ -420,7 +485,6 @@ fun HongguoApp(vm: AppViewModel) {
                     },
                     onNextEpisode = {},
                     onFavorite = { state.detail.series?.let { vm.toggleFavorite(it) } },
-                    onLater = { state.detail.series?.let { vm.toggleLater(it) } },
                     onSeries = { series ->
                         // 从季签切换时把光标留在新季上；从相关推荐进来则按常规落在播放键。
                         pendingSeasonFocus = series.id
@@ -440,19 +504,24 @@ fun HongguoApp(vm: AppViewModel) {
                     actor = state.actor,
                     onExpandSynopsis = vm::toggleSynopsis,
                     showBack = snapshot?.showScreenBack == true,
+                    creator = state.creator,
+                    reviews = state.reviews,
+                    onCreatorFollow = vm::toggleCreatorFollow,
+                    onCreatorLoadMoreWorks = vm::loadMoreCreatorWorks,
+                    onReviewLoadMore = vm::loadMoreReviews,
                 )
 
                 is Route.Player -> PlayerRoute(
                     route = target,
                     vm = vm,
                     clock = clock,
+                    // 启动选剧模式下返回直接回首页；普通播放返回详情。
                     onBack = {
-                        route = Route.Detail(target.series.id, target.series)
+                        if (target.startupCandidates.isNotEmpty()) route = Route.Main
+                        else route = Route.Detail(target.series.id, target.series)
                     },
-                    onDanmakuSettings = {
-                        pendingSettingsSection = "DANMAKU"
-                        tab = Tab.SETTINGS
-                        route = Route.Main
+                    onSwitchSeries = { index ->
+                        pendingStartupSwitch = index
                     },
                 )
 
@@ -518,6 +587,16 @@ fun HongguoApp(vm: AppViewModel) {
         },
         onDismiss = vm::dismissUpdateDialog,
         onPickMirror = vm::setUpdateMirror,
+        onOpenWeb = { url ->
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            val opened = runCatching { context.startActivity(intent) }.isSuccess
+            if (!opened) {
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("下载地址", url))
+                vm.toast("无法打开浏览器，下载地址已复制")
+            }
+        },
     )
 }
 
@@ -527,16 +606,17 @@ private fun PlayerRoute(
     vm: AppViewModel,
     clock: String,
     onBack: () -> Unit,
-    onDanmakuSettings: () -> Unit,
+    onSwitchSeries: (Int) -> Unit,
 ) {
+    val sleepState by vm.sleepState.collectAsStateWithLifecycle()
     val session = remember(route.series.id) {
         PlayerSession(
             context = vm.getApplication(),
             repository = vm.repository,
             library = vm.library,
             extras = vm.extras,
-            series = route.series,
-            episodes = route.episodes,
+            initialSeries = route.series,
+            initialEpisodes = route.episodes,
             initialIndex = route.episodeIndex,
             initialPositionMs = route.positionMs,
         )
@@ -553,12 +633,28 @@ private fun PlayerRoute(
     // 只在切后台前正在播时才恢复，不覆盖用户此前的手动暂停。
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { session.onAppBackground() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { session.onAppForeground() }
+    // 定时关闭·暂停播放：到点落到当前播放器会话（切剧/跨季后这里会指向新 session）。
+    LaunchedEffect(Unit) {
+        vm.sleepFire.collect { action ->
+            if (action == com.hongguotv.nativeapp.ui.data.SleepAction.PAUSE) {
+                session.pause()
+                vm.toast("定时到点，已暂停播放")
+            }
+        }
+    }
     PlayerScreen(
         session = session,
         settings = remember { vm.settingsSnapshot() },
         onBack = onBack,
         clock = clock,
-        onDanmakuSettings = onDanmakuSettings,
+        startupCandidates = route.startupCandidates,
+        startupIndex = route.startupIndex,
+        onSwitchSeries = onSwitchSeries,
+        sleepState = sleepState,
+        onSetSleep = { mode, value, action -> vm.setSleep(mode, value, action) },
+        onSleepAction = { action -> vm.setSleepAction(action) },
+        onCancelSleep = { vm.cancelSleep() },
+        onEpisodeAdvanced = { vm.onEpisodeEnded() },
     )
 }
 
@@ -584,22 +680,29 @@ private fun MainTabContent(
     settingsEntry: FocusRequester? = null,
     accountEntry: FocusRequester? = null,
     upFocus: FocusRequester? = null,
-    initialSettingsSection: String? = null,
-    onSettingsSectionConsumed: () -> Unit = {},
 ) {
     val favoriteIds = remember(state.library.version) { state.library.favorites.map { it.id }.toSet() }
     val progressById = remember(state.library.version) { state.library.history.associateBy { it.series.id } }
+    // 账号中心点「我的收藏 / 观看历史」时的一次性分区请求：追剧页消费后立刻清空，
+    // 否则下次从顶栏进追剧会被旧值反复劫持。
+    var libraryTarget by remember { mutableStateOf<LibraryTab?>(null) }
     // 进入页面即按需加载：不依赖顶栏点击路径，冷启动或从其它页返回都能自愈。
-    LaunchedEffect(tab, state.booted) {
+    LaunchedEffect(tab, state.booted, state.account.signedIn) {
         if (!state.booted) return@LaunchedEffect
         when (tab) {
             Tab.THEATER -> if (state.theater.items.isEmpty() && !state.theater.loading) vm.loadTheater(state.theater.type)
             Tab.RANK -> if (state.ranking.items.isEmpty() && !state.ranking.loading)
                 vm.loadRanking(state.ranking.board, state.ranking.kind)
-            Tab.LIBRARY -> vm.refreshLibraryState()
-            Tab.ACCOUNT -> if (!state.account.signedIn && state.account.mode == LoginMode.QR &&
-                state.account.qrBitmap == null
-            ) {
+            Tab.LIBRARY -> {
+                vm.refreshLibraryState()
+                // 预约片单在云端，进入追剧页时按需拉取（未登录会自动跳过）。
+                vm.loadCloudReservations()
+            }
+            // 已登录进账号中心要看到真实的收藏/历史数量，先把本地库映射进页面状态；
+            // 未登录则维持原来的「进页即出扫码」行为。
+            Tab.ACCOUNT -> if (state.account.signedIn) {
+                vm.refreshLibraryState()
+            } else if (state.account.mode == LoginMode.QR && state.account.qrBitmap == null) {
                 vm.startQrLogin()
             }
             else -> Unit
@@ -658,6 +761,8 @@ private fun MainTabContent(
             onToggleLater = { vm.toggleLater(it) },
             onGoTheater = { onTab(Tab.THEATER) },
             version = state.library.version,
+            initialTab = libraryTarget,
+            onInitialTabConsumed = { libraryTarget = null },
             entryFocus = libraryEntry,
             upFocus = upFocus,
         )
@@ -668,8 +773,6 @@ private fun MainTabContent(
                 snapshot = snapshot,
                 versionName = BuildConfig.VERSION_NAME,
                 onApiStatus = onApiStatus,
-                initialSection = initialSettingsSection,
-                onInitialSectionConsumed = onSettingsSectionConsumed,
                 entryFocus = settingsEntry,
                 upFocus = upFocus,
             )
@@ -677,6 +780,7 @@ private fun MainTabContent(
 
         Tab.ACCOUNT -> AccountScreen(
             state = state.account,
+            library = state.library,
             onLogin = vm::startQrLogin,
             onSignOut = vm::signOut,
             onSwitchMode = vm::switchLoginMode,
@@ -685,6 +789,14 @@ private fun MainTabContent(
             onSendCode = vm::sendLoginCode,
             onVerify = vm::verifyLoginCode,
             onResetPhone = vm::resetLoginPhone,
+            onCountryCode = vm::setCountryCode,
+            onOpenLibrary = { target ->
+                libraryTarget = target
+                onTab(Tab.LIBRARY)
+            },
+            onDetail = onDetail,
+            onResume = { series -> onResume(series) },
+            onToggleSync = { enabled, mode -> vm.setSyncEnabled(enabled, mode) },
             entryFocus = accountEntry,
             upFocus = upFocus,
         )

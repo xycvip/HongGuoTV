@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hongguotv.core.BackupProgress
+import com.hongguotv.core.ContentType
 import com.hongguotv.core.Series
 import com.hongguotv.nativeapp.ui.components.CornerBadge
 import com.hongguotv.nativeapp.ui.components.EmptyState
@@ -51,16 +53,24 @@ import com.hongguotv.nativeapp.ui.components.ThinProgress
 import com.hongguotv.nativeapp.ui.components.TvButton
 import com.hongguotv.nativeapp.ui.components.ButtonTone
 import com.hongguotv.nativeapp.ui.data.LibraryState
+import com.hongguotv.nativeapp.ui.theme.Gold
 import com.hongguotv.nativeapp.ui.theme.Ink
 import com.hongguotv.nativeapp.ui.theme.Paper
 import com.hongguotv.nativeapp.ui.theme.Rouge
 import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
 
-private enum class LibraryTab(val label: String) {
+/** 追剧页的分区。公开是为了让账号中心能直接跳到指定分区。 */
+enum class LibraryTab(val label: String) {
     HISTORY("观看历史"),
     FAVORITES("我的收藏"),
+    RESERVATIONS("我的预约"),
 }
+
+/** 各分区的二级筛选，独立于主 Tab，切分区时各自保留。 */
+enum class HistoryFilter(val label: String) { ALL("全部"), UNFINISHED("未看完"), FINISHED("已看完") }
+enum class FavoriteFilter(val label: String) { ALL("全部"), REAL("真人剧"), COMIC("漫剧"), AI("AI剧") }
+enum class ReservationFilter(val label: String) { ALL("全部"), UPCOMING("未上线"), ONLINE("已上线") }
 
 @Composable
 fun LibraryScreen(
@@ -74,6 +84,9 @@ fun LibraryScreen(
     onGoTheater: () -> Unit,
     version: Int,
     modifier: Modifier = Modifier,
+    /** 从账号中心跳进来时指定的分区；消费后由外部清空，避免下次进入被旧值劫持。 */
+    initialTab: LibraryTab? = null,
+    onInitialTabConsumed: () -> Unit = {},
     entryFocus: FocusRequester? = null,
     upFocus: FocusRequester? = null,
 ) {
@@ -81,9 +94,39 @@ fun LibraryScreen(
     // 计数/落点全部按枚举类型判断，避免依赖顺序；entryFocus 也绑到历史标签。
     val historyIndex = LibraryTab.entries.indexOf(LibraryTab.HISTORY)
     var tab by remember(version) { mutableIntStateOf(historyIndex) }
+    // 账号中心指定分区：覆盖当前选择并立刻回报已消费，防止切换回来时重复生效。
+    LaunchedEffect(initialTab) {
+        if (initialTab != null) {
+            tab = LibraryTab.entries.indexOf(initialTab)
+            onInitialTabConsumed()
+        }
+    }
     val current = LibraryTab.entries[tab.coerceIn(0, LibraryTab.entries.lastIndex)]
     val favorites = state.favorites
     val history = state.history
+    val reservations = state.reservations
+    // 二级筛选状态：每个分区独立记住，切走再回来不用重选。
+    var historyFilter by remember(version) { mutableIntStateOf(HistoryFilter.entries.indexOf(HistoryFilter.ALL)) }
+    var favoriteFilter by remember(version) { mutableIntStateOf(FavoriteFilter.entries.indexOf(FavoriteFilter.ALL)) }
+    var reservationFilter by remember(version) { mutableIntStateOf(ReservationFilter.entries.indexOf(ReservationFilter.ALL)) }
+
+    // 按分区 + 筛选得到最终列表。
+    val shownHistory = when (HistoryFilter.entries[historyFilter.coerceIn(0, HistoryFilter.entries.lastIndex)]) {
+        HistoryFilter.ALL -> history
+        HistoryFilter.UNFINISHED -> history.filterNot { it.completed }
+        HistoryFilter.FINISHED -> history.filter { it.completed }
+    }
+    val shownFavorites = when (FavoriteFilter.entries[favoriteFilter.coerceIn(0, FavoriteFilter.entries.lastIndex)]) {
+        FavoriteFilter.ALL -> favorites
+        FavoriteFilter.REAL -> favorites.filter { it.contentType == ContentType.SHORT }
+        FavoriteFilter.COMIC -> favorites.filter { it.contentType == ContentType.COMIC }
+        FavoriteFilter.AI -> favorites.filter { it.contentType == ContentType.AI }
+    }
+    val shownReservations = when (ReservationFilter.entries[reservationFilter.coerceIn(0, ReservationFilter.entries.lastIndex)]) {
+        ReservationFilter.ALL -> reservations
+        ReservationFilter.UPCOMING -> reservations.filterNot { it.online }
+        ReservationFilter.ONLINE -> reservations.filter { it.online }
+    }
 
     Box(modifier.fillMaxSize()) {
         LazyVerticalGrid(
@@ -100,7 +143,7 @@ fun LibraryScreen(
                             Text("追剧", style = MaterialTheme.typography.displaySmall, color = Paper.Pure, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(d(6)))
                             Text(
-                                "收藏 ${favorites.size} 部 · 看过 ${history.size} 部",
+                                "收藏 ${favorites.size} · 看过 ${history.size} · 预约 ${reservations.size}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Paper.Tertiary,
                             )
@@ -110,11 +153,18 @@ fun LibraryScreen(
                             TvButton("清空历史", onClearHistory, tone = ButtonTone.Ghost)
                         }
                     }
-                    Spacer(Modifier.height(d(18)))
-                    Row(horizontalArrangement = Arrangement.spacedBy(d(10))) {
+                    Spacer(Modifier.height(d(16)))
+                    // 一级分区：三个大胶囊。
+                    Row(horizontalArrangement = Arrangement.spacedBy(d(12))) {
                         LibraryTab.entries.forEachIndexed { index, item ->
                             SelectChip(
-                                text = "${item.label}  ${if (item == LibraryTab.FAVORITES) favorites.size else history.size}",
+                                text = "${item.label}  ${
+                                    when (item) {
+                                        LibraryTab.FAVORITES -> favorites.size
+                                        LibraryTab.RESERVATIONS -> reservations.size
+                                        else -> history.size
+                                    }
+                                }",
                                 selected = tab == index,
                                 onClick = { tab = index },
                                 focusRequester = if (item == LibraryTab.HISTORY) entryFocus else null,
@@ -122,23 +172,53 @@ fun LibraryScreen(
                             )
                         }
                     }
-                    Spacer(Modifier.height(d(6)))
+                    Spacer(Modifier.height(d(12)))
+                    // 二级筛选：细胶囊 + 左侧引导线，视觉上与主分区分层。
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(d(8)),
+                    ) {
+                        Box(Modifier.width(d(2)).height(d(16)).background(Gold.Core.copy(alpha = 0.6f)))
+                        when (current) {
+                            LibraryTab.HISTORY -> HistoryFilter.entries.forEachIndexed { index, f ->
+                                SelectChip(
+                                    text = f.label, selected = historyFilter == index,
+                                    onClick = { historyFilter = index }, accent = Gold.Core,
+                                )
+                            }
+                            LibraryTab.FAVORITES -> FavoriteFilter.entries.forEachIndexed { index, f ->
+                                SelectChip(
+                                    text = f.label, selected = favoriteFilter == index,
+                                    onClick = { favoriteFilter = index }, accent = Gold.Core,
+                                )
+                            }
+                            LibraryTab.RESERVATIONS -> ReservationFilter.entries.forEachIndexed { index, f ->
+                                SelectChip(
+                                    text = f.label, selected = reservationFilter == index,
+                                    onClick = { reservationFilter = index }, accent = Gold.Core,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(d(10)))
                 }
             }
 
             when (current) {
                 LibraryTab.FAVORITES -> {
-                    if (favorites.isEmpty()) {
+                    if (shownFavorites.isEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             EmptyState(
-                                title = "还没有收藏",
-                                subtitle = "在剧集详情页按「加入收藏」，更新会第一时间出现在这里。",
+                                title = if (favorites.isEmpty()) "还没有收藏" else "这个分类还没有收藏",
+                                subtitle = if (favorites.isEmpty())
+                                    "在剧集详情页按「加入收藏」，更新会第一时间出现在这里。"
+                                else "切换上方分类，或在详情页收藏这个类型的剧。",
                                 modifier = Modifier.height(d(320)),
                                 action = { TvButton("去剧场逛逛", onGoTheater, tone = ButtonTone.Ghost) },
                             )
                         }
                     } else {
-                        items(favorites, key = { it.id }) { series ->
+                        items(shownFavorites, key = { it.id }) { series ->
                             PosterCard(
                                 series = series,
                                 onClick = { onDetail(series) },
@@ -151,21 +231,49 @@ fun LibraryScreen(
                     }
                 }
                 LibraryTab.HISTORY -> {
-                    if (history.isEmpty()) {
+                    if (shownHistory.isEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             EmptyState(
-                                title = "还没有观看记录",
-                                subtitle = "看过的剧会自动出现在这里，随时接着看。",
+                                title = if (history.isEmpty()) "还没有观看记录" else "这个筛选下没有记录",
+                                subtitle = if (history.isEmpty())
+                                    "看过的剧会自动出现在这里，随时接着看。"
+                                else "切换上方筛选查看其它观看记录。",
                                 modifier = Modifier.height(d(320)),
                                 action = { TvButton("去首页看看", onGoTheater, tone = ButtonTone.Ghost) },
                             )
                         }
                     } else {
-                        items(history, key = { it.series.id }, span = { GridItemSpan(maxLineSpan) }) { progress ->
+                        items(shownHistory, key = { it.series.id }, span = { GridItemSpan(maxLineSpan) }) { progress ->
                             HistoryRow(
                                 progress = progress,
                                 onClick = { onResume(progress) },
                                 onRemove = { onRemoveHistory(progress.series.id) },
+                            )
+                        }
+                    }
+                }
+                LibraryTab.RESERVATIONS -> {
+                    if (shownReservations.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            EmptyState(
+                                title = if (reservations.isEmpty()) "还没有预约" else "这个筛选下没有预约",
+                                subtitle = if (reservations.isEmpty())
+                                    "登录账号后，手机端预约的作品会同步显示在这里。"
+                                else "切换上方筛选查看其它预约。",
+                                modifier = Modifier.height(d(320)),
+                                action = { TvButton("去剧场逛逛", onGoTheater, tone = ButtonTone.Ghost) },
+                            )
+                        }
+                    } else {
+                        items(shownReservations, key = { it.series.id }) { reservation ->
+                            PosterCard(
+                                series = reservation.series,
+                                onClick = { onDetail(reservation.series) },
+                                fillWidth = true,
+                                subtitle = if (reservation.online) "已上线 · 点击观看"
+                                    else if (reservation.publishText.isNotBlank()) reservation.publishText
+                                    else "未上线 · 已预约",
+                                completed = false,
                             )
                         }
                     }

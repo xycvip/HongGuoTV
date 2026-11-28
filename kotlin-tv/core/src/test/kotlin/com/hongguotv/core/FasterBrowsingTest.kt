@@ -2,7 +2,6 @@ package com.hongguotv.core
 
 import com.sun.net.httpserver.HttpServer
 import okhttp3.OkHttpClient
-import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.Closeable
@@ -36,18 +35,6 @@ class FasterBrowsingTest {
         assertEquals(30,page.items.size); assertTrue(page.hasMore); assertEquals(1500,page.items.first().description.length)
         assertNull(CatalogSnapshot.decode(value,999)); assertNull(CatalogSnapshot.decode(value,1000+8*24*60*60*1000L))
         assertNull(CatalogSnapshot.decode("{bad",1100)); assertNull(CatalogSnapshot.decode("x".repeat(200001),1100))
-    }
-    @Test fun oldBackupStillImportsAndNewQuickActionListsMergeWithinLimits() {
-        val base=BackupData(listOf(Series("1","收藏")),emptyList(),emptySet(),emptyList(),BackupSettings())
-        val old=JSONObject(LibraryBackup.encode(base)).apply { remove("later"); remove("hidden") }.toString()
-        assertTrue(LibraryBackup.decode(old).later.isEmpty())
-        val extra=base.copy(later=listOf(Series("2","稍后看")),hidden=setOf("3"))
-        val imported=LibraryBackup.decode(LibraryBackup.encode(extra))
-        assertEquals(extra,imported)
-        val merged=LibraryBackup.merge(base.copy(later=listOf(Series("4","本机"))),imported,false)
-        assertEquals(listOf("4","2"),merged.later.map { it.id }); assertEquals(setOf("3"),merged.hidden)
-        val invalid=JSONObject(LibraryBackup.encode(extra)).put("hidden",org.json.JSONArray(listOf("bad")))
-        assertThrows(IllegalArgumentException::class.java) { LibraryBackup.decode(invalid.toString()) }
     }
     @Test fun cachedVideoPrefixServesRepeatReadsAndFetchesOnlyMissingTail() {
         fun box(type: String,body: ByteArray)=be32(body.size+8)+type.toByteArray()+body

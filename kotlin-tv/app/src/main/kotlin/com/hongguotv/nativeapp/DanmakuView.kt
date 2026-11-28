@@ -92,6 +92,7 @@ class DanmakuView(
     private var travelMs = crossMs
     private var maxRows = Int.MAX_VALUE
     private var colorMode = COLOR_MODE_DEFAULT
+    private var mergeRepeat = false
     private var opacityAlpha = 255
     private var fontValue = DanmakuPrefs.FONT_DEFAULT
     private var speedValue = DanmakuPrefs.SPEED_DEFAULT
@@ -284,11 +285,31 @@ class DanmakuView(
         }
         prepared.sortBy { it.third }
 
+        // 合并重复弹幕：同一文本在 10 秒窗口内只保留最早一条。
+        // 按视频时间轴（offsetMs）判定而非墙上时钟，reschedule 可重入且结果确定，
+        // 重排/缓冲更新不会让已显示的弹幕闪跳或重复冒出。
+        val effective: List<Triple<String, Int, Long>> = if (mergeRepeat) {
+            val lastShown = HashMap<String, Long>()
+            prepared.filter { item ->
+                val text = item.first
+                val at = item.third
+                val last = lastShown[text]
+                if (last != null && at - last < DanmakuPrefs.MERGE_REPEAT_WINDOW_MS) {
+                    false
+                } else {
+                    lastShown[text] = at
+                    true
+                }
+            }
+        } else {
+            prepared
+        }
+
         val lastOnLane = arrayOfNulls<Scheduled>(lanes)
         val clearanceMs = LongArray(lanes)
-        val output = ArrayList<Scheduled>(prepared.size)
+        val output = ArrayList<Scheduled>(effective.size)
         var maxLane = -1
-        for ((text, color, at) in prepared) {
+        for ((text, color, at) in effective) {
             val widthPx = fill.measureText(text)
             if (widthPx <= 0f) continue
             // 同轨两条的安全间隔：前条尾部离开入口后，后条才入轨，避免追尾。
@@ -447,6 +468,12 @@ class DanmakuView(
         val normalized = mode.coerceIn(COLOR_MODE_DEFAULT, COLOR_MODE_LAST)
         if (colorMode == normalized) return
         colorMode = normalized
+        reschedule()
+    }
+
+    override fun setMergeRepeat(enabled: Boolean) {
+        if (mergeRepeat == enabled) return
+        mergeRepeat = enabled
         reschedule()
     }
 

@@ -36,7 +36,6 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -77,9 +76,12 @@ import com.hongguotv.nativeapp.ui.components.RoundIconButton
 import com.hongguotv.nativeapp.ui.components.SmartImage
 import com.hongguotv.nativeapp.ui.components.ThinProgress
 import com.hongguotv.nativeapp.ui.components.TvButton
+import com.hongguotv.nativeapp.ui.components.focusUpTo
 import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import com.hongguotv.nativeapp.ui.data.ActorState
+import com.hongguotv.nativeapp.ui.data.CreatorState
 import com.hongguotv.nativeapp.ui.data.DetailState
+import com.hongguotv.nativeapp.ui.data.ReviewState
 import com.hongguotv.nativeapp.ui.theme.Gold
 import com.hongguotv.nativeapp.ui.theme.Ink
 import com.hongguotv.nativeapp.ui.theme.Paper
@@ -104,7 +106,6 @@ fun DetailScreen(
     onPlay: (Int, Long) -> Unit,
     onNextEpisode: (Int) -> Unit,
     onFavorite: () -> Unit,
-    onLater: () -> Unit,
     onSeries: (Series) -> Unit,
     /** 点演员卡打开其档案弹窗；没有作品 ID 的演员也会弹窗，只是作品区显示「暂无作品」。 */
     onActor: (Actor) -> Unit,
@@ -121,7 +122,38 @@ fun DetailScreen(
     onSeasonFocusConsumed: () -> Unit = {},
     /** 屏幕顶部是否显示可点击的返回箭头；遥控器返回键始终可用，不受此开关影响。 */
     showBack: Boolean = true,
+    /** 发布作者区块状态。 */
+    creator: CreatorState = CreatorState(),
+    reviews: ReviewState = ReviewState(),
+    onCreatorFollow: () -> Unit = {},
+    onCreatorLoadMoreWorks: () -> Unit = {},
+    onReviewLoadMore: () -> Unit = {},
 ) {
+    // 作者 / 剧评弹窗：0 关闭，1 作者，2 剧评。入口按钮在 hero 内，关掉弹窗要把焦点还给对应按钮。
+    val seriesKey = state.detail?.series?.id
+    var socialSheet by remember(seriesKey) { mutableIntStateOf(0) }
+    var lastSocialSheet by remember(seriesKey) { mutableIntStateOf(0) }
+    val creatorChipFocus = remember { FocusRequester() }
+    val reviewChipFocus = remember { FocusRequester() }
+    LaunchedEffect(socialSheet) {
+        if (socialSheet != 0) return@LaunchedEffect
+        val target = when (lastSocialSheet) {
+            1 -> creatorChipFocus
+            2 -> reviewChipFocus
+            else -> null
+        } ?: return@LaunchedEffect
+        lastSocialSheet = 0
+        repeat(12) {
+            if (target.tryRequestFocus()) return@LaunchedEffect
+            withFrameNanos { }
+        }
+    }
+    val openCreator = { lastSocialSheet = 1; socialSheet = 1 }
+    val openReview = { lastSocialSheet = 2; socialSheet = 2 }
+    // 作者数据到位才显示「作者信息」按钮；没有发布方/制作方就不占按钮位。
+    // 剧评几乎每部剧都有，按钮常驻。
+    val hasCreator = creator.creator != null
+
     Box(modifier.fillMaxSize()) {
         val detail = state.detail
         when {
@@ -133,7 +165,6 @@ fun DetailScreen(
                 onBack = onBack,
                 onPlay = onPlay,
                 onFavorite = onFavorite,
-                onLater = onLater,
                 onSeries = onSeries,
                 onActor = onActor,
                 actorSheetOpen = actor.actor != null,
@@ -141,6 +172,11 @@ fun DetailScreen(
                 focusSeasonId = focusSeasonId,
                 onSeasonFocusConsumed = onSeasonFocusConsumed,
                 showBack = showBack,
+                onOpenCreator = openCreator,
+                onOpenReview = openReview,
+                creatorChipFocus = creatorChipFocus,
+                reviewChipFocus = reviewChipFocus,
+                hasCreator = hasCreator,
             )
         }
         // 弹窗叠在详情页之上：详情页保持在组合里，关掉弹窗时选集/滚动位置原样还在。
@@ -153,6 +189,23 @@ fun DetailScreen(
                 onRetry = onActorRetry,
             )
         }
+        when (socialSheet) {
+            1 -> CreatorSheet(
+                state = creator,
+                onClose = { socialSheet = 0 },
+                onFollow = onCreatorFollow,
+                onWork = { series ->
+                    socialSheet = 0
+                    onSeries(series)
+                },
+                onLoadMoreWorks = onCreatorLoadMoreWorks,
+            )
+            2 -> ReviewSheet(
+                state = reviews,
+                onClose = { socialSheet = 0 },
+                onLoadMore = onReviewLoadMore,
+            )
+        }
     }
 }
 
@@ -163,7 +216,6 @@ private fun DetailContent(
     onBack: () -> Unit,
     onPlay: (Int, Long) -> Unit,
     onFavorite: () -> Unit,
-    onLater: () -> Unit,
     onSeries: (Series) -> Unit,
     onActor: (Actor) -> Unit,
     /** 演员弹窗是否正开着；关掉时把焦点还给刚才点的头像。 */
@@ -172,6 +224,11 @@ private fun DetailContent(
     focusSeasonId: String?,
     onSeasonFocusConsumed: () -> Unit,
     showBack: Boolean = true,
+    onOpenCreator: () -> Unit,
+    onOpenReview: () -> Unit,
+    creatorChipFocus: FocusRequester,
+    reviewChipFocus: FocusRequester,
+    hasCreator: Boolean,
 ) {
     val series = detail.series
     var episodesExpanded by remember(series.id) { mutableIntStateOf(0) }
@@ -227,9 +284,13 @@ private fun DetailContent(
                 onBack = onBack,
                 onPlay = onPlay,
                 onFavorite = onFavorite,
-                onLater = onLater,
                 onExpandSynopsis = onExpandSynopsis,
                 showBack = showBack,
+                onOpenCreator = onOpenCreator,
+                onOpenReview = onOpenReview,
+                creatorChipFocus = creatorChipFocus,
+                reviewChipFocus = reviewChipFocus,
+                hasCreator = hasCreator,
             )
         }
         // 演职员放在选集之前：它是「这部剧是什么」，属于内容本身；
@@ -280,9 +341,13 @@ private fun DetailHero(
     onBack: () -> Unit,
     onPlay: (Int, Long) -> Unit,
     onFavorite: () -> Unit,
-    onLater: () -> Unit,
     onExpandSynopsis: () -> Unit,
     showBack: Boolean = true,
+    onOpenCreator: () -> Unit,
+    onOpenReview: () -> Unit,
+    creatorChipFocus: FocusRequester,
+    reviewChipFocus: FocusRequester,
+    hasCreator: Boolean,
 ) {
     val series = detail.series
     // 高度按屏高取一个下限，但不再写死：内容（标题 2 行 + 评分 + 简介 + 按钮）
@@ -432,7 +497,22 @@ private fun DetailHero(
                         tone = ButtonTone.Ghost,
                         upFocus = backFocus.takeIf { showBack },
                     )
-                    // 「稍后看」与「收藏」是同一件事，只留一个入口，避免每次都要想点哪个。
+                    if (hasCreator) {
+                        TvButton(
+                            text = "作者信息",
+                            onClick = onOpenCreator,
+                            tone = ButtonTone.Ghost,
+                            focusRequester = creatorChipFocus,
+                            upFocus = backFocus.takeIf { showBack },
+                        )
+                    }
+                    TvButton(
+                        text = "剧评",
+                        onClick = onOpenReview,
+                        tone = ButtonTone.Ghost,
+                        focusRequester = reviewChipFocus,
+                        upFocus = backFocus.takeIf { showBack },
+                    )
                 }
             }
         }
@@ -735,7 +815,7 @@ private fun RelatedSection(related: List<Series>, onSeries: (Series) -> Unit) {
 }
 
 @Composable
-private fun SectionTitle(title: String, subtitle: String? = null) {
+internal fun SectionTitle(title: String, subtitle: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier

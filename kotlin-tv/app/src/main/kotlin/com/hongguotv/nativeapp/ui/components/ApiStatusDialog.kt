@@ -78,7 +78,7 @@ fun ApiStatusDialog(
                     Text("接口状态", style = MaterialTheme.typography.headlineMedium, color = Paper.Pure, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(d(4)))
                     Text(
-                        "首页、搜索、播放与联想四项接口的最近一次检测",
+                        "首页、搜索、播放与剧场四项接口的最近一次检测",
                         style = MaterialTheme.typography.bodySmall,
                         color = Paper.Tertiary,
                     )

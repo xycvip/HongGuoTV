@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 内容直径原占 63%，收缩到画布 54% 后与其余图标等大。 -->
-<inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@drawable/ic_launcher_fg_k"
-    android:insetLeft="8dp"
-    android:insetTop="8dp"
-    android:insetRight="8dp"
-    android:insetBottom="8dp" />

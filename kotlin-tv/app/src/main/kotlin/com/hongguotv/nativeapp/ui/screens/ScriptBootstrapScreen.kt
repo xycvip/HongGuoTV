@@ -57,10 +57,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 
 /**
- * 首次启动的数据脚本引导页。
+ * 首次启动的数据接口引导页。
  *
  * APK 不再内置 main.js，全新安装必须先联网拉一份（约 0.5 MB）。
- * 这条路径只会在「本地一份可用脚本都没有」时出现：首次安装，或当前版与上一版都损坏。
+ * 这条路径只会在「本地一份可用数据接口都没有」时出现：首次安装，或当前版与上一版都损坏。
  * 下载成功后本页卸载，主界面才开始渲染；失败则停在原地等用户重试，不会进到一个空数据层。
  */
 @Composable
@@ -89,7 +89,7 @@ fun ScriptBootstrapScreen(
             BootstrapCard(state = state, onRetry = onRetry, retryFocus = retryFocus)
             Spacer(Modifier.height(d(22)))
             Text(
-                text = "红果测试版 v$versionName · 发布通道 RedGuoAPI",
+                text = "红果TV v$versionName · 发布通道 RedGuoAPI",
                 style = MaterialTheme.typography.labelSmall,
                 color = Paper.Tertiary,
             )
@@ -117,7 +117,7 @@ private fun BrandMark() {
         Box(Modifier.width(d(1)).height(d(14)).background(Ink.Line))
         Spacer(Modifier.width(d(10)))
         Text(
-            text = "数据脚本",
+            text = "数据接口",
             style = MaterialTheme.typography.titleSmall,
             color = Paper.Tertiary,
         )
@@ -159,7 +159,7 @@ private fun BootstrapCard(
                 Spacer(Modifier.width(d(30)))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = if (failed) "数据脚本下载失败" else "正在准备数据脚本",
+                        text = if (failed) "数据接口下载失败" else "正在准备数据接口",
                         style = MaterialTheme.typography.headlineSmall,
                         color = Paper.Pure,
                     )
@@ -168,7 +168,7 @@ private fun BootstrapCard(
                         text = if (failed) {
                             state.error
                         } else {
-                            "红果的数据接口由云端脚本提供，首次启动需要联网下载一次（约 0.5 MB）。以后脚本更新会自动完成，不需要手动操作。"
+                            "红果的数据接口由云端提供，首次启动需要联网下载一次（约 0.5 MB）。以后数据更新会自动完成，不需要手动操作。"
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = Paper.Secondary,

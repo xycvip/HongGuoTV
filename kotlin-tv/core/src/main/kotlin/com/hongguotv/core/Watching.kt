@@ -6,12 +6,29 @@ import org.json.JSONObject
 object PlaybackQuality {
     const val AUTO_HIGH = PlaybackQualityMode.AUTO_HIGH
     const val AUTO_COMPAT = PlaybackQualityMode.AUTO_COMPAT
-    val options=listOf(480,720,1080,AUTO_HIGH,AUTO_COMPAT)
-    fun normalize(value: Int)=value.takeIf { it in options } ?: AUTO_COMPAT
+    // 「自动（兼容优先）」已从设置选项移除；历史存档里的 -2 不在 options 内，
+    // 会被 normalize 自动迁移到 AUTO_HIGH，新安装也默认 AUTO_HIGH。
+    // 档位用官方标称值（和 1080P 一样），显示与存储都保持一致。
+    val options=listOf(360,480,540,720,1080,AUTO_HIGH)
+    fun normalize(value: Int)=value.takeIf { it in options } ?: AUTO_HIGH
     fun label(value: Int)=when(normalize(value)) {
         AUTO_HIGH -> "自动（高清优先）"
-        AUTO_COMPAT -> "自动（兼容优先）"
         else -> "${normalize(value)}P"
+    }
+
+    /**
+     * 标称档位 → 取流请求值。
+     *
+     * 官方接口按「视频短边」选档，且各档短边会在标称值附近波动（例如 1080p 实际短边恒为 1080，
+     * 但 540p 片源的实际短边约 576）。JS 的选档规则是：请求值 < 1080 时优先取短边「小于请求值」的档，
+     * 若直接传标称 540，576 档（>540）会被判到「更高档」而落空，错选成 480p。
+     *
+     * 因此只把 540 上移到一个能容纳短边波动（约 560~600）的请求值 600；
+     * 其它档和 1080P 一样原样透传，靠接口自身的就近匹配吸收波动，不固定死真实短边。
+     */
+    fun streamRequest(value: Int): Int = when (normalize(value)) {
+        540 -> 600
+        else -> value
     }
 }
 

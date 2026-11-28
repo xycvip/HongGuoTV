@@ -4,9 +4,33 @@ package com.hongguotv.core
 import org.json.JSONObject
 import java.io.IOException
 
-data class Series(val id: String, val title: String, val cover: String = "", val description: String = "", val badge: String = "", val tags: String = "") {
-    fun toJson() = JSONObject().put("id",id).put("title",title).put("cover",cover).put("description",description).put("badge",badge).put("tags",tags)
-    companion object { fun fromJson(o: JSONObject) = Series(o.str("id"),o.str("title"),o.str("cover"),o.str("description"),o.str("badge"),o.str("tags")) }
+data class Series(
+    val id: String,
+    val title: String,
+    val cover: String = "",
+    val description: String = "",
+    val badge: String = "",
+    val tags: String = "",
+    /** 内容类型：收藏分组（真人剧/漫剧/AI剧）用。默认 SHORT 保持旧备份与旧调用兼容。 */
+    val contentType: ContentType = ContentType.SHORT,
+    /**
+     * feed 信息流直出的分集 vid（与 Detail.episodes 同构，去掉 hongguo-cenc:// 前缀的纯数字串）。
+     * 只用于启动选剧层：拿到剧卡即可起播，省掉逐部拉 detail。其他来源（详情/榜单/搜索）为空，
+     * 需要播放时仍走 detail。默认空集保持所有旧构造点兼容。
+     */
+    val episodes: List<String> = emptyList(),
+) {
+    fun toJson() = JSONObject()
+        .put("id", id).put("title", title).put("cover", cover)
+        .put("description", description).put("badge", badge).put("tags", tags)
+        .put("contentType", contentType.storedValue)
+    companion object {
+        fun fromJson(o: JSONObject) = Series(
+            o.str("id"), o.str("title"), o.str("cover"), o.str("description"),
+            o.str("badge"), o.str("tags"),
+            ContentType.fromStored(o.optString("contentType")),
+        )
+    }
 }
 /**
  * 详情页演员：来自官方 details 响应的 celebrities。

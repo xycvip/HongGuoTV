@@ -45,6 +45,46 @@ object MediaCrypto {
         if(size<8 || end>total || end>8*1024*1024) throw IOException("视频索引大小异常")
         return end.toInt()
     }
+    /**
+     * 从已解析的 MP4 header（含 moov）里读视频轨道的显示宽高，单位像素。
+     * 与 ExoPlayer 上报的 videoFormat 宽高同源（都来自 tkhd），供起播前预判绿屏风险。
+     * header 可能是 ftyp+moov（明文路径）或直接 moov（CENC/校验路径），两种都支持。
+     * 解析失败或没有视频轨道返回 0x0，交由调用方兜底。
+     */
+    fun videoSize(header: ByteArray): Pair<Int, Int> {
+        val moov = run {
+            val first = box(header, 0)
+            when (first?.type) {
+                "moov" -> first
+                "ftyp" -> box(header, first.end)
+                else -> null
+            }
+        }?.takeIf { it.type == "moov" } ?: return 0 to 0
+        var cursor = moov.body
+        while (cursor < moov.end) {
+            val trak = box(header, cursor, moov.end) ?: return 0 to 0
+            cursor = trak.end
+            if (trak.type != "trak") continue
+            val tkhd = directChild(header, trak, "tkhd") ?: continue
+            val mdia = directChild(header, trak, "mdia") ?: continue
+            val hdlr = directChild(header, mdia, "hdlr") ?: continue
+            if (hdlr.body + 12 > hdlr.end) continue
+            if (String(header, hdlr.body + 8, 4, Charsets.US_ASCII) != "vide") continue
+            if (tkhd.body + 4 > tkhd.end) continue
+            val version = header[tkhd.body].u()
+            if (version > 1) continue
+            // tkhd 的 width/height 是 16.16 定点数，取高 16 位为整数像素。
+            val widthAt = tkhd.body + if (version == 1) 88 else 76
+            val heightAt = tkhd.body + if (version == 1) 92 else 80
+            val need = if (version == 1) 96 else 84
+            if (tkhd.end - tkhd.body < need) continue
+            val w = (header.u32(widthAt) shr 16).toInt()
+            val h = (header.u32(heightAt) shr 16).toInt()
+            if (w > 0 && h > 0) return w to h
+        }
+        return 0 to 0
+    }
+
     fun prepare(data: ByteArray,key: ByteArray?, requireOoiUaMp4Validation: Boolean = false, moovStart: Long = 0): Prepared {
         if(key==null) {
             val samples = if (requireOoiUaMp4Validation) inspectPlainMp4(data) else emptyList()

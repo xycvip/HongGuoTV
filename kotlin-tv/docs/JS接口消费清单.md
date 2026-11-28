@@ -29,7 +29,7 @@
 | 19 | `theaterFilters` | 剧院筛选面板 | ✅ | `HongguoJsContent.theaterFilters` |
 | 21 | `recommendations` | 相关推荐 | ❌ **未消费** | App 详情页未接 |
 | 22 | `validRecommendation` | 推荐项校验 | ❌ **未消费** | 随 recommendations |
-| 23 | `feed` | 信息流推荐 | ❌ **未消费** | App 无信息流页 |
+| 23 | `feed` | 信息流推荐 | ✅ | `HongguoJsContent.feed`（启动自动播放的选剧第一层） |
 | 24 | `danmakuIds` | 弹幕 ID 列表（旧接口） | ❌ **未消费** | 统一走 danmaku |
 | 25 | `devices` | 设备伪装列表 | ⚠️ 内部 | JS 内部调用（含剧院设备注册） |
 | 26 | `coverAddress` | 封面地址规范化 | ⚠️ 内部 | JS 内部调用 |
@@ -46,7 +46,6 @@
 | 导出 | 说明 | 影响 |
 |---|---|---|
 | `recommendations` + `validRecommendation` | 相关作品推荐。详情页 `detail` 返回的 `related` 已被门面置空，未走此接口 | 详情页无"相关推荐"区块 |
-| `feed` | 首页信息流/无限刷 | App 无信息流页面 |
 | `danmakuIds` | 旧版弹幕 ID 列表接口 | 无影响，弹幕已统一走 `danmaku` |
 | `needsExtraMetadata` + `extraMetadata` | 封面/元数据的二次补全 | 无影响，详情接口已自带元数据 |
 | `restoreCatalogState` | 恢复分类翻页游标 | 无影响，门面每次从首页重新拉 |

@@ -29,6 +29,13 @@ sealed interface Route {
         val episodes: List<String>,
         val episodeIndex: Int,
         val positionMs: Long = 0L,
+        /**
+         * 启动自动播放的候选剧单（feed 信息流第一页）。非空表示该播放器处于「选剧第一层」：
+         * 进入即自动播放当前剧，上下键在候选间切剧、确定键进入完整控制层（第二层）。
+         * 手动点剧进来时为空，行为与原来完全一致。
+         */
+        val startupCandidates: List<com.hongguotv.core.Series> = emptyList(),
+        val startupIndex: Int = 0,
     ) : Route
     data class Collection(val kind: CollectionKind) : Route
 

@@ -21,6 +21,12 @@ open class ContentRepository(
         return js.home(page, type)
     }
 
+    /** 首页信息流（无限刷 feed）：启动自动播放从中选取推荐内容。 */
+    open fun feed(page: Int = 1, scope: String = "all"): CatalogPage {
+        require(page in 1..100)
+        return js.feed(page, scope)
+    }
+
     fun comicRanking(page: Int = 1)=ranking(RankBoard.COMIC,page)
     fun realRanking(page: Int = 1)=ranking(RankBoard.REAL,page)
 
@@ -39,8 +45,8 @@ open class ContentRepository(
 
     fun suggest(query: String): List<String> = js.suggest(query)
 
-    /** 接口健康探测：联想词个数即探测结果。 */
-    fun probeSuggest(query: String): Int = suggest(query).size
+    /** 接口健康探测：剧场条目数即探测结果。 */
+    fun probeTheater(): Int = theater().catalog.items.size
 
     fun detail(id: String): Detail = js.detail(id)
 

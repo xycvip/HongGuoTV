@@ -7,12 +7,14 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,13 +49,16 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -653,3 +659,56 @@ fun KeyValue(label: String, value: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun ScreenPadding(content: PaddingValues = PaddingValues(horizontal = ui.gutter)): PaddingValues = content
+
+/**
+ * 竖向滚动条：与 LazyColumn 放进同一个 Box，叠加在列表右缘。
+ *
+ * 遥控器无法拖动滚动条，所以它只做「内容可滚动 + 当前位置」的视觉提示；
+ * 真正的滚动仍由列表项获得焦点时的 bringIntoView 完成（见各弹窗里给行加的 focusable）。
+ * 内容未超出可视区时不绘制，避免误导。
+ */
+@Composable
+fun BoxScope.LazyListScrollbar(
+    state: LazyListState,
+    modifier: Modifier = Modifier,
+    color: Color = Gold.Core,
+) {
+    val visible = state.layoutInfo.visibleItemsInfo
+    val total = state.layoutInfo.totalItemsCount
+    val viewport =
+        (state.layoutInfo.viewportEndOffset - state.layoutInfo.viewportStartOffset).toFloat()
+    if (visible.isEmpty() || total <= 0 || viewport <= 0f) return
+    // 用可见项的平均高度估算总内容高度（这些弹窗的行高相近，足够定位滑块）。
+    val avg = visible.sumOf { it.size }.toFloat() / visible.size
+    val content = avg * total
+    if (content <= viewport) return
+
+    val scrollPx = visible.first().index * avg + state.firstVisibleItemScrollOffset
+    val maxScroll = (content - viewport).coerceAtLeast(1f)
+    val progress = (scrollPx / maxScroll).coerceIn(0f, 1f)
+    val thumbFraction = (viewport / content).coerceIn(0.08f, 1f)
+    val minThumbPx = with(LocalDensity.current) { d(18).toPx() }
+
+    Canvas(
+        modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxHeight()
+            .width(d(3))
+            .padding(vertical = d(4)),
+    ) {
+        val trackH = size.height
+        val thumbH = (trackH * thumbFraction).coerceAtLeast(minThumbPx)
+        val top = (trackH - thumbH) * progress
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.08f),
+            size = Size(size.width, trackH),
+            cornerRadius = CornerRadius(size.width / 2),
+        )
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(0f, top),
+            size = Size(size.width, thumbH),
+            cornerRadius = CornerRadius(size.width / 2),
+        )
+    }
+}

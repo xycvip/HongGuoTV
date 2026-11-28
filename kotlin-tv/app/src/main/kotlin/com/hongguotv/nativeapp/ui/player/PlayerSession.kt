@@ -80,12 +80,18 @@ class PlayerSession(
     private val repository: ContentRepository,
     private val library: Library,
     private val extras: PlaybackExtras,
-    val series: Series,
-    val episodes: List<String>,
+    initialSeries: Series,
+    initialEpisodes: List<String>,
     initialIndex: Int,
     /** 进入播放器时的续播位置（详情页「继续第 N 集」带过来的毫秒数）。 */
     initialPositionMs: Long = 0L,
 ) {
+    // 跨季连播会在同一会话内把剧集整体换成下一季，因此 series/episodes 必须可观察，
+    // 让 PlayerScreen 的季标题、集数、选集列表随之重组。
+    var series by mutableStateOf(initialSeries)
+        private set
+    var episodes by mutableStateOf(initialEpisodes)
+        private set
     var index by mutableIntStateOf(initialIndex.coerceIn(0, (episodes.size - 1).coerceAtLeast(0)))
         private set
 
@@ -112,6 +118,16 @@ class PlayerSession(
         private set
     var error by mutableStateOf<String?>(null)
         private set
+    /** 跨季连播的短暂提示（如「《第二季》已上线，继续播放」），由 UI 层显示后自动消隐。 */
+    var seasonNotice by mutableStateOf<String?>(null)
+        private set
+    /** 自动降低分辨率尝试后仍是 1080p 的提示，由 UI 层显示后自动消隐。 */
+    var downgradeNotice by mutableStateOf<String?>(null)
+        private set
+    /** 提示所属的集号：切集后若提示还没被消费就作废，避免串到下一集。 */
+    var downgradeNoticeIndex: Int = -1
+        private set
+    fun clearDowngradeNotice() { downgradeNotice = null; downgradeNoticeIndex = -1 }
 
     /**
      * 错误归属，界面据此给不同的补救动作：
@@ -153,12 +169,19 @@ class PlayerSession(
     var danmakuLoaded by mutableIntStateOf(0)
         private set
 
+    /** 调试模式快照：仅在播放信息切到「调试模式」时由心跳生成，界面只读。 */
+    var debugInfo by mutableStateOf(PlaybackDebugInfo())
+        private set
+
     private val danmakuSource = HongguoJsDanmaku(HongguoJsStore.get(context, repository.http))
     private var danmakuView: DanmakuRenderer? = null
     private var danmakuLoader: DanmakuLoader? = null
-    /** 弹幕帧率设置；切换后下次进入播放页生效。 */
-    val danmakuFrameRateMode: Int
-        get() = library.danmakuFrameRateMode
+    /** 弹幕帧率设置；镜像成 Compose state，播放页内联切换后 DanmakuView 立即重建生效。 */
+    var danmakuFrameRateMode by mutableIntStateOf(library.danmakuFrameRateMode)
+        private set
+    /** 合并重复弹幕；镜像成 Compose state，切换后立刻下发给渲染器重排。 */
+    var danmakuMergeRepeat by mutableStateOf(library.danmakuMergeRepeat)
+        private set
     /** 当前绑定的「集 + 时长」，避免同一集被 READY/接管/刷新重复重建 loader。 */
     private var danmakuKey = ""
 
@@ -180,15 +203,26 @@ class PlayerSession(
         client: OkHttpClient,
         episodeId: String,
         notifyOnFallback: Boolean = true,
+        /**
+         * 本集取流档位覆盖；为 null 时用 [effectiveQuality]（用户设定 + 设备解码器降档，
+         * 不含绿屏降档）。绿屏是片源问题，降档只在这一路流内部生效，绝不写全局，
+         * 以免传染下一集。预载 / 备用流程因此能各自独立判断，每集用自己的清晰度。
+         */
+        qualityHint: Int? = null,
+        /** 是否允许绿屏前移检测；一路流内只降一次，递归重取低档时传 false。默认所有流程都检测。 */
+        allowGreenDowngrade: Boolean = true,
+        /** 是否为主播放流程：仅主流程登记本集降档状态（供兜底提示 / debug 用）；预载与备用各自局部降档，不写全局。 */
+        primaryPlayback: Boolean = false,
     ): PreparedStream {
         val startedAt = SystemClock.elapsedRealtime()
+        val requestedQuality = qualityHint ?: effectiveQuality
         PlaybackDiagnostics.event("STREAM_RESOLVE_BEGIN", "resolve stream", mapOf(
-            "episodeId" to episodeId, "quality" to effectiveQuality,
+            "episodeId" to episodeId, "quality" to requestedQuality,
             "notifyFallback" to notifyOnFallback,
         ))
         val info = try {
             context.playbackStreamSource(client, notifyOnFallback = notifyOnFallback)
-                .stream(episodeKey(episodeId), effectiveQuality)
+                .stream(episodeKey(episodeId), requestedQuality)
         } catch (failure: Throwable) {
             PlaybackDiagnostics.event("STREAM_RESOLVE_FAILED", failure.toString(), mapOf(
                 "episodeId" to episodeId, "elapsedMs" to (SystemClock.elapsedRealtime() - startedAt),
@@ -207,6 +241,35 @@ class PlayerSession(
                 "episodeId" to episodeId, "quality" to info.quality,
                 "totalElapsedMs" to (SystemClock.elapsedRealtime() - startedAt),
             ))
+            // 绿屏风险前移检测：每一路流都做（主播放 + 预载 + 备用），每集独立判断，
+            // 命中才降档；绿块从未渲染，比 STATE_READY 兜底更早，且不走播放器重建。
+            if (allowGreenDowngrade && library.autoDowngradeNonAligned) {
+                val (w, h) = video.videoSize
+                val next = greenDowngradeTarget(w, h, requestedQuality)
+                if (next != null) {
+                    // 仅主播放流程登记全局标志，供本集 STATE_READY 兜底与 debug 显示用；
+                    // 预载 / 备用流程只局部降档，绝不写全局，避免污染正在播放的集。
+                    // 降档只改这一路流的 qualityHint，不写 qualityOverride：
+                    // 下一集用回自己的基准清晰度，做到每集独立判断。
+                    if (primaryPlayback) {
+                        // 绿屏降档只登记绿屏自己的标志；绝不碰解码器降档的 autoDowngraded。
+                        // autoDowngraded 是解码器降档的专用锁（downgradeFor 拦截、软解判断），
+                        // 一旦被绿屏降档占用，后续真正的解码错误会跳过降档阶梯直接进软解。
+                        nonAlignedDowngraded = true
+                    }
+                    PlaybackDiagnostics.event("NONALIGNED_DOWNGRADE_EARLY", "pre-play tkhd green-screen risk, auto downgrade", mapOf(
+                        "size" to "${w}x${h}", "fromQuality" to requestedQuality.toString(),
+                        "toQuality" to next.toString(), "episodeId" to episodeId,
+                    ))
+                    runCatching { video.close() }
+                    // 局部递归重取：只靠 qualityHint 传低档，绝不污染全局档位。
+                    return createPreparedStream(
+                        client, episodeId, notifyOnFallback,
+                        qualityHint = next, allowGreenDowngrade = false,
+                        primaryPlayback = primaryPlayback,
+                    )
+                }
+            }
             PreparedStream(video, info.quality)
         } catch (failure: Throwable) {
             PlaybackDiagnostics.event("STREAM_PREPARE_FAILED", failure.toString(), mapOf(
@@ -218,12 +281,35 @@ class PlayerSession(
         }
     }
 
+    /** 1080p 档长边非 8 倍数对齐 → 部分电视硬解驱动顶部绿块并卡死。判据来自真值验证。 */
+    private fun isGreenRisk(width: Int, height: Int): Boolean {
+        if (width <= 0 || height <= 0) return false
+        val longSide = maxOf(width, height)
+        return longSide in 1900..2000 && longSide % 8 != 0
+    }
+
+    /** 命中绿屏风险且当前档位还能下降时，返回目标低档；否则 null。 */
+    private fun greenDowngradeTarget(width: Int, height: Int, quality: Int): Int? {
+        if (!isGreenRisk(width, height)) return null
+        return when (quality) {
+            PlaybackQuality.AUTO_HIGH, PlaybackQuality.AUTO_COMPAT, 1080 -> 720
+            else -> null
+        }
+    }
+
     /**
      * 解码器报「不支持该分辨率」时的一次性降档：不改用户的清晰度设置，
      * 只对当前这一集生效，切集/用户手动改清晰度都会清掉。
      */
-    private var qualityOverride: Int? = null
-    private var autoDowngraded = false
+    @Volatile private var qualityOverride: Int? = null
+    @Volatile private var autoDowngraded = false
+
+    /**
+     * 本集是否已因「长边非 8 倍数对齐」自动降过档。
+     * 判据真值 100% 命中：1080p 档长边被 8 整除（1920）不绿，非 8 对齐（1922/1924）在部分设备上顶部绿块并卡死。
+     * 降档后若取流层仍返回同一分辨率（低档全是 BYTEVC2 被脚本过滤），靠此标志避免无限重建。
+     */
+    @Volatile private var nonAlignedDowngraded = false
 
     /**
      * 硬解在某段码流上崩溃后的最后一档：换软解重建播放器。
@@ -274,6 +360,9 @@ class PlayerSession(
     private var loadJob: Job? = null
     /** 令阻塞 IO 返回的旧解析结果失效，避免切集/改画质后旧结果覆盖新播放器。 */
     private var loadGeneration = 0
+    /** 跨季连播的异步取季任务与令牌：换季 IO 期间用户若手动切集/退出，用令牌作废迟到的结果。 */
+    private var crossSeasonJob: Job? = null
+    private var crossSeasonToken = 0
     private var released = false
     private var lastSavedAt = 0L
     private var lastDiagnosticPositionAt = 0L
@@ -384,12 +473,18 @@ class PlayerSession(
                     errorKind = ""
                     val exo = player ?: return
                     duration = exo.duration.coerceAtLeast(0L)
+                    var downgrading = false
                     exo.videoFormat?.let { format ->
                         videoWidth = format.width
                         videoHeight = format.height
                         videoBitrate = format.bitrate
                         videoFrameRate = format.frameRate
+                        // 自动降低分辨率：前移检测已在取流阶段处理降档；这里是 tkhd 读不到时的兜底。
+                        // 低档若全是 BYTEVC2 被脚本过滤，取回流还是同档，靠 nonAlignedDowngraded 只降一次。
+                        downgrading = maybeDowngradeNonAligned(format.width, format.height, exo.currentPosition)
+                        if (!downgrading) noticeGreenRiskIfNeeded(format.width, format.height)
                     }
+                    if (downgrading) return
                     startDanmaku()
                     // 原版时机：当前集真正可播后才启动预载，避免和主播放抢带宽。
                     if (useDualDecoder) prepareStandby(index + 1) else queueNextEpisode(index)
@@ -418,6 +513,9 @@ class PlayerSession(
                     // playlist 已包含下一集时由 Media3 自己过渡，不能再手动 prepare(index+1)。
                     if (library.autoNext && !queuedAppended && index < episodes.lastIndex) {
                         prepare(index + 1, 0L)
+                    } else if (library.autoNext && library.autoSeason && index == episodes.lastIndex) {
+                        // 本季最后一集播完且开启跨季连播：异步取下一季，在同一会话内接着播。
+                        switchToNextSeason(expectedSeriesId = series.id, expectedIndex = index)
                     }
                 }
             }
@@ -574,12 +672,24 @@ class PlayerSession(
             if (autoDowngraded) return null
             if (decodeRetries > MAX_DECODE_RETRIES) return null
             if (!isDecodeIssue(playerError)) return null
-            return when (val current = effectiveQuality) {
-                PlaybackQuality.AUTO_HIGH, PlaybackQuality.AUTO_COMPAT -> 720
-                1080 -> 720
-                720 -> 480
-                else -> null
+            // 本集已因绿屏降档：前移降档不写全局档位，effectiveQuality 仍是用户设定值（可能 1080），
+            // 但播放器实际在播 720。从实际档位 720 继续往下降，避免按 stale 值重复降回 720 做无效重建；
+            // 若绿屏降档其实失败（低档被过滤、仍在播 1080 风险流），直接降到 720 也是安全的下一档。
+            if (nonAlignedDowngraded) return nextLowerQuality(720) ?: 480
+            val current = when (val q = effectiveQuality) {
+                PlaybackQuality.AUTO_HIGH, PlaybackQuality.AUTO_COMPAT -> 1080
+                else -> q
             }
+            return nextLowerQuality(current)
+        }
+
+        /** 清晰的降档阶梯：1080 → 720 → 540 → 480 → 360 → 到底。 */
+        private fun nextLowerQuality(current: Int): Int? = when (current) {
+            1080 -> 720
+            720 -> 540
+            540 -> 480
+            480 -> 360
+            else -> null
         }
 
         private fun isDecodeIssue(playerError: PlaybackException): Boolean {
@@ -721,6 +831,94 @@ class PlayerSession(
      * 播到一半解码器挂掉：释放当前实例，按当前进度重建。
      * 不重新解析用户的清晰度设置，只在当前这一集内自救。
      */
+    /**
+     * 自动降低分辨率：1080p 档长边非 8 对齐（1922/1924 等）在部分电视硬解驱动上会顶部绿块并卡死，
+     * 这类片源降到低分辨率后长边 8 对齐、可正常播放。只在 1080p 档生效。
+     *
+     * 判据来自真值验证：1080p 长边 1920（8 倍数）不绿、1922/1924（非 8 倍数）绿；
+     * 4K 3840×2160 双向 8 对齐不绿；低清档 854 虽非 8 对齐但不绿（绿屏只在 1080p 档发生）。
+     *
+     * 只降一次（[nonAlignedDowngraded]）：取流层若因低档全是 BYTEVC2 被过滤而仍返回 1080p，
+     * 不会反复重建，而是给出「降档后仍是 1080p」的提示。切集 / 手动改清晰度会重置。
+     */
+    private fun maybeDowngradeNonAligned(width: Int, height: Int, atMs: Long): Boolean {
+        if (!library.autoDowngradeNonAligned) return false
+        if (width <= 0 || height <= 0) return false
+        val longSide = maxOf(width, height)
+        val is1080p = longSide in 1900..2000
+        if (nonAlignedDowngraded) {
+            // 本集已由前移检测降过档：这里只负责阻止重复降档（低档被过滤、仍是风险流时不再重建）。
+            // 提示统一由 noticeGreenRiskIfNeeded 在「当前集确立」时按真实 videoFormat 发出，
+            // 这样双播放器接管 / playlist 过渡等不回调 STATE_READY 的路径也能覆盖。
+            return false
+        }
+        // 本模式只在 1080p 档生效；4K / 720p / 480p 一律不参与判定。
+        if (!is1080p) return false
+        // 判据：长边能被 8 整除就是安全的。
+        if (longSide % 8 == 0) return false
+        if (released || handoffInProgress) return false
+        // 只有还能往下降的档才动；已经在 720/480 就没意义（绿屏只发生在 1080p）。
+        val current = effectiveQuality
+        val next = when (current) {
+            PlaybackQuality.AUTO_HIGH, PlaybackQuality.AUTO_COMPAT, 1080 -> 720
+            else -> return false
+        }
+        nonAlignedDowngraded = true
+        val resumeAt = atMs.coerceAtLeast(0L)
+        val target = index
+        val token = ++recoveryToken
+        PlaybackDiagnostics.event("NONALIGNED_DOWNGRADE", "non-8-aligned 1080p, auto downgrade", mapOf(
+            "size" to "${width}x${height}", "longSide" to longSide.toString(),
+            "fromQuality" to current.toString(), "toQuality" to next.toString(),
+            "episodeIndex" to target, "positionMs" to resumeAt.toString(),
+        ))
+        qualityOverride = next
+        // 不设 autoDowngraded：那是解码器降档的专用锁（downgradeFor 拦截 + 软解判断）。
+        // 绿屏降档只动 nonAlignedDowngraded，后续若真遇解码错误仍可正常走降档阶梯，不被锁死。
+        clearStandby("自动降低分辨率")
+        queueJob?.cancel()
+        discardQueue()
+        activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }
+        activeMainListener = null
+        runCatching { playerView?.player = null }
+        runCatching { player?.release() }
+        player = null
+        error = null
+        buffering = true
+        ready = false
+        playing = false
+        position = resumeAt
+        loadingLabel = "正在降低分辨率…"
+        mainHandler.postDelayed({
+            if (released || recoveryToken != token) return@postDelayed
+            if (!buildPlayer()) return@postDelayed
+            playerView?.player = player
+            prepare(target, resumeAt)
+        }, DECODER_RELEASE_DELAY_MS)
+        return true
+    }
+
+    /**
+     * 降档失败提示：按当前集真实 videoFormat 判断，覆盖所有「集确立」路径——
+     * 主播放器 STATE_READY、单播放器 playlist 过渡、双播放器接管。
+     *
+     * 之所以不放在 STATE_READY 兜底里：双播放器接管和 playlist 过渡都是手动补参数、
+     * 不回调 STATE_READY；而前移检测在非主播放流程不登记标志。改看真实宽高就不依赖这些状态，
+     * 只要当前在播的是「1080p 非 8 对齐」风险流，就说明降档没成功（低档全是 BYTEVC2 被过滤）。
+     * 只有开关开启时才提示；8 对齐的安全 1080p / 4K / 低清一律不提示。
+     */
+    private fun noticeGreenRiskIfNeeded(width: Int, height: Int) {
+        if (!library.autoDowngradeNonAligned) return
+        // 本集已提示过就不再重复；若残留的是上一集未消费的提示，允许本集覆盖。
+        if (downgradeNotice != null && downgradeNoticeIndex == index) return
+        if (!isGreenRisk(width, height)) return
+        downgradeNotice = "自动降低分辨率失败，当前视频可能会引起绿屏"
+        downgradeNoticeIndex = index
+        PlaybackDiagnostics.event("NONALIGNED_DOWNGRADE_STILL_1080P", "still 1080p after downgrade", mapOf(
+            "size" to "${width}x${height}", "episodeIndex" to index.toString(),
+        ))
+    }
+
     private fun rebuildForDecoderIssue(softwareOnly: Boolean) {
         if (released) return
         val resumeAt = runCatching { player?.currentPosition ?: position }.getOrDefault(position)
@@ -961,8 +1159,10 @@ class PlayerSession(
             "queuedIndex" to queuedIndex, "queuePreparingIndex" to queuePreparingIndex,
             "standbyIndex" to standbyIndex,
         ))
-        // 任何一次新的准备都让之前挂着的解码恢复作废，避免它把这次准备覆盖掉。
+        // 任何一次新的准备都让之前挂着的解码恢复、跨季取季任务作废，
+        // 避免用户在跨季 IO 期间手动切集后，迟到的下一季结果覆盖当前播放。
         recoveryToken += 1
+        crossSeasonToken += 1
         // 新 prepare 立即作废上一轮阻塞取流，即使 coroutine cancel 不能中断底层 IO。
         loadGeneration += 1
         loadJob?.cancel()
@@ -1033,7 +1233,7 @@ class PlayerSession(
             val pending = AtomicReference<PreparedStream?>(null)
             try {
                 val result = withContext(Dispatchers.IO) {
-                    runCatching { createPreparedStream(repository.http, episodeId).also(pending::set) }
+                    runCatching { createPreparedStream(repository.http, episodeId, primaryPlayback = true).also(pending::set) }
                 }
                 if (released || loadGeneration != requestGeneration) return@launch
                 result.onSuccess { preparedStream ->
@@ -1245,6 +1445,7 @@ class PlayerSession(
         duration = 0L
         buffering = true
         ready = false
+        nonAlignedDowngraded = false
         loadingLabel = ""
         stopDanmaku()
         danmakuLoaded = 0
@@ -1266,6 +1467,8 @@ class PlayerSession(
                     videoHeight = format.height
                     videoBitrate = format.bitrate
                     videoFrameRate = format.frameRate
+                    // playlist 过渡不回调 STATE_READY，按真实宽高补一次降档失败提示。
+                    noticeGreenRiskIfNeeded(format.width, format.height)
                 }
             }
             ready = true
@@ -1606,6 +1809,7 @@ class PlayerSession(
         switchingTo = -1
         index = targetIndex
         error = null
+        nonAlignedDowngraded = false
         ready = false
         buffering = false
         suppressBuffering = true
@@ -1665,6 +1869,8 @@ class PlayerSession(
                 videoHeight = format.height
                 videoBitrate = format.bitrate
                 videoFrameRate = format.frameRate
+                // 接管不回调 STATE_READY，兜底检测不到；按真实宽高补一次降档失败提示。
+                noticeGreenRiskIfNeeded(format.width, format.height)
             }
         }
         ready = true
@@ -1831,6 +2037,7 @@ class PlayerSession(
         val view = danmakuView ?: return
         view.applyPrefs(library.danmakuOpacity, library.danmakuFont, library.danmakuSpeed, library.danmakuRows)
         view.setColorMode(extras.danmakuColorMode)
+        view.setMergeRepeat(library.danmakuMergeRepeat)
     }
 
     // --- 播放页内联弹幕面板 ---
@@ -1880,12 +2087,27 @@ class PlayerSession(
         applyDanmakuPrefs()
     }
 
+    /** 帧率档位 0=标准、1=高帧率、2=超帧率，与设置页同一套编号。 */
+    fun changeDanmakuFrameRateMode(value: Int) {
+        danmakuFrameRateMode = value.coerceIn(0, 2)
+        library.danmakuFrameRateMode = danmakuFrameRateMode
+    }
+
+    /** 合并重复弹幕开关，切换后立刻下发渲染器重排当前窗口。 */
+    fun changeDanmakuMergeRepeat(value: Boolean) {
+        danmakuMergeRepeat = value
+        library.danmakuMergeRepeat = value
+        danmakuView?.setMergeRepeat(value)
+    }
+
     fun resetDanmakuStyle() {
         changeDanmakuOpacity(DanmakuPrefs.OPACITY_DEFAULT)
         changeDanmakuFont(DanmakuPrefs.FONT_DEFAULT)
         changeDanmakuSpeed(DanmakuPrefs.SPEED_DEFAULT)
         changeDanmakuRows(DanmakuPrefs.ROWS_DEFAULT)
         changeDanmakuColor(0)
+        changeDanmakuFrameRateMode(0)
+        changeDanmakuMergeRepeat(false)
     }
 
     private fun startDanmaku() {
@@ -1971,6 +2193,74 @@ class PlayerSession(
         }
         // 心跳顺带兜住备用实例：被清掉 / 建失败时最多 3 秒补回来，别等到播完才发现没有下一集。
         maybeRestoreStandby()
+        // 调试模式才生成快照：正常观看不参与，避免每 400ms 无谓构建。
+        if (library.videoInfoMode == 3) refreshDebugInfo()
+    }
+
+    /** 汇总播放器内部状态成一屏诊断快照；只在「调试模式」下由心跳调用。 */
+    private fun refreshDebugInfo() {
+        val exo = player
+        fun fmt(ms: Long): String {
+            if (ms <= 0) return "0:00"
+            val s = ms / 1000
+            return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+        }
+        fun yes(value: Boolean) = if (value) "是" else "否"
+
+        val stateName = when (exo?.playbackState) {
+            Player.STATE_IDLE -> "空闲"
+            Player.STATE_BUFFERING -> "缓冲中"
+            Player.STATE_READY -> if (exo.isPlaying) "播放中" else "已暂停"
+            Player.STATE_ENDED -> "已结束"
+            else -> if (ready) "就绪" else "初始化"
+        }
+        val playSection = DebugSection("播放", listOf(
+            DebugRow("状态", stateName + if (!error.isNullOrBlank()) " · 错误" else ""),
+            DebugRow("剧集", "第 ${index + 1}/${episodes.size} 集 · ${currentEpisodeId.take(14)}"),
+            DebugRow("进度", "${fmt(position)} / ${fmt(duration)}"),
+            DebugRow("缓冲", if (exo != null) "${exo.bufferedPercentage}%" else "—"),
+            DebugRow("错误", error?.take(24)?.replace('\n', ' ') ?: "无"),
+        ))
+
+        val videoSection = DebugSection("视频", listOf(
+            DebugRow("分辨率", if (videoWidth > 0) "${videoWidth}×${videoHeight}" else "—"),
+            DebugRow("画质", qualityLabel.ifBlank { "—" }),
+            DebugRow("码率", if (videoBitrate > 0) "%.2f Mbps".format(videoBitrate / 1_000_000f) else "—"),
+            DebugRow("帧率", if (videoFrameRate > 0f) "%.0f fps".format(videoFrameRate) else "—"),
+            DebugRow("帧模式", frameMode.toString()),
+        ))
+
+        // 地址脱敏：丢掉 query，只留协议 + 主机 + 路径尾段，避免签名/令牌出现在画面上。
+        val rawUrl = remote?.info?.url.orEmpty()
+        val safeUrl = runCatching {
+            val noQuery = rawUrl.substringBefore('?')
+            if (noQuery.length <= 46) noQuery else "…" + noQuery.takeLast(45)
+        }.getOrDefault("—")
+        val networkSection = DebugSection("网络", listOf(
+            DebugRow("实时网速", "%.1f Mbps".format(networkMbps)),
+            DebugRow("带宽估计", if (exo != null) "%.1f Mbps".format(bandwidthMeter.bitrateEstimate / 1_000_000f) else "—"),
+            DebugRow("地址", safeUrl.ifBlank { "—" }),
+        ))
+
+        val seamlessSection = DebugSection("无缝连播", listOf(
+            DebugRow("双播放器", yes(useDualDecoder)),
+            DebugRow("当前层", if (dualVideoLayers) "第 ${activeSlot + 1} 层" else "单实例"),
+            DebugRow("预载集", if (standbyIndex >= 0) "第 ${standbyIndex + 1} 集" else "—"),
+            DebugRow("预载就绪", if (standbyIndex >= 0) yes(standbyReady) else "—"),
+            DebugRow("队列", if (queuedIndex >= 0) "第 ${queuedIndex + 1} 集" else "—"),
+        ))
+
+        val decodeSection = DebugSection("解码与弹幕", listOf(
+            DebugRow("解码模式", if (softwareDecoderForced) "软解" else "默认"),
+            DebugRow("倍速", "%.2f×".format(speed)),
+            DebugRow("兼容模式", yes(autoDowngraded || qualityOverride != null)),
+            DebugRow("弹幕", "${danmakuLoaded} 条 · ${danmakuFrameRateMode}档 · ${yes(danmakuMergeRepeat)}"),
+        ))
+
+        debugInfo = PlaybackDebugInfo(
+            sections = listOf(playSection, videoSection, networkSection, seamlessSection, decodeSection),
+            updatedAt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()),
+        )
     }
 
     fun togglePlay() {
@@ -2038,16 +2328,69 @@ class PlayerSession(
         seekTo(position + deltaMs)
     }
 
+    /**
+     * 跨季连播：本季最后一集播完后，异步取下一季分集并在同一会话内接着播。
+     * 全程不重建播放器（切季和切集走同一条 prepare 通道），避免闪屏/黑帧。
+     * 任何一次用户主动切集/改画质/退出都会让 crossSeasonToken 变化，作废这里迟到的结果。
+     */
+    private fun switchToNextSeason(expectedSeriesId: String, expectedIndex: Int) {
+        if (released || crossSeasonJob?.isActive == true) return
+        val token = ++crossSeasonToken
+        crossSeasonJob = scope.launch {
+            val next = withContext(Dispatchers.IO) {
+                runCatching {
+                    val seasons = repository.seasons(expectedSeriesId)
+                    if (seasons.isEmpty()) return@runCatching null
+                    // 先用官方 ID 精确定位当前季；投播/合成 ID 匹配不到时用标题季号兜底。
+                    var pos = seasons.indexOfFirst { it.series.id == expectedSeriesId }
+                    if (pos < 0) {
+                        val currentNumber = com.hongguotv.core.seasonNumber(series.title)
+                        if (currentNumber != Int.MAX_VALUE) {
+                            pos = seasons.indexOfFirst { it.number == currentNumber }
+                        }
+                    }
+                    if (pos < 0 || pos + 1 >= seasons.size) return@runCatching null
+                    val nextSeason = seasons[pos + 1]
+                    val detail = repository.detail(nextSeason.series.id)
+                    if (detail.episodes.isEmpty()) null else detail
+                }.getOrNull()
+            }
+            // 取季期间用户可能已切集/退出，令牌或剧集变了就放弃，绝不覆盖当前播放。
+            if (released || crossSeasonToken != token || series.id != expectedSeriesId ||
+                index != expectedIndex || next == null
+            ) {
+                crossSeasonJob = null
+                return@launch
+            }
+            // 换季前先清掉本季的队列与备用实例：discardQueue 依赖旧 episodes 找 mediaId，
+            // 换数据后它就找不到目标了。completedIndex 复位避免 saveLeavingEpisode 误判。
+            discardQueue()
+            clearStandby("跨季切换")
+            completedIndex = -1
+            position = 0L
+            duration = 0L
+            nonAlignedDowngraded = false
+            series = next.series
+            episodes = next.episodes
+            seasonNotice = "《${next.series.title}》已上线，继续播放"
+            prepare(0, 0L, allowStandbyWait = false)
+            crossSeasonJob = null
+        }
+    }
+
+    /** 清除跨季提示（UI 提示展示完后调用）。 */
+    fun clearSeasonNotice() { seasonNotice = null }
+
     fun next() {
-        if (index < episodes.lastIndex) prepare(index + 1, 0L)
+        if (index < episodes.lastIndex) { nonAlignedDowngraded = false; prepare(index + 1, 0L) }
     }
 
     fun previous() {
-        if (index > 0) prepare(index - 1, 0L)
+        if (index > 0) { nonAlignedDowngraded = false; prepare(index - 1, 0L) }
     }
 
     fun selectEpisode(target: Int) {
-        if (target != index) prepare(target, 0L)
+        if (target != index) { nonAlignedDowngraded = false; prepare(target, 0L) }
     }
 
     fun changeSpeed(value: Float) {
@@ -2104,6 +2447,7 @@ class PlayerSession(
         // 用户手动选清晰度后，之前那次自动降档就该失效。
         qualityOverride = null
         autoDowngraded = false
+        nonAlignedDowngraded = false
         failedQualityLabel = ""
         decodeRetries = 0
         clearStandby("清晰度变更")
@@ -2114,9 +2458,6 @@ class PlayerSession(
         frameMode = mode
         library.frameMode = mode
     }
-
-    /** 当前剧集是否允许弹幕（全局开关 + 单剧记忆）。 */
-    fun danmakuAvailable(): Boolean = extras.danmakuEnabled(series.id, library.danmaku)
 
     fun remoteAction(key: com.hongguotv.nativeapp.ui.data.RemoteKey): String = when (key) {
         com.hongguotv.nativeapp.ui.data.RemoteKey.UP -> extras.remoteUpAction
@@ -2202,6 +2543,9 @@ class PlayerSession(
         loadGeneration += 1
         queueGeneration += 1
         standbyGeneration += 1
+        crossSeasonToken += 1
+        crossSeasonJob?.cancel()
+        crossSeasonJob = null
         loadJob?.cancel()
         scope.cancel()
         activeMainListener?.let { listener -> runCatching { player?.removeListener(listener) } }

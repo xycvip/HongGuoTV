@@ -40,6 +40,7 @@ import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Settings
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -69,6 +71,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
@@ -81,6 +84,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -96,7 +100,11 @@ import com.hongguotv.nativeapp.ui.components.PulseDots
 import com.hongguotv.nativeapp.ui.components.TvButton
 import com.hongguotv.nativeapp.ui.components.tryRequestFocus
 import com.hongguotv.nativeapp.R
+import com.hongguotv.nativeapp.ui.player.PlaybackDebugInfo
+import com.hongguotv.nativeapp.ui.player.DebugSection
+import com.hongguotv.nativeapp.ui.player.DebugRow
 import com.hongguotv.nativeapp.ui.player.PlayerSession
+import com.hongguotv.nativeapp.ui.theme.Gold
 import com.hongguotv.nativeapp.ui.theme.Ink
 import com.hongguotv.nativeapp.ui.theme.Paper
 import com.hongguotv.nativeapp.ui.theme.Rouge
@@ -107,7 +115,11 @@ import com.hongguotv.nativeapp.ui.data.RemoteKey
 import com.hongguotv.nativeapp.ui.data.SettingsSnapshot
 import com.hongguotv.nativeapp.ui.theme.d
 import com.hongguotv.nativeapp.ui.theme.ui
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 @UnstableApi
 @Composable
@@ -117,27 +129,44 @@ fun PlayerScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     clock: String = "",
-    onDanmakuSettings: () -> Unit = {},
+    /** 启动自动播放的候选剧；非空表示处于「选剧第一层」。手动点剧进来为空，行为与原来一致。 */
+    startupCandidates: List<com.hongguotv.core.Series> = emptyList(),
+    startupIndex: Int = 0,
+    /** 第一层上下键切剧：回调候选列表中的目标索引，由外层拉新剧分集后重建播放器。 */
+    onSwitchSeries: (Int) -> Unit = {},
+    /** 定时关闭：应用级状态与操作，面板在本页内联弹出。 */
+    sleepState: com.hongguotv.nativeapp.ui.data.SleepTimerUiState = com.hongguotv.nativeapp.ui.data.SleepTimerUiState(),
+    onSetSleep: (com.hongguotv.nativeapp.ui.data.SleepMode, Int, com.hongguotv.nativeapp.ui.data.SleepAction) -> Unit = { _, _, _ -> },
+    onSleepAction: (com.hongguotv.nativeapp.ui.data.SleepAction) -> Unit = {},
+    onCancelSleep: () -> Unit = {},
+    /** 一集播完推进到下一集时回调（含跨季），驱动「再播 N 集」定时递减。 */
+    onEpisodeAdvanced: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    // 第一层：启动选剧模式。进入即自动播放当前剧，画面上只显示简洁的切剧提示 + 操作说明；
+    // 确定键进入第二层（完整控制层），不打断播放。手动点剧进来时直接是第二层，行为不变。
+    var introLayer by remember { mutableStateOf(startupCandidates.isNotEmpty()) }
     // 进播放页直接出画面：控制层（进度条 + 底部选项）初始隐藏，不给「先闪一层 UI 再收起」的过程。
     // 遥控器按确定随时叫出来；此前是 true，开播瞬间会盖住画面底部一大块。
     var controlsVisible by remember { mutableStateOf(false) }
     var episodesOpen by remember { mutableStateOf(false) }
     var seekHint by remember { mutableStateOf<String?>(null) }
     var hintToken by remember { mutableIntStateOf(0) }
+    var hintDuration by remember { mutableLongStateOf(900L) }
     var interaction by remember { mutableIntStateOf(0) }
     var qualityDialog by remember { mutableStateOf(false) }
     var speedDialog by remember { mutableStateOf(false) }
     var frameDialog by remember { mutableStateOf(false) }
     // 弹幕设置：在播放页内联弹出，不再跳去设置页（跳走会把播放会话一起销毁）。
     var danmakuOpen by remember { mutableStateOf(false) }
+    // 定时关闭面板：off/on 点击都弹同一个面板。
+    var sleepOpen by remember { mutableStateOf(false) }
     val playFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     val episodeFocus = remember { FocusRequester() }
     val episodeFirstFocus = remember { FocusRequester() }
     // 面板六行各一个 requester：首尾互相绕回，方向键不会跑到面板背后的播放控件上。
-    val danmakuRowFocus = remember { List(6) { FocusRequester() } }
+    val danmakuRowFocus = remember { List(7) { FocusRequester() } }
     // 错误弹窗的首/末按钮：弹窗一出就把焦点拉过来，否则遥控器确定键落在背后的播放键上。
     val errorPrimaryFocus = remember { FocusRequester() }
     val errorLastFocus = remember { FocusRequester() }
@@ -154,6 +183,14 @@ fun PlayerScreen(
         // 只重置自动收起计时，不把控制层叫出来：它一出现就会抢走焦点，
         // 第二次按左右变成移动光标，连续快进就此中断。
         interaction++
+    }
+
+    /** 第一层上下键切剧：在候选列表内循环，越过首尾回到另一端。 */
+    fun switchStartupSeries(delta: Int) {
+        if (startupCandidates.isEmpty()) return
+        val next = (startupIndex + delta + startupCandidates.size) % startupCandidates.size
+        if (next == startupIndex) return
+        onSwitchSeries(next)
     }
 
     /** 按用户配置分派遥控器动作。 */
@@ -173,36 +210,63 @@ fun PlayerScreen(
                 hintToken++
             }
             PlaybackExtras.REMOTE_MENU -> {
+                // 打开播放设置面板：直接叫出控制层。原先这里还有一层从无入口的
+                // menuKeyAction 死分支（永远走 else），已随死字段一并移除。
                 revealControls = true
-                when (settings.menuKeyAction) {
-                    PlaybackExtras.MENU_EPISODES -> episodesOpen = true
-                    PlaybackExtras.MENU_DANMAKU -> {
-                        session.toggleDanmaku()
-                        seekHint = if (session.danmakuEnabled) "弹幕已开启" else "弹幕已关闭"
-                        hintToken++
-                    }
-                    else -> Unit
-                }
             }
             PlaybackExtras.REMOTE_SLEEP_TIMER -> {
-                seekHint = "暂不支持定时关闭"
-                hintToken++
+                sleepOpen = true
+                poke()
             }
             else -> Unit
         }
         if (revealControls) poke() else interaction++
     }
 
-    // 5 秒无操作自动收起控制层；暂停、缓冲、选集、弹幕面板打开时保持显示。
-    LaunchedEffect(interaction, session.playing, session.buffering, episodesOpen, danmakuOpen) {
+    // 5 秒无操作自动收起控制层；暂停、缓冲、选集、弹幕/定时面板打开时保持显示。
+    // 定时面板一旦让控制层收起，下面的焦点联动会把焦点拉回根节点，面板里方向键就失灵了。
+    LaunchedEffect(interaction, session.playing, session.buffering, episodesOpen, danmakuOpen, sleepOpen) {
         if (!controlsVisible) return@LaunchedEffect
         delay(5000)
-        if (session.playing && !session.buffering && !episodesOpen && !danmakuOpen) controlsVisible = false
+        if (session.playing && !session.buffering && !episodesOpen && !danmakuOpen && !sleepOpen) controlsVisible = false
     }
     LaunchedEffect(hintToken) {
         if (hintToken == 0) return@LaunchedEffect
-        delay(900)
+        delay(hintDuration)
         seekHint = null
+        hintDuration = 900L
+    }
+    // 跨季连播：把会话层的切季提示接到统一的 hint 通道显示，随后清掉会话状态。
+    val seasonNotice = session.seasonNotice
+    LaunchedEffect(seasonNotice) {
+        if (seasonNotice != null) {
+            seekHint = seasonNotice
+            hintToken++
+            session.clearSeasonNotice()
+        }
+    }
+    // 自动降低分辨率：降档后仍返回 1080p 时提示一次，停留久一点让用户看清。
+    // 提示带所属集号：若消费前已切到别的集，旧提示直接作废，不串台。
+    val downgradeNotice = session.downgradeNotice
+    val downgradeNoticeIndex = session.downgradeNoticeIndex
+    LaunchedEffect(downgradeNotice) {
+        if (downgradeNotice != null) {
+            if (downgradeNoticeIndex == session.index) {
+                seekHint = downgradeNotice
+                hintDuration = 3000L
+                hintToken++
+            }
+            session.clearDowngradeNotice()
+        }
+    }
+    // 定时关闭·集数模式：一集推进到下一集（含手动切集、自动连播、跨季重置为第 1 集）
+    // 就回调一次。首次组合不回调，避免刚进播放页就把定时集数减掉。
+    var lastEpisodeIndex by remember { mutableIntStateOf(session.index) }
+    LaunchedEffect(session.index) {
+        if (session.index != lastEpisodeIndex) {
+            lastEpisodeIndex = session.index
+            onEpisodeAdvanced()
+        }
     }
     // 焦点跟着画面状态走：控制层可见时落在主播放键上（一进来就能按方向键操作），
     // 隐藏时收回根节点（方向键直接变成快进/快退），选集抽屉打开则进抽屉。
@@ -210,7 +274,11 @@ fun PlayerScreen(
     // 焦点跟着画面状态走：错误弹窗优先，其次弹幕面板 / 选集抽屉 / 控制层 / 根节点。
     // 控制层可见时落在主播放键上（一进来就能按方向键操作），隐藏时收回根节点
     // （方向键直接变成快进/快退）。之前焦点永远停在根 Box 上，遥控器看着「完全没反应」。
-    LaunchedEffect(controlsVisible, episodesOpen, danmakuOpen, session.error) {
+    LaunchedEffect(controlsVisible, episodesOpen, danmakuOpen, sleepOpen, session.error) {
+        // 定时面板有自己完整的焦点闭环（进面板时 modeTab.tryRequestFocus），
+        // 打开期间本联动不插手，否则会把焦点拉回播放键/根节点，面板里方向键就失灵了。
+        // 唯一例外是错误弹窗——那种情况优先级最高，仍要走下面的 error 分支。
+        if (sleepOpen && session.error == null) return@LaunchedEffect
         // 选集抽屉里优先落在当前集；当前集不在首屏时退回第一集，保证一定有落点。
         val targets = when {
             session.error != null -> listOf(errorPrimaryFocus)
@@ -236,6 +304,7 @@ fun PlayerScreen(
     // 之前控制层可见时直接 onBack()，用户只是想收起进度条，结果一脚踹回详情页。
     BackHandler {
         when {
+            sleepOpen -> sleepOpen = false
             danmakuOpen -> danmakuOpen = false
             episodesOpen -> episodesOpen = false
             qualityDialog -> qualityDialog = false
@@ -258,10 +327,15 @@ fun PlayerScreen(
                 if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.nativeKeyEvent.keyCode) {
                     KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                        // 控制层可见时把「确定」让给焦点所在的控件（清晰度/选集/进度条…），
-                        // 否则 preview 会先把它当成「确认键行为」消费掉——用户点「清晰度」
-                        // 却触发播放/暂停，就是这里抢了事件。
-                        if (!controlsVisible) {
+                        // 第一层：确定键进入第二层（显示完整控制层），不影响正在播放的内容。
+                        if (introLayer) {
+                            introLayer = false
+                            poke()
+                            true
+                        } else if (!controlsVisible) {
+                            // 控制层可见时把「确定」让给焦点所在的控件（清晰度/选集/进度条…），
+                            // 否则 preview 会先把它当成「确认键行为」消费掉——用户点「清晰度」
+                            // 却触发播放/暂停，就是这里抢了事件。
                             poke()
                             true
                         } else {
@@ -282,13 +356,16 @@ fun PlayerScreen(
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         if (!controlsVisible) {
-                            dispatch(session.remoteAction(RemoteKey.UP))
+                            // 第一层：上下键切剧；第二层：沿用原来的遥控动作映射。
+                            if (introLayer) switchStartupSeries(-1)
+                            else dispatch(session.remoteAction(RemoteKey.UP))
                             true
                         } else false
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
                         if (!controlsVisible) {
-                            dispatch(session.remoteAction(RemoteKey.DOWN))
+                            if (introLayer) switchStartupSeries(1)
+                            else dispatch(session.remoteAction(RemoteKey.DOWN))
                             true
                         } else false
                     }
@@ -385,50 +462,6 @@ fun PlayerScreen(
             onDispose { session.detachDanmaku(danmakuRenderer) }
         }
 
-        // 播放信息与实时网速
-        val showInfo = settings.videoInfoMode > 0 && session.ready
-        if (showInfo || settings.showNetworkSpeed) {
-            Column(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = ui.gutter, top = d(64)),
-                horizontalAlignment = Alignment.End,
-            ) {
-                if (showInfo) {
-                    Text(
-                        buildString {
-                            if (session.videoWidth > 0) append("${session.videoWidth}×${session.videoHeight}")
-                            if (session.qualityLabel.isNotBlank()) {
-                                if (isNotEmpty()) append("  ·  ")
-                                append(session.qualityLabel)
-                            }
-                            if (settings.videoInfoMode >= 2) {
-                                if (session.videoBitrate > 0) append("  ·  ${"%.1f".format(session.videoBitrate / 1_000_000f)} Mbps")
-                                if (session.videoFrameRate > 0f) append("  ·  ${"%.0f".format(session.videoFrameRate)} fps")
-                            }
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xCCFFFFFF),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(d(6)))
-                            .background(Color(0x66000000))
-                            .padding(horizontal = d(8), vertical = d(4)),
-                    )
-                }
-                if (settings.showNetworkSpeed) {
-                    Spacer(Modifier.height(d(6)))
-                    Text(
-                        "↓ ${"%.1f".format(session.networkMbps)} Mbps",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xB3FFFFFF),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(d(6)))
-                            .background(Color(0x66000000))
-                            .padding(horizontal = d(8), vertical = d(4)),
-                    )
-                }
-            }
-        }
 
         if (session.buffering && session.error == null) {
             Column(
@@ -517,6 +550,133 @@ fun PlayerScreen(
             }
         }
 
+        // ── 第一层（启动选剧）：电影感导览层，覆盖在播放画面上，不抢焦点、不打断播放 ──
+        // 进入即自动播放当前剧；上下键在候选间切剧，确定键进入第二层完整控制层，返回键回首页。
+        AnimatedVisibility(
+            visible = introLayer && !controlsVisible && session.error == null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                // 左侧横向渐变：只压暗文字区、把画面让给右侧，贴片感而非整屏黑罩。
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.68f)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xE6000000),
+                                    Color(0xA6000000),
+                                    Color(0x3D000000),
+                                    Color.Transparent,
+                                ),
+                            ),
+                        ),
+                )
+
+                // 主信息：垂直居中偏上，海报 hero 式排版。
+                Column(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth(0.62f)
+                        .padding(start = ui.gutter),
+                ) {
+                    // 品牌行：金线 + 开机精选。
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(width = d(28), height = d(2))
+                                .background(Gold.Core),
+                        )
+                        Spacer(Modifier.width(d(10)))
+                        Text(
+                            "开机精选",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Gold.Bright,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    Spacer(Modifier.height(d(16)))
+                    // 剧名：全站最大的字阶，收字距，最多两行。
+                    Text(
+                        session.series.title,
+                        style = MaterialTheme.typography.displaySmall,
+                        color = Paper.Pure,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(d(14)))
+                    // 元信息：全 N 集胭脂红胶囊 + 标签，缺项自动隐去，不留空档。
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val episodeCount = startupCandidates.getOrNull(startupIndex)?.episodes?.size ?: 0
+                        if (episodeCount > 0) {
+                            Text(
+                                "全 $episodeCount 集",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Paper.Pure,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(d(6)))
+                                    .background(Rouge.Core)
+                                    .padding(horizontal = d(10), vertical = d(4)),
+                            )
+                        }
+                        val tags = session.series.tags.trim()
+                        if (tags.isNotBlank()) {
+                            if (episodeCount > 0) Spacer(Modifier.width(d(12)))
+                            Text(
+                                tags,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Paper.Secondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    // 简介：克制两行，给画面留呼吸。
+                    val synopsis = session.series.description.trim()
+                    if (synopsis.isNotBlank()) {
+                        Spacer(Modifier.height(d(12)))
+                        Text(
+                            synopsis,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Paper.Secondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    // 候选导览：金色进度轨道 + 序号，比纯文字更直观。
+                    if (startupCandidates.size > 1) {
+                        Spacer(Modifier.height(d(26)))
+                        StartupProgressRail(startupCandidates.size, startupIndex)
+                    }
+                }
+
+                // 底部操作说明：玻璃质感按键条，确定键用金色强调。
+                Row(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = d(40), start = ui.gutter, end = ui.gutter)
+                        .clip(RoundedCornerShape(d(18)))
+                        .background(Color(0x9910141C))
+                        .border(d(1), Color(0x33E7BE7C), RoundedCornerShape(d(18)))
+                        .padding(horizontal = d(22), vertical = d(14)),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StartupKeyHint("▲ ▼", "切换剧目")
+                    Spacer(Modifier.width(d(18)))
+                    Box(Modifier.width(d(1)).height(d(18)).background(Color(0x2EFFFFFF)))
+                    Spacer(Modifier.width(d(18)))
+                    StartupKeyHint("确定", "进入播放", accent = true)
+                    Spacer(Modifier.width(d(18)))
+                    Box(Modifier.width(d(1)).height(d(18)).background(Color(0x2EFFFFFF)))
+                    Spacer(Modifier.width(d(18)))
+                    StartupKeyHint("返回", "回到首页")
+                }
+            }
+        }
+
         // 顶部信息与控制
         AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut()) {
             Box(Modifier.fillMaxSize()) {
@@ -551,11 +711,6 @@ fun PlayerScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = Paper.Secondary,
                         )
-                    }
-                    // 右上角时间：跟随设置里的「时间显示」开关，不加背景框，避免遮挡画面。
-                    if (settings.showClock && clock.isNotBlank()) {
-                        Spacer(Modifier.weight(1f))
-                        Text(clock, style = MaterialTheme.typography.labelMedium, color = Paper.Secondary)
                     }
                 }
 
@@ -640,6 +795,13 @@ fun PlayerScreen(
                                     poke()
                                 },
                             )
+                            SleepBadgeChip(
+                                on = sleepState.badgeOn,
+                                description = if (sleepState.badgeOn) "定时已开启，${sleepState.summaryText}" else "定时关闭",
+                            ) {
+                                sleepOpen = true
+                                poke()
+                            }
                             ControlChip("选集", Icons.AutoMirrored.Rounded.PlaylistPlay) { episodesOpen = true }
                         }
                         Spacer(Modifier.weight(1f))
@@ -676,6 +838,104 @@ fun PlayerScreen(
                     }
                 }
             }
+        }
+
+        // 右上角一行：播放信息 · 实时网速 · 时钟，常驻、不随控制层显隐。
+        // 无框无金、低饱和灰白 + 细投影，各段用细竖线分隔，时间固定在最右。
+        // 调试模式（播放信息第 4 档）时整行让位给左侧诊断面板，避免信息重复。
+        val debugMode = settings.videoInfoMode >= 3
+        val showInfo = !debugMode && settings.videoInfoMode > 0 && session.ready
+        val showSpeed = !debugMode && settings.showNetworkSpeed
+        val showClockThis = settings.showClock && clock.isNotBlank()
+        // 定时关闭：只在临界时显示倒计时（分钟<=60s 逐秒、集数<=3 逐集），平时不常驻。
+        val showSleep = sleepState.active && sleepState.countdownText.isNotBlank()
+        if (showInfo || showSpeed || showClockThis || showSleep) {
+            Row(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = d(30), end = ui.gutter),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(d(10)),
+            ) {
+                if (showInfo) {
+                    Text(
+                        buildString {
+                            if (session.videoWidth > 0) append("${session.videoWidth}×${session.videoHeight}")
+                            if (session.qualityLabel.isNotBlank()) {
+                                if (isNotEmpty()) append(" · ")
+                                append(session.qualityLabel)
+                            }
+                            if (settings.videoInfoMode >= 2) {
+                                if (session.videoBitrate > 0) append(" · ${"%.1f".format(session.videoBitrate / 1_000_000f)} Mbps")
+                                if (session.videoFrameRate > 0f) append(" · ${"%.0f".format(session.videoFrameRate)} fps")
+                            }
+                        },
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            shadow = Shadow(color = Color(0x99000000), blurRadius = with(LocalDensity.current) { d(5).toPx() }),
+                        ),
+                        color = Color(0xD9FFFFFF),
+                    )
+                }
+                if (showInfo && showSpeed) TopInfoDivider()
+                if (showSpeed) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.Download,
+                            contentDescription = null,
+                            tint = Color(0xD9FFFFFF),
+                            modifier = Modifier.size(d(14)),
+                        )
+                        Spacer(Modifier.width(d(4)))
+                        Text(
+                            "${"%.1f".format(session.networkMbps)} Mbps",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                shadow = Shadow(color = Color(0x99000000), blurRadius = with(LocalDensity.current) { d(5).toPx() }),
+                            ),
+                            color = Color(0xD9FFFFFF),
+                        )
+                    }
+                }
+                if (showSleep) {
+                    if (showInfo || showSpeed) TopInfoDivider()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.Schedule,
+                            contentDescription = null,
+                            tint = Color(0xFF43A047),
+                            modifier = Modifier.size(d(14)),
+                        )
+                        Spacer(Modifier.width(d(4)))
+                        Text(
+                            sleepState.countdownText,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                shadow = Shadow(color = Color(0x99000000), blurRadius = with(LocalDensity.current) { d(5).toPx() }),
+                            ),
+                            color = Color(0xFFFF6B7E),
+                        )
+                    }
+                }
+                if ((showInfo || showSpeed || showSleep) && showClockThis) TopInfoDivider()
+                if (showClockThis) {
+                    Text(
+                        clock,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            shadow = Shadow(color = Color(0x99000000), blurRadius = with(LocalDensity.current) { d(6).toPx() }),
+                        ),
+                        color = Paper.Secondary,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+
+        // 调试模式：视频左侧叠一屏诊断面板，带半透明背景、所有信息一屏展示，不滚动、不抢焦点。
+        if (debugMode && session.error == null) {
+            DebugOverlayPanel(
+                info = session.debugInfo,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = ui.gutter, top = d(26)),
+            )
         }
 
         // 进度条常驻：屏幕最底部一条极细进度线，比常规进度条更细、低对比，不聚焦不拦截输入，
@@ -784,18 +1044,18 @@ fun PlayerScreen(
                 Spacer(Modifier.height(d(12)))
                 Column(
                     Modifier
-                        .height(d(430))
+                        .height(d(500))
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(d(8)),
                 ) {
                     DanmakuStepperRow(
-                        title = "显示弹幕",
-                        description = "关闭后本集与后续剧集都不叠加弹幕",
-                        value = if (session.danmakuEnabled) "开启" else "关闭",
+                        title = "弹幕帧率",
+                        description = "越高越流畅，性能消耗也越大",
+                        value = danmakuFrameRateLabel(session.danmakuFrameRateMode),
                         focusRequester = danmakuRowFocus[0],
-                        // 两档开关，左右和确定都给「切一下」，避免按左在关闭态下无反应。
-                        onLeft = { session.toggleDanmaku() },
-                        onRight = { session.toggleDanmaku() },
+                        // 三档循环，左右和确定都切一档，避免到端点时按键无反应。
+                        onLeft = { session.changeDanmakuFrameRateMode((session.danmakuFrameRateMode + 2) % 3) },
+                        onRight = { session.changeDanmakuFrameRateMode((session.danmakuFrameRateMode + 1) % 3) },
                         onUp = { danmakuRowFocus[5].tryRequestFocus() },
                     )
                     DanmakuStepperRow(
@@ -833,6 +1093,17 @@ fun PlayerScreen(
                         focusRequester = danmakuRowFocus[5],
                         onLeft = { session.changeDanmakuRows(session.danmakuRows - 1) },
                         onRight = { session.changeDanmakuRows(session.danmakuRows + 1) },
+                        onDown = { danmakuRowFocus[6].tryRequestFocus() },
+                    )
+                    DanmakuStepperRow(
+                        title = "合并重复弹幕",
+                        description = "十秒内重复的字幕只显示一条",
+                        value = if (session.danmakuMergeRepeat) "开启" else "关闭",
+                        focusRequester = danmakuRowFocus[6],
+                        onLeft = { session.changeDanmakuMergeRepeat(!session.danmakuMergeRepeat) },
+                        onRight = { session.changeDanmakuMergeRepeat(!session.danmakuMergeRepeat) },
+                        onUp = { danmakuRowFocus[5].tryRequestFocus() },
+                        onDown = { danmakuRowFocus[0].tryRequestFocus() },
                     )
                 }
                 Spacer(Modifier.height(d(14)))
@@ -850,18 +1121,19 @@ fun PlayerScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TvButton("恢复默认", { session.resetDanmakuStyle() }, tone = ButtonTone.Quiet)
-                    // 屏蔽词与热更新脚本仍留在设置页：那个入口是次要路径，点了会离开播放页。
-                    TvButton(
-                        "更多设置",
-                        {
-                            danmakuOpen = false
-                            onDanmakuSettings()
-                        },
-                        tone = ButtonTone.Ghost,
-                    )
                 }
             }
         }
+    }
+
+    if (sleepOpen) {
+        SleepTimerPanel(
+            state = sleepState,
+            onSetSleep = onSetSleep,
+            onSleepAction = onSleepAction,
+            onCancelSleep = onCancelSleep,
+            onDismiss = { sleepOpen = false },
+        )
     }
 
     if (qualityDialog) {
@@ -898,6 +1170,92 @@ fun PlayerScreen(
                 frameDialog = false
             },
             onDismiss = { frameDialog = false },
+        )
+    }
+}
+
+/** 右上角状态行的段间细竖线。 */
+@Composable
+private fun TopInfoDivider() {
+    Box(
+        Modifier
+            .width(d(1))
+            .height(d(12))
+            .background(Color(0x44FFFFFF)),
+    )
+}
+
+/**
+ * 调试模式诊断面板：视频左侧一屏展示所有播放状态，带半透明深色背景 + 细金边。
+ * 分组标题金色小字，信息逐行列对齐；不滚动、不聚焦，不干扰遥控器操作。
+ */
+@Composable
+private fun DebugOverlayPanel(info: PlaybackDebugInfo, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .width(d(320))
+            .clip(RoundedCornerShape(d(12)))
+            .background(Color(0xD90B0E14))
+            .border(d(1), Color(0x33E7BE7C), RoundedCornerShape(d(12)))
+            .padding(horizontal = d(16), vertical = d(14)),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(d(7)).clip(RoundedCornerShape(d(2))).background(Rouge.Bright))
+            Spacer(Modifier.width(d(8)))
+            Text(
+                "播放诊断",
+                style = MaterialTheme.typography.titleSmall,
+                color = Gold.Bright,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                info.updatedAt,
+                style = MaterialTheme.typography.labelSmall,
+                color = Paper.Disabled,
+            )
+        }
+        Spacer(Modifier.height(d(6)))
+        Box(Modifier.fillMaxWidth().height(d(1)).background(Color(0x26FFFFFF)))
+        info.sections.forEachIndexed { index, section ->
+            Spacer(Modifier.height(d(9)))
+            Text(
+                section.title,
+                style = MaterialTheme.typography.labelSmall,
+                color = Gold.Core,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(d(3)))
+            section.rows.forEach { row -> DebugInfoRow(row) }
+            if (index != info.sections.lastIndex) {
+                Spacer(Modifier.height(d(5)))
+                Box(Modifier.fillMaxWidth().height(d(1)).background(Color(0x14FFFFFF)))
+            }
+        }
+    }
+}
+
+/** 诊断面板里的一行：左侧标签固定宽，右侧值右对齐、单行截断。 */
+@Composable
+private fun DebugInfoRow(row: DebugRow) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = d(1)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            row.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Paper.Secondary,
+            modifier = Modifier.width(d(74)),
+        )
+        Text(
+            row.value,
+            style = MaterialTheme.typography.labelSmall,
+            color = Paper.Pure,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
     }
 }
@@ -978,6 +1336,49 @@ private fun DanmakuBadgeChip(
     }
 }
 
+/**
+ * 定时关闭状态按钮：单个定时器图标（恒定灰白，不随开关变色），右下角挂 OFF/ON 文字角标。
+ * ON 用弹幕绿勾同款绿，OFF 用弹幕关勾同款灰；两种状态点击行为一致，都弹定时面板。
+ */
+@Composable
+private fun SleepBadgeChip(on: Boolean, description: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(d(999)))
+            .background(if (focused) Color(0x2EFFFFFF) else Color(0x14FFFFFF))
+            .border(d(1.2f), if (focused) Rouge.Bright else Color(0x22FFFFFF), RoundedCornerShape(d(999)))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = d(13), vertical = d(9)),
+    ) {
+        Box {
+            Icon(
+                Icons.Rounded.Schedule,
+                null,
+                tint = if (focused) Color.White else Paper.Secondary,
+                modifier = Modifier.size(d(18)),
+            )
+            Box(
+                Modifier
+                    .offset(x = d(9), y = d(9))
+                    .height(d(12))
+                    .clip(RoundedCornerShape(d(4)))
+                    .background(Color(0xE60A0C12))
+                    .border(d(0.7f), Color(0x66FFFFFF), RoundedCornerShape(d(4)))
+                    .padding(horizontal = d(2.5f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (on) "ON" else "OFF",
+                    color = if (on) Color(0xFF43A047) else Color(0xFF9AA0AA),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 6.sp, fontWeight = FontWeight.Bold),
+                )
+            }
+        }
+    }
+}
+
 /** 弹幕面板的一行：左右键直接调档，确定键等价于「加一档」。 */
 @Composable
 private fun DanmakuStepperRow(
@@ -1047,6 +1448,303 @@ private fun DanmakuStepperRow(
     }
 }
 
+/**
+ * 定时关闭面板。
+ * 01 计时方式：分钟 / 集数两个分段，左右键切换（互斥，切到哪段就激活哪段），每模式记住各自的值。
+ * 大号数字左右键单步，长按 320ms 后加速连调；范围分钟 10..999、集数 1..999。
+ * 02 到点后：暂停 / 退出两档。底部显示当前状态并可一键关闭。
+ * 焦点链：模式段 → 数字 → 动作 → 关闭按钮 → 回到模式段，方向键不会跑到面板背后。
+ */
+@Composable
+private fun SleepTimerPanel(
+    state: com.hongguotv.nativeapp.ui.data.SleepTimerUiState,
+    onSetSleep: (com.hongguotv.nativeapp.ui.data.SleepMode, Int, com.hongguotv.nativeapp.ui.data.SleepAction) -> Unit,
+    onSleepAction: (com.hongguotv.nativeapp.ui.data.SleepAction) -> Unit,
+    onCancelSleep: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val modeTab = remember { FocusRequester() }
+    val numberRow = remember { FocusRequester() }
+    val actionTab = remember { FocusRequester() }
+    val closeBtn = remember { FocusRequester() }
+
+    // 面板本地记住两个模式各自调到的值，切回来时接着用；底层 timer 始终只有一种模式生效。
+    var minutesDraft = remember { mutableIntStateOf(if (state.mode == com.hongguotv.nativeapp.ui.data.SleepMode.MINUTES && state.active) state.value.coerceIn(10, 999) else 30) }
+    var episodesDraft = remember { mutableIntStateOf(if (state.mode == com.hongguotv.nativeapp.ui.data.SleepMode.EPISODES && state.active) state.value.coerceIn(1, 999) else 3) }
+    var selectedMode = remember {
+        mutableStateOf(
+            when (state.mode) {
+                com.hongguotv.nativeapp.ui.data.SleepMode.EPISODES -> com.hongguotv.nativeapp.ui.data.SleepMode.EPISODES
+                else -> com.hongguotv.nativeapp.ui.data.SleepMode.MINUTES
+            }
+        )
+    }
+
+    // 长按加速：按下先走一步，320ms 后每 40ms 一跳并逐渐提速；松开或焦点移走即停止。
+    // TV 遥控长按会持续发 repeat KeyDown，用 holdingDir 拦住，避免反复重启协程。
+    var holdJob by remember { mutableStateOf<Job?>(null) }
+    var holdingDir by remember { mutableIntStateOf(0) }
+    fun stopHold() { holdJob?.cancel(); holdJob = null; holdingDir = 0 }
+    DisposableEffect(Unit) { onDispose { holdJob?.cancel() } }
+
+    fun step(delta: Int) {
+        if (selectedMode.value == com.hongguotv.nativeapp.ui.data.SleepMode.EPISODES) {
+            val next = episodesDraft.intValue + delta
+            if (next !in 1..999) return
+            episodesDraft.intValue = next
+            onSetSleep(com.hongguotv.nativeapp.ui.data.SleepMode.EPISODES, next, state.action)
+        } else {
+            val next = minutesDraft.intValue + delta * 10
+            if (next !in 10..999) return
+            minutesDraft.intValue = next
+            onSetSleep(com.hongguotv.nativeapp.ui.data.SleepMode.MINUTES, next, state.action)
+        }
+    }
+
+    fun startHold(delta: Int) {
+        if (holdingDir == delta) return // repeat KeyDown，加速已在跑，忽略
+        stopHold()
+        holdingDir = delta
+        step(delta)
+        holdJob = scope.launch {
+            delay(320)
+            var gap = 40L
+            while (isActive) {
+                step(delta)
+                delay(gap)
+                if (gap > 16L) gap -= 2L
+            }
+        }
+    }
+
+    fun selectMode(mode: com.hongguotv.nativeapp.ui.data.SleepMode) {
+        if (selectedMode.value == mode) return
+        stopHold()
+        selectedMode.value = mode
+        val value = if (mode == com.hongguotv.nativeapp.ui.data.SleepMode.EPISODES) episodesDraft.intValue else minutesDraft.intValue
+        onSetSleep(mode, value, state.action)
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0x99000000))
+                .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
+        )
+        Column(
+            Modifier
+                .align(Alignment.Center)
+                .width(d(560))
+                .clip(RoundedCornerShape(d(22)))
+                .background(Color(0xF20B0E14))
+                .border(d(1f), Color(0x1FFFFFFF), RoundedCornerShape(d(22)))
+                // 面板内部点击自己吃掉，不穿透到底层遮罩（否则手动点一下面板就关了）。
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+                .padding(d(22)),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Schedule, null, tint = Rouge.Bright, modifier = Modifier.size(d(20)))
+                Spacer(Modifier.width(d(10)))
+                Text("定时关闭", style = MaterialTheme.typography.headlineSmall, color = Paper.Pure, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                CircleAction(Icons.Rounded.Close, "关闭", d(38), onDismiss)
+            }
+            Spacer(Modifier.height(d(6)))
+            Text("左右键切模式 / 调数值 · 长按加速 · 立即生效", style = MaterialTheme.typography.labelSmall, color = Paper.Tertiary)
+            Spacer(Modifier.height(d(16)))
+
+            Text("01  计时方式", style = MaterialTheme.typography.labelSmall, color = Gold.Bright)
+            Spacer(Modifier.height(d(8)))
+            // 分段 tab：左右键在「分钟 / 集数」间切换，互斥激活。
+            val modeInteraction = remember { MutableInteractionSource() }
+            val modeFocused by modeInteraction.collectIsFocusedAsState()
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(d(12)))
+                    .background(if (modeFocused) Color(0x1FFFFFFF) else Color(0x0AFFFFFF))
+                    .border(d(1.2f), if (modeFocused) Rouge.Bright else Color(0x12FFFFFF), RoundedCornerShape(d(12)))
+                    .onKeyEvent { event ->
+                        if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
+                        when (event.key) {
+                            Key.DirectionLeft -> { selectMode(com.hongguotv.nativeapp.ui.data.SleepMode.MINUTES); true }
+                            Key.DirectionRight -> { selectMode(com.hongguotv.nativeapp.ui.data.SleepMode.EPISODES); true }
+                            Key.DirectionDown -> { numberRow.tryRequestFocus(); true }
+                            Key.DirectionUp -> { closeBtn.tryRequestFocus(); true }
+                            else -> false
+                        }
+                    }
+                    .focusRequester(modeTab)
+                    .focusable(interactionSource = modeInteraction)
+                    .padding(d(4)),
+                horizontalArrangement = Arrangement.spacedBy(d(4)),
+            ) {
+                listOf(com.hongguotv.nativeapp.ui.data.SleepMode.MINUTES to "分钟", com.hongguotv.nativeapp.ui.data.SleepMode.EPISODES to "集数").forEach { (mode, label) ->
+                    val on = selectedMode.value == mode
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(d(9)))
+                            .background(if (on) Rouge.Bright else Color.Transparent)
+                            // 触摸点击也能切模式；不新增焦点节点，遥控器焦点链不变。
+                            .pointerInput(mode) { detectTapGestures(onTap = { selectMode(mode) }) }
+                            .padding(vertical = d(9)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (on) Color.White else Paper.Secondary,
+                            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(d(12)))
+
+            // 大号数字：左右键单步，长按加速。
+            val numInteraction = remember { MutableInteractionSource() }
+            val numFocused by numInteraction.collectIsFocusedAsState()
+            val isEpisodes = selectedMode.value == com.hongguotv.nativeapp.ui.data.SleepMode.EPISODES
+            val bigValue = if (isEpisodes) episodesDraft.intValue else minutesDraft.intValue
+            val unit = if (isEpisodes) "集" else "分钟"
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(d(14)))
+                    .background(if (numFocused) Color(0x1FFFFFFF) else Color(0x0AFFFFFF))
+                    .border(d(1.2f), if (numFocused) Rouge.Bright else Color(0x12FFFFFF), RoundedCornerShape(d(14)))
+                    .onKeyEvent { event ->
+                        when (event.type) {
+                            androidx.compose.ui.input.key.KeyEventType.KeyDown -> when (event.key) {
+                                Key.DirectionLeft -> { startHold(-1); true }
+                                Key.DirectionRight -> { startHold(1); true }
+                                Key.DirectionUp -> { stopHold(); modeTab.tryRequestFocus(); true }
+                                Key.DirectionDown -> { stopHold(); actionTab.tryRequestFocus(); true }
+                                else -> false
+                            }
+                            androidx.compose.ui.input.key.KeyEventType.KeyUp -> {
+                                if (event.key == Key.DirectionLeft || event.key == Key.DirectionRight) { stopHold(); true } else false
+                            }
+                            else -> false
+                        }
+                    }
+                    .focusRequester(numberRow)
+                    .focusable(interactionSource = numInteraction),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    "‹",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (numFocused) Rouge.Bright else Paper.Tertiary,
+                    modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { stopHold(); step(-1) }) },
+                )
+                Spacer(Modifier.width(d(20)))
+                Text(
+                    "$bigValue",
+                    style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (numFocused) Color.White else Paper.Primary,
+                )
+                Spacer(Modifier.width(d(6)))
+                Text(unit, style = MaterialTheme.typography.titleMedium, color = Paper.Secondary)
+                Spacer(Modifier.width(d(20)))
+                Text(
+                    "›",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (numFocused) Rouge.Bright else Paper.Tertiary,
+                    modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { stopHold(); step(1) }) },
+                )
+            }
+            Spacer(Modifier.height(d(4)))
+            Text(
+                if (isEpisodes) "每次 1 集 · 范围 1 – 999" else "每次 10 分钟 · 范围 10 – 999",
+                style = MaterialTheme.typography.labelSmall,
+                color = Paper.Tertiary,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Spacer(Modifier.height(d(16)))
+
+            Text("02  到点后", style = MaterialTheme.typography.labelSmall, color = Gold.Bright)
+            Spacer(Modifier.height(d(8)))
+            val exit = state.action == com.hongguotv.nativeapp.ui.data.SleepAction.EXIT
+            val actInteraction = remember { MutableInteractionSource() }
+            val actFocused by actInteraction.collectIsFocusedAsState()
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(d(12)))
+                    .background(if (actFocused) Color(0x1FFFFFFF) else Color(0x0AFFFFFF))
+                    .border(d(1.2f), if (actFocused) Rouge.Bright else Color(0x12FFFFFF), RoundedCornerShape(d(12)))
+                    .onKeyEvent { event ->
+                        if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
+                        when (event.key) {
+                            Key.DirectionLeft -> { onSleepAction(com.hongguotv.nativeapp.ui.data.SleepAction.PAUSE); true }
+                            Key.DirectionRight -> { onSleepAction(com.hongguotv.nativeapp.ui.data.SleepAction.EXIT); true }
+                            Key.DirectionUp -> { numberRow.tryRequestFocus(); true }
+                            Key.DirectionDown -> { closeBtn.tryRequestFocus(); true }
+                            else -> false
+                        }
+                    }
+                    .focusRequester(actionTab)
+                    .focusable(interactionSource = actInteraction)
+                    .padding(d(4)),
+                horizontalArrangement = Arrangement.spacedBy(d(4)),
+            ) {
+                listOf(false to "暂停播放", true to "退出应用").forEach { (isExit, label) ->
+                    val on = exit == isExit
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(d(9)))
+                            .background(if (on) Rouge.Bright else Color.Transparent)
+                            // 触摸点击也能切「到点后」动作；不新增焦点节点。
+                            .pointerInput(isExit) {
+                                detectTapGestures(onTap = {
+                                    onSleepAction(if (isExit) com.hongguotv.nativeapp.ui.data.SleepAction.EXIT else com.hongguotv.nativeapp.ui.data.SleepAction.PAUSE)
+                                })
+                            }
+                            .padding(vertical = d(9)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (on) Color.White else Paper.Secondary,
+                            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(d(18)))
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .border(d(1f), Color(0x18FFFFFF), RoundedCornerShape(d(12)))
+                    .padding(horizontal = d(14), vertical = d(10)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("当前", style = MaterialTheme.typography.labelSmall, color = Paper.Tertiary)
+                Spacer(Modifier.width(d(10)))
+                Text(
+                    if (state.active) state.summaryText else "未设置",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (state.active) Color(0xFF43A047) else Paper.Secondary,
+                )
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.focusRequester(closeBtn)) {
+                    TvButton("关闭定时", { onCancelSleep(); onDismiss() }, tone = ButtonTone.Quiet, enabled = state.active)
+                }
+            }
+        }
+    }
+    LaunchedEffect(Unit) { modeTab.tryRequestFocus() }
+}
+
 private fun stepOpacity(current: Int, delta: Int): Int = (current + delta).coerceIn(25, 100)
 
 private fun stepColor(current: Int, delta: Int): Int = ((current + delta) % 10 + 10) % 10
@@ -1058,6 +1756,10 @@ private fun danmakuColorName(mode: Int): String = when (mode) {
         .getOrElse(mode - 2) { "默认" }
 }
 
+/** 与设置页「弹幕帧率」同一套编号：0=标准、1=高帧率、2=超帧率。 */
+private fun danmakuFrameRateLabel(mode: Int): String =
+    listOf("标准", "高帧率", "超帧率").getOrElse(mode.coerceIn(0, 2)) { "标准" }
+
 @Composable
 private fun PersistentProgress(
     position: Long,
@@ -1068,7 +1770,7 @@ private fun PersistentProgress(
     Box(
         modifier
             .fillMaxWidth()
-            .height(d(2.5f))
+            .height(d(1.5f))
             .background(Color(0x2EFFFFFF)),
     ) {
         Box(
@@ -1157,6 +1859,72 @@ private fun SeekBar(
         }
         Spacer(Modifier.width(d(14)))
         Text(formatSeconds(duration), style = MaterialTheme.typography.labelSmall, color = Paper.Tertiary)
+    }
+}
+
+/** 第一层操作说明里的单个按键提示：键帽 + 说明文字；确定键用金色强调。 */
+@Composable
+private fun StartupKeyHint(key: String, label: String, accent: Boolean = false) {
+    val keyColor = if (accent) Gold.Bright else Paper.Pure
+    val capBg = if (accent) Color(0x33E7BE7C) else Ink.SurfaceTop
+    val capBorder = if (accent) Gold.Core else Ink.Line
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(d(8)))
+                .background(capBg)
+                .border(d(1), capBorder, RoundedCornerShape(d(8)))
+                .padding(horizontal = d(12), vertical = d(6)),
+        ) {
+            Text(
+                key,
+                style = MaterialTheme.typography.labelSmall,
+                color = keyColor,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Spacer(Modifier.width(d(8)))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (accent) Paper.Primary else Paper.Secondary,
+        )
+    }
+}
+
+/** 第一层候选导览：以当前剧为窗口展示最多 9 个刻度，居中项金色高亮并放大。 */
+@Composable
+private fun StartupProgressRail(count: Int, current: Int) {
+    if (count <= 0) return
+    val window = 9.coerceAtMost(count)
+    val start = (current - window / 2).coerceIn(0, count - window)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "${current + 1}",
+            style = MaterialTheme.typography.titleMedium,
+            color = Gold.Bright,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            " / $count",
+            style = MaterialTheme.typography.bodySmall,
+            color = Paper.Tertiary,
+        )
+        Spacer(Modifier.width(d(18)))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            for (slot in 0 until window) {
+                val index = start + slot
+                val active = index == current
+                Box(
+                    Modifier
+                        .width(if (active) d(22) else d(10))
+                        .height(if (active) d(5) else d(4))
+                        .clip(RoundedCornerShape(d(3)))
+                        .background(if (active) Gold.Bright else Color(0x59FFFFFF)),
+                )
+                if (slot < window - 1) Spacer(Modifier.width(d(6)))
+            }
+        }
     }
 }
 

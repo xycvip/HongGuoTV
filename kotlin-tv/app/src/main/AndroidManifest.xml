@@ -8,18 +8,8 @@
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.updates" android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_paths"/>
         </provider>
-        <activity android:name=".ui.ComposeActivity" android:exported="true" android:screenOrientation="landscape" android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTop"/>
-        <activity-alias android:name=".ui.LauncherIconH" android:targetActivity=".ui.ComposeActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_h" android:banner="@drawable/tv_banner_h">
+        <activity android:name=".ui.ComposeActivity" android:exported="true" android:icon="@mipmap/ic_launcher_i" android:banner="@drawable/tv_banner_i" android:screenOrientation="landscape" android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTop">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/></intent-filter>
-        </activity-alias>
-        <activity-alias android:name=".ui.LauncherIconI" android:targetActivity=".ui.ComposeActivity" android:enabled="true" android:exported="true" android:icon="@mipmap/ic_launcher_i" android:banner="@drawable/tv_banner_i">
-            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/></intent-filter>
-        </activity-alias>
-        <activity-alias android:name=".ui.LauncherIconJ" android:targetActivity=".ui.ComposeActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_j" android:banner="@drawable/tv_banner_j">
-            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/></intent-filter>
-        </activity-alias>
-        <activity-alias android:name=".ui.LauncherIconK" android:targetActivity=".ui.ComposeActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_k" android:banner="@drawable/tv_banner_k">
-            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/></intent-filter>
-        </activity-alias>
+        </activity>
     </application>
 </manifest>

@@ -109,17 +109,28 @@ class WatchingTest {
     }
     @Test fun `legacy global defaults stay valid and invalid values have safe defaults`() {
         assertEquals(720,PlaybackQuality.normalize(720)); assertEquals(1080,PlaybackQuality.normalize(1080))
-        assertEquals(PlaybackQuality.AUTO_COMPAT,PlaybackQuality.normalize(999))
-        assertEquals(PlaybackQuality.AUTO_COMPAT,BackupSettings().quality)
+        assertEquals(PlaybackQuality.AUTO_HIGH,PlaybackQuality.normalize(999))
+        assertEquals(PlaybackQuality.AUTO_HIGH,BackupSettings().quality)
         assertEquals(PlaybackQuality.AUTO_HIGH,PlaybackQuality.normalize(PlaybackQuality.AUTO_HIGH))
-        assertEquals(PlaybackQuality.AUTO_COMPAT,PlaybackQuality.normalize(PlaybackQuality.AUTO_COMPAT))
+        // 「自动（兼容优先）」已移出选项；历史值 -2 会被 normalize 自动迁移到高清优先。
+        assertEquals(PlaybackQuality.AUTO_HIGH,PlaybackQuality.normalize(PlaybackQuality.AUTO_COMPAT))
         assertEquals("自动（高清优先）",PlaybackQuality.label(PlaybackQuality.AUTO_HIGH))
-        assertEquals("自动（兼容优先）",PlaybackQuality.label(PlaybackQuality.AUTO_COMPAT))
+        assertEquals("自动（高清优先）",PlaybackQuality.label(PlaybackQuality.AUTO_COMPAT))
         assertEquals(1080,PlaybackQualityMode.limit(PlaybackQuality.AUTO_HIGH,true))
         assertEquals(Int.MAX_VALUE,PlaybackQualityMode.limit(PlaybackQuality.AUTO_COMPAT,false))
         assertEquals(Int.MAX_VALUE,PlaybackQualityMode.limit(PlaybackQuality.AUTO_COMPAT,true))
         assertEquals(Int.MAX_VALUE,PlaybackQualityMode.limit(PlaybackQuality.AUTO_COMPAT,null))
         assertEquals(480,PlaybackQuality.normalize(480))
+        // 新增 360P 档：正常化与 label 都要覆盖。
+        assertEquals(360,PlaybackQuality.normalize(360))
+        assertEquals("360P",PlaybackQuality.label(360))
+        // 540P 档：档位用标称值 540（和 1080P 一样允许短边波动，不钉死真实分辨率）；
+        // 取流时换算成 600 才能命中实际短边约 576 的 540p 档并容纳波动。
+        assertEquals(540,PlaybackQuality.normalize(540))
+        assertEquals("540P",PlaybackQuality.label(540))
+        assertEquals(600,PlaybackQuality.streamRequest(540))
+        assertEquals(480,PlaybackQuality.streamRequest(480))
+        assertEquals(1080,PlaybackQuality.streamRequest(1080))
         assertEquals(1.5f,PlaybackSpeed.normalize(1.5f)); assertEquals(1f,PlaybackSpeed.normalize(Float.NaN))
     }
 }

@@ -211,6 +211,17 @@ class Library(context: Context) {
     fun clearSearches() { state().clearSearches(); persist("searches") }
     fun removeHistory(id: String) { state().removeHistory(id); persist("progress", "watched") }
     fun clearHistory() { state().clearHistory(); persist("progress", "watched") }
+
+    /** 云同步合并后一次性写回，避免逐条上传/下载造成 N 次磁盘提交。 */
+    fun replaceFavoritesMerged(rows: List<Series>) {
+        state().replaceFavorites(rows)
+        persist("favorites", "favoriteUpdates", "favoriteGroups")
+    }
+    fun replaceHistoryMerged(rows: List<BackupProgress>) {
+        state().replaceHistory(rows)
+        persist("progress", "watched")
+    }
+
     fun observeFavorite(id: String, count: Int, now: Long, acknowledge: Boolean = false, newSeason: Series? = null) {
         if (state().observeFavorite(id, count, now, acknowledge, newSeason)) persist("favoriteUpdates")
     }
@@ -256,6 +267,17 @@ class Library(context: Context) {
     var danmakuFrameRateMode: Int
         get() = prefs.getInt("danmakuFrameRateMode", 0).coerceIn(0, 2)
         set(value) { prefs.edit().putInt("danmakuFrameRateMode", value.coerceIn(0, 2)).apply() }
+    /** 合并重复弹幕：同一文本 10 秒内只显示一条。设备本地显示偏好，默认关闭。 */
+    var danmakuMergeRepeat: Boolean
+        get() = prefs.getBoolean("danmakuMergeRepeat", false)
+        set(value) { prefs.edit().putBoolean("danmakuMergeRepeat", value).apply() }
+    /**
+     * 自动降低分辨率：检测到长边非 8 倍数对齐的 1080p 档（部分设备会顶部绿屏并卡死）时，
+     * 自动降到低分辨率播放。设备本地偏好，默认关闭。
+     */
+    var autoDowngradeNonAligned: Boolean
+        get() = prefs.getBoolean("autoDowngradeNonAligned", false)
+        set(value) { prefs.edit().putBoolean("autoDowngradeNonAligned", value).apply() }
     var playbackSpeed: Float
         get() = state().settings.speed
         set(value) { val next = PlaybackSpeed.normalize(value); if (next != playbackSpeed) { state().settings = state().settings.copy(speed = next); put("playbackSpeed", next) } }
@@ -267,8 +289,8 @@ class Library(context: Context) {
         set(value) { if (value != showClock) { state().settings = state().settings.copy(showClock = value); put("showClock", value) } }
     /** Player overlays are device-local display preferences, independent of playback and clock visibility. */
     var videoInfoMode: Int
-        get() = prefs.getInt("videoInfoMode", 0).coerceIn(0, 2)
-        set(value) { prefs.edit().putInt("videoInfoMode", value.coerceIn(0, 2)).apply() }
+        get() = prefs.getInt("videoInfoMode", 0).coerceIn(0, 3)
+        set(value) { prefs.edit().putInt("videoInfoMode", value.coerceIn(0, 3)).apply() }
     var showNetworkSpeed: Boolean
         get() = prefs.getBoolean("showNetworkSpeed", false)
         set(value) { prefs.edit().putBoolean("showNetworkSpeed", value).apply() }
@@ -280,54 +302,6 @@ class Library(context: Context) {
     var showScreenBack: Boolean
         get() = prefs.getBoolean("showScreenBack", false)
         set(value) { prefs.edit().putBoolean("showScreenBack", value).apply() }
-    var theme: String
-        get() = prefs.getString("theme", null) ?: "NIGHT"
-        set(value) { prefs.edit().putString("theme", value).apply() }
-    // Per-series intro/outro skips are stored locally and included in exported backups.
-    private var marksCache: LinkedHashMap<String, SkipMark>? = null
-    private fun marks(): LinkedHashMap<String, SkipMark> =
-        marksCache ?: SkipMarks.decode(prefs.getString("skipMarks", null)).also { marksCache = it }
-    fun skipMark(id: String): SkipMark? = marks()[id]
-    fun setSkipMark(id: String, mark: SkipMark?) {
-        val next = SkipMarks.set(marks(), id, mark)
-        marksCache = next
-        prefs.edit().putString("skipMarks", SkipMarks.encode(next)).apply()
-    }
-    fun skipMarksSnapshot(): Map<String, SkipMark> = marks().toMap()
-    fun restoreSkipMarks(incoming: Map<String, SkipMark>) {
-        val normalized = SkipMarks.decode(SkipMarks.encode(incoming))
-        marksCache = normalized
-        prefs.edit().putString("skipMarks", SkipMarks.encode(normalized)).apply()
-    }
-    fun snapshot() = state().snapshot()
-
-    fun restore(incoming: BackupData, restoreSettings: Boolean) {
-        // 文件恢复以备份为准覆盖本机记录；仅在用户选择保留时沿用当前播放/设备偏好。
-        val current = snapshot()
-        val restored = incoming.copy(settings = if (restoreSettings) incoming.settings else current.settings)
-        index = LibraryIndex(restored, emptyMap())
-        if (restoreSettings) {
-            // A-D 设置中有一部分保存在独立 SharedPreferences，必须与 Library 设置一起恢复。
-            prefs.edit()
-                .putString("theme", restored.settings.theme)
-                .putInt("videoInfoMode", restored.settings.videoInfoMode.coerceIn(0, 2))
-                .putBoolean("showNetworkSpeed", restored.settings.showNetworkSpeed)
-                .apply()
-            app.getSharedPreferences("startup_playback", Context.MODE_PRIVATE).edit()
-                .putBoolean("autoplay_recommendation", restored.settings.startupAutoplay)
-                .apply()
-            app.getSharedPreferences("playback-settings-v1", Context.MODE_PRIVATE).edit()
-                .putInt("sleep_action_mode", restored.settings.sleepActionMode.coerceIn(0, 1))
-                .apply()
-        }
-        persist("favorites", "later", "progress", "watched", "hidden", "searches", "favoriteUpdates", "favoriteGroups")
-        writes.submit(mapOf("quality" to { restored.settings.quality }, "playbackSpeed" to { restored.settings.speed },
-            "autoNext" to { restored.settings.autoNext }, "frameMode" to { restored.settings.frame.name },
-            "autoSeason" to { restored.settings.autoSeason }, "danmaku" to { restored.settings.danmaku },
-            "danmakuOpacity" to { restored.settings.danmakuOpacity }, "danmakuFont" to { restored.settings.danmakuFont },
-            "danmakuSpeed" to { restored.settings.danmakuSpeed }, "danmakuRows" to { restored.settings.danmakuRows }, "showClock" to { restored.settings.showClock }))
-        flush()
-    }
     /** Reset only playback preferences; preserve catalog filters and device/interface preferences. */
     fun resetPlaybackPreferences() {
         val defaults = LibraryDisk.decode(emptyMap<String, Any?>()).settings
@@ -341,17 +315,19 @@ class Library(context: Context) {
         danmakuFont = defaults.danmakuFont
         danmakuSpeed = defaults.danmakuSpeed
         danmakuRows = defaults.danmakuRows
-        marksCache = linkedMapOf()
-        prefs.edit().remove("skipMarks").apply()
+        danmakuFrameRateMode = 0
+        danmakuMergeRepeat = false
+        autoDowngradeNonAligned = false
     }
 
     /** Restore playback/interface preferences while retaining all user library data. */
     fun resetSettings() {
         val defaults = LibraryDisk.decode(emptyMap<String, Any?>()).settings
         state().settings = defaults
-        marksCache = linkedMapOf()
-        prefs.edit().remove("theme").remove("skipMarks").remove("videoInfoMode").remove("showNetworkSpeed")
-            .remove("persistentProgress").remove("showScreenBack").apply()
+        prefs.edit().remove("videoInfoMode").remove("showNetworkSpeed")
+            .remove("persistentProgress").remove("showScreenBack")
+            .remove("danmakuFrameRateMode").remove("danmakuMergeRepeat")
+            .remove("autoDowngradeNonAligned").apply()
         writes.submit(mapOf(
             "quality" to { defaults.quality }, "playbackSpeed" to { defaults.speed },
             "autoNext" to { defaults.autoNext },

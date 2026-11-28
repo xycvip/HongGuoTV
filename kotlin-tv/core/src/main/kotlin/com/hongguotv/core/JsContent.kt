@@ -70,6 +70,12 @@ interface JsContentGateway {
      * [offset] 同样是「已消耗行数」，[sessionId] 首屏传空、之后原样回传上一页的值。
      */
     fun actorRank(board: ActorRankBoard, offset: Int, sessionId: String): ActorRankPage
+
+    /**
+     * 首页信息流（无限刷 feed）。脚本内按 [scope] 维护分页会话与去重。
+     * 当前用于「启动自动播放」选取推荐内容：[page] 传 1、[scope] 传固定键即可取第一页。
+     */
+    fun feed(page: Int, scope: String): CatalogPage
 }
 
 /** 进程内门面注册表。 */

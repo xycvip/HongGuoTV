@@ -62,15 +62,20 @@ class HongguoJsContent(
             ContentType.AI -> "ai_series"
         }
         val data = call("catalogPage", page, key)
-        return CatalogPage(data.optJSONArray("items").mapDramas(), data.optBoolean("hasMore"))
+        return CatalogPage(
+            data.optJSONArray("items").mapDramas(typeOverride = type),
+            data.optBoolean("hasMore"),
+        )
     }
 
     override fun search(keyword: String, page: Int, type: ContentType?): CatalogPage {
         val data = callCached("search", SEARCH_TTL_MS, page, keyword)
         val expected = expectedContentType(type)
-        val items = data.optJSONArray("items").mapDramas { drama ->
-            expected == null || drama.optLong("contentType") == expected
-        }
+        val items = data.optJSONArray("items").mapDramas(
+            accept = { drama -> expected == null || drama.optLong("contentType") == expected },
+            // 指定类型搜索时，综合接口 contentType 无法区分漫剧/AI，直接按用户所选类型标记。
+            typeOverride = type,
+        )
         return CatalogPage(items, data.optBoolean("hasMore"))
     }
 
@@ -145,7 +150,10 @@ class HongguoJsContent(
         val boards = callCached("rankingBoards", BOARDS_TTL_MS).optJSONArray("items") ?: JSONArray()
         val boardId = resolveBoardId(boards, board, kind)
             ?: throw IOException("官方榜单缺少「${board.label}·${kind.label}」")
-        val data = call("rankingPage", boardId, page)
+        // Java 层再兜一层缓存：脚本内部虽有 60s KV 缓存，但每次调用仍要新建 QuickJS runtime
+        // 并 evaluate 整份 main.js。命中这层就直接返回解析好的 CatalogPage，连运行时都不建。
+        // callCached 的 key = 函数名 + 参数，天然按 boardId+page 隔离，不会串榜串页。
+        val data = callCached("rankingPage", RANK_PAGE_TTL_MS, boardId, page)
         val description = boardDescription(boards, boardId)
         return CatalogPage(
             items = data.optJSONArray("items").mapDramas(),
@@ -159,10 +167,18 @@ class HongguoJsContent(
         return danmakuWindowOf(data, startMs)
     }
 
+    override fun feed(page: Int, scope: String): CatalogPage {
+        val data = call("feed", page, scope)
+        return CatalogPage(
+            data.optJSONArray("items").mapDramas(),
+            data.optBoolean("hasMore"),
+        )
+    }
+
     override fun theater(page: Int, type: ContentType?, selected: Map<String, String>): TheaterCatalogPage {
         val typeName = type?.name // SHORT / COMIC / AI，与 JS 的 theaterScene/theaterGenre 对齐
         val data = call("theater", page, typeName, selected)
-        return theaterPageOf(data)
+        return theaterPageOf(data, type)
     }
 
     override fun theaterFilters(type: ContentType): List<TheaterFilterGroup> {
@@ -244,6 +260,8 @@ class HongguoJsContent(
         /** 演员榜按人气实时变动，但 3 分钟内的重复进出没必要重拉。 */
         private const val ACTOR_RANK_TTL_MS = 3 * 60 * 1000L
         private const val BOARDS_TTL_MS = 10 * 60 * 1000L
+        /** 榜单分页：脚本内已有 60s KV 缓存，这层主要省掉「新建 runtime + 求值整份 main.js」的固定开销。 */
+        private const val RANK_PAGE_TTL_MS = 3 * 60 * 1000L
         /** 搜索结果 60 秒内复用，重复提交同一个关键词不再等一次完整请求。 */
         private const val SEARCH_TTL_MS = 60 * 1000L
 
@@ -257,12 +275,24 @@ class HongguoJsContent(
             ContentType.COMIC, ContentType.AI -> CONTENT_TYPE_COMIC
         }
 
-        /** drama JSON → core Series；ID 取官方数字 ID（sourceId），与原生一致。 */
-        internal fun dramaToSeries(drama: JSONObject): Series? {
+        /**
+         * drama JSON → core Series；ID 取官方数字 ID（sourceId），与原生一致。
+         * [typeOverride] 为调用入口已知的内容类型（如 home 传入的 SHORT/COMIC/AI），
+         * 优先于 drama 字段——官方 contentType 把漫剧与 AI 剧都报成 1，无法自行区分。
+         */
+        internal fun dramaToSeries(drama: JSONObject, typeOverride: ContentType? = null): Series? {
             val id = drama.optString("sourceId")
                 .ifBlank { drama.optString("id").substringAfterLast(':') }
             if (!id.matches(Regex("[0-9]{1,30}"))) return null
             val tags = drama.optJSONArray("tags") ?: JSONArray()
+            val resolvedType = typeOverride ?: runCatching {
+                ContentType.entries.firstOrNull { it.searchTab == drama.optLong("contentType").toInt() }
+            }.getOrNull() ?: ContentType.SHORT
+            // feed 直出的分集 vid（启动选剧层拿剧即可起播）。其他来源无此字段，得到空集。
+            val episodesJson = drama.optJSONArray("episodes") ?: JSONArray()
+            val episodes = (0 until episodesJson.length()).mapNotNull { i ->
+                episodesJson.optString(i).takeIf { it.isNotBlank() }
+            }
             return Series(
                 id = id,
                 title = drama.optString("title").ifBlank { drama.optString("name") },
@@ -271,6 +301,8 @@ class HongguoJsContent(
                 badge = drama.optString("remark").ifBlank { drama.optString("badge") },
                 tags = (0 until tags.length()).map { tags.optString(it) }.filter { it.isNotBlank() }
                     .joinToString(" · "),
+                contentType = resolvedType,
+                episodes = episodes,
             )
         }
 
@@ -295,13 +327,16 @@ class HongguoJsContent(
             return out.distinctBy { it.series.id }.sortedBy { it.number }
         }
 
-        /** drama 数组 → Series 列表；[accept] 在映射前按官方字段过滤（如搜索类型）。 */        internal fun JSONArray?.mapDramas(accept: (JSONObject) -> Boolean = { true }): List<Series> {
+        /** drama 数组 → Series 列表；[accept] 在映射前按官方字段过滤（如搜索类型）。 */        internal fun JSONArray?.mapDramas(
+            accept: (JSONObject) -> Boolean = { true },
+            typeOverride: ContentType? = null,
+        ): List<Series> {
             if (this == null) return emptyList()
             val out = ArrayList<Series>(length())
             for (index in 0 until length()) {
                 val drama = optJSONObject(index) ?: continue
                 if (!accept(drama)) continue
-                dramaToSeries(drama)?.let(out::add)
+                dramaToSeries(drama, typeOverride)?.let(out::add)
             }
             return out
         }
@@ -443,7 +478,7 @@ class HongguoJsContent(
         }
 
         /** theater 导出返回 → core TheaterCatalogPage，字段与 JS 适配层逐一对齐。 */
-        internal fun theaterPageOf(page: JSONObject): TheaterCatalogPage {
+        internal fun theaterPageOf(page: JSONObject, typeOverride: ContentType? = null): TheaterCatalogPage {
             // JS theater 导出用 id/title/cover/description/badge/tags（与原生 Series 同名），
             // 不同于 drama 的 sourceId/intro/remark，所以这里单独映射，不走 dramaToSeries。
             val rows = page.optJSONArray("items") ?: JSONArray()
@@ -459,6 +494,7 @@ class HongguoJsContent(
                     description = row.optString("description"),
                     badge = row.optString("badge"),
                     tags = row.optString("tags"),
+                    contentType = typeOverride ?: ContentType.SHORT,
                 ))
             }
             val hasMore = page.optBoolean("hasMore")

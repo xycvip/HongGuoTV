@@ -28,6 +28,8 @@ class HongguoJs private constructor(
     val fromUpdate: Boolean,
     /** 脚本头部「构建时间」，空串表示未识别。 */
     val builtAt: String,
+    /** 清单版本号（如 v1.0.0-20261128），从脚本同目录的 sidecar 读取，随字节一起回退。 */
+    val version: String,
 ) {
     suspend fun call(function: String, vararg args: Any?): JsCallResult {
         val argsJson = args.toJsonArray()
@@ -38,8 +40,10 @@ class HongguoJs private constructor(
         private const val UPDATE_DIR = "hongguo-js"
         private const val UPDATE_SCRIPT = "main.js"
         private const val UPDATE_DIGEST = "main.js.sha256"
+        private const val UPDATE_VERSION = "main.js.version"
         private const val PREV_SCRIPT = "main.js.prev"
         private const val PREV_DIGEST = "main.js.prev.sha256"
+        private const val PREV_VERSION = "main.js.prev.version"
 
         private const val STAMP_HEAD_BYTES = 4096
 
@@ -62,6 +66,7 @@ class HongguoJs private constructor(
                 contentDigest = loaded.digest,
                 fromUpdate = loaded.fromUpdate,
                 builtAt = loaded.bytes.buildStamp(),
+                version = loaded.version,
             )
         }
 
@@ -69,16 +74,17 @@ class HongguoJs private constructor(
             val bytes: ByteArray,
             val digest: String,
             val fromUpdate: Boolean,
+            val version: String,
         )
 
         /** 返回已验证的脚本；在线版损坏时依次退到上一版、内置版。 */
         private fun loadScript(context: Context): Loaded {
             val dir = File(context.filesDir, UPDATE_DIR)
-            readValid(File(dir, UPDATE_SCRIPT), File(dir, UPDATE_DIGEST))?.let { (bytes, digest) ->
-                return Loaded(bytes, digest, true)
+            readValid(File(dir, UPDATE_SCRIPT), File(dir, UPDATE_DIGEST), File(dir, UPDATE_VERSION))?.let { (bytes, digest, version) ->
+                return Loaded(bytes, digest, true, version)
             }
-            readValid(File(dir, PREV_SCRIPT), File(dir, PREV_DIGEST))?.let { (bytes, digest) ->
-                return Loaded(bytes, digest, true)
+            readValid(File(dir, PREV_SCRIPT), File(dir, PREV_DIGEST), File(dir, PREV_VERSION))?.let { (bytes, digest, version) ->
+                return Loaded(bytes, digest, true, version)
             }
             throw ScriptUnavailableException("数据脚本尚未下载")
         }
@@ -86,35 +92,51 @@ class HongguoJs private constructor(
         /** 本地是否已经有一份可用脚本（不创建运行时，供启动阶段判断）。 */
         fun isInstalled(context: Context): Boolean {
             val dir = File(context.filesDir, UPDATE_DIR)
-            return readValid(File(dir, UPDATE_SCRIPT), File(dir, UPDATE_DIGEST)) != null ||
-                readValid(File(dir, PREV_SCRIPT), File(dir, PREV_DIGEST)) != null
+            return readValid(File(dir, UPDATE_SCRIPT), File(dir, UPDATE_DIGEST), File(dir, UPDATE_VERSION)) != null ||
+                readValid(File(dir, PREV_SCRIPT), File(dir, PREV_DIGEST), File(dir, PREV_VERSION)) != null
         }
 
-        /** 读文件并校验摘要；摘要缺失或为空视为有效（兼容早期手动放置的脚本）。 */
-        private fun readValid(script: File, digestFile: File): Pair<ByteArray, String>? = runCatching {
+        /**
+         * 读文件并校验摘要；摘要缺失或为空视为有效（兼容早期手动放置的脚本）。
+         * 版本号 sidecar 与摘要同目录、同回退路径，保证显示的版本号永远和实际加载的字节同源。
+         * 版本号文件缺失（早期落盘的脚本）返回空串，由界面回退到脚本头部构建时间。
+         */
+        private fun readValid(script: File, digestFile: File, versionFile: File): Triple<ByteArray, String, String>? = runCatching {
             if (!script.isFile) return@runCatching null
             val bytes = script.readBytes()
             if (bytes.isEmpty()) return@runCatching null
             val actual = bytes.sha256Hex()
             val expected = digestFile.takeIf { it.isFile }?.readText()?.trim()?.lowercase().orEmpty()
-            if (expected.isNotEmpty() && expected != actual) null else bytes to actual
+            if (expected.isNotEmpty() && expected != actual) {
+                null
+            } else {
+                val version = versionFile.takeIf { it.isFile }?.readText()?.trim().orEmpty()
+                Triple(bytes, actual, version)
+            }
         }.getOrNull()
 
         /**
          * 落盘在线脚本：旧版留一份到 main.js.prev，损坏时可回退。
          * 校验由调用方（JsScriptUpdater）完成，这里只做原子写入。
+         *
+         * 摘要与版本号两份 sidecar 都跟着各自的脚本走：覆盖前把当前版的摘要+版本号
+         * 一起拷到 prev，保证回退到上一版时显示的版本号与那一版的字节匹配。
          */
-        fun installUpdate(context: Context, bytes: ByteArray): Boolean {
+        fun installUpdate(context: Context, bytes: ByteArray, version: String): Boolean {
             val digest = bytes.sha256Hex()
             val dir = File(context.filesDir, UPDATE_DIR)
             return runCatching {
                 dir.mkdirs()
                 val script = File(dir, UPDATE_SCRIPT)
                 val digestFile = File(dir, UPDATE_DIGEST)
+                val versionFile = File(dir, UPDATE_VERSION)
                 if (script.isFile && script.length() > 0) {
                     runCatching { script.copyTo(File(dir, PREV_SCRIPT), overwrite = true) }
                     runCatching {
                         digestFile.takeIf { it.isFile }?.copyTo(File(dir, PREV_DIGEST), overwrite = true)
+                    }
+                    runCatching {
+                        versionFile.takeIf { it.isFile }?.copyTo(File(dir, PREV_VERSION), overwrite = true)
                     }
                 }
                 val temp = File(dir, "$UPDATE_SCRIPT.tmp")
@@ -124,6 +146,7 @@ class HongguoJs private constructor(
                     return false
                 }
                 digestFile.writeText(digest)
+                versionFile.writeText(version)
                 true
             }.getOrDefault(false)
         }

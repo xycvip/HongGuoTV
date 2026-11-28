@@ -45,4 +45,49 @@ class MediaCryptoTest {
     }
     @Test(expected=java.io.IOException::class) fun truncatedAuxiliaryDataFailsClosed() { MediaCrypto.prepare(fixture(auxSize=16),key) }
     @Test(expected=java.io.IOException::class) fun oversizedMoovRejected() { MediaCrypto.headerEnd(box("ftyp","isom0000".toByteArray())+be32(9000000)+"moov".toByteArray(),10000000) }
+
+    // ---- tkhd 宽高解析：绿屏前移检测读的就是这个值 ----
+    private fun tkhdBox(w: Int, h: Int, version: Int): ByteArray {
+        // width/height 是 16.16 定点数：整数部分左移 16 位。
+        val wh = be32((w shl 16)) + be32((h shl 16))
+        val body = if (version == 0) {
+            ByteArray(4) +              // version(1)+flags(3)，version=0
+            ByteArray(20) +             // creation,modification,trackId,reserved,duration
+            ByteArray(8) +              // reserved
+            ByteArray(8) +              // layer,alternate_group,volume,reserved
+            ByteArray(36) +             // matrix
+            wh                          // body+76 = width, body+80 = height → body 共 84
+        } else {
+            byteArrayOf(1, 0, 0, 0) +   // version=1
+            ByteArray(32) +             // creation(8),modification(8),trackId(4),reserved(4),duration(8)
+            ByteArray(8) +              // reserved
+            ByteArray(8) +
+            ByteArray(36) +
+            wh                          // body+88 = width, body+92 = height → body 共 96
+        }
+        return box("tkhd", body)
+    }
+    private fun headerWithVideoSize(w: Int, h: Int, version: Int, withFtyp: Boolean): ByteArray {
+        val hdlr = box("hdlr", ByteArray(8) + "vide".toByteArray() + ByteArray(8))
+        val mdia = box("mdia", hdlr)
+        val trak = box("trak", tkhdBox(w, h, version) + mdia)
+        val moov = box("moov", trak)
+        val ftyp = box("ftyp", "isom0000".toByteArray())
+        return if (withFtyp) ftyp + moov else moov
+    }
+    @Test fun tkhdVideoSizeVersion0() {
+        assertEquals(1922 to 1080, MediaCrypto.videoSize(headerWithVideoSize(1922, 1080, 0, withFtyp = true)))
+        assertEquals(1920 to 1080, MediaCrypto.videoSize(headerWithVideoSize(1920, 1080, 0, withFtyp = false)))
+    }
+    @Test fun tkhdVideoSizeVersion1() {
+        assertEquals(1924 to 1080, MediaCrypto.videoSize(headerWithVideoSize(1924, 1080, 1, withFtyp = true)))
+        assertEquals(3840 to 2160, MediaCrypto.videoSize(headerWithVideoSize(3840, 2160, 1, withFtyp = false)))
+    }
+    @Test fun tkhdVideoSizeIgnoresAudioAndMalformed() {
+        // 只有音频轨道时返回 0x0，交给上层兜底。
+        val hdlr = box("hdlr", ByteArray(8) + "soun".toByteArray() + ByteArray(8))
+        val trak = box("trak", tkhdBox(1922, 1080, 0) + box("mdia", hdlr))
+        assertEquals(0 to 0, MediaCrypto.videoSize(box("moov", trak)))
+        assertEquals(0 to 0, MediaCrypto.videoSize(byteArrayOf(1, 2, 3)))
+    }
 }

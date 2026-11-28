@@ -13,10 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.OpenInBrowser
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,6 +68,7 @@ fun UpdateDialog(
     onRetry: () -> Unit,
     onDismiss: () -> Unit,
     onPickMirror: (Int?) -> Unit,
+    onOpenWeb: (String) -> Unit,
 ) {
     if (!state.visible) return
     var mirrorPicker by remember { mutableStateOf(false) }
@@ -154,6 +159,7 @@ fun UpdateDialog(
                 }
                 Spacer(Modifier.weight(1f))
                 if (update != null && state.phase != UpdatePhase.UP_TO_DATE && state.phase != UpdatePhase.READY) {
+                    WebDownloadChip(onClick = { onOpenWeb(releasePageUrl(update)) })
                     MirrorChip(
                         label = state.mirrorIndex?.let { AppUpdate.MIRROR_NAMES.getOrNull(it) } ?: "自动线路",
                         enabled = !state.busy,
@@ -335,6 +341,38 @@ private fun MirrorChip(label: String, enabled: Boolean, onClick: () -> Unit) {
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = d(12), vertical = d(7)),
     )
+}
+
+/** 网页下载胶囊：金色描边与线路胶囊成组，点击去当前分发仓库的最新 Release 页。 */
+@Composable
+private fun WebDownloadChip(onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(d(5)),
+        modifier = Modifier
+            .clip(RoundedCornerShape(d(99)))
+            .background(Color(0x14E7BE7C))
+            .border(d(1f), Color(0x40E7BE7C), RoundedCornerShape(d(99)))
+            .clickable(onClick = onClick)
+            .padding(horizontal = d(12), vertical = d(7)),
+    ) {
+        Icon(
+            Icons.Rounded.OpenInBrowser,
+            contentDescription = null,
+            tint = Gold.Core,
+            modifier = Modifier.size(d(15)),
+        )
+        Text("网页下载", style = MaterialTheme.typography.labelMedium, color = Gold.Bright)
+    }
+}
+
+/** 按当前版本 tag 判断分发通道：测试版去 HongGuoTV，正式版去 AppDownload。 */
+private fun releasePageUrl(update: AppUpdate): String {
+    val repository = if (update.tag.startsWith(AppUpdate.BETA_TAG_PREFIX))
+        AppUpdate.BETA_REPOSITORY
+    else
+        AppUpdate.OFFICIAL_REPOSITORY
+    return "https://github.com/$repository/releases/latest"
 }
 
 private fun speedText(bytesPerSecond: Long): String = when {

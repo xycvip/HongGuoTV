@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "packageName": "com.x.hongguotv.bate",
+  "script": {
+    "version": "2026.11.27.2007",
+    "path": "dist/hongguoTV/HongGuoTV.js",
+    "size": 577388,
+    "sha256": "b9c83662a8283e064557280eaf4f25ec6e66fdb39a99955f16b421a72f80943b",
+    "builtAt": "2026-11-27T20:07+08:00"
+  }
+}
