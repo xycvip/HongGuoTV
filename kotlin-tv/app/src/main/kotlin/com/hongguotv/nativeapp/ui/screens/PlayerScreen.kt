@@ -68,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -165,8 +166,11 @@ fun PlayerScreen(
     val rootFocus = remember { FocusRequester() }
     val episodeFocus = remember { FocusRequester() }
     val episodeFirstFocus = remember { FocusRequester() }
-    // 面板六行各一个 requester：首尾互相绕回，方向键不会跑到面板背后的播放控件上。
+    // 面板七行各一个 requester：首尾互相绕回，方向键不会跑到面板背后的播放控件上。
     val danmakuRowFocus = remember { List(7) { FocusRequester() } }
+    // 弹幕面板底部「恢复默认 / 关闭」两个按钮，与设置行连成闭环焦点链。
+    val danmakuResetFocus = remember { FocusRequester() }
+    val danmakuCloseFocus = remember { FocusRequester() }
     // 错误弹窗的首/末按钮：弹窗一出就把焦点拉过来，否则遥控器确定键落在背后的播放键上。
     val errorPrimaryFocus = remember { FocusRequester() }
     val errorLastFocus = remember { FocusRequester() }
@@ -216,7 +220,8 @@ fun PlayerScreen(
             }
             PlaybackExtras.REMOTE_SLEEP_TIMER -> {
                 sleepOpen = true
-                poke()
+                // 与清晰度/倍速弹窗一致：面板弹出即收起播放状态栏，焦点由面板自己接管。
+                controlsVisible = false
             }
             else -> Unit
         }
@@ -224,7 +229,8 @@ fun PlayerScreen(
     }
 
     // 5 秒无操作自动收起控制层；暂停、缓冲、选集、弹幕/定时面板打开时保持显示。
-    // 定时面板一旦让控制层收起，下面的焦点联动会把焦点拉回根节点，面板里方向键就失灵了。
+    // 方向键/确定键在控制层内移动焦点会 interaction++ 重置本计时（见根节点 onPreviewKeyEvent），
+    // 用户还在操作时状态栏不会消失，停下来 5 秒才收起。
     LaunchedEffect(interaction, session.playing, session.buffering, episodesOpen, danmakuOpen, sleepOpen) {
         if (!controlsVisible) return@LaunchedEffect
         delay(5000)
@@ -333,41 +339,63 @@ fun PlayerScreen(
                             poke()
                             true
                         } else if (!controlsVisible) {
-                            // 控制层可见时把「确定」让给焦点所在的控件（清晰度/选集/进度条…），
-                            // 否则 preview 会先把它当成「确认键行为」消费掉——用户点「清晰度」
-                            // 却触发播放/暂停，就是这里抢了事件。
+                            // 内联面板（弹幕/定时）打开时，确定键交给面板内焦点控件做确认，
+                            // 不能被这里 poke 把状态栏叫回来、也不能抢走面板的确认操作。
+                            if (sleepOpen || danmakuOpen) return@onPreviewKeyEvent false
+                            // 控制层隐藏时把「确定」当成叫出控制层。
                             poke()
                             true
                         } else {
+                            // 焦点在控制层内操作：重置自动收起计时，确定键让给焦点控件。
+                            interaction++
                             false
                         }
                     }
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
                         if (!controlsVisible) {
+                            // 内联面板（弹幕/定时）打开时，方向键必须交给面板内的焦点控件，
+                            // 否则会被这里当成快进消费，面板里左右调档就失灵了。
+                            if (sleepOpen || danmakuOpen) return@onPreviewKeyEvent false
                             seek(-session.seekStepMillis, "快退 ${session.seekStepMillis / 1000} 秒")
                             true
-                        } else false
+                        } else {
+                            // 焦点还在控制层按钮间移动：重置自动收起计时，避免操作中途状态栏消失。
+                            interaction++
+                            false
+                        }
                     }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
                         if (!controlsVisible) {
+                            if (sleepOpen || danmakuOpen) return@onPreviewKeyEvent false
                             seek(session.seekStepMillis, "快进 ${session.seekStepMillis / 1000} 秒")
                             true
-                        } else false
+                        } else {
+                            interaction++
+                            false
+                        }
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         if (!controlsVisible) {
+                            if (sleepOpen || danmakuOpen) return@onPreviewKeyEvent false
                             // 第一层：上下键切剧；第二层：沿用原来的遥控动作映射。
                             if (introLayer) switchStartupSeries(-1)
                             else dispatch(session.remoteAction(RemoteKey.UP))
                             true
-                        } else false
+                        } else {
+                            interaction++
+                            false
+                        }
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
                         if (!controlsVisible) {
+                            if (sleepOpen || danmakuOpen) return@onPreviewKeyEvent false
                             if (introLayer) switchStartupSeries(1)
                             else dispatch(session.remoteAction(RemoteKey.DOWN))
                             true
-                        } else false
+                        } else {
+                            interaction++
+                            false
+                        }
                     }
                     KeyEvent.KEYCODE_MENU -> {
                         // 菜单键任何时候都要能用：控制层可见时被焦点移动吃掉，
@@ -792,7 +820,9 @@ fun PlayerScreen(
                                 description = "弹幕设置",
                                 onClick = {
                                     danmakuOpen = true
-                                    poke()
+                                    // 与清晰度/倍速弹窗一致：面板弹出即收起播放状态栏，
+                                    // 焦点由 danmakuOpen 联动落到面板行，不会丢。
+                                    controlsVisible = false
                                 },
                             )
                             SleepBadgeChip(
@@ -800,7 +830,9 @@ fun PlayerScreen(
                                 description = if (sleepState.badgeOn) "定时已开启，${sleepState.summaryText}" else "定时关闭",
                             ) {
                                 sleepOpen = true
-                                poke()
+                                // 与清晰度/倍速弹窗一致：面板弹出即收起播放状态栏，
+                                // 定时面板有自己的焦点闭环（modeTab 请求焦点），不会丢。
+                                controlsVisible = false
                             }
                             ControlChip("选集", Icons.AutoMirrored.Rounded.PlaylistPlay) { episodesOpen = true }
                         }
@@ -1056,7 +1088,8 @@ fun PlayerScreen(
                         // 三档循环，左右和确定都切一档，避免到端点时按键无反应。
                         onLeft = { session.changeDanmakuFrameRateMode((session.danmakuFrameRateMode + 2) % 3) },
                         onRight = { session.changeDanmakuFrameRateMode((session.danmakuFrameRateMode + 1) % 3) },
-                        onUp = { danmakuRowFocus[5].tryRequestFocus() },
+                        // 首行向上绕到底部「关闭」按钮，与底部两按钮连成闭环。
+                        onUp = { danmakuCloseFocus.tryRequestFocus() },
                     )
                     DanmakuStepperRow(
                         title = "不透明度",
@@ -1103,24 +1136,37 @@ fun PlayerScreen(
                         onLeft = { session.changeDanmakuMergeRepeat(!session.danmakuMergeRepeat) },
                         onRight = { session.changeDanmakuMergeRepeat(!session.danmakuMergeRepeat) },
                         onUp = { danmakuRowFocus[5].tryRequestFocus() },
-                        onDown = { danmakuRowFocus[0].tryRequestFocus() },
+                        // 末行向下落到「恢复默认」，不再直接绕回首行。
+                        onDown = { danmakuResetFocus.tryRequestFocus() },
                     )
                 }
-                Spacer(Modifier.height(d(14)))
+                Spacer(Modifier.height(d(16)))
+                // 底部两个按钮并排居中，不再孤零零一个「恢复默认」。
+                // 焦点链：末行↓恢复默认↓关闭↓首行，首行↑关闭，形成闭环，方向键不会掉到面板外。
                 Row(
-                    // 底部按钮向下绕回首行，避免焦点掉到面板背后的播放控制条上。
-                    modifier = Modifier.onKeyEvent { event ->
-                        if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
-                            event.key == Key.DirectionDown
-                        ) {
-                            danmakuRowFocus[0].tryRequestFocus()
-                            true
-                        } else false
-                    },
-                    horizontalArrangement = Arrangement.spacedBy(d(10)),
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TvButton("恢复默认", { session.resetDanmakuStyle() }, tone = ButtonTone.Quiet)
+                    TvButton(
+                        "恢复默认",
+                        { session.resetDanmakuStyle() },
+                        tone = ButtonTone.Ghost,
+                        modifier = Modifier.focusProperties { right = danmakuCloseFocus },
+                        focusRequester = danmakuResetFocus,
+                        upFocus = danmakuRowFocus[6],
+                        downFocus = danmakuCloseFocus,
+                    )
+                    Spacer(Modifier.width(d(18)))
+                    TvButton(
+                        "关闭",
+                        { danmakuOpen = false },
+                        tone = ButtonTone.Ghost,
+                        modifier = Modifier.focusProperties { left = danmakuResetFocus },
+                        focusRequester = danmakuCloseFocus,
+                        upFocus = danmakuResetFocus,
+                        downFocus = danmakuRowFocus[0],
+                    )
                 }
             }
         }

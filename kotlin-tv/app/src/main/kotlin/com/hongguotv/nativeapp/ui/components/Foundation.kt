@@ -686,7 +686,9 @@ fun BoxScope.LazyListScrollbar(
     val scrollPx = visible.first().index * avg + state.firstVisibleItemScrollOffset
     val maxScroll = (content - viewport).coerceAtLeast(1f)
     val progress = (scrollPx / maxScroll).coerceIn(0f, 1f)
-    val thumbFraction = (viewport / content).coerceIn(0.08f, 1f)
+    // 滑块长度封顶：内容只比视口略大时 viewport/content 会接近 1，
+    // 滑块铺满整条轨道就成了「一根长条」而非可辨认的滚动指示。
+    val thumbFraction = (viewport / content).coerceIn(0.08f, 0.45f)
     val minThumbPx = with(LocalDensity.current) { d(18).toPx() }
 
     Canvas(

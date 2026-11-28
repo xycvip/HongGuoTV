@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,6 +54,9 @@ fun SoftwareInfoDialog(onDismiss: () -> Unit) {
         Column(
             Modifier
                 .widthIn(min = d(560), max = d(660))
+                // 固定为屏幕高度的 86%：列表区用 weight 吃掉剩余空间，
+                // 底部「关闭」行始终锚定在可见区域，不会被超长内容挤出屏幕。
+                .fillMaxHeight(0.86f)
                 .clip(RoundedCornerShape(d(26)))
                 .background(Brush.verticalGradient(listOf(Color(0xFF171B24), Color(0xFF0C0F16))))
                 .border(d(1f), Color(0x26FFFFFF), RoundedCornerShape(d(26)))
@@ -88,12 +91,12 @@ fun SoftwareInfoDialog(onDismiss: () -> Unit) {
             )
 
             Spacer(Modifier.height(d(18)))
-            Box(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().weight(1f)) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = d(370))
+                        .fillMaxHeight()
                         .clip(RoundedCornerShape(d(14)))
                         .background(Color(0x06FFFFFF)),
                     verticalArrangement = Arrangement.spacedBy(d(8)),

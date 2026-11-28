@@ -74,6 +74,10 @@ fun HongguoApp(vm: AppViewModel) {
     // 启动门控：开关开启时，feed 就绪前显示启动态而不是首页——满足「打开就播 feed、不闪首页」。
     // feed 拿到后直接进播放器；失败/关闭则放行到首页。一次开机只判定一次，返回首页不会重播。
     var startupGate by remember { mutableStateOf(vm.extras.startupAutoplay) }
+    // 启动返回保护：开启启动播放的这次开机，第一次按返回只回首页、不退出 app。
+    // 覆盖三个阶段：门控期间（feed 加载中）、启动播放器、feed 为空已放行。
+    // 用掉后置 false，之后在首页按返回才正常退出，符合标准返回栈。
+    var startupBackGuard by remember { mutableStateOf(vm.extras.startupAutoplay) }
     var clock by remember { mutableStateOf("") }
     var showApiStatus by remember { mutableStateOf(false) }
     // 启动选剧第一层的上下键切剧请求（索引）；由下方 LaunchedEffect 拉取新剧分集并重建播放器。
@@ -178,10 +182,12 @@ fun HongguoApp(vm: AppViewModel) {
     // feed 直出分集：拉一次信息流就拿到「剧 + 分集」，起播不再逐部 detail、不落磁盘缓存。
     // 门控期间显示启动态而非首页；拿到候选直接进播放器，失败/关闭才放行到首页。
     // 一次开机只消费一次（VM 内 startupConsumed 保证），返回首页不会重播。
+    // 用户在 feed 加载期间按了返回（startupBackGuard 已消费）：不再跳播放器，放行首页。
     LaunchedEffect(state.booted, route) {
         if (!state.booted) return@LaunchedEffect
         if (!vm.extras.startupAutoplay) {
             startupGate = false
+            startupBackGuard = false
             return@LaunchedEffect
         }
         val current = route
@@ -191,10 +197,20 @@ fun HongguoApp(vm: AppViewModel) {
             return@LaunchedEffect
         }
         if (current != Route.Main) return@LaunchedEffect
+        // 用户已按返回表达「回首页」：即使此刻 feed 到达也不再起播。
+        if (!startupBackGuard) {
+            startupGate = false
+            return@LaunchedEffect
+        }
 
         val candidates = vm.consumeStartupRecommendations()
         if (candidates.isEmpty()) {
             // feed 不可用：放行到首页，不让用户卡在启动态。
+            startupGate = false
+            return@LaunchedEffect
+        }
+        // consume 期间用户可能按了返回，拿到候选后再核对一次。
+        if (!startupBackGuard) {
             startupGate = false
             return@LaunchedEffect
         }
@@ -339,7 +355,11 @@ fun HongguoApp(vm: AppViewModel) {
 
     BackHandler(enabled = route != Route.Main) {
         route = when (val current = route) {
-            is Route.Player -> Route.Detail(current.series.id, current.series)
+            // 启动选剧模式：系统返回键与界面返回按钮一致，直接回首页、不绕详情页。
+            is Route.Player -> if (current.startupCandidates.isNotEmpty()) {
+                startupBackGuard = false
+                Route.Main
+            } else Route.Detail(current.series.id, current.series)
             // 详情页记着来源：从演员榜点进作品，返回要回演员榜（列表还在，秒开）。
             is Route.Detail -> current.from ?: Route.Main
             is Route.ActorRank -> {
@@ -361,7 +381,15 @@ fun HongguoApp(vm: AppViewModel) {
         tab = Tab.HOME
     }
     BackHandler(enabled = route == Route.Main && tab == Tab.HOME) {
-        (context as? Activity)?.finish()
+        // 启动播放模式下第一次按返回：放行到首页、不退出 app。
+        // 门控期间（startupGate=true）走这里，feed 空已放行（gate=false）也走这里，
+        // 统一做到「不管能不能读到 feed，开机按返回都回首页而不是回桌面」。
+        if (startupBackGuard) {
+            startupBackGuard = false
+            startupGate = false
+        } else {
+            (context as? Activity)?.finish()
+        }
     }
 
     AmbientBackground {
@@ -517,8 +545,11 @@ fun HongguoApp(vm: AppViewModel) {
                     clock = clock,
                     // 启动选剧模式下返回直接回首页；普通播放返回详情。
                     onBack = {
-                        if (target.startupCandidates.isNotEmpty()) route = Route.Main
-                        else route = Route.Detail(target.series.id, target.series)
+                        if (target.startupCandidates.isNotEmpty()) {
+                            // 启动选剧层返回首页：用掉保护，下次在首页按返回才退出。
+                            startupBackGuard = false
+                            route = Route.Main
+                        } else route = Route.Detail(target.series.id, target.series)
                     },
                     onSwitchSeries = { index ->
                         pendingStartupSwitch = index

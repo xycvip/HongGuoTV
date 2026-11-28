@@ -1,21 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.hongguotv.nativeapp.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +63,9 @@ fun ComponentLicenseDialog(onDismiss: () -> Unit) {
         Column(
             Modifier
                 .widthIn(min = d(560), max = d(660))
+                // 固定为屏幕高度的 86%：列表区用 weight 吃掉剩余空间，
+                // 底部「关闭」行始终锚定在可见区域，不会被超长内容挤出屏幕。
+                .fillMaxHeight(0.86f)
                 .clip(RoundedCornerShape(d(26)))
                 .background(Brush.verticalGradient(listOf(Color(0xFF171B24), Color(0xFF0C0F16))))
                 .border(d(1f), Color(0x26FFFFFF), RoundedCornerShape(d(26)))
@@ -119,12 +117,12 @@ fun ComponentLicenseDialog(onDismiss: () -> Unit) {
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(d(8)))
-            Box(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().weight(1f)) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = d(300))
+                        .fillMaxHeight()
                         .border(d(1f), Color(0x14FFFFFF), RoundedCornerShape(d(14)))
                         .clip(RoundedCornerShape(d(14)))
                         .background(Color(0x06FFFFFF)),
@@ -231,20 +229,15 @@ private fun CoreComponentCard(component: CoreComponent, modifier: Modifier = Mod
 
 @Composable
 private fun DependencyRow(component: Dependency, focusRequester: FocusRequester? = null) {
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
-    val rowBg by animateColorAsState(
-        if (focused) Color(0x1AFFFFFF) else Ink.Surface,
-        tween(120),
-        label = "dep-row-bg",
-    )
+    // 与软件说明弹窗一致：固定淡边框、无聚焦红框。
+    // 列表已有滚动条指示位置，遥控器上下键靠 .focusable() 滚动即可，不再画选中框。
     Row(
         Modifier
             .fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .focusable(interactionSource = interaction)
-            .background(rowBg)
-            .border(d(1f), if (focused) Rouge.Bright.copy(alpha = 0.5f) else Color.Transparent, RoundedCornerShape(d(8)))
+            .focusable()
+            .background(Ink.Surface)
+            .border(d(1f), Color(0x14FFFFFF), RoundedCornerShape(d(8)))
             .padding(horizontal = d(14), vertical = d(10)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
