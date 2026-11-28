@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "bee477a92ff3b3bc8ba078c4338fdbbccc61a419",
-  "versionCode": 117,
-  "versionName": "0.0.117",
+  "sourceCommit": "d4f1245111fc7915831dbcb8d2a712bcdb20770c",
+  "versionCode": 118,
+  "versionName": "0.0.118",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.117",
+  "tag": "hongguotv-bate-v0.0.118",
   "apk": {
-    "name": "HongguoTV-0.0.117.apk",
+    "name": "HongguoTV-0.0.118.apk",
     "size": 5711760,
-    "sha256": "2c38c74bfca35ba782ab09917baded2933e24baca755d6a90cac74c1d23b270b",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.117/HongguoTV-0.0.117.apk"
+    "sha256": "d5cfa29afa64ea5747da6d50bbf310834427334d9452e3a5b0086a71bb2723ee",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.118/HongguoTV-0.0.118.apk"
   },
-  "notes": "【播放与播放器】\n- 重构接口版本显示与首次安装引导页，修复播放设置多项交互问题\n【其他功能与问题修复】\n- Restore app icon dialog text to official 2.1.0\n- Revert launcher icon fixes to official 2.1.0"
+  "notes": "【播放与播放器】\n- 优化播放页与设置弹窗交互：焦点闭环、状态栏收起、启动返回键"
 }
