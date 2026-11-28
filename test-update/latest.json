@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "packageName": "com.x.hongguotv.bate",
-  "sourceCommit": "890be20f8d5238fc3806e8d6846858a1811f411c",
-  "versionCode": 116,
-  "versionName": "0.0.116",
+  "sourceCommit": "bee477a92ff3b3bc8ba078c4338fdbbccc61a419",
+  "versionCode": 117,
+  "versionName": "0.0.117",
   "minSdk": 26,
-  "tag": "hongguotv-bate-v0.0.116",
+  "tag": "hongguotv-bate-v0.0.117",
   "apk": {
-    "name": "HongguoTV-0.0.116.apk",
-    "size": 5771666,
-    "sha256": "0c58503e3b8a10a64428f2b619771798b15653c8e029a7e3417285a4721b2734",
-    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.116/HongguoTV-0.0.116.apk"
+    "name": "HongguoTV-0.0.117.apk",
+    "size": 5711760,
+    "sha256": "2c38c74bfca35ba782ab09917baded2933e24baca755d6a90cac74c1d23b270b",
+    "url": "https://github.com/xycvip/HongGuoTV/releases/download/hongguotv-bate-v0.0.117/HongguoTV-0.0.117.apk"
   },
-  "notes": "【其他功能与问题修复】\n- 桌面图标点不开：每个版本首次启动全量翻转四个 alias"
+  "notes": "【播放与播放器】\n- 重构接口版本显示与首次安装引导页，修复播放设置多项交互问题\n【其他功能与问题修复】\n- Restore app icon dialog text to official 2.1.0\n- Revert launcher icon fixes to official 2.1.0"
 }
